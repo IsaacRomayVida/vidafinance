@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 2480 3508">
+  <!-- Generator: Adobe Illustrator 30.2.1, SVG Export Plug-In . SVG Version: 2.1.1 Build 1)  -->
+  <defs>
+    <style>
+      .st0, .st1 {
+        fill: #1c4b4a;
+      }
+
+      .st1 {
+        font-family: MBFCanno, 'MBF Canno';
+        font-size: 402.08px;
+      }
+    </style>
+  </defs>
+  <path class="st0" d="M1165.07,1819.58h-41.36v-281.11h41.36v281.11Z"/>
+  <path class="st0" d="M1296.38,1778.22c54.62,0,99.19-44.58,99.19-99.59s-44.58-98.79-99.19-98.79h-49.8v119.27h-41.36v-160.63h91.16c77.51,0,140.55,62.65,140.55,140.15s-63.05,140.96-140.55,140.96h-89.55v-41.36h89.55Z"/>
+  <path class="st0" d="M1563.43,1538.47h28.51l107.22,281.11h-44.17l-77.1-202.8-77.51,202.8h-44.17l107.22-281.11Z"/>
+  <rect class="st0" x="1205.16" y="1621" width="41.39" height="199.58"/>
+  <text class="st1" transform="translate(794.98 1820.22)"><tspan x="0" y="0">V</tspan></text>
+</svg>
