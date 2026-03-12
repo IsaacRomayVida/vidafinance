@@ -2,35 +2,63 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Employers collection
-    match /employers/{employerId} {
-      allow read: if request.auth != null && request.auth.uid == employerId;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && request.auth.uid == employerId;
+    function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
+    function isAdmin()    { return request.auth != null && request.auth.token.admin == true; }
+    function signedIn()   { return request.auth != null; }
+
+    match /employers/{uid} {
+      allow read:   if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['employerCode','createdAt','totalEmployees','activeLoans','totalDisbursed']);
+      allow delete: if false;
     }
 
-    // Employees collection
-    match /employees/{employeeId} {
-      allow read: if request.auth != null && (
-        request.auth.uid == employeeId ||
-        get(/databases/$(database)/documents/employees/$(employeeId)).data.employerId == request.auth.uid
-      );
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && request.auth.uid == employeeId;
+    match /employees/{uid} {
+      allow read:   if isOwner(uid) ||
+        (signedIn() && get(/databases/$(database)/documents/employees/$(uid)).data.employerId == request.auth.uid) ||
+        isAdmin();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['creditLimit','availableCredit','employerId','createdAt']);
+      allow delete: if false;
     }
 
-    // Loan requests
     match /loans/{loanId} {
-      allow read: if request.auth != null && (
+      allow read: if signedIn() && (
         resource.data.employeeId == request.auth.uid ||
-        resource.data.employerId == request.auth.uid
-      );
-      allow create: if request.auth != null &&
-        request.resource.data.employeeId == request.auth.uid;
-      allow update: if request.auth != null && (
         resource.data.employerId == request.auth.uid ||
-        resource.data.employeeId == request.auth.uid
+        isAdmin()
       );
+      allow create: if false;
+      allow update: if signedIn() &&
+        resource.data.employerId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status in ['approved','rejected'];
+      allow delete: if false;
     }
+
+    match /contact/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /audit_log/{docId}       { allow read: if isAdmin(); allow write: if false; }
+    match /disbursement_queue/{d}  { allow read, write: if false; }
+    match /notification_queue/{d}  { allow read, write: if false; }
+    match /overdue_log/{d}         { allow read: if isAdmin(); allow write: if false; }
+    match /repayments/{d}          { allow read: if isAdmin() || resource.data.employeeId == request.auth.uid; allow write: if false; }
+    match /spei_log/{d}            { allow read: if isAdmin(); allow write: if false; }
+    match /payment_failures/{d}    { allow read: if isAdmin(); allow write: if false; }
+    match /incident_log/{d}        { allow read: if isAdmin(); allow write: if false; }
+    match /scheduler_runs/{d}      { allow read: if isAdmin(); allow write: if false; }
+    match /portfolio_snapshots/{d} { allow read: if isAdmin(); allow write: if false; }
+    match /system_health/{d}       { allow read: if isAdmin(); allow write: if false; }
+    match /notification_log/{d}    { allow read: if isAdmin(); allow write: if false; }
+    match /softcredito_employers/{d}{ allow read: if isAdmin(); allow write: if false; }
+    match /ml_decisions/{d}        { allow read: if isAdmin(); allow write: if false; }
   }
 }

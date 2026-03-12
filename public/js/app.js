@@ -12,6 +12,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+const storage = firebase.storage();
 
 // ─── i18n ────────────────────────────────────────────────
 const i18n = {
@@ -42,8 +43,9 @@ const i18n = {
     onb_e_step1_h:'¿Cómo se llama<br>tu <em>empresa</em>?',onb_e_step1_sub:'Este será el nombre visible para tus empleados.',onb_e_step1_placeholder:'Nombre de tu empresa',onb_next:'Continuar',
     onb_e_step2_h:'Cuéntanos<br>sobre <em>ti</em>.',onb_e_step2_sub:'Información de contacto del administrador.',onb_e_step2_name:'Nombre completo',onb_e_step2_name_ph:'Tu nombre completo',onb_e_step2_email:'Correo electrónico',onb_e_step2_email_ph:'tu@empresa.com',
     onb_e_step3_h:'Sobre tu<br><em>empresa</em>.',onb_e_step3_sub:'Esto nos ayuda a personalizar tu experiencia.',onb_e_step3_size:'Tamaño de empresa',onb_e_step3_employees:'empleados',onb_e_step3_payroll:'Sistema de nómina',onb_e_step3_payroll_ph:'Selecciona tu sistema',onb_e_step3_payroll_other:'Otro',
-    onb_e_step4_h:'Crea tu<br><em>cuenta</em>.',onb_e_step4_sub:'Un último paso para activar VIDA en tu empresa.',onb_e_step4_pass:'Contraseña',onb_e_step4_pass_ph:'Mínimo 6 caracteres',onb_e_step4_terms:'Acepto los',onb_e_step4_terms_link:'Términos y Condiciones',onb_e_step4_btn:'Crear Mi Cuenta',onb_e_step4_creating:'Creando cuenta...',
-    onb_e_step5_h:'¡Tu empresa<br>está <em>activa</em>!',onb_e_step5_sub:'Comparte este código con tus empleados para que se registren.',onb_e_step5_code_hint:'Toca para copiar',onb_e_step5_copied:'¡Copiado!',onb_e_step5_cta:'Ir al Panel',
+    onb_e_step4_h:'Documentos<br><em>requeridos</em>.',onb_e_step4_sub:'Sube los documentos de tu empresa para verificación.',onb_e_step4_rfc:'Constancia de Situación Fiscal (RFC)',onb_e_step4_id:'Identificación oficial / Acta Constitutiva',onb_e_step4_address:'Comprobante de domicilio (< 3 meses)',onb_e_step4_upload:'Seleccionar archivo',onb_e_step4_uploading:'Subiendo...',onb_e_step4_done:'Archivo subido',onb_e_step4_error:'Error al subir',onb_e_step4_formats:'PDF o imagen, máx 5 MB',
+    onb_e_step5_h:'Crea tu<br><em>cuenta</em>.',onb_e_step5_sub:'Un último paso para activar VIDA en tu empresa.',onb_e_step5_pass:'Contraseña',onb_e_step5_pass_ph:'Mínimo 6 caracteres',onb_e_step5_terms:'Acepto los',onb_e_step5_terms_link:'Términos y Condiciones',onb_e_step5_btn:'Crear Mi Cuenta',onb_e_step5_creating:'Creando cuenta...',
+    onb_e_step6_h:'¡Cuenta<br><em>creada</em>!',onb_e_step6_sub:'Nuestro equipo revisará tus documentos en 24–48 horas hábiles.',onb_e_step6_badge:'Verificación en proceso',onb_e_step6_cta:'Ir al inicio',
     onb_m_step1_h:'Ingresa tu<br><em>código</em>.',onb_m_step1_sub:'Tu empleador te proporcionó un código de acceso.',onb_m_step1_placeholder:'CÓDIGO',onb_m_step1_hint:'¿No tienes código? Pregunta a tu departamento de RH.',onb_m_step1_found:'Empresa encontrada',onb_m_step1_not_found:'Código no encontrado',onb_m_step1_searching:'Buscando...',
     onb_m_step2_h:'Cuéntanos<br>sobre <em>ti</em>.',onb_m_step2_sub:'Tu información personal para activar tu crédito.',onb_m_step2_name:'Nombre completo',onb_m_step2_name_ph:'Tu nombre completo',onb_m_step2_email:'Correo electrónico',onb_m_step2_email_ph:'tu@correo.com',
     onb_m_step3_h:'Tu crédito<br><em>pre-aprobado</em>.',onb_m_step3_sub:'Ingresa tu salario mensual para ver tu línea de crédito.',onb_m_step3_salary:'Salario mensual',onb_m_step3_salary_ph:'15,000',onb_m_step3_preapproved:'Pre-aprobado',onb_m_step3_credit_label:'CRÉDITO DISPONIBLE',
@@ -322,8 +324,9 @@ const i18n = {
     onb_e_step1_h:'What\'s your<br><em>company</em> name?',onb_e_step1_sub:'This will be visible to your employees.',onb_e_step1_placeholder:'Your company name',onb_next:'Continue',
     onb_e_step2_h:'Tell us<br>about <em>you</em>.',onb_e_step2_sub:'Admin contact information.',onb_e_step2_name:'Full name',onb_e_step2_name_ph:'Your full name',onb_e_step2_email:'Email address',onb_e_step2_email_ph:'you@company.com',
     onb_e_step3_h:'About your<br><em>company</em>.',onb_e_step3_sub:'This helps us personalize your experience.',onb_e_step3_size:'Company size',onb_e_step3_employees:'employees',onb_e_step3_payroll:'Payroll system',onb_e_step3_payroll_ph:'Select your system',onb_e_step3_payroll_other:'Other',
-    onb_e_step4_h:'Create your<br><em>account</em>.',onb_e_step4_sub:'One last step to activate VIDA for your company.',onb_e_step4_pass:'Password',onb_e_step4_pass_ph:'Min 6 characters',onb_e_step4_terms:'I accept the',onb_e_step4_terms_link:'Terms and Conditions',onb_e_step4_btn:'Create My Account',onb_e_step4_creating:'Creating account...',
-    onb_e_step5_h:'Your company<br>is <em>active</em>!',onb_e_step5_sub:'Share this code with your employees so they can sign up.',onb_e_step5_code_hint:'Tap to copy',onb_e_step5_copied:'Copied!',onb_e_step5_cta:'Go to Dashboard',
+    onb_e_step4_h:'Required<br><em>documents</em>.',onb_e_step4_sub:'Upload your company documents for verification.',onb_e_step4_rfc:'Tax Registration Certificate (RFC)',onb_e_step4_id:'Official ID / Articles of Incorporation',onb_e_step4_address:'Proof of address (< 3 months)',onb_e_step4_upload:'Choose file',onb_e_step4_uploading:'Uploading...',onb_e_step4_done:'File uploaded',onb_e_step4_error:'Upload error',onb_e_step4_formats:'PDF or image, max 5 MB',
+    onb_e_step5_h:'Create your<br><em>account</em>.',onb_e_step5_sub:'One last step to activate VIDA for your company.',onb_e_step5_pass:'Password',onb_e_step5_pass_ph:'Min 6 characters',onb_e_step5_terms:'I accept the',onb_e_step5_terms_link:'Terms and Conditions',onb_e_step5_btn:'Create My Account',onb_e_step5_creating:'Creating account...',
+    onb_e_step6_h:'Account<br><em>created</em>!',onb_e_step6_sub:'Our team will review your documents within 24–48 business hours.',onb_e_step6_badge:'Verification in progress',onb_e_step6_cta:'Go to home',
     onb_m_step1_h:'Enter your<br><em>code</em>.',onb_m_step1_sub:'Your employer provided you with an access code.',onb_m_step1_placeholder:'CODE',onb_m_step1_hint:'Don\'t have a code? Ask your HR department.',onb_m_step1_found:'Company found',onb_m_step1_not_found:'Code not found',onb_m_step1_searching:'Searching...',
     onb_m_step2_h:'Tell us<br>about <em>you</em>.',onb_m_step2_sub:'Your personal information to activate your credit.',onb_m_step2_name:'Full name',onb_m_step2_name_ph:'Your full name',onb_m_step2_email:'Email address',onb_m_step2_email_ph:'you@email.com',
     onb_m_step3_h:'Your<br><em>pre-approved</em> credit.',onb_m_step3_sub:'Enter your monthly salary to see your credit line.',onb_m_step3_salary:'Monthly salary',onb_m_step3_salary_ph:'15,000',onb_m_step3_preapproved:'Pre-approved',onb_m_step3_credit_label:'AVAILABLE CREDIT',
@@ -706,7 +709,7 @@ function renderOnboarding(app) {
   const state = { step: 0, role: onbPreselect || null, data: {}, employerDoc: null };
   onbPreselect = null;
 
-  const totalSteps = { employer: 5, employee: 5 };
+  const totalSteps = { employer: 6, employee: 5 };
   const backArrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
 
   function progress() {
@@ -824,8 +827,24 @@ function renderOnboarding(app) {
     if (n === 1) return `${back}<h1 class="onb-h">${t('onb_e_step1_h')}</h1><p class="onb-sub">${t('onb_e_step1_sub')}</p><div class="onb-field"><input class="onb-input" id="onbCompany" type="text" placeholder="${t('onb_e_step1_placeholder')}" value="${state.data.company||''}" autofocus></div><button class="onb-btn" id="onbNext" disabled>${t('onb_next')}</button>`;
     if (n === 2) return `${back}<h1 class="onb-h">${t('onb_e_step2_h')}</h1><p class="onb-sub">${t('onb_e_step2_sub')}</p><div class="onb-field"><div class="onb-label">${t('onb_e_step2_name')}</div><input class="onb-input" id="onbName" type="text" placeholder="${t('onb_e_step2_name_ph')}" value="${state.data.name||''}"></div><div class="onb-field"><div class="onb-label">${t('onb_e_step2_email')}</div><input class="onb-input" id="onbEmail" type="email" placeholder="${t('onb_e_step2_email_ph')}" value="${state.data.email||''}"></div><button class="onb-btn" id="onbNext" disabled>${t('onb_next')}</button>`;
     if (n === 3) return `${back}<h1 class="onb-h">${t('onb_e_step3_h')}</h1><p class="onb-sub">${t('onb_e_step3_sub')}</p><div class="onb-field"><div class="onb-label">${t('onb_e_step3_size')}</div><div class="onb-tiles" id="onbTiles"><div class="onb-tile${state.data.size==='1-50'?' active':''}" data-val="1-50"><div class="onb-tile-val">1-50</div><div class="onb-tile-lbl">${t('onb_e_step3_employees')}</div></div><div class="onb-tile${state.data.size==='50-200'?' active':''}" data-val="50-200"><div class="onb-tile-val">50-200</div><div class="onb-tile-lbl">${t('onb_e_step3_employees')}</div></div><div class="onb-tile${state.data.size==='200-500'?' active':''}" data-val="200-500"><div class="onb-tile-val">200-500</div><div class="onb-tile-lbl">${t('onb_e_step3_employees')}</div></div><div class="onb-tile${state.data.size==='500+'?' active':''}" data-val="500+"><div class="onb-tile-val">500+</div><div class="onb-tile-lbl">${t('onb_e_step3_employees')}</div></div></div></div><div class="onb-field"><div class="onb-label">${t('onb_e_step3_payroll')}</div><select class="onb-select" id="onbPayroll"><option value="" disabled ${!state.data.payroll?'selected':''}>${t('onb_e_step3_payroll_ph')}</option><option value="Nomipaq" ${state.data.payroll==='Nomipaq'?'selected':''}>Nomipaq</option><option value="Aspel NOI" ${state.data.payroll==='Aspel NOI'?'selected':''}>Aspel NOI</option><option value="CONTPAQi" ${state.data.payroll==='CONTPAQi'?'selected':''}>CONTPAQi</option><option value="Workday" ${state.data.payroll==='Workday'?'selected':''}>Workday</option><option value="ADP" ${state.data.payroll==='ADP'?'selected':''}>ADP</option><option value="Otro" ${state.data.payroll==='Otro'?'selected':''}>${t('onb_e_step3_payroll_other')}</option></select></div><button class="onb-btn" id="onbNext" disabled>${t('onb_next')}</button>`;
-    if (n === 4) return `${back}<h1 class="onb-h">${t('onb_e_step4_h')}</h1><p class="onb-sub">${t('onb_e_step4_sub')}</p><div class="onb-error" id="onbError"></div><div class="onb-field"><div class="onb-label">${t('onb_e_step4_pass')}</div><input class="onb-input" id="onbPass" type="password" placeholder="${t('onb_e_step4_pass_ph')}" minlength="6"><div class="onb-strength"><div class="onb-strength-fill" id="onbStrength"></div></div></div><div class="onb-terms"><input type="checkbox" id="onbTerms"><label for="onbTerms">${t('onb_e_step4_terms')} <a href="/terms" onclick="event.stopPropagation();event.preventDefault();window.open('/terms','_blank')">${t('onb_e_step4_terms_link')}</a></label></div><button class="onb-btn" id="onbCreate" disabled>${t('onb_e_step4_btn')}</button>`;
-    if (n === 5) return `<div class="onb-celebration"><div class="onb-check-circle"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><h1 class="onb-h">${t('onb_e_step5_h')}</h1><p class="onb-sub">${t('onb_e_step5_sub')}</p><div class="onb-code-display" id="onbCopyCode"><div class="onb-code-val">${state.data.employerCode||''}</div><div class="onb-code-hint">${t('onb_e_step5_code_hint')}</div></div><button class="onb-btn" id="onbToDash">${t('onb_e_step5_cta')}</button></div>`;
+    if (n === 4) {
+      const docFields = [
+        { key: 'rfc', label: t('onb_e_step4_rfc') },
+        { key: 'id_oficial', label: t('onb_e_step4_id') },
+        { key: 'comprobante', label: t('onb_e_step4_address') }
+      ];
+      const uploads = docFields.map(f => {
+        const done = state.docs && state.docs[f.key];
+        return `<div class="onb-upload-row" data-key="${f.key}">
+          <div class="onb-upload-info"><div class="onb-upload-label">${f.label}</div><div class="onb-upload-hint">${t('onb_e_step4_formats')}</div></div>
+          <label class="onb-upload-btn ${done ? 'done' : ''}"><input type="file" accept="image/*,application/pdf" class="onb-file-input" data-key="${f.key}" style="display:none">${done ? t('onb_e_step4_done') : t('onb_e_step4_upload')}</label>
+          <div class="onb-upload-progress" id="prog_${f.key}" style="display:none"><div class="onb-upload-progress-fill"></div></div>
+        </div>`;
+      }).join('');
+      return `${back}<h1 class="onb-h">${t('onb_e_step4_h')}</h1><p class="onb-sub">${t('onb_e_step4_sub')}</p><div class="onb-uploads">${uploads}</div><button class="onb-btn" id="onbNext" disabled>${t('onb_next')}</button>`;
+    }
+    if (n === 5) return `${back}<h1 class="onb-h">${t('onb_e_step5_h')}</h1><p class="onb-sub">${t('onb_e_step5_sub')}</p><div class="onb-error" id="onbError"></div><div class="onb-field"><div class="onb-label">${t('onb_e_step5_pass')}</div><input class="onb-input" id="onbPass" type="password" placeholder="${t('onb_e_step5_pass_ph')}" minlength="6"><div class="onb-strength"><div class="onb-strength-fill" id="onbStrength"></div></div></div><div class="onb-terms"><input type="checkbox" id="onbTerms"><label for="onbTerms">${t('onb_e_step5_terms')} <a href="/terms" onclick="event.stopPropagation();event.preventDefault();window.open('/terms','_blank')">${t('onb_e_step5_terms_link')}</a></label></div><button class="onb-btn" id="onbCreate" disabled>${t('onb_e_step5_btn')}</button>`;
+    if (n === 6) return `<div class="onb-celebration"><div class="onb-check-circle" style="background:rgba(162,134,87,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><div class="onb-approved-tag"><span class="onb-approved-dot" style="background:var(--gold)"></span>${t('onb_e_step6_badge')}</div><h1 class="onb-h">${t('onb_e_step6_h')}</h1><p class="onb-sub">${t('onb_e_step6_sub')}</p><button class="onb-btn" id="onbToHome">${t('onb_e_step6_cta')}</button></div>`;
     return '';
   }
 
@@ -914,7 +933,56 @@ function renderOnboarding(app) {
       btn.addEventListener('click', () => { state.step = 4; renderStep(); });
     }
 
-    // Step 4 - password
+    // EMPLOYER Step 4 - document uploads
+    const fileInputs = stg.querySelectorAll('.onb-file-input');
+    if (fileInputs.length > 0 && state.role === 'employer') {
+      if (!state.docs) state.docs = {};
+      const nextBtn = $('[id="onbNext"]');
+      function checkUploads() { nextBtn.disabled = Object.keys(state.docs).length < 3; }
+      checkUploads();
+      fileInputs.forEach(input => {
+        input.addEventListener('change', async () => {
+          const file = input.files[0];
+          if (!file) return;
+          const key = input.dataset.key;
+          const row = stg.querySelector(`.onb-upload-row[data-key="${key}"]`);
+          const label = row.querySelector('.onb-upload-btn');
+          const prog = row.querySelector('.onb-upload-progress');
+          const progFill = prog.querySelector('.onb-upload-progress-fill');
+          label.textContent = t('onb_e_step4_uploading');
+          label.classList.add('uploading');
+          prog.style.display = 'block';
+          try {
+            const tempId = 'temp_' + Date.now();
+            const ref = storage.ref('employers/' + tempId + '/docs/' + key + '_' + Date.now());
+            const task = ref.put(file);
+            task.on('state_changed',
+              s => { progFill.style.width = (s.bytesTransferred / s.totalBytes * 100) + '%'; },
+              err => {
+                label.textContent = t('onb_e_step4_error');
+                label.classList.remove('uploading');
+                label.classList.add('error');
+                prog.style.display = 'none';
+              },
+              async () => {
+                state.docs[key] = await task.snapshot.ref.getDownloadURL();
+                label.textContent = t('onb_e_step4_done');
+                label.classList.remove('uploading');
+                label.classList.add('done');
+                prog.style.display = 'none';
+                checkUploads();
+              }
+            );
+          } catch (err) {
+            label.textContent = t('onb_e_step4_error');
+            label.classList.remove('uploading');
+          }
+        });
+      });
+      nextBtn.addEventListener('click', () => { state.step = 5; renderStep(); });
+    }
+
+    // Step 5 - password (employer & employee share this binding)
     const passIn = $('[id="onbPass"]');
     const termsBox = $('[id="onbTerms"]');
     const createBtn = $('[id="onbCreate"]');
@@ -929,7 +997,7 @@ function renderOnboarding(app) {
       termsBox.addEventListener('change', checkCreate);
       createBtn.addEventListener('click', async () => {
         createBtn.disabled = true;
-        createBtn.innerHTML = '<span class="spinner"></span>' + (state.role === 'employer' ? t('onb_e_step4_creating') : t('onb_m_step4_creating'));
+        createBtn.innerHTML = '<span class="spinner"></span>' + (state.role === 'employer' ? t('onb_e_step5_creating') : t('onb_m_step4_creating'));
         const errEl = $('[id="onbError"]');
         errEl.classList.remove('show');
         try {
@@ -941,6 +1009,11 @@ function renderOnboarding(app) {
             await db.collection('employers').doc(uid).set({
               name: state.data.name, companyName: state.data.company, email: state.data.email,
               employerCode, companySize: state.data.size, payrollSystem: state.data.payroll,
+              status: 'pending_verification',
+              docRFC: state.docs?.rfc || null,
+              docId: state.docs?.id_oficial || null,
+              docAddress: state.docs?.comprobante || null,
+              submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
               createdAt: firebase.firestore.FieldValue.serverTimestamp(),
               totalEmployees: 0, activeLoans: 0, totalDisbursed: 0
             });
@@ -954,27 +1027,22 @@ function renderOnboarding(app) {
             });
             await db.collection('employers').doc(state.employerDoc.id).update({ totalEmployees: firebase.firestore.FieldValue.increment(1) });
           }
-          state.step = 5;
+          state.step = state.role === 'employer' ? 6 : 5;
           renderStep();
           setTimeout(fireConfetti, 300);
         } catch (err) {
           errEl.textContent = err.message;
           errEl.classList.add('show');
           createBtn.disabled = false;
-          createBtn.textContent = state.role === 'employer' ? t('onb_e_step4_btn') : t('onb_m_step4_btn');
+          createBtn.textContent = state.role === 'employer' ? t('onb_e_step5_btn') : t('onb_m_step4_btn');
         }
       });
     }
 
-    // EMPLOYER Step 5
-    const copyEl = $('[id="onbCopyCode"]');
-    if (copyEl) {
-      copyEl.addEventListener('click', () => {
-        navigator.clipboard?.writeText(state.data.employerCode);
-        copyEl.querySelector('.onb-code-hint').textContent = t('onb_e_step5_copied');
-        setTimeout(() => { copyEl.querySelector('.onb-code-hint').textContent = t('onb_e_step5_code_hint'); }, 2000);
-      });
-    }
+    // EMPLOYER Step 6 - verification pending
+    $('[id="onbToHome"]')?.addEventListener('click', () => { navigate('/'); });
+
+    // EMPLOYEE Step 5 - go to dashboard
     $('[id="onbToDash"]')?.addEventListener('click', () => {
       navigate(state.role === 'employer' ? '/employer/dashboard' : '/employee/dashboard');
     });
@@ -1581,6 +1649,11 @@ async function renderEmployerDashboard(app) {
   const empDoc = await db.collection('employers').doc(uid).get();
   if (!empDoc.exists) { navigate('/employee/dashboard'); return; }
   const emp = empDoc.data();
+  if (emp.status === 'pending_verification') {
+    app.innerHTML = `<div class="onb"><div class="onb-blob ob1"></div><div class="onb-blob ob2"></div><div class="onb-top"><span class="onb-logo">${vidaLogo()}</span></div><div class="onb-body"><div class="onb-stage active"><div class="onb-content"><div class="onb-celebration"><div class="onb-check-circle" style="background:rgba(162,134,87,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><div class="onb-approved-tag"><span class="onb-approved-dot" style="background:var(--gold)"></span>${currentLang==='es'?'Verificación en proceso':'Verification in progress'}</div><h1 class="onb-h">${currentLang==='es'?'¡Cuenta<br><em>creada</em>!':'Account<br><em>created</em>!'}</h1><p class="onb-sub">${currentLang==='es'?'Nuestro equipo revisará tus documentos en 24–48 horas hábiles.':'Our team will review your documents within 24–48 business hours.'}</p><button class="onb-btn" onclick="auth.signOut().then(()=>navigate('/'))">${currentLang==='es'?'Ir al inicio':'Go to home'}</button></div></div></div></div></div>`;
+    return;
+  }
+  if (emp.status && emp.status !== 'active' && emp.status !== 'pending_verification') { navigate('/'); return; }
   const loansSnap = await db.collection('loans').where('employerId', '==', uid).orderBy('createdAt', 'desc').get();
   const loans = loansSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   const pending = loans.filter(l => l.status === 'pending').length;
