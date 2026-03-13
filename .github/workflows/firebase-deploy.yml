@@ -1,0 +1,40 @@
+name: Deploy Firebase
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "services/**"
+      - "*.md"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: functions/package-lock.json
+
+      - run: cd functions && npm ci
+
+      - name: Write functions .env
+        run: |
+          cat > functions/.env << ENVEOF
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
+          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
+          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
+          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
+          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
+          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
+          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
+          ENVEOF
+
+      - name: Deploy Firebase
+        run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
