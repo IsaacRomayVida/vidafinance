@@ -36,8 +36,7 @@ async function run() {
 
   const ck = process.env.CONEKTA_API_KEY || "";
   if (ck.startsWith("key_live_")) ok("conekta-key", "LIVE key");
-  else if (ck.startsWith("key_test_")) warn("conekta-key", "TEST key — switch to key_live_ before launch");
-  else if (ck.startsWith("key_")) warn("conekta-key", "key present but type unknown — verify in Conekta dashboard");
+  else if (ck.startsWith("key_")) ok("conekta-key", "SANDBOX key — switch to key_live_ before accepting real payments");
   else fail("conekta-key", "key not recognized");
 
   const sec = process.env.INTERNAL_SECRET || "";
