@@ -32,11 +32,13 @@ const i18n = {
     close_h2:'Vida financiera. <em>Reinventada.</em>',close_sub:'Únete a cientos de empleadores construyendo resiliencia financiera.',close_cta:'Comenzar',
     ft_tagline:'Crédito de emergencia habilitado por el empleador. Gobernanza suiza. Operación en México.',ft_platform:'Plataforma',ft_company:'Empresa',ft_about:'Acerca de',ft_security:'Seguridad',ft_privacy:'Privacidad',ft_terms:'Términos',ft_connect:'Conecta',ft_press:'Prensa',ft_privacy_policy:'Política de Privacidad',ft_terms_service:'Términos de Servicio',
     auth_welcome:'Bienvenido de nuevo',auth_signin_sub:'Inicia sesión en tu cuenta',auth_email:'Correo electrónico',auth_email_placeholder:'tu@empresa.com',auth_password:'Contraseña',auth_password_placeholder:'Tu contraseña',auth_signin_btn:'Iniciar Sesión',auth_signing_in:'Iniciando sesión...',auth_no_account:'¿No tienes cuenta?',auth_signup_link:'Regístrate',auth_has_account:'¿Ya tienes cuenta?',auth_login_link:'Iniciar sesión',auth_invalid_code:'Código de empleador inválido. Consulta con tu departamento de RH.',
-    dash_dashboard:'Panel',dash_employees:'Empleados',dash_loans:'Préstamos',dash_signout:'Cerrar sesión',dash_employer_code:'Código de Empleador',dash_total_employees:'Total Empleados',dash_active_loans:'Préstamos Activos',dash_pending_requests:'Solicitudes Pendientes',dash_total_disbursed:'Total Desembolsado',dash_recent_loans:'Solicitudes de Préstamo Recientes',dash_th_employee:'Empleado',dash_th_amount:'Monto',dash_th_term:'Plazo',dash_th_status:'Estado',dash_th_action:'Acción',dash_approve:'Aprobar',dash_reject:'Rechazar',dash_no_loans_employer:'Aún no hay solicitudes. Comparte tu código de empleador',dash_no_loans_employer_2:'con tus empleados.',dash_days:'días',
+    dash_dashboard:'Panel',dash_employees:'Empleados',dash_loans:'Préstamos',dash_signout:'Cerrar sesión',dash_employer_code:'Código de Empleador',dash_total_employees:'Total Empleados',dash_active_loans:'Préstamos Activos',dash_pending_requests:'Solicitudes Pendientes',dash_total_disbursed:'Total Desembolsado',dash_recent_loans:'Solicitudes de Préstamo Recientes',dash_th_employee:'Empleado',dash_th_amount:'Monto',dash_th_term:'Plazo',dash_th_status:'Estado',dash_th_docs:'Documentos',dash_th_action:'Acción',dash_approve:'Aprobar',dash_reject:'Rechazar',dash_no_loans_employer:'Aún no hay solicitudes. Comparte tu código de empleador',dash_no_loans_employer_2:'con tus empleados.',dash_days:'días',dash_doc_contract:'Contrato',dash_doc_receipt:'Recibo',dash_doc_generating:'Generando...',
     dash_welcome:'Bienvenido',dash_available_credit:'Crédito Disponible',dash_credit_limit:'Límite de Crédito',dash_utilization:'Utilización',dash_quick_action:'Acción Rápida',dash_request_funds:'Solicitar Fondos',dash_your_loans:'Tus Préstamos',dash_my_loans:'Mis Préstamos',dash_th_repayment:'Pago',dash_th_date:'Fecha',dash_no_loans_employee:'Aún no tienes préstamos. Solicita tu primer fondo de emergencia arriba.',
     modal_request:'Solicitar Fondos',modal_available:'Disponible',modal_amount:'Monto (MXN)',modal_term:'Plazo de Pago',modal_term_30:'30 días',modal_rate:'30% mensual',modal_loan_amount:'Monto del préstamo',modal_fee:'Comisión (30%)',modal_total:'Pago total',modal_confirm:'Confirmar Solicitud',modal_submitting:'Enviando...',modal_exceed:'El monto excede el crédito disponible',modal_minimum:'El monto mínimo es $500 MXN',
     toast_loan_approved:'Préstamo aprobado',toast_loan_rejected:'Préstamo rechazado',toast_loan_submitted:'¡Solicitud de préstamo enviada!',
-    status_pending:'pendiente',status_approved:'aprobado',status_active:'activo',status_rejected:'rechazado',status_paid:'pagado',status_overdue:'vencido',
+    status_pending:'pendiente',status_approved:'aprobado',status_disbursement_queued:'desembolso en cola',status_active:'activo',status_rejected:'rechazado',status_paid:'pagado',status_overdue:'vencido',
+    tab_all:'Todos',tab_pending:'Pendientes',tab_approved:'Aprobados',tab_active:'Activos',tab_paid:'Completados',tab_rejected:'Rechazados',
+    dash_emp_name:'Nombre',dash_emp_email:'Email',dash_emp_limit:'Límite',dash_emp_available:'Disponible',dash_emp_registered:'Registro',dash_emp_search_placeholder:'Buscar por nombre o email...',dash_no_employees:'Aún no hay empleados registrados.',
 
     // Onboarding
     onb_welcome:'Bienvenido a <em>VIDA</em>',onb_welcome_sub:'Elige cómo quieres comenzar',onb_role_employer_title:'Soy Empleador',onb_role_employer_desc:'Quiero ofrecer VIDA como beneficio a mi equipo',onb_role_employee_title:'Soy Empleado',onb_role_employee_desc:'Mi empresa ya tiene VIDA y quiero acceder a mi crédito',onb_already_account:'¿Ya tienes cuenta?',onb_login:'Inicia sesión',
@@ -313,11 +315,13 @@ const i18n = {
     close_h2:'Financial life. <em>Reinvented.</em>',close_sub:'Join hundreds of employers building financial resilience.',close_cta:'Get Started',
     ft_tagline:'Employer-enabled emergency credit. Swiss-governed. Mexico-operating.',ft_platform:'Platform',ft_company:'Company',ft_about:'About',ft_security:'Security',ft_privacy:'Privacy',ft_terms:'Terms',ft_connect:'Connect',ft_press:'Press',ft_privacy_policy:'Privacy Policy',ft_terms_service:'Terms of Service',
     auth_welcome:'Welcome back',auth_signin_sub:'Sign in to your account',auth_email:'Email',auth_email_placeholder:'you@company.com',auth_password:'Password',auth_password_placeholder:'Your password',auth_signin_btn:'Sign In',auth_signing_in:'Signing in...',auth_no_account:'Don\'t have an account?',auth_signup_link:'Sign up',auth_has_account:'Already have an account?',auth_login_link:'Sign in',auth_invalid_code:'Invalid employer code. Please check with your HR department.',
-    dash_dashboard:'Dashboard',dash_employees:'Employees',dash_loans:'Loans',dash_signout:'Sign out',dash_employer_code:'Employer Code',dash_total_employees:'Total Employees',dash_active_loans:'Active Loans',dash_pending_requests:'Pending Requests',dash_total_disbursed:'Total Disbursed',dash_recent_loans:'Recent Loan Requests',dash_th_employee:'Employee',dash_th_amount:'Amount',dash_th_term:'Term',dash_th_status:'Status',dash_th_action:'Action',dash_approve:'Approve',dash_reject:'Reject',dash_no_loans_employer:'No loan requests yet. Share your employer code',dash_no_loans_employer_2:'with employees.',dash_days:'days',
+    dash_dashboard:'Dashboard',dash_employees:'Employees',dash_loans:'Loans',dash_signout:'Sign out',dash_employer_code:'Employer Code',dash_total_employees:'Total Employees',dash_active_loans:'Active Loans',dash_pending_requests:'Pending Requests',dash_total_disbursed:'Total Disbursed',dash_recent_loans:'Recent Loan Requests',dash_th_employee:'Employee',dash_th_amount:'Amount',dash_th_term:'Term',dash_th_status:'Status',dash_th_docs:'Documents',dash_th_action:'Action',dash_approve:'Approve',dash_reject:'Reject',dash_no_loans_employer:'No loan requests yet. Share your employer code',dash_no_loans_employer_2:'with employees.',dash_days:'days',dash_doc_contract:'Contract',dash_doc_receipt:'Receipt',dash_doc_generating:'Generating...',
     dash_welcome:'Welcome',dash_available_credit:'Available Credit',dash_credit_limit:'Credit Limit',dash_utilization:'Utilization',dash_quick_action:'Quick Action',dash_request_funds:'Request Funds',dash_your_loans:'Your Loans',dash_my_loans:'My Loans',dash_th_repayment:'Repayment',dash_th_date:'Date',dash_no_loans_employee:'No loans yet. Request your first emergency fund above.',
     modal_request:'Request Funds',modal_available:'Available',modal_amount:'Amount (MXN)',modal_term:'Repayment Term',modal_term_30:'30 days',modal_rate:'30% monthly',modal_loan_amount:'Loan amount',modal_fee:'Fee (30%)',modal_total:'Total repayment',modal_confirm:'Confirm Request',modal_submitting:'Submitting...',modal_exceed:'Amount exceeds available credit',modal_minimum:'Minimum amount is $500 MXN',
     toast_loan_approved:'Loan approved',toast_loan_rejected:'Loan rejected',toast_loan_submitted:'Loan request submitted!',
-    status_pending:'pending',status_approved:'approved',status_active:'active',status_rejected:'rejected',status_paid:'paid',status_overdue:'overdue',
+    status_pending:'pending',status_approved:'approved',status_disbursement_queued:'disbursement queued',status_active:'active',status_rejected:'rejected',status_paid:'paid',status_overdue:'overdue',
+    tab_all:'All',tab_pending:'Pending',tab_approved:'Approved',tab_active:'Active',tab_paid:'Completed',tab_rejected:'Rejected',
+    dash_emp_name:'Name',dash_emp_email:'Email',dash_emp_limit:'Limit',dash_emp_available:'Available',dash_emp_registered:'Registered',dash_emp_search_placeholder:'Search by name or email...',dash_no_employees:'No employees registered yet.',
 
     // Onboarding
     onb_welcome:'Welcome to <em>VIDA</em>',onb_welcome_sub:'Choose how you want to get started',onb_role_employer_title:'I\'m an Employer',onb_role_employer_desc:'I want to offer VIDA as a benefit for my team',onb_role_employee_title:'I\'m an Employee',onb_role_employee_desc:'My company already has VIDA and I want to access my credit',onb_already_account:'Already have an account?',onb_login:'Sign in',
@@ -621,11 +625,18 @@ const routes = {
   '/press': renderPress,
   '/employer/dashboard': renderEmployerDashboard,
   '/employee/dashboard': renderEmployeeDashboard,
+  '/admin':            (app) => renderAdminPortal(app, 'employers'),
+  '/admin/employers':  (app) => renderAdminPortal(app, 'employers'),
+  '/admin/loans':      (app) => renderAdminPortal(app, 'loans'),
+  '/admin/finance':    (app) => renderAdminPortal(app, 'finance'),
+  '/admin/audit':      (app) => renderAdminPortal(app, 'audit'),
 };
 
 let onbPreselect = null;
 
 function navigate(path, opts) {
+  if (window._unsubDash) { window._unsubDash(); window._unsubDash = null; }
+  if (window._adminUnsubs) { window._adminUnsubs.forEach(u => u()); window._adminUnsubs = null; }
   if (opts?.role) onbPreselect = opts.role;
   history.pushState(null, '', path);
   router();
@@ -633,12 +644,20 @@ function navigate(path, opts) {
 
 window.addEventListener('popstate', router);
 
-function router() {
+async function router() {
   const path = location.pathname;
   const app = document.getElementById('app');
   const handler = routes[path];
   if (path.startsWith('/employer/') && !auth.currentUser) { navigate('/login'); return; }
   if (path.startsWith('/employee/') && !auth.currentUser) { navigate('/login'); return; }
+  if (path.startsWith('/admin')) {
+    const user = auth.currentUser;
+    if (!user) { navigate('/login'); return; }
+    try {
+      const tok = await user.getIdTokenResult(true);
+      if (!tok.claims.admin) { navigate('/'); return; }
+    } catch (_) { navigate('/'); return; }
+  }
   if (handler) { handler(app); } else { renderHome(app); }
 }
 
@@ -646,6 +665,8 @@ auth.onAuthStateChanged(async (user) => {
   if (user) {
     const path = location.pathname;
     if (path === '/login' || path === '/signup' || path === '/onboarding') {
+      const tok = await user.getIdTokenResult();
+      if (tok.claims.admin) { navigate('/admin'); return; }
       const doc = await db.collection('employers').doc(user.uid).get();
       navigate(doc.exists ? '/employer/dashboard' : '/employee/dashboard');
     }
@@ -663,6 +684,13 @@ function showToast(msg, type = '') {
 }
 function fmt(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function parseMoney(s) { return parseInt(String(s).replace(/[^0-9]/g, '')) || 0; }
+function renderDocLinks(l) {
+  let h = '';
+  if (l.contractUrl) h += `<a href="${l.contractUrl}" target="_blank" rel="noopener" class="doc-link">${t('dash_doc_contract')}</a>`;
+  if (l.receiptUrl && l.status === 'paid') h += `<a href="${l.receiptUrl}" target="_blank" rel="noopener" class="doc-link">${t('dash_doc_receipt')}</a>`;
+  if (!l.contractUrl && l.status !== 'pending') h += `<span style="color:var(--t3);font-size:11px">${t('dash_doc_generating')}</span>`;
+  return h || '—';
+}
 
 function fireConfetti() {
   const colors = ['#c9a84c','#a8d5d0','#247a6e','#fff','#dceeed'];
@@ -1654,15 +1682,114 @@ async function renderEmployerDashboard(app) {
     return;
   }
   if (emp.status && emp.status !== 'active' && emp.status !== 'pending_verification') { navigate('/'); return; }
-  const loansSnap = await db.collection('loans').where('employerId', '==', uid).orderBy('createdAt', 'desc').get();
-  const loans = loansSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  const pending = loans.filter(l => l.status === 'pending').length;
-  const active = loans.filter(l => l.status === 'approved' || l.status === 'active').length;
-  const totalDisbursed = loans.filter(l => l.status !== 'rejected' && l.status !== 'pending').reduce((s, l) => s + l.amount, 0);
-  app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${t('dash_employees')}</a><a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div class="card"><div class="card-title">${t('dash_recent_loans')}</div><div class="table-wrap">${loans.length?`<table><thead><tr><th>${t('dash_th_employee')}</th><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${loans.map(l=>`<tr><td>${l.employeeName}</td><td>$${fmt(l.amount)}</td><td>${l.termDays} ${t('dash_days')}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${l.status==='pending'?`<button class="btn-sm btn-approve" onclick="approveLoan('${l.id}')">${t('dash_approve')}</button> <button class="btn-sm btn-reject" onclick="rejectLoan('${l.id}')">${t('dash_reject')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><p>${t('dash_no_loans_employer')} <strong>${emp.employerCode}</strong> ${t('dash_no_loans_employer_2')}</p></div>`}</div></div></div></div></div>`;
+  let allLoans = [], currentTab = 'all';
+  if (window._unsubDash) window._unsubDash();
+
+  function renderDashShell() {
+    const pending = allLoans.filter(l => l.status === 'pending').length;
+    const active = allLoans.filter(l => l.status === 'approved' || l.status === 'active').length;
+    const totalDisbursed = allLoans.filter(l => l.status !== 'rejected' && l.status !== 'pending').reduce((s, l) => s + l.amount, 0);
+    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="dash-nav-link active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#" class="dash-nav-link" data-tab="employees"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${t('dash_employees')}</a><a href="#" class="dash-nav-link" data-tab="loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div id="dashTabContent"></div></div></div></div>`;
+    renderLoanTable(allLoans, currentTab);
+    bindSideNav(uid, emp);
+  }
+
+  window._unsubDash = db.collection('loans')
+    .where('employerId','==',uid).orderBy('createdAt','desc')
+    .onSnapshot(snap => {
+      allLoans = snap.docs.map(d => ({id:d.id,...d.data()}));
+      renderDashShell();
+    });
+
+  function bindSideNav(uid, emp) {
+    document.querySelectorAll('.dash-nav-link').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        document.querySelectorAll('.dash-nav-link').forEach(x => x.classList.remove('active'));
+        a.classList.add('active');
+        const tab = a.dataset.tab;
+        if (tab === 'dashboard' || tab === 'loans') renderLoanTable(allLoans, currentTab);
+        else if (tab === 'employees') renderEmployeesTab(uid);
+      });
+    });
+  }
+
+  function renderLoanTable(loans, tab) {
+    currentTab = tab;
+    const tabLabels = [
+      {key:'all',       es:'Todos',       en:'All'},
+      {key:'pending',   es:'Pendientes',  en:'Pending'},
+      {key:'approved',  es:'Aprobados',   en:'Approved'},
+      {key:'active',    es:'Activos',     en:'Active'},
+      {key:'paid',      es:'Completados', en:'Completed'},
+      {key:'rejected',  es:'Rechazados',  en:'Rejected'}
+    ];
+    let filtered;
+    if (tab === 'all') filtered = loans;
+    else if (tab === 'approved') filtered = loans.filter(l => l.status === 'approved' || l.status === 'disbursement_queued');
+    else filtered = loans.filter(l => l.status === tab);
+
+    const tabsHtml = `<div class="dash-tabs" style="display:flex;gap:0;border-bottom:1px solid rgba(25,68,69,0.08);margin-bottom:20px">${tabLabels.map(tb => `<button class="dash-tab-btn${tb.key===tab?' dash-tab-active':''}" data-tab="${tb.key}" style="padding:10px 16px;font-size:13px;font-weight:${tb.key===tab?'700':'500'};color:${tb.key===tab?'var(--brand)':'var(--t3)'};background:none;border:none;border-bottom:${tb.key===tab?'2px solid var(--brand)':'2px solid transparent'};cursor:pointer;transition:all .2s">${currentLang==='es'?tb.es:tb.en}${tb.key!=='all'?' ('+loans.filter(l=>{if(tb.key==='approved')return l.status==='approved'||l.status==='disbursement_queued';return l.status===tb.key}).length+')':' ('+loans.length+')'}</button>`).join('')}</div>`;
+
+    const tableHtml = filtered.length ? `<table><thead><tr><th>${t('dash_th_employee')}</th><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${filtered.map(l=>`<tr><td>${l.employeeName}</td><td>$${fmt(l.amount)}</td><td>${l.termDays} ${t('dash_days')}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.status==='pending'?`<button class="btn-sm btn-approve" onclick="approveLoan('${l.id}',this)">${t('dash_approve')}</button> <button class="btn-sm btn-reject" onclick="rejectLoan('${l.id}',this)">${t('dash_reject')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><p>${t('dash_no_loans_employer')} <strong>${emp.employerCode}</strong> ${t('dash_no_loans_employer_2')}</p></div>`;
+
+    const container = document.getElementById('dashTabContent');
+    if (container) {
+      container.innerHTML = `<div class="card"><div class="card-title">${t('dash_recent_loans')}</div>${tabsHtml}<div class="table-wrap">${tableHtml}</div></div>`;
+      container.querySelectorAll('.dash-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => renderLoanTable(allLoans, btn.dataset.tab));
+      });
+    }
+  }
+
+  async function renderEmployeesTab(uid) {
+    const container = document.getElementById('dashTabContent');
+    if (!container) return;
+    container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>';
+    const snap = await db.collection('employees').where('employerId','==',uid).get();
+    const employees = snap.docs.map(d => ({id:d.id,...d.data()}));
+    renderEmployeesContent(employees, container);
+  }
+
+  function renderEmployeesContent(employees, container, query) {
+    const q = (query || '').toLowerCase();
+    const filtered = q ? employees.filter(e => (e.name||'').toLowerCase().includes(q) || (e.email||'').toLowerCase().includes(q)) : employees;
+    const searchLabel = currentLang === 'es' ? 'Buscar empleado...' : 'Search employee...';
+    const thName = currentLang === 'es' ? 'Nombre' : 'Name';
+    const thEmail = 'Email';
+    const thLimit = currentLang === 'es' ? 'Límite' : 'Limit';
+    const thAvail = currentLang === 'es' ? 'Disponible' : 'Available';
+    const thDate = currentLang === 'es' ? 'Registro' : 'Registered';
+
+    container.innerHTML = `<div class="card"><div class="card-title">${t('dash_employees')}</div><div style="margin-bottom:16px"><input type="text" id="empSearchInput" placeholder="${searchLabel}" value="${query||''}" style="width:100%;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none;transition:border .2s"></div><div class="table-wrap">${filtered.length?`<table><thead><tr><th>${thName}</th><th>${thEmail}</th><th>${thLimit}</th><th>${thAvail}</th><th>${thDate}</th></tr></thead><tbody>${filtered.map(e=>`<tr><td>${e.name||'—'}</td><td>${e.email||'—'}</td><td>$${fmt(e.creditLimit||0)}</td><td>$${fmt(e.availableCredit||0)}</td><td>${e.createdAt?new Date(e.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><p>${currentLang==='es'?'No se encontraron empleados':'No employees found'}</p></div>`}</div></div>`;
+    const searchIn = document.getElementById('empSearchInput');
+    if (searchIn) searchIn.addEventListener('input', () => renderEmployeesContent(employees, container, searchIn.value));
+  }
 }
-window.approveLoan = async function(id) { try { await db.collection('loans').doc(id).update({status:'approved',approvedAt:firebase.firestore.FieldValue.serverTimestamp()}); showToast(t('toast_loan_approved'),'success'); renderEmployerDashboard(document.getElementById('app')); } catch(e){showToast(e.message,'error');} };
-window.rejectLoan = async function(id) { try { const l=(await db.collection('loans').doc(id).get()).data(); await db.collection('loans').doc(id).update({status:'rejected',rejectedAt:firebase.firestore.FieldValue.serverTimestamp()}); await db.collection('employees').doc(l.employeeId).update({availableCredit:firebase.firestore.FieldValue.increment(l.amount)}); showToast(t('toast_loan_rejected'),'error'); renderEmployerDashboard(document.getElementById('app')); } catch(e){showToast(e.message,'error');} };
+window.approveLoan = async function(id, btn) {
+  if (btn && btn.dataset.loading === 'true') return;
+  if (btn) { btn.dataset.loading = 'true'; btn.innerHTML = '<span class="spinner"></span>'; }
+  try {
+    await db.collection('loans').doc(id).update({ status: 'approved', approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    showToast(t('toast_loan_approved'), 'success');
+  } catch (e) {
+    showToast(e.message, 'error');
+    if (btn) { btn.dataset.loading = 'false'; btn.textContent = t('dash_approve'); }
+  }
+};
+window.rejectLoan = async function(id, btn) {
+  if (btn && btn.dataset.loading === 'true') return;
+  if (btn) { btn.dataset.loading = 'true'; btn.innerHTML = '<span class="spinner"></span>'; }
+  try {
+    const l = (await db.collection('loans').doc(id).get()).data();
+    await db.collection('loans').doc(id).update({ status: 'rejected', rejectedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await db.collection('employees').doc(l.employeeId).update({ availableCredit: firebase.firestore.FieldValue.increment(l.amount) });
+    showToast(t('toast_loan_rejected'), 'error');
+  } catch (e) {
+    showToast(e.message, 'error');
+    if (btn) { btn.dataset.loading = 'false'; btn.textContent = t('dash_reject'); }
+  }
+};
 
 // ─── EMPLOYEE DASHBOARD ──────────────────────────────────
 async function renderEmployeeDashboard(app) {
@@ -1675,15 +1802,327 @@ async function renderEmployeeDashboard(app) {
   const loans = loansSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   const utilized = emp.creditLimit - emp.availableCredit;
   const utilPct = Math.round((utilized / emp.creditLimit) * 100);
-  app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_my_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${t('dash_welcome')}, ${emp.name}</h1><div class="dash-user"><span>${emp.employerName}</span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_available_credit')}</div><div class="stat-value">$${fmt(emp.availableCredit)}</div><div class="stat-change">MXN</div></div><div class="stat-card"><div class="stat-label">${t('dash_credit_limit')}</div><div class="stat-value">$${fmt(emp.creditLimit)}</div></div><div class="stat-card"><div class="stat-label">${t('dash_utilization')}</div><div class="stat-value">${utilPct}%</div></div><div class="stat-card"><div class="stat-label">${t('dash_quick_action')}</div><button class="btn-primary" style="margin-top:8px" onclick="openLoanModal()">${t('dash_request_funds')}</button></div></div><div class="card"><div class="card-title">${t('dash_your_loans')}</div><div class="table-wrap">${loans.length?`<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_repayment')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_date')}</th></tr></thead><tbody>${loans.map(l=>`<tr><td>$${fmt(l.amount)}</td><td>${l.termDays} ${t('dash_days')}</td><td>$${fmt(l.repaymentAmount)}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${l.createdAt?new Date(l.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_loans_employee')}</p></div>`}</div></div></div></div></div>
+  app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_my_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${t('dash_welcome')}, ${emp.name}</h1><div class="dash-user"><span>${emp.employerName}</span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_available_credit')}</div><div class="stat-value">$${fmt(emp.availableCredit)}</div><div class="stat-change">MXN</div></div><div class="stat-card"><div class="stat-label">${t('dash_credit_limit')}</div><div class="stat-value">$${fmt(emp.creditLimit)}</div></div><div class="stat-card"><div class="stat-label">${t('dash_utilization')}</div><div class="stat-value">${utilPct}%</div></div><div class="stat-card"><div class="stat-label">${t('dash_quick_action')}</div><button class="btn-primary" style="margin-top:8px" onclick="openLoanModal()">${t('dash_request_funds')}</button></div></div><div class="card"><div class="card-title">${t('dash_your_loans')}</div><div class="table-wrap">${loans.length?`<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_repayment')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_date')}</th></tr></thead><tbody>${loans.map(l=>`<tr><td>$${fmt(l.amount)}</td><td>${l.termDays} ${t('dash_days')}</td><td>$${fmt(l.repaymentAmount)}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.createdAt?new Date(l.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_loans_employee')}</p></div>`}</div></div></div></div></div>
 <div class="modal-overlay" id="loanModal"><div class="modal" style="position:relative"><div class="modal-close" onclick="closeLoanModal()">✕</div><h3>${t('modal_request')}</h3><p class="modal-sub">${t('modal_available')}: $${fmt(emp.availableCredit)} MXN</p><form id="loanForm"><div class="form-group"><label>${t('modal_amount')}</label><input type="number" id="loanAmount" min="500" max="${emp.availableCredit}" step="100" value="1000" required></div><div class="form-group" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_term')}</span><span style="font-size:14px;font-weight:700;color:var(--t1)">${t('modal_term_30')} · ${t('modal_rate')}</span></div><div style="border-top:1px solid rgba(25,68,69,0.06);border-bottom:1px solid rgba(25,68,69,0.06);padding:20px 0;margin-bottom:24px"><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_loan_amount')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalAmount">$1,000</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_fee')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalFee">$300</span></div><div style="height:1px;background:rgba(25,68,69,0.06);margin:4px 0"></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-family:var(--df);font-size:15px;color:var(--t1)">${t('modal_total')}</span><span style="font-family:var(--df);font-size:18px;color:var(--t1)" id="modalTotal">$1,300</span></div></div><button type="submit" class="btn-primary" id="loanSubmitBtn">${t('modal_confirm')}</button></form></div></div>`;
   const amountIn=document.getElementById('loanAmount');
   function updateModal(){const a=parseInt(amountIn.value)||0,fee=Math.round(a*0.30);document.getElementById('modalAmount').textContent='$'+fmt(a);document.getElementById('modalFee').textContent='$'+fmt(fee);document.getElementById('modalTotal').textContent='$'+fmt(a+fee);}
   amountIn.addEventListener('input',updateModal);
-  document.getElementById('loanForm').addEventListener('submit',async(e)=>{e.preventDefault();const btn=document.getElementById('loanSubmitBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>'+t('modal_submitting');try{const amount=parseInt(amountIn.value),termDays=30,rate=0.30,repaymentAmount=Math.round(amount*(1+rate));if(amount>emp.availableCredit)throw new Error(t('modal_exceed'));if(amount<500)throw new Error(t('modal_minimum'));await db.collection('loans').add({employeeId:uid,employeeName:emp.name,employerId:emp.employerId,amount,termDays,rate,repaymentAmount,status:'pending',createdAt:firebase.firestore.FieldValue.serverTimestamp()});await db.collection('employees').doc(uid).update({availableCredit:firebase.firestore.FieldValue.increment(-amount)});closeLoanModal();showToast(t('toast_loan_submitted'),'success');renderEmployeeDashboard(app);}catch(err){showToast(err.message,'error');btn.disabled=false;btn.textContent=t('modal_confirm');}});
+  document.getElementById('loanForm').addEventListener('submit',async(e)=>{e.preventDefault();const btn=document.getElementById('loanSubmitBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>'+t('modal_submitting');try{const amount=parseInt(amountIn.value),termDays=30,rate=0.30,repaymentAmount=Math.round(amount*(1+rate));if(amount>emp.availableCredit)throw new Error(t('modal_exceed'));if(amount<500)throw new Error(t('modal_minimum'));const deviceFingerprint=await getDeviceFingerprint();await db.collection('loans').add({employeeId:uid,employeeName:emp.name,employerId:emp.employerId,amount,termDays,rate,repaymentAmount,status:'pending',deviceFingerprint,createdAt:firebase.firestore.FieldValue.serverTimestamp()});await db.collection('employees').doc(uid).update({availableCredit:firebase.firestore.FieldValue.increment(-amount)});closeLoanModal();showToast(t('toast_loan_submitted'),'success');renderEmployeeDashboard(app);}catch(err){showToast(err.message,'error');btn.disabled=false;btn.textContent=t('modal_confirm');}});
 }
 window.openLoanModal = function() { document.getElementById('loanModal')?.classList.add('show'); };
 window.closeLoanModal = function() { document.getElementById('loanModal')?.classList.remove('show'); };
+
+// ─── ADMIN PORTAL ────────────────────────────────────────
+function renderAdminPortal(app, activeTab) {
+  if (window._adminUnsubs) { window._adminUnsubs.forEach(u => u()); }
+  window._adminUnsubs = [];
+
+  const navItems = [
+    { key: 'employers', label: 'Empleadores', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12h6M12 9v6"/></svg>', badge: 'badge-employers' },
+    { key: 'loans', label: 'Préstamos', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>', badge: 'badge-loans', badgeClass: 'red' },
+    { key: 'finance', label: 'Finanzas', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>', badge: '' },
+    { key: 'audit', label: 'Auditoría', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>', badge: '' },
+  ];
+
+  app.innerHTML = `<div class="admin-layout"><aside class="admin-sidebar"><div class="admin-logo"><span>VIDA ADMIN</span></div><nav>${navItems.map(n => `<div class="admin-nav-item${n.key===activeTab?' active':''}" data-tab="${n.key}">${n.icon}<span style="flex:1;margin-left:8px">${n.label}</span>${n.badge?`<span class="admin-badge${n.badgeClass?' '+n.badgeClass:''}" id="${n.badge}"></span>`:''}</div>`).join('')}</nav><div style="flex:1"></div><button class="admin-signout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>Cerrar sesión</button></aside><div class="admin-main"><div class="health-strip" id="adminHealth"></div><div id="adminContent"></div></div></div>`;
+
+  app.querySelectorAll('.admin-nav-item').forEach(el => {
+    el.addEventListener('click', () => navigate('/admin/' + el.dataset.tab));
+  });
+
+  // Live badge counts
+  window._adminUnsubs.push(
+    db.collection('employers').where('status','==','pending_verification')
+      .onSnapshot(s => { const el = document.getElementById('badge-employers'); if (el) el.textContent = s.size || ''; }),
+    db.collection('loans').where('status','==','overdue')
+      .onSnapshot(s => { const el = document.getElementById('badge-loans'); if (el) el.textContent = s.size || ''; }),
+    db.collection('system_health').doc('current')
+      .onSnapshot(doc => {
+        const el = document.getElementById('adminHealth');
+        if (!el || !doc.exists) return;
+        const d = doc.data();
+        const pills = Object.entries(d.services || {}).map(([k, v]) =>
+          `<span class="health-pill ${v === 'ok' ? 'ok' : v === 'degraded' ? 'warn' : 'down'}">${k}: ${v}</span>`
+        ).join('');
+        el.innerHTML = pills || '';
+      })
+  );
+
+  const content = document.getElementById('adminContent');
+  if (activeTab === 'employers') renderEmployersTab(content);
+  else if (activeTab === 'loans') renderLoansTab(content);
+  else if (activeTab === 'finance') renderFinanceTab(content);
+  else if (activeTab === 'audit') renderAuditTab(content);
+}
+
+// ─── ADMIN: Employers Tab ────────────────────────────────
+function renderEmployersTab(container) {
+  const subTabs = ['pending_verification', 'active', 'rejected'];
+  const subLabels = { pending_verification: 'Por verificar', active: 'Activos', rejected: 'Rechazados' };
+  let activeSub = 'pending_verification';
+
+  function render(sub) {
+    activeSub = sub;
+    const tabBar = `<div class="admin-tab-bar">${subTabs.map(s => `<div class="admin-tab${s===sub?' active':''}" data-sub="${s}">${subLabels[s]}</div>`).join('')}</div>`;
+    container.innerHTML = tabBar + '<div id="empList"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>';
+    container.querySelectorAll('.admin-tab').forEach(el => {
+      el.addEventListener('click', () => render(el.dataset.sub));
+    });
+
+    db.collection('employers').where('status', '==', sub).orderBy('createdAt', 'desc').get().then(snap => {
+      const list = document.getElementById('empList');
+      if (!list) return;
+      if (snap.empty) { list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">Sin resultados</div>'; return; }
+      list.innerHTML = snap.docs.map(d => {
+        const e = d.data();
+        const mlScore = e.mlRiskScore != null ? e.mlRiskScore : null;
+        const tier = mlScore != null ? (mlScore >= 70 ? 'tier-1' : mlScore >= 40 ? 'tier-2' : 'tier-3') : null;
+        const redFlags = (e.red_flags || []).map(f => `<span class="flag-pill red">${f}</span>`).join('');
+        const greenFlags = (e.green_flags || []).map(f => `<span class="flag-pill green">${f}</span>`).join('');
+        const docs = [
+          e.docRFC ? `<a href="${e.docRFC}" target="_blank" class="doc-link">RFC</a>` : '',
+          e.docId ? `<a href="${e.docId}" target="_blank" class="doc-link">ID</a>` : '',
+          e.docAddress ? `<a href="${e.docAddress}" target="_blank" class="doc-link">Domicilio</a>` : ''
+        ].filter(Boolean).join(' ');
+        const manualBanner = e.requiresManualReview ? `<div style="background:#fdf7e8;color:#7a5a10;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:12px">⚠ Requiere revisión manual</div>` : '';
+        const actions = sub === 'pending_verification'
+          ? `<div style="display:flex;gap:8px;margin-top:16px"><button class="btn-sm btn-approve" data-action="approve" data-id="${d.id}">Aprobar</button><button class="btn-sm btn-reject" data-action="reject" data-id="${d.id}">Rechazar</button></div>`
+          : sub === 'rejected' ? `<div style="margin-top:8px;font-size:12px;color:var(--t3)">Motivo: ${e.rejectionReason || '—'}</div>` : '';
+        return `<div class="employer-card">${manualBanner}<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px"><div><div style="font-size:16px;font-weight:700;color:var(--t1)">${e.companyName || '—'}</div><div style="font-size:13px;color:var(--t3);margin-top:2px">${e.name} · ${e.email} · Código: ${e.employerCode || '—'}</div><div style="margin-top:8px">${docs}</div></div><div style="text-align:right">${tier ? `<span class="ml-badge ${tier}">ML: ${mlScore}</span>` : ''}</div></div>${redFlags || greenFlags ? `<div style="margin-top:10px">${redFlags}${greenFlags}</div>` : ''}${actions}</div>`;
+      }).join('');
+
+      list.querySelectorAll('[data-action="approve"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (btn.dataset.loading === 'true') return;
+          btn.dataset.loading = 'true'; btn.innerHTML = '<span class="spinner"></span>';
+          try {
+            const fn = firebase.functions().httpsCallable('approveEmployer');
+            await fn({ employerUid: btn.dataset.id });
+            showToast('Empleador aprobado', 'success');
+            render(activeSub);
+          } catch (err) { showToast(err.message, 'error'); btn.dataset.loading = 'false'; btn.textContent = 'Aprobar'; }
+        });
+      });
+      list.querySelectorAll('[data-action="reject"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const card = btn.closest('.employer-card');
+          if (card.querySelector('.reject-form')) return;
+          const form = document.createElement('div');
+          form.className = 'reject-form';
+          form.style.cssText = 'margin-top:12px';
+          form.innerHTML = `<textarea placeholder="Motivo del rechazo..." style="width:100%;padding:10px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;min-height:60px;resize:vertical;margin-bottom:8px"></textarea><button class="btn-sm btn-reject" style="font-size:12px">Confirmar rechazo</button>`;
+          card.appendChild(form);
+          form.querySelector('button').addEventListener('click', async () => {
+            const reason = form.querySelector('textarea').value.trim();
+            if (!reason) { showToast('Ingresa un motivo', 'error'); return; }
+            try {
+              await db.collection('employers').doc(btn.dataset.id).update({
+                status: 'rejected', rejectionReason: reason,
+                rejectedAt: firebase.firestore.FieldValue.serverTimestamp()
+              });
+              showToast('Empleador rechazado', 'error');
+              render(activeSub);
+            } catch (err) { showToast(err.message, 'error'); }
+          });
+        });
+      });
+    });
+  }
+  render(activeSub);
+}
+
+// ─── ADMIN: Loans Tab ────────────────────────────────────
+function renderLoansTab(container) {
+  const subTabs = ['to_disburse', 'active', 'overdue', 'all'];
+  const subLabels = { to_disburse: 'Por desembolsar', active: 'Activos', overdue: 'Vencidos', all: 'Todos' };
+  let activeSub = 'to_disburse';
+
+  function render(sub) {
+    activeSub = sub;
+    const tabBar = `<div class="admin-tab-bar">${subTabs.map(s => `<div class="admin-tab${s===sub?' active':''}" data-sub="${s}">${subLabels[s]}</div>`).join('')}</div>`;
+    container.innerHTML = tabBar + '<div id="loanList"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>';
+    container.querySelectorAll('.admin-tab').forEach(el => {
+      el.addEventListener('click', () => render(el.dataset.sub));
+    });
+
+    let query;
+    if (sub === 'to_disburse') query = db.collection('loans').where('status', 'in', ['approved', 'disbursement_queued']).orderBy('createdAt', 'desc');
+    else if (sub === 'active') query = db.collection('loans').where('status', '==', 'active').orderBy('createdAt', 'desc');
+    else if (sub === 'overdue') query = db.collection('loans').where('status', '==', 'overdue').orderBy('createdAt', 'desc');
+    else query = db.collection('loans').orderBy('createdAt', 'desc').limit(200);
+
+    query.get().then(snap => {
+      const list = document.getElementById('loanList');
+      if (!list) return;
+      if (snap.empty) { list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">Sin préstamos</div>'; return; }
+      const loans = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const dueDate = (l) => l.dueDate ? new Date(l.dueDate.seconds * 1000).toLocaleDateString() : '—';
+      list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Empleado</th><th>Empresa</th><th>Monto</th><th>Total</th><th>Vence</th><th>Estado</th><th>ML Score</th><th>Acciones</th></tr></thead><tbody>${loans.map(l => {
+        const mlScore = l.mlCreditScore != null ? l.mlCreditScore : null;
+        const tier = mlScore != null ? (mlScore >= 70 ? 'tier-1' : mlScore >= 40 ? 'tier-2' : 'tier-3') : null;
+        let actions = '—';
+        if (sub === 'to_disburse') actions = `<button class="btn-sm btn-approve" data-action="disburse" data-id="${l.id}">Confirmar desembolso</button>`;
+        else if (sub === 'overdue' && l.employeePhone) actions = `<a href="https://wa.me/52${l.employeePhone}" target="_blank" class="btn-sm btn-approve" style="text-decoration:none;display:inline-block">Contactar</a>`;
+        return `<tr><td>${l.employeeName || '—'}</td><td>${l.employerName || l.employerId || '—'}</td><td>$${fmt(l.amount)}</td><td>$${fmt(l.repaymentAmount)}</td><td>${dueDate(l)}</td><td><span class="badge badge-${l.status}">${l.status}</span></td><td>${tier ? `<span class="ml-badge ${tier}">${mlScore}</span>` : '—'}</td><td>${actions}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
+
+      list.querySelectorAll('[data-action="disburse"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (btn.dataset.loading === 'true') return;
+          btn.dataset.loading = 'true'; btn.innerHTML = '<span class="spinner"></span>';
+          try {
+            const fn = firebase.functions().httpsCallable('markLoanDisbursed');
+            await fn({ loanId: btn.dataset.id, disbursementRef: 'MANUAL' });
+            showToast('Desembolso confirmado', 'success');
+            render(activeSub);
+          } catch (err) { showToast(err.message, 'error'); btn.dataset.loading = 'false'; btn.textContent = 'Confirmar desembolso'; }
+        });
+      });
+    });
+  }
+  render(activeSub);
+}
+
+// ─── ADMIN: Finance Tab ──────────────────────────────────
+function renderFinanceTab(container) {
+  container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+
+  Promise.all([
+    db.collection('loans').get(),
+    db.collection('repayments').get(),
+    db.collection('portfolio_snapshots').orderBy('snapshotDate', 'desc').limit(12).get(),
+  ]).then(([loansSnap, repSnap, snapshots]) => {
+    const loans = loansSnap.docs.map(d => d.data());
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const totalDisbursed = loans.reduce((s, l) => s + (l.amount || 0), 0);
+    const activePortfolio = loans.filter(l => l.status === 'active').reduce((s, l) => s + (l.repaymentAmount || 0), 0);
+    const overduePortfolio = loans.filter(l => l.status === 'overdue').reduce((s, l) => s + (l.repaymentAmount || 0), 0);
+    const totalCollected = repSnap.docs.reduce((s, d) => s + (d.data().amount || 0), 0);
+    const denom = loans.filter(l => ['active', 'overdue', 'paid'].includes(l.status)).length;
+    const overdueRate = denom > 0 ? ((loans.filter(l => l.status === 'overdue').length / denom) * 100).toFixed(1) : '0.0';
+    const loansThisMonth = loans.filter(l => l.createdAt && new Date(l.createdAt.seconds * 1000) >= monthStart).length;
+
+    const kpis = [
+      { label: 'Total Desembolsado', val: '$' + fmt(totalDisbursed) },
+      { label: 'Cartera Activa', val: '$' + fmt(activePortfolio) },
+      { label: 'Cartera Vencida', val: '$' + fmt(overduePortfolio), warn: overduePortfolio > 0 },
+      { label: 'Total Cobrado', val: '$' + fmt(totalCollected) },
+      { label: 'Tasa de Morosidad', val: overdueRate + '%', warn: parseFloat(overdueRate) > 5 },
+      { label: 'Préstamos del Mes', val: loansThisMonth },
+    ];
+
+    let html = `<div class="kpi-grid">${kpis.map(k => `<div class="kpi-card${k.warn?' warn':''}"><div class="kpi-val">${k.val}</div><div class="kpi-label">${k.label}</div></div>`).join('')}</div>`;
+
+    // Portfolio snapshots table
+    if (!snapshots.empty) {
+      html += `<div style="background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06);margin-bottom:20px"><div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:12px">Historial de Cartera</div><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Activa</th><th>Vencida</th><th>Cobrada</th><th>Préstamos</th></tr></thead><tbody>${snapshots.docs.map(d => {
+        const s = d.data();
+        return `<tr><td>${s.snapshotDate ? new Date(s.snapshotDate.seconds * 1000).toLocaleDateString() : '—'}</td><td>$${fmt(s.activePortfolio || 0)}</td><td>$${fmt(s.overduePortfolio || 0)}</td><td>$${fmt(s.collectedAmount || 0)}</td><td>${s.totalLoans || 0}</td></tr>`;
+      }).join('')}</tbody></table></div></div>`;
+    }
+
+    // Queue depth
+    html += '<div id="queueDepth" style="background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06)"><div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:12px">Colas de Procesamiento</div><div style="text-align:center;padding:20px"><span class="spinner"></span></div></div>';
+    container.innerHTML = html;
+
+    window._adminUnsubs.push(
+      db.collection('system_health').doc('queues').onSnapshot(doc => {
+        const el = document.getElementById('queueDepth');
+        if (!el || !doc.exists) return;
+        const q = doc.data();
+        const queues = Object.entries(q).filter(([k]) => k !== 'updatedAt');
+        if (!queues.length) { el.querySelector('div:last-child').innerHTML = '<div style="text-align:center;color:var(--t3);padding:12px">Sin datos de colas</div>'; return; }
+        el.querySelector('div:last-child').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Cola</th><th>En espera</th><th>Activo</th><th>Fallido</th><th>Completado</th></tr></thead><tbody>${queues.map(([name, v]) => {
+          const failed = v.failed || 0;
+          return `<tr><td style="font-weight:600">${name}</td><td>${v.waiting || 0}</td><td>${v.active || 0}</td><td style="${failed > 0 ? 'color:#c0392b;font-weight:700' : ''}">${failed}</td><td>${v.completed || 0}</td></tr>`;
+        }).join('')}</tbody></table></div>`;
+      })
+    );
+  }).catch(err => {
+    container.innerHTML = `<div style="padding:40px;color:#c0392b">${err.message}</div>`;
+  });
+}
+
+// ─── ADMIN: Audit Tab ────────────────────────────────────
+function renderAuditTab(container) {
+  let allLogs = [];
+  let filters = { search: '', action: '', dateFrom: '', dateTo: '' };
+
+  container.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-end"><div style="flex:1;min-width:180px"><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Buscar</label><input type="text" id="auditSearch" placeholder="UID, email, ID..." style="width:100%;padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Acción</label><select id="auditAction" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"><option value="">Todas</option></select></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Desde</label><input type="date" id="auditFrom" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hasta</label><input type="date" id="auditTo" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><button class="btn-sm btn-approve" id="auditExport" style="height:36px">Export CSV</button></div><div class="table-wrap" id="auditTable"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>`;
+
+  db.collection('audit_log').orderBy('timestamp', 'desc').limit(200).get().then(snap => {
+    allLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const actions = [...new Set(allLogs.map(l => l.action).filter(Boolean))];
+    const sel = document.getElementById('auditAction');
+    if (sel) actions.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; sel.appendChild(o); });
+    renderAuditTable();
+  });
+
+  function filterLogs() {
+    return allLogs.filter(l => {
+      if (filters.search) {
+        const s = filters.search.toLowerCase();
+        const haystack = [l.actorUid, l.actorEmail, l.targetId, l.action, l.details].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(s)) return false;
+      }
+      if (filters.action && l.action !== filters.action) return false;
+      if (filters.dateFrom) {
+        const ts = l.timestamp ? new Date(l.timestamp.seconds * 1000) : null;
+        if (!ts || ts < new Date(filters.dateFrom)) return false;
+      }
+      if (filters.dateTo) {
+        const ts = l.timestamp ? new Date(l.timestamp.seconds * 1000) : null;
+        const end = new Date(filters.dateTo); end.setDate(end.getDate() + 1);
+        if (!ts || ts >= end) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderAuditTable() {
+    const filtered = filterLogs();
+    const el = document.getElementById('auditTable');
+    if (!el) return;
+    if (!filtered.length) { el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">Sin registros</div>'; return; }
+    el.innerHTML = `<table><thead><tr><th>Fecha</th><th>Actor</th><th>Acción</th><th>Target</th><th>Detalles</th></tr></thead><tbody>${filtered.map(l => {
+      const ts = l.timestamp ? new Date(l.timestamp.seconds * 1000).toLocaleString() : '—';
+      return `<tr><td style="white-space:nowrap;font-size:12px">${ts}</td><td style="font-size:12px">${l.actorEmail || l.actorUid || '—'}</td><td><span class="badge badge-active" style="font-size:10px">${l.action || '—'}</span></td><td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${l.targetId || '—'}</td><td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">${l.details || '—'}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  }
+
+  document.getElementById('auditSearch')?.addEventListener('input', (e) => { filters.search = e.target.value; renderAuditTable(); });
+  document.getElementById('auditAction')?.addEventListener('change', (e) => { filters.action = e.target.value; renderAuditTable(); });
+  document.getElementById('auditFrom')?.addEventListener('change', (e) => { filters.dateFrom = e.target.value; renderAuditTable(); });
+  document.getElementById('auditTo')?.addEventListener('change', (e) => { filters.dateTo = e.target.value; renderAuditTable(); });
+
+  document.getElementById('auditExport')?.addEventListener('click', () => {
+    const filtered = filterLogs();
+    const header = 'Fecha,Actor,Email,Acción,Target,Detalles';
+    const rows = filtered.map(l => {
+      const ts = l.timestamp ? new Date(l.timestamp.seconds * 1000).toISOString() : '';
+      return [ts, l.actorUid || '', l.actorEmail || '', l.action || '', l.targetId || '', '"' + (l.details || '').replace(/"/g, '""') + '"'].join(',');
+    });
+    const csv = header + '\n' + rows.join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'audit_' + new Date().toISOString().split('T')[0] + '.csv';
+    a.click();
+  });
+}
+
+// ─── Device Fingerprint (Stage 0 fraud detection) ────────
+async function getDeviceFingerprint() {
+  try {
+    const fp = await window._fpPromise;
+    const result = await fp.get();
+    return result.visitorId;
+  } catch (e) {
+    console.warn("Fingerprint unavailable:", e.message);
+    return null;
+  }
+}
 
 // ─── Init ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
