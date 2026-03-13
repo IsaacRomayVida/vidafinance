@@ -7,6 +7,7 @@ functions/.env
 functions/node_modules/
 .DS_Store
 service-account.json
+docai-key.json
 env/
 services/**/node_modules/
 services/**/__pycache__/
