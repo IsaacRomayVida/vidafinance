@@ -6,15 +6,29 @@ const IORedis = require('ioredis');
 const { Queue, Worker } = require('bullmq');
 require('dotenv').config();
 
-admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+const svcAcct = JSON.parse(
+  process.env.FIREBASE_SERVICE_ACCOUNT_B64
+    ? Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64, 'base64').toString()
+    : process.env.FIREBASE_SERVICE_ACCOUNT
+);
+admin.initializeApp({ credential: admin.credential.cert(svcAcct) });
 const db    = admin.firestore();
 const redis = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,
   tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
 
+const cors = require('cors');
+const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
 app.use(helmet());
+app.use((req, res, next) => {
+  if (req.path.startsWith('/webhooks')) return next();
+  const origin = req.headers.origin;
+  if (origin && ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
+  if (req.method === 'OPTIONS') { res.setHeader('Access-Control-Allow-Methods', 'GET,POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-internal-secret'); return res.sendStatus(204); }
+  next();
+});
 app.use('/webhooks', express.raw({ type: 'application/json', limit: '10kb' }));
 app.use(express.json({ limit: '100kb' }));
 
@@ -45,9 +59,21 @@ app.get('/health', async (req, res) => {
 
 // ── Conekta webhook ─────────────────────────────────────────────────
 app.post('/webhooks/conekta', async (req, res) => {
-  const sig = req.headers['x-conekta-signature'];
-  const exp = crypto.createHmac('sha256', process.env.CONEKTA_WEBHOOK_SECRET).update(req.body).digest('base64');
-  if (sig !== exp) {
+  const sig = req.headers['digest'] || req.headers['x-conekta-signature'];
+  const payload = req.body;
+  let valid = false;
+  try {
+    const pubKey = process.env.CONEKTA_WEBHOOK_SECRET;
+    if (pubKey.startsWith('-----BEGIN PUBLIC KEY')) {
+      const verifier = crypto.createVerify('RSA-SHA256');
+      verifier.update(payload);
+      valid = verifier.verify(pubKey, sig, 'base64');
+    } else {
+      const exp = crypto.createHmac('sha256', pubKey).update(payload).digest('base64');
+      valid = (sig === exp);
+    }
+  } catch (_) { valid = false; }
+  if (!valid) {
     await db.collection('incident_log').add({ source: 'conekta-webhook', error: 'invalid_signature', ts: admin.firestore.FieldValue.serverTimestamp() });
     return res.status(401).json({ error: 'Invalid signature' });
   }

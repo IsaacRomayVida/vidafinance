@@ -9,11 +9,12 @@ const fs         = require("fs");
 const path       = require("path");
 require("dotenv").config();
 
-admin.initializeApp({
-  credential: admin.credential.cert(
-    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-  ),
-});
+const svcAcct = JSON.parse(
+  process.env.FIREBASE_SERVICE_ACCOUNT_B64
+    ? Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64, 'base64').toString()
+    : process.env.FIREBASE_SERVICE_ACCOUNT
+);
+admin.initializeApp({ credential: admin.credential.cert(svcAcct) });
 const db = admin.firestore();
 const storage = admin.storage().bucket(process.env.FIREBASE_STORAGE_BUCKET);
 const redis = new IORedis(process.env.REDIS_URL, {
@@ -158,8 +159,16 @@ const requireInternal = (req, res, next) => {
   next();
 };
 
+const cors = require("cors");
+const ALLOWED = ["https://vida-finance.web.app"];
 const app = express();
 app.use(helmet());
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
+  if (req.method === "OPTIONS") { res.setHeader("Access-Control-Allow-Methods", "GET,POST"); res.setHeader("Access-Control-Allow-Headers", "Content-Type,x-internal-secret"); return res.sendStatus(204); }
+  next();
+});
 app.use(express.json({ limit: "100kb" }));
 
 app.get("/health", async (req, res) => {

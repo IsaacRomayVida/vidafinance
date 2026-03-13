@@ -10,6 +10,8 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+const appCheck = firebase.appCheck();
+appCheck.activate('6LcXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', true);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
@@ -1666,7 +1668,18 @@ function renderLogin(app) {
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault(); const btn = document.getElementById('loginBtn'); const errEl = document.getElementById('authError');
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>' + t('auth_signing_in'); errEl.classList.remove('show');
-    try { await auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginPass').value); }
+    try {
+      await auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginPass').value);
+      if (!auth.currentUser.emailVerified) {
+        await auth.currentUser.sendEmailVerification();
+        errEl.textContent = 'Verifica tu correo electrónico. Te enviamos un enlace de verificación.';
+        errEl.classList.add('show');
+        errEl.style.background = '#fff8e1'; errEl.style.color = '#8d6e00';
+        btn.disabled = false; btn.textContent = t('auth_signin_btn');
+        await auth.signOut();
+        return;
+      }
+    }
     catch (err) { errEl.textContent = err.message; errEl.classList.add('show'); btn.disabled = false; btn.textContent = t('auth_signin_btn'); }
   });
 }
@@ -1674,6 +1687,10 @@ function renderLogin(app) {
 // ─── EMPLOYER DASHBOARD ──────────────────────────────────
 async function renderEmployerDashboard(app) {
   app.innerHTML = '<div class="loading-page"><div class="spinner"></div></div>';
+  if (!auth.currentUser?.emailVerified) {
+    app.innerHTML = '<div style="max-width:600px;margin:80px auto;text-align:center;padding:40px"><h2>Verifica tu correo electrónico</h2><p style="margin:16px 0;color:var(--t2)">Te enviamos un enlace de verificación. Revisa tu bandeja de entrada y vuelve a iniciar sesión.</p><button class="btn-primary" onclick="auth.signOut().then(()=>navigate(\'/login\'))">Volver al inicio</button></div>';
+    return;
+  }
   const uid = auth.currentUser.uid;
   const empDoc = await db.collection('employers').doc(uid).get();
   if (!empDoc.exists) { navigate('/employee/dashboard'); return; }
@@ -1795,6 +1812,10 @@ window.rejectLoan = async function(id, btn) {
 // ─── EMPLOYEE DASHBOARD ──────────────────────────────────
 async function renderEmployeeDashboard(app) {
   app.innerHTML = '<div class="loading-page"><div class="spinner"></div></div>';
+  if (!auth.currentUser?.emailVerified) {
+    app.innerHTML = '<div style="max-width:600px;margin:80px auto;text-align:center;padding:40px"><h2>Verifica tu correo electrónico</h2><p style="margin:16px 0;color:var(--t2)">Te enviamos un enlace de verificación. Revisa tu bandeja de entrada y vuelve a iniciar sesión.</p><button class="btn-primary" onclick="auth.signOut().then(()=>navigate(\'/login\'))">Volver al inicio</button></div>';
+    return;
+  }
   const uid = auth.currentUser.uid;
   const empDoc = await db.collection('employees').doc(uid).get();
   if (!empDoc.exists) { navigate('/employer/dashboard'); return; }

@@ -7,7 +7,12 @@ const twilio  = require('twilio');
 const sg      = require('@sendgrid/mail');
 require('dotenv').config();
 
-admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+const svcAcct = JSON.parse(
+  process.env.FIREBASE_SERVICE_ACCOUNT_B64
+    ? Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64, 'base64').toString()
+    : process.env.FIREBASE_SERVICE_ACCOUNT
+);
+admin.initializeApp({ credential: admin.credential.cert(svcAcct) });
 const db    = admin.firestore();
 const redis = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest:null, tls:process.env.REDIS_URL?.startsWith('rediss://')?{rejectUnauthorized:false}:undefined });
 const tw    = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
@@ -72,8 +77,17 @@ worker.on('failed', async (job,err) => {
   await db.collection('incident_log').add({ source:'notification-worker', type:job?.data?.type, error:err.message, attempts:job?.attemptsMade, ts:admin.firestore.FieldValue.serverTimestamp() });
 });
 
+const cors = require('cors');
+const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
-app.use(helmet()); app.use(express.json({limit:'100kb'}));
+app.use(helmet());
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
+  if (req.method === 'OPTIONS') { res.setHeader('Access-Control-Allow-Methods', 'GET,POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-internal-secret'); return res.sendStatus(204); }
+  next();
+});
+app.use(express.json({limit:'100kb'}));
 app.get('/health', async (req,res) => {
   const redisOk = await redis.ping().then(()=>true).catch(()=>false);
   res.json({status:redisOk?'ok':'degraded',service:'vida-notification-service',redis:redisOk,worker:worker.isRunning()});
