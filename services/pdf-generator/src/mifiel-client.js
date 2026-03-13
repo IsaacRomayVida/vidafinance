@@ -20,7 +20,7 @@ const Document = Mifiel.Models.Document;
 function init() {
   Mifiel.Config.setTokens(
     process.env.MIFIEL_APP_ID,
-    process.env.MIFIEL_APP_SECRET
+    process.env.MIFIEL_APP_SECRET || process.env.MIFIEL_ACCESS_TOKEN
   );
   Mifiel.Config.url = process.env.MIFIEL_ENV === "production"
     ? "https://www.mifiel.com/api/v1"

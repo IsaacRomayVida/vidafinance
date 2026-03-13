@@ -14,7 +14,7 @@ const redis = require("./redis-client");
 const CACHE_TTL = 86400; // 24 h
 
 const BASE = () => process.env.VERIFIK_BASE_URL || "https://api.verifik.co";
-const AUTH = () => ({ "Authorization": `Bearer ${process.env.VERIFIK_API_KEY}`, "Content-Type": "application/json" });
+const AUTH = () => ({ "Authorization": `Bearer ${process.env.VERIFIK_API_KEY || process.env.VERIFY_API_KEY}`, "Content-Type": "application/json" });
 
 async function cachedPost(cacheKey, path, body) {
   const cached = await redis.get(cacheKey).catch(() => null);
