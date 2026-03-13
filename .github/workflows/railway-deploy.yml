@@ -1,0 +1,67 @@
+name: Deploy Railway Services
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      payment-server: ${{ steps.changes.outputs.payment-server }}
+      softcredito-adapter: ${{ steps.changes.outputs.softcredito-adapter }}
+      notification-service: ${{ steps.changes.outputs.notification-service }}
+      pdf-generator: ${{ steps.changes.outputs.pdf-generator }}
+      ml-service: ${{ steps.changes.outputs.ml-service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            payment-server:
+              - "services/payment-server/**"
+            softcredito-adapter:
+              - "services/softcredito-adapter/**"
+            notification-service:
+              - "services/notification-service/**"
+            pdf-generator:
+              - "services/pdf-generator/**"
+            ml-service:
+              - "services/ml-service/**"
+
+  deploy:
+    needs: detect
+    runs-on: ubuntu-latest
+    if: |
+      needs.detect.outputs.payment-server == 'true' ||
+      needs.detect.outputs.softcredito-adapter == 'true' ||
+      needs.detect.outputs.notification-service == 'true' ||
+      needs.detect.outputs.pdf-generator == 'true' ||
+      needs.detect.outputs.ml-service == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install -g @railway/cli
+      - name: Deploy changed services
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          if [ "${{ needs.detect.outputs.payment-server }}" = "true" ]; then
+            railway redeploy --service payment-server --yes
+          fi
+          if [ "${{ needs.detect.outputs.softcredito-adapter }}" = "true" ]; then
+            railway redeploy --service softcredito-adapter --yes
+          fi
+          if [ "${{ needs.detect.outputs.notification-service }}" = "true" ]; then
+            railway redeploy --service notification-service --yes
+          fi
+          if [ "${{ needs.detect.outputs.pdf-generator }}" = "true" ]; then
+            railway redeploy --service pdf-generator --yes
+          fi
+          if [ "${{ needs.detect.outputs.ml-service }}" = "true" ]; then
+            railway redeploy --service ml-service --yes
+          fi

@@ -3,5 +3,15 @@ node_modules/
 *.log
 .env
 .env.local
+functions/.env
 functions/node_modules/
 .DS_Store
+service-account.json
+docai-key.json
+client_secret_*.json
+env/
+services/**/node_modules/
+services/**/__pycache__/
+services/**/.env
+services/**/*.pyc
+services/**/*.pyo

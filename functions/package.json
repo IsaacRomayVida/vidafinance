@@ -13,8 +13,12 @@
   },
   "main": "index.js",
   "dependencies": {
+    "bullmq": "^5.71.0",
     "firebase-admin": "^13.7.0",
-    "firebase-functions": "^7.0.6"
+    "firebase-functions": "^7.0.6",
+    "ioredis": "^5.10.0",
+    "nanoid": "^3.3.11",
+    "node-fetch": "^2.7.0"
   },
   "private": true
 }
