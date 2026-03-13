@@ -186,6 +186,8 @@ exports.requestLoan = onCall({ cors: true }, async (request) => {
       contractUrl: null,
       receiptUrl: null,
       ...loanExtra,
+      acceptedIp: request.rawRequest?.ip || null,
+      acceptedUserAgent: request.rawRequest?.headers?.["user-agent"] || null,
       acceptedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -557,6 +559,87 @@ exports.weeklyPortfolioSnapshot = onSchedule(
       overdueRate: total > 0 ? overdue / total : 0,
       snapshotAt: FieldValue.serverTimestamp(),
     });
+  }
+);
+
+// ── systemHealthCheck — every 5 minutes ───────────────────────────────
+exports.systemHealthCheck = onSchedule(
+  { schedule: "*/5 * * * *", timeZone: "America/Mexico_City" },
+  async () => {
+    const services = [
+      { name: "payment-server", url: process.env.PAYMENT_SERVER_URL + "/health" },
+      { name: "softcredito-adapter", url: process.env.SOFTCREDITO_ADAPTER_URL + "/health" },
+      { name: "notification-service", url: process.env.NOTIFICATION_SERVICE_URL + "/health" },
+      { name: "pdf-generator", url: process.env.PDF_GENERATOR_URL + "/health" },
+      { name: "ml-service", url: process.env.ML_SERVICE_URL + "/health" },
+    ];
+
+    const results = await Promise.allSettled(
+      services.map(async (s) => {
+        const start = Date.now();
+        const r = await fetch(s.url, { signal: AbortSignal.timeout(6000) });
+        const d = await r.json();
+        return { name: s.name, status: d.status, redis: d.redis, latencyMs: Date.now() - start };
+      })
+    );
+
+    const data = {};
+    const ts = FieldValue.serverTimestamp();
+
+    for (let i = 0; i < services.length; i++) {
+      const res = results[i];
+      data[services[i].name] =
+        res.status === "fulfilled"
+          ? { ...res.value, checkedAt: ts }
+          : { status: "down", error: res.reason.message, checkedAt: ts };
+
+      if (res.status === "rejected") {
+        await db.collection("incident_log").add({
+          source: "health-check",
+          service: services[i].name,
+          error: res.reason.message,
+          severity: "critical",
+          ts,
+          resolved: false,
+        });
+      }
+    }
+
+    await db.collection("system_health").doc("current").set({ ...data, lastChecked: ts });
+  }
+);
+
+// ── queueHealthCheck — every 2 minutes ────────────────────────────────
+exports.queueHealthCheck = onSchedule(
+  { schedule: "*/2 * * * *", timeZone: "America/Mexico_City" },
+  async () => {
+    try {
+      const r = await fetch(process.env.PAYMENT_SERVER_URL + "/internal/queue-stats", {
+        headers: { "x-internal-secret": process.env.INTERNAL_SECRET },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!r.ok) return;
+
+      const d = await r.json();
+      const ts = FieldValue.serverTimestamp();
+
+      await db.collection("system_health").doc("queues").set({ ...d.queues, checkedAt: ts });
+
+      for (const [name, stats] of Object.entries(d.queues)) {
+        if (stats.failed > 50) {
+          await db.collection("incident_log").add({
+            source: "queue-monitor",
+            queue: name,
+            failedCount: stats.failed,
+            severity: "warning",
+            ts,
+            resolved: false,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Queue health check failed:", e.message);
+    }
   }
 );
 
