@@ -3,12 +3,10 @@
  * docai-client.js
  * Google Document AI — payroll slip OCR (Form Parser).
  *
- * Setup:
- *   1. Enable documentai.googleapis.com on your GCP project
- *   2. Create a Form Parser processor (console or gcloud CLI)
- *   3. Create a service account with roles/documentai.apiUser
- *   4. Store the JSON key in GOOGLE_DOCAI_CREDENTIALS env var
+ * Reuses FIREBASE_SERVICE_ACCOUNT credentials (same SA used by all services).
+ * The SA needs roles/documentai.apiUser on the GCP project.
  *
+ * Processor: vida-payroll-parser (8d46c79a75eb5406), Form Parser, us region.
  * Docs: https://cloud.google.com/document-ai/docs
  */
 const { DocumentProcessorServiceClient } = require("@google-cloud/documentai").v1;
@@ -17,7 +15,9 @@ let _client = null;
 
 function getDocAIClient() {
   if (_client) return _client;
-  const creds = JSON.parse(process.env.GOOGLE_DOCAI_CREDENTIALS);
+  const creds = JSON.parse(
+    process.env.GOOGLE_DOCAI_CREDENTIALS || process.env.FIREBASE_SERVICE_ACCOUNT
+  );
   _client = new DocumentProcessorServiceClient({ credentials: creds });
   return _client;
 }
