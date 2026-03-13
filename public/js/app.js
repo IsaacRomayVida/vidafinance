@@ -10,9 +10,8 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-// App Check — uncomment and replace with your reCAPTCHA v3 site key when ready:
-// const appCheck = firebase.appCheck();
-// appCheck.activate('YOUR_RECAPTCHA_V3_SITE_KEY', true);
+const appCheck = firebase.appCheck();
+appCheck.activate('6LcROIksAAAAAKv4V9UtRXdalbYNGzOK23tE-WX5', true);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
