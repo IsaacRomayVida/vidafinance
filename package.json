@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "verify": "node scripts/verify-production.js"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0",
+    "dotenv": "^16.0.0"
+  }
+}
