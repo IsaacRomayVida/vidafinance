@@ -176,6 +176,3 @@ jobs:
             echo ""
             echo "🎉 All services are healthy!"
           fi
-          if [ "${{ needs.detect.outputs.underwriting-service }}" = "true" ]; then
-            railway redeploy --service underwriting-service --yes
-          fi

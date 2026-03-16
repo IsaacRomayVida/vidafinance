@@ -113,15 +113,15 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - name: payment-server
+          - name: vida-payment-server
             dir: services/payment-server
-          - name: softcredito-adapter
+          - name: vida-softcredito
             dir: services/softcredito-adapter
-          - name: notification-service
+          - name: vida-notifications
             dir: services/notification-service
-          - name: pdf-generator
+          - name: vida-pdf-generator
             dir: services/pdf-generator
-          - name: ml-service
+          - name: vida-ml-service
             dir: services/ml-service
     steps:
       - uses: actions/checkout@v4
@@ -131,15 +131,13 @@ jobs:
 
       - name: Deploy ${{ matrix.service.name }} to Staging
         if: github.ref == 'refs/heads/develop'
-        run: railway up --service ${{ matrix.service.name }} --detach
-        working-directory: ${{ matrix.service.dir }}
+        run: railway redeploy --service ${{ matrix.service.name }} --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
 
       - name: Deploy ${{ matrix.service.name }} to Production
         if: github.ref == 'refs/heads/main'
-        run: railway up --service ${{ matrix.service.name }} --detach
-        working-directory: ${{ matrix.service.dir }}
+        run: railway redeploy --service ${{ matrix.service.name }} --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
@@ -156,17 +154,31 @@ jobs:
         run: sleep 30
 
       - name: Health check all Railway services
-        env:
-          BASE: ${{ env.ENVIRONMENT == 'production' && secrets.RAILWAY_BASE_URL_PROD || secrets.RAILWAY_BASE_URL_STAGING }}
         run: |
-          for service in payment-server softcredito-adapter notification-service pdf-generator ml-service; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/$service/health")
-            if [ "$STATUS" != "200" ]; then
-              echo "❌ $service health check failed (HTTP $STATUS)"
-              exit 1
-            fi
-            echo "✅ $service: OK"
-          done
+          check_health() {
+            local url="$1"
+            local service="$2"
+            local max_attempts=5
+            local attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              local status
+              status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$url" 2>/dev/null || echo "000")
+              if [ "$status" = "200" ]; then
+                echo "✅ $service — healthy (HTTP $status)"
+                return 0
+              fi
+              echo "  attempt $attempt/$max_attempts: $service returned $status, retrying in 15s..."
+              sleep 15
+              attempt=$((attempt + 1))
+            done
+            echo "❌ $service — not healthy after $max_attempts attempts (last: $status)"
+            return 1
+          }
+          check_health "https://vida-payment-server.railway.app/health"  "payment-server"
+          check_health "https://vida-softcredito.railway.app/health"     "softcredito-adapter"
+          check_health "https://vida-notifications.railway.app/health"   "notification-service"
+          check_health "https://vida-pdf-generator.railway.app/health"   "pdf-generator"
+          check_health "https://vida-ml-service.railway.app/health"      "ml-service"
 
       - name: Notify Slack on success
         if: success()
