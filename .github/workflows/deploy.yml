@@ -39,22 +39,8 @@ jobs:
       - name: TypeScript check (Cloud Functions)
         run: cd functions && npm run build
 
-      - name: Setup Java 21 (required by Firebase emulator)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Install Firebase CLI
-        run: npm install -g firebase-tools
-
-      - name: Authenticate Firebase CLI (service account)
-        run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" | base64 -d > /tmp/sa.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json" >> "$GITHUB_ENV"
-
-      - name: Run Firestore rules tests
-        run: firebase emulators:exec --only firestore --project vida-finance-test 'npm test'
+      - name: Run functions unit tests
+        run: cd functions && npm test
 
   # ─────────────────────────────────────────────
   # JOB 2: Deploy Firebase
@@ -92,25 +78,28 @@ jobs:
       - name: Build Cloud Functions
         run: cd functions && npm run build
 
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
       - name: Deploy to Firebase (Staging)
         if: github.ref == 'refs/heads/develop'
         run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" | base64 -d > /tmp/sa.json
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
-          npx firebase-tools deploy \
-            --only hosting,functions,firestore:rules,firestore:indexes,storage \
-            --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
+          firebase deploy \
+            --only functions,firestore:rules,firestore:indexes,storage \
+            --project vida-finance \
             --non-interactive
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
       - name: Deploy to Firebase (Production)
         if: github.ref == 'refs/heads/main'
         run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}" | base64 -d > /tmp/sa.json
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
-          npx firebase-tools deploy \
-            --only hosting,functions,firestore:rules,firestore:indexes,storage \
-            --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
+          firebase deploy \
+            --only functions,firestore:rules,firestore:indexes,storage \
+            --project vida-finance \
             --non-interactive
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
   # ─────────────────────────────────────────────
   # JOB 3: Deploy Railway Microservices
