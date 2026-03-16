@@ -30,11 +30,12 @@ Functions      │  softcredito-adapter :3002              │
 ## Private Networking (Railway Internal Domains)
 
 ```
-payment-server.railway.internal:3001    → vida-payment-server
-vida-softcredito.railway.internal:3002  → vida-softcredito
-vida-notifications.railway.internal:3003 → vida-notifications
-vida-pdf-generator.railway.internal:3004 → vida-pdf-generator
-vida-ml-service.railway.internal:3005   → vida-ml-service
+vida-payment-server.railway.internal:3001   → vida-payment-server
+vida-softcredito.railway.internal:3002      → vida-softcredito
+vida-notifications.railway.internal:3003    → vida-notifications
+vida-pdf-generator.railway.internal:3004    → vida-pdf-generator
+vida-ml-service.railway.internal:3005       → vida-ml-service
+vida-redis.railway.internal:6379            → vida-redis
 ```
 
 ## Health Check Endpoints
@@ -57,8 +58,32 @@ curl https://vida-ml-service.railway.app/health
 
 1. Create Railway project `vida-staging`
 2. Add Redis service first (`vida-redis`, image: `redis:7.2-alpine`)
-3. Set all secrets in Railway dashboard (see `.env.example` in each service)
-4. Deploy services — pushes to `main` or `develop` trigger auto-deploy via CI
+3. Add all 5 microservices linked to this repo (point each to the right `services/<name>/` subdirectory)
+4. **Add GitHub secrets** (see list below) — then run the automated setup:
+
+   ```bash
+   # Option A — GitHub Actions (recommended)
+   # 1. Add RAILWAY_TOKEN + other secrets to GitHub repo Settings → Secrets → Actions
+   # 2. Go to Actions → "Setup Railway Environment Variables" → Run workflow → service: all
+
+   # Option B — Local script
+   RAILWAY_TOKEN=<token> \
+   FIREBASE_SERVICE_ACCOUNT_B64=<base64> \
+   INTERNAL_SECRET=<secret> \
+   CONEKTA_WEBHOOK_SECRET=<secret> \
+   SOFTCREDITO_CLIENT_ID=<id> \
+   SOFTCREDITO_CLIENT_SECRET=<secret> \
+   TWILIO_ACCOUNT_SID=<sid> \
+   TWILIO_AUTH_TOKEN=<token> \
+   SENDGRID_API_KEY=<key> \
+   ANTHROPIC_API_KEY=<key> \
+   MIFIEL_APP_ID=<id> \
+   MIFIEL_APP_SECRET=<secret> \
+   bash scripts/setup-railway-env.sh
+   ```
+
+5. Deploy services — push to `main`/`develop` triggers auto-deploy, or use:
+   `Actions → "Deploy Railway Services" → Run workflow → service: all`
 
 ## Required GitHub Secrets
 
