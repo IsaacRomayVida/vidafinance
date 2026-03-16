@@ -2,7 +2,7 @@ name: Deploy Firebase
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths-ignore:
       - "services/**"
       - "*.md"
@@ -21,7 +21,22 @@ jobs:
 
       - run: cd functions && npm ci
 
-      - name: Write functions .env
+      - name: Write functions .env (staging)
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          cat > functions/.env << ENVEOF
+          REDIS_URL=${{ secrets.REDIS_URL_STAGING }}
+          CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
+          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
+          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL_STAGING }}
+          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL_STAGING }}
+          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL_STAGING }}
+          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL_STAGING }}
+          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_STAGING }}
+          ENVEOF
+
+      - name: Write functions .env (production)
+        if: github.ref == 'refs/heads/main'
         run: |
           cat > functions/.env << ENVEOF
           REDIS_URL=${{ secrets.REDIS_URL }}
@@ -34,7 +49,14 @@ jobs:
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
           ENVEOF
 
-      - name: Deploy Firebase
+      - name: Deploy Firebase to STAGING
+        if: github.ref == 'refs/heads/develop'
+        run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance-staging
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Deploy Firebase to PRODUCTION
+        if: github.ref == 'refs/heads/main'
         run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

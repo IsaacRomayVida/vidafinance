@@ -2,7 +2,7 @@ name: Deploy Railway Services
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - "services/**"
 
@@ -32,21 +32,59 @@ jobs:
             ml-service:
               - "services/ml-service/**"
 
-  deploy:
+  deploy-staging:
     needs: detect
     runs-on: ubuntu-latest
     if: |
-      needs.detect.outputs.payment-server == 'true' ||
-      needs.detect.outputs.softcredito-adapter == 'true' ||
-      needs.detect.outputs.notification-service == 'true' ||
-      needs.detect.outputs.pdf-generator == 'true' ||
-      needs.detect.outputs.ml-service == 'true'
+      github.ref == 'refs/heads/develop' && (
+        needs.detect.outputs.payment-server == 'true' ||
+        needs.detect.outputs.softcredito-adapter == 'true' ||
+        needs.detect.outputs.notification-service == 'true' ||
+        needs.detect.outputs.pdf-generator == 'true' ||
+        needs.detect.outputs.ml-service == 'true'
+      )
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - run: npm install -g @railway/cli
-      - name: Deploy changed services
+      - name: Deploy changed services to STAGING
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: |
+          if [ "${{ needs.detect.outputs.payment-server }}" = "true" ]; then
+            railway redeploy --service payment-server --yes
+          fi
+          if [ "${{ needs.detect.outputs.softcredito-adapter }}" = "true" ]; then
+            railway redeploy --service softcredito-adapter --yes
+          fi
+          if [ "${{ needs.detect.outputs.notification-service }}" = "true" ]; then
+            railway redeploy --service notification-service --yes
+          fi
+          if [ "${{ needs.detect.outputs.pdf-generator }}" = "true" ]; then
+            railway redeploy --service pdf-generator --yes
+          fi
+          if [ "${{ needs.detect.outputs.ml-service }}" = "true" ]; then
+            railway redeploy --service ml-service --yes
+          fi
+
+  deploy-production:
+    needs: detect
+    runs-on: ubuntu-latest
+    if: |
+      github.ref == 'refs/heads/main' && (
+        needs.detect.outputs.payment-server == 'true' ||
+        needs.detect.outputs.softcredito-adapter == 'true' ||
+        needs.detect.outputs.notification-service == 'true' ||
+        needs.detect.outputs.pdf-generator == 'true' ||
+        needs.detect.outputs.ml-service == 'true'
+      )
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install -g @railway/cli
+      - name: Deploy changed services to PRODUCTION
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |

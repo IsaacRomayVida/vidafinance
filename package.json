@@ -1,9 +1,27 @@
 {
   "scripts": {
-    "verify": "node scripts/verify-production.js"
+    "verify": "node scripts/verify-production.js",
+    "prepare": "husky"
   },
   "dependencies": {
-    "node-fetch": "^2.7.0",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0"
+  },
+  "lint-staged": {
+    "functions/src/**/*.ts": [
+      "eslint --fix --max-warnings 0",
+      "tsc --noEmit -p functions/tsconfig.json"
+    ],
+    "services/**/*.ts": [
+      "eslint --fix --max-warnings 0"
+    ],
+    "services/ml-service/**/*.py": [
+      "python -m black --check",
+      "python -m flake8"
+    ]
   }
 }
