@@ -25,7 +25,7 @@ require_var() {
   fi
 }
 
-echo "🚀 Setting Railway environment variables for vida-staging project..."
+echo "🚀 Setting Railway environment variables for observant-miracle project..."
 echo ""
 
 # ── Verify Railway CLI is installed ──────────────────────────────────────────
@@ -34,16 +34,18 @@ if ! command -v railway &>/dev/null; then
   npm install -g @railway/cli
 fi
 
-# ── Check Railway project ─────────────────────────────────────────────────────
-echo "📋 Available projects:"
-railway list 2>/dev/null || true
+# ── Link to Railway project ───────────────────────────────────────────────────
+# Project: observant-miracle (id: 1ad040b4-6f0b-4530-9f58-0a1ef5e89c75)
+RAILWAY_PROJECT_ID="${RAILWAY_PROJECT_ID:-1ad040b4-6f0b-4530-9f58-0a1ef5e89c75}"
+echo "📋 Linking to Railway project: observant-miracle ($RAILWAY_PROJECT_ID)"
+railway link --projectId "$RAILWAY_PROJECT_ID" --environment production 2>/dev/null || true
 echo ""
 
 # ── Prompt for required secrets if not provided ──────────────────────────────
 require_var "FIREBASE_SERVICE_ACCOUNT_B64"     "Firebase service account JSON (base64-encoded)"
 require_var "INTERNAL_SECRET"                  "Internal service-to-service secret (random string)"
-# Default to Railway private networking URL (update if your Redis service has a different name)
-REDIS_URL="${REDIS_URL:-redis://vida-redis.railway.internal:6379}"
+# Railway Redis service is named "Redis" in the observant-miracle project
+REDIS_URL="${REDIS_URL:-redis://Redis.railway.internal:6379}"
 export REDIS_URL
 
 # Service-specific secrets
@@ -72,22 +74,9 @@ railway variables set \
   CONEKTA_WEBHOOK_SECRET="$CONEKTA_WEBHOOK_SECRET" \
   INTERNAL_SECRET="$INTERNAL_SECRET" \
   ALLOWED_ORIGINS="https://vida-staging.web.app,https://admin-staging.vida.com" \
-  SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
-  NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
-  ML_SERVICE_URL="http://vida-ml-service.railway.internal:3005" \
-  --service vida-payment-server 2>/dev/null || \
-railway variables set \
-  NODE_ENV=staging \
-  PORT=3001 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  CONEKTA_WEBHOOK_SECRET="$CONEKTA_WEBHOOK_SECRET" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
-  ALLOWED_ORIGINS="https://vida-staging.web.app,https://admin-staging.vida.com" \
-  SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
-  NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
-  ML_SERVICE_URL="http://vida-ml-service.railway.internal:3005" \
+  SOFTCREDITO_ADAPTER_URL="http://softcredito-adapter.railway.internal:3002" \
+  NOTIFICATION_SERVICE_URL="http://notification-service.railway.internal:3003" \
+  ML_SERVICE_URL="http://ml-service.railway.internal:3005" \
   --service payment-server
 echo "✅ vida-payment-server configured"
 
@@ -104,40 +93,12 @@ railway variables set \
   SOFTCREDITO_API_URL="https://api.softcredito.com.mx/v1" \
   SOFTCREDITO_CLIENT_ID="$SOFTCREDITO_CLIENT_ID" \
   SOFTCREDITO_CLIENT_SECRET="$SOFTCREDITO_CLIENT_SECRET" \
-  PAYMENT_SERVER_URL="http://vida-payment-server.railway.internal:3001" \
-  --service vida-softcredito 2>/dev/null || \
-railway variables set \
-  NODE_ENV=staging \
-  PORT=3002 \
-  REDIS_URL="$REDIS_URL" \
-  REDIS_CACHE_TTL=86400 \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
-  SOFTCREDITO_API_URL="https://api.softcredito.com.mx/v1" \
-  SOFTCREDITO_CLIENT_ID="$SOFTCREDITO_CLIENT_ID" \
-  SOFTCREDITO_CLIENT_SECRET="$SOFTCREDITO_CLIENT_SECRET" \
-  PAYMENT_SERVER_URL="http://vida-payment-server.railway.internal:3001" \
+  PAYMENT_SERVER_URL="http://payment-server.railway.internal:3001" \
   --service softcredito-adapter
 echo "✅ vida-softcredito configured"
 
 # ── service: vida-notifications ───────────────────────────────────────────────
 echo "⚙️  Configuring vida-notifications (port 3003)..."
-railway variables set \
-  NODE_ENV=staging \
-  PORT=3003 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
-  TWILIO_ACCOUNT_SID="$TWILIO_ACCOUNT_SID" \
-  TWILIO_AUTH_TOKEN="$TWILIO_AUTH_TOKEN" \
-  TWILIO_WHATSAPP_FROM="+14155238886" \
-  TWILIO_SMS_FROM="+15551234567" \
-  SENDGRID_API_KEY="$SENDGRID_API_KEY" \
-  SENDGRID_FROM_EMAIL="noreply@vida.finance" \
-  SENDGRID_FROM_NAME="VIDA Finance" \
-  --service vida-notifications 2>/dev/null || \
 railway variables set \
   NODE_ENV=staging \
   PORT=3003 \
@@ -172,38 +133,11 @@ railway variables set \
   MIFIEL_APP_ID="$MIFIEL_APP_ID" \
   MIFIEL_APP_SECRET="$MIFIEL_APP_SECRET" \
   MIFIEL_ENV="sandbox" \
-  --service vida-pdf-generator 2>/dev/null || \
-railway variables set \
-  NODE_ENV=staging \
-  PORT=3004 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  FIREBASE_STORAGE_BUCKET="$FIREBASE_STORAGE_BUCKET" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
-  PDF_STORAGE_PATH="documents/" \
-  MAX_CONCURRENT_PDF_JOBS=3 \
-  SOFOM_RFC="VIDA240101XXX" \
-  SOFOM_ADDRESS="Paseo de la Reforma 250 Piso 12, CDMX" \
-  MIFIEL_APP_ID="$MIFIEL_APP_ID" \
-  MIFIEL_APP_SECRET="$MIFIEL_APP_SECRET" \
-  MIFIEL_ENV="sandbox" \
   --service pdf-generator
 echo "✅ vida-pdf-generator configured"
 
 # ── service: vida-ml-service ──────────────────────────────────────────────────
 echo "⚙️  Configuring vida-ml-service (port 3005)..."
-railway variables set \
-  PORT=3005 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
-  ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-  MODEL_PATH="models/underwriting_v1.joblib" \
-  USE_ML_MODELS="false" \
-  ML_CACHE_TTL=86400 \
-  --service vida-ml-service 2>/dev/null || \
 railway variables set \
   PORT=3005 \
   REDIS_URL="$REDIS_URL" \
@@ -221,10 +155,10 @@ echo ""
 echo "🎉 All Railway environment variables configured!"
 echo ""
 echo "Next steps:"
-echo "  1. Trigger a deployment: push to main/develop or use 'railway up' per service"
-echo "  2. Verify health endpoints:"
-echo "     curl https://vida-payment-server.railway.app/health"
-echo "     curl https://vida-softcredito.railway.app/health"
-echo "     curl https://vida-notifications.railway.app/health"
-echo "     curl https://vida-pdf-generator.railway.app/health"
-echo "     curl https://vida-ml-service.railway.app/health"
+echo "  1. Trigger a deployment: push to main/develop or use 'railway redeploy --service <name>'"
+echo "  2. Verify health endpoints (project: observant-miracle):"
+echo "     curl https://payment-server-production-b9b8.up.railway.app/health"
+echo "     curl https://softcredito-adapter-production.up.railway.app/health"
+echo "     curl https://notification-service-production-f49e.up.railway.app/health"
+echo "     curl https://pdf-generator-production-1a31.up.railway.app/health"
+echo "     curl https://ml-service-production-f949.up.railway.app/health"

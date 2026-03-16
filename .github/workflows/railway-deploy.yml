@@ -104,6 +104,11 @@ jobs:
           fi
           echo "RAILWAY_TOKEN=$TOKEN" >> $GITHUB_ENV
 
+      - name: Link Railway project
+        run: railway link --projectId "$RAILWAY_PROJECT_ID" --environment production
+        env:
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID || '1ad040b4-6f0b-4530-9f58-0a1ef5e89c75' }}
+
       - name: Deploy changed services
         run: |
           deploy_service() {
@@ -112,14 +117,14 @@ jobs:
             if [ "$svc_flag" = "true" ]; then
               echo "🚀 Deploying $svc_name..."
               railway redeploy --service "$svc_name" --yes || \
-              echo "⚠️  redeploy failed for $svc_name (service may not exist with that name)"
+              echo "⚠️  redeploy failed for $svc_name"
             fi
           }
-          deploy_service "${{ needs.detect.outputs.payment-server }}"      "vida-payment-server"
-          deploy_service "${{ needs.detect.outputs.softcredito-adapter }}" "vida-softcredito"
-          deploy_service "${{ needs.detect.outputs.notification-service }}" "vida-notifications"
-          deploy_service "${{ needs.detect.outputs.pdf-generator }}"       "vida-pdf-generator"
-          deploy_service "${{ needs.detect.outputs.ml-service }}"          "vida-ml-service"
+          deploy_service "${{ needs.detect.outputs.payment-server }}"      "payment-server"
+          deploy_service "${{ needs.detect.outputs.softcredito-adapter }}" "softcredito-adapter"
+          deploy_service "${{ needs.detect.outputs.notification-service }}" "notification-service"
+          deploy_service "${{ needs.detect.outputs.pdf-generator }}"       "pdf-generator"
+          deploy_service "${{ needs.detect.outputs.ml-service }}"          "ml-service"
 
   health-check:
     needs: deploy
@@ -153,11 +158,11 @@ jobs:
             return 1
           }
 
-          check_health "https://vida-payment-server.railway.app/health"  "payment-server"     || true
-          check_health "https://vida-softcredito.railway.app/health"     "softcredito-adapter" || true
-          check_health "https://vida-notifications.railway.app/health"   "notification-service" || true
-          check_health "https://vida-pdf-generator.railway.app/health"   "pdf-generator"      || true
-          check_health "https://vida-ml-service.railway.app/health"      "ml-service"         || true
+          check_health "https://payment-server-production-b9b8.up.railway.app/health"        "payment-server"      || true
+          check_health "https://softcredito-adapter-production.up.railway.app/health"     "softcredito-adapter" || true
+          check_health "https://notification-service-production-f49e.up.railway.app/health" "notification-service" || true
+          check_health "https://pdf-generator-production-1a31.up.railway.app/health"      "pdf-generator"       || true
+          check_health "https://ml-service-production-f949.up.railway.app/health"         "ml-service"          || true
 
           if [ "$ALL_OK" = "false" ]; then
             echo ""
