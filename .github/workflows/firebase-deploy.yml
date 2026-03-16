@@ -2,7 +2,7 @@ name: Deploy Firebase
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths-ignore:
       - "services/**"
       - "*.md"
@@ -10,6 +10,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +35,19 @@ jobs:
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
           ENVEOF
 
+      - name: Set Firebase credentials (staging)
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" | base64 -d > /tmp/firebase-sa.json
+          echo "FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID_STAGING }}" >> $GITHUB_ENV
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json" >> $GITHUB_ENV
+
+      - name: Set Firebase credentials (production)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}" | base64 -d > /tmp/firebase-sa.json
+          echo "FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }}" >> $GITHUB_ENV
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json" >> $GITHUB_ENV
+
       - name: Deploy Firebase
-        run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project "$FIREBASE_PROJECT_ID"
