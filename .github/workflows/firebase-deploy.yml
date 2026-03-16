@@ -58,7 +58,7 @@ jobs:
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}' > /tmp/sa-staging.json
           GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-staging.json \
           firebase deploy \
-            --only functions,firestore:rules,firestore:indexes,storage \
+            --only functions,firestore:rules,firestore:indexes \
             --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
             --non-interactive
 
@@ -68,6 +68,6 @@ jobs:
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}' > /tmp/sa-production.json
           GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-production.json \
           firebase deploy \
-            --only functions,firestore:rules,firestore:indexes,storage \
+            --only functions,firestore:rules,firestore:indexes \
             --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
             --non-interactive
