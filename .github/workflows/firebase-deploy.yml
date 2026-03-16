@@ -21,8 +21,7 @@ jobs:
 
       - run: cd functions && npm ci
 
-      - name: Write functions .env (staging)
-        if: github.ref == 'refs/heads/develop'
+      - name: Write functions .env
         run: |
           cat > functions/.env << ENVEOF
           REDIS_URL=${{ secrets.REDIS_URL_STAGING }}
@@ -35,36 +34,8 @@ jobs:
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_STAGING }}
           ENVEOF
 
-      - name: Write functions .env (production)
-        if: github.ref == 'refs/heads/main'
+      - name: Authenticate Firebase
         run: |
-          cat > functions/.env << ENVEOF
-          REDIS_URL=${{ secrets.REDIS_URL }}
-          CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
-          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
-          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
-          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
-          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
-          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
-          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
-          ENVEOF
-
-      - name: Decode service account (staging)
-        if: github.ref == 'refs/heads/develop'
-        run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" | base64 --decode > /tmp/firebase-sa.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json" >> $GITHUB_ENV
-
-      - name: Decode service account (production)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}" | base64 --decode > /tmp/firebase-sa.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json" >> $GITHUB_ENV
-
-      - name: Deploy Firebase to STAGING
-        if: github.ref == 'refs/heads/develop'
-        run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance-staging
-
-      - name: Deploy Firebase to PRODUCTION
-        if: github.ref == 'refs/heads/main'
-        run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" > /tmp/sa.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
+          firebase deploy --only functions,hosting,firestore:rules,storage --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }}
