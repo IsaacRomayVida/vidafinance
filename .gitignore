@@ -1,5 +1,8 @@
 node_modules/
 .firebase/
+functions/lib/
+.test-build/
+tsconfig.test.json
 *.log
 .env
 .env.local

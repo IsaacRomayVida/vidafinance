@@ -1,9 +1,35 @@
 {
   "scripts": {
-    "verify": "node scripts/verify-production.js"
+    "verify": "node scripts/verify-production.js",
+    "test": "jest",
+    "test:rules": "jest firestore.rules.test"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testTimeout": 30000,
+    "globals": {
+      "ts-jest": {
+        "tsconfig": {
+          "module": "commonjs",
+          "esModuleInterop": true,
+          "strict": true,
+          "skipLibCheck": true,
+          "target": "es2020"
+        }
+      }
+    }
   },
   "dependencies": {
-    "node-fetch": "^2.7.0",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "firebase": "^12.10.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3"
   }
 }
