@@ -3,32 +3,21 @@ import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
 import fetch from 'node-fetch';
 import { nanoid } from 'nanoid';
-import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 
-import { withAuth, AuthContext } from './middleware/authMiddleware';
+import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
+import { getRedis } from './utils/redis';
+
+// Re-export fully-implemented cloud functions from their own modules
+export { markLoanDisbursed } from './loans/markLoanDisbursed';
+export { generatePaymentLink } from './payments/generatePaymentLink';
+export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
 
 initializeApp();
 const db = getFirestore();
-
-// ── Redis / BullMQ singletons ────────────────────────────────────────────────
-
-let _redis: IORedis | null = null;
-function getRedis(): IORedis {
-  if (!_redis) {
-    _redis = new IORedis(process.env['REDIS_URL'] ?? '', {
-      maxRetriesPerRequest: 3,
-      tls: process.env['REDIS_URL']?.startsWith('rediss://')
-        ? { rejectUnauthorized: false }
-        : undefined,
-    });
-  }
-  return _redis;
-}
 
 function getQueue(name: string): Queue {
   // Pass connection URL directly to avoid IORedis version mismatch with bullmq's bundled ioredis.
@@ -289,152 +278,9 @@ export const updateLoanStatus = onCall(
   }
 );
 
-// ── markLoanDisbursed — ops/admin only ───────────────────────────────────────
+// markLoanDisbursed is exported from ./loans/markLoanDisbursed
 
-interface MarkLoanDisbursedData {
-  loanId: string;
-  disbursementRef: string;
-}
-
-export const markLoanDisbursed = onCall(
-  { cors: true, enforceAppCheck: false },
-  withAuth<MarkLoanDisbursedData, { success: boolean }>(
-    ['admin', 'super_admin', 'ops'],
-    async (data, auth) =>
-      withErrorHandling({ functionName: 'markLoanDisbursed', uid: auth.uid, loanId: data.loanId }, async () => {
-        const { loanId, disbursementRef } = data;
-        if (!loanId || !disbursementRef)
-          throw new HttpsError('invalid-argument', 'loanId and disbursementRef are required');
-
-        const loanSnap = await db.collection('loans').doc(loanId).get();
-        if (!loanSnap.exists) throw new HttpsError('not-found', 'Loan not found');
-        const loan = loanSnap.data()!;
-
-        await db.collection('loans').doc(loanId).update({
-          status: 'active',
-          disbursedAt: FieldValue.serverTimestamp(),
-          disbursementRef,
-        });
-        await db.collection('disbursement_queue').doc(loanId).update({
-          status: 'completed',
-          completedAt: FieldValue.serverTimestamp(),
-        });
-
-        try {
-          await getQueue('vida-notifications').add('loan_disbursed', {
-            type: 'loan_disbursed',
-            loanId,
-            employeeId: loan['employeeId'],
-            amount: loan['amount'],
-            disbursementRef,
-            phone: loan['employeePhone'],
-          });
-        } catch (e: unknown) {
-          console.warn('Queue unavailable:', (e as Error).message);
-        }
-
-        try {
-          await auditLog(db, {
-            action: 'loan.disbursed',
-            actorUid: auth.uid,
-            actorRole: auth.role,
-            targetId: loanId,
-            after: { status: 'active', disbursementRef },
-          });
-        } catch (_) { /* non-critical */ }
-
-        return { success: true };
-      })
-  )
-);
-
-// ── generatePaymentLink — employee only ──────────────────────────────────────
-
-interface GeneratePaymentLinkData {
-  loanId: string;
-}
-
-export const generatePaymentLink = onCall(
-  { cors: true, enforceAppCheck: false },
-  withAuth<GeneratePaymentLinkData, { paymentUrl: string }>(
-    ['employee'],
-    async (data, auth) =>
-      withErrorHandling({ functionName: 'generatePaymentLink', uid: auth.uid, loanId: data.loanId }, async () => {
-        const { loanId } = data;
-        const loanDoc = await db.collection('loans').doc(loanId).get();
-        if (!loanDoc.exists) throw new HttpsError('not-found', 'Loan not found');
-        const loan = loanDoc.data()!;
-
-        if (loan['employeeId'] !== auth.uid)
-          throw new HttpsError('permission-denied', 'Not your loan');
-        if (!['active', 'overdue'].includes(loan['status'] as string))
-          throw new HttpsError('failed-precondition', 'Loan not payable');
-
-        const generatedAt = loan['paymentLinkGeneratedAt'] as FirebaseFirestore.Timestamp | null;
-        if (
-          loan['paymentUrl'] &&
-          generatedAt &&
-          Date.now() - generatedAt.toMillis() < 23 * 60 * 60 * 1000
-        ) {
-          return { paymentUrl: loan['paymentUrl'] as string };
-        }
-
-        const b64 = Buffer.from(process.env['CONEKTA_API_KEY'] + ':').toString('base64');
-        const resp = await fetch('https://api.conekta.io/orders', {
-          method: 'POST',
-          headers: {
-            Authorization: 'Basic ' + b64,
-            'Content-Type': 'application/json',
-            Accept: 'application/vnd.conekta-v2.1.0+json',
-          },
-          body: JSON.stringify({
-            currency: 'MXN',
-            customer_info: {
-              name: loan['employeeName'],
-              email: loan['employeeEmail'],
-              phone: loan['employeePhone'] || '0000000000',
-            },
-            line_items: [
-              {
-                name: 'Pago préstamo VIDA ' + loanId.slice(0, 8).toUpperCase(),
-                unit_price: Math.round((loan['total'] as number) * 100),
-                quantity: 1,
-              },
-            ],
-            checkout: {
-              type: 'HostedPayment',
-              expires_at: Math.floor(Date.now() / 1000) + 86400,
-            },
-            metadata: { loanId, employeeId: loan['employeeId'] },
-          }),
-        });
-
-        const order = (await resp.json()) as Record<string, unknown>;
-        if (!resp.ok) {
-          const details = order['details'] as Array<{ message: string }> | undefined;
-          throw new HttpsError('internal', details?.[0]?.message ?? 'Conekta error');
-        }
-
-        const checkout = order['checkout'] as Record<string, unknown>;
-        await db.collection('loans').doc(loanId).update({
-          conektaOrderId: order['id'],
-          paymentUrl: checkout['url'],
-          paymentLinkGeneratedAt: FieldValue.serverTimestamp(),
-        });
-
-        try {
-          await auditLog(db, {
-            action: 'payment_link.generated',
-            actorUid: auth.uid,
-            actorRole: auth.role,
-            targetId: loanId,
-          });
-        } catch (_) { /* non-critical */ }
-
-        return { paymentUrl: checkout['url'] as string };
-      })
-  )
-);
+// generatePaymentLink is exported from ./payments/generatePaymentLink
 
 // ── approveEmployer — admin only ─────────────────────────────────────────────
 
@@ -534,38 +380,7 @@ export const approveEmployer = onCall(
   )
 );
 
-// ── setAdminClaim / revokeAdminClaim — admin only ────────────────────────────
-
-interface SetClaimData {
-  uid: string;
-  role?: AuthContext['role'];
-}
-
-export const setAdminClaim = onCall(
-  { cors: true, enforceAppCheck: false },
-  withAuth<SetClaimData, { success: boolean }>(
-    ['admin', 'super_admin'],
-    async (data, auth) =>
-      withErrorHandling({ functionName: 'setAdminClaim', uid: auth.uid }, async () => {
-        if (!data.uid) throw new HttpsError('invalid-argument', 'uid is required');
-        await getAuth().setCustomUserClaims(data.uid, { admin: true, role: data.role ?? 'admin' });
-        return { success: true };
-      })
-  )
-);
-
-export const revokeAdminClaim = onCall(
-  { cors: true, enforceAppCheck: false },
-  withAuth<SetClaimData, { success: boolean }>(
-    ['admin', 'super_admin'],
-    async (data, auth) =>
-      withErrorHandling({ functionName: 'revokeAdminClaim', uid: auth.uid }, async () => {
-        if (!data.uid) throw new HttpsError('invalid-argument', 'uid is required');
-        await getAuth().setCustomUserClaims(data.uid, { admin: false, role: 'employee' });
-        return { success: true };
-      })
-  )
-);
+// setAdminClaim and revokeAdminClaim are exported from ./admin/adminClaims
 
 // ── getPortfolioReport — admin only ──────────────────────────────────────────
 

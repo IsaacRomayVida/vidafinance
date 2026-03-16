@@ -8,7 +8,47 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "npm run build && firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "jest --coverage",
+    "test:ci": "jest --coverage --ci --forceExit"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/src"],
+    "testMatch": ["**/__tests__/**/*.test.ts"],
+    "collectCoverageFrom": [
+      "src/loans/markLoanDisbursed.ts",
+      "src/loans/calculateNextPayrollDate.ts",
+      "src/payments/generatePaymentLink.ts",
+      "src/admin/adminClaims.ts"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 90,
+        "functions": 90,
+        "branches": 85,
+        "statements": 90
+      }
+    },
+    "moduleNameMapper": {
+      "^firebase-admin/app$": "<rootDir>/src/__mocks__/firebase-admin/app.ts",
+      "^firebase-admin/firestore$": "<rootDir>/src/__mocks__/firebase-admin/firestore.ts",
+      "^firebase-admin/auth$": "<rootDir>/src/__mocks__/firebase-admin/auth.ts",
+      "^firebase-functions/v2/https$": "<rootDir>/src/__mocks__/firebase-functions/v2/https.ts",
+      "^node-fetch$": "<rootDir>/src/__mocks__/node-fetch.ts",
+      "^../utils/redis$": "<rootDir>/src/__mocks__/utils/redis.ts",
+      "^../../utils/redis$": "<rootDir>/src/__mocks__/utils/redis.ts"
+    },
+    "transform": {
+      "^.+\\.tsx?$": ["ts-jest", {
+        "tsconfig": {
+          "strict": true,
+          "esModuleInterop": true,
+          "skipLibCheck": true
+        }
+      }]
+    }
   },
   "engines": {
     "node": "20"
@@ -20,11 +60,16 @@
     "firebase-functions": "^7.0.6",
     "ioredis": "^5.10.0",
     "nanoid": "^3.3.11",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.0.0",
     "@types/node-fetch": "^2.6.11",
+    "firebase-functions-test": "^3.4.1",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6",
     "typescript": "^5.4.5"
   },
   "private": true

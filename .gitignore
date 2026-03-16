@@ -18,3 +18,5 @@ services/**/__pycache__/
 services/**/.env
 services/**/*.pyc
 services/**/*.pyo
+functions/coverage
+functions/lib
