@@ -188,14 +188,20 @@ jobs:
 
       - name: Notify Slack on success
         if: success()
+        continue-on-error: true
         run: |
-          curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          [ -n "$SLACK_URL" ] && curl -X POST "$SLACK_URL" \
             -H 'Content-type: application/json' \
-            --data "{\"text\":\"✅ VIDA Deploy to *${{ env.ENVIRONMENT }}* succeeded — all services healthy\"}"
+            --data "{\"text\":\"✅ VIDA Deploy to *${{ env.ENVIRONMENT }}* succeeded — all services healthy\"}" || true
+        env:
+          SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify Slack on failure
         if: failure()
+        continue-on-error: true
         run: |
-          curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          [ -n "$SLACK_URL" ] && curl -X POST "$SLACK_URL" \
             -H 'Content-type: application/json' \
-            --data "{\"text\":\"🚨 VIDA Deploy to *${{ env.ENVIRONMENT }}* FAILED — check GitHub Actions\"}"
+            --data "{\"text\":\"🚨 VIDA Deploy to *${{ env.ENVIRONMENT }}* FAILED — check GitHub Actions\"}" || true
+        env:
+          SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
