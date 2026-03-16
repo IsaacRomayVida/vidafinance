@@ -34,7 +34,10 @@ jobs:
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
           ENVEOF
 
-      - name: Deploy Firebase
+      - name: Decode production service account
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}" | base64 --decode > /tmp/firebase-sa.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json" >> $GITHUB_ENV
+
+      - name: Deploy Firebase (production)
         run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
