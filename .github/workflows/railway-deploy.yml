@@ -19,6 +19,7 @@ on:
           - notification-service
           - pdf-generator
           - ml-service
+          - underwriting-service
       environment:
         description: "Target environment"
         required: false
@@ -36,6 +37,7 @@ jobs:
       notification-service: ${{ steps.changes.outputs.notification-service || steps.manual.outputs.notification-service }}
       pdf-generator: ${{ steps.changes.outputs.pdf-generator || steps.manual.outputs.pdf-generator }}
       ml-service: ${{ steps.changes.outputs.ml-service || steps.manual.outputs.ml-service }}
+      underwriting-service: ${{ steps.changes.outputs.underwriting-service || steps.manual.outputs.underwriting-service }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,6 +57,8 @@ jobs:
               - "services/pdf-generator/**"
             ml-service:
               - "services/ml-service/**"
+            underwriting-service:
+              - "services/underwriting-service/**"
 
       # On manual dispatch: mark selected service(s) for deploy
       - name: Resolve manual dispatch targets
@@ -63,17 +67,19 @@ jobs:
         run: |
           svc="${{ github.event.inputs.service }}"
           if [ "$svc" = "all" ]; then
-            echo "payment-server=true"      >> "$GITHUB_OUTPUT"
-            echo "softcredito-adapter=true" >> "$GITHUB_OUTPUT"
-            echo "notification-service=true" >> "$GITHUB_OUTPUT"
-            echo "pdf-generator=true"       >> "$GITHUB_OUTPUT"
-            echo "ml-service=true"          >> "$GITHUB_OUTPUT"
+            echo "payment-server=true"        >> "$GITHUB_OUTPUT"
+            echo "softcredito-adapter=true"   >> "$GITHUB_OUTPUT"
+            echo "notification-service=true"  >> "$GITHUB_OUTPUT"
+            echo "pdf-generator=true"         >> "$GITHUB_OUTPUT"
+            echo "ml-service=true"            >> "$GITHUB_OUTPUT"
+            echo "underwriting-service=true"  >> "$GITHUB_OUTPUT"
           else
-            echo "payment-server=$( [ '$svc' = 'payment-server' ] && echo true || echo false )"      >> "$GITHUB_OUTPUT"
-            echo "softcredito-adapter=$( [ '$svc' = 'softcredito-adapter' ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
-            echo "notification-service=$( [ '$svc' = 'notification-service' ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
-            echo "pdf-generator=$( [ '$svc' = 'pdf-generator' ] && echo true || echo false )"       >> "$GITHUB_OUTPUT"
-            echo "ml-service=$( [ '$svc' = 'ml-service' ] && echo true || echo false )"             >> "$GITHUB_OUTPUT"
+            echo "payment-server=$( [ '$svc' = 'payment-server' ] && echo true || echo false )"              >> "$GITHUB_OUTPUT"
+            echo "softcredito-adapter=$( [ '$svc' = 'softcredito-adapter' ] && echo true || echo false )"    >> "$GITHUB_OUTPUT"
+            echo "notification-service=$( [ '$svc' = 'notification-service' ] && echo true || echo false )"  >> "$GITHUB_OUTPUT"
+            echo "pdf-generator=$( [ '$svc' = 'pdf-generator' ] && echo true || echo false )"                >> "$GITHUB_OUTPUT"
+            echo "ml-service=$( [ '$svc' = 'ml-service' ] && echo true || echo false )"                      >> "$GITHUB_OUTPUT"
+            echo "underwriting-service=$( [ '$svc' = 'underwriting-service' ] && echo true || echo false )"  >> "$GITHUB_OUTPUT"
           fi
 
   deploy:
@@ -84,25 +90,26 @@ jobs:
       needs.detect.outputs.softcredito-adapter == 'true' ||
       needs.detect.outputs.notification-service == 'true' ||
       needs.detect.outputs.pdf-generator == 'true' ||
-      needs.detect.outputs.ml-service == 'true'
+      needs.detect.outputs.ml-service == 'true' ||
+      needs.detect.outputs.underwriting-service == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - run: npm install -g @railway/cli
 
-      # Supports both RAILWAY_TOKEN and the legacy RAILWAY_API_TOKEN secret name
       - name: Resolve Railway token
         run: |
-          TOKEN="${{ secrets.RAILWAY_TOKEN }}"
-          if [ -z "$TOKEN" ]; then
-            TOKEN="${{ secrets.RAILWAY_API_TOKEN }}"
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            TOKEN="${{ secrets.RAILWAY_TOKEN }}"
+          else
+            TOKEN="${{ secrets.RAILWAY_TOKEN_STAGING }}"
           fi
           if [ -z "$TOKEN" ]; then
-            echo "❌ Neither RAILWAY_TOKEN nor RAILWAY_API_TOKEN secret is set."
+            echo "❌ Railway token secret not set for branch ${{ github.ref_name }}."
             exit 1
           fi
-          echo "RAILWAY_TOKEN=$TOKEN" >> $GITHUB_ENV
+          echo "RAILWAY_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Deploy changed services
         run: |
@@ -120,6 +127,7 @@ jobs:
           deploy_service "${{ needs.detect.outputs.notification-service }}" "vida-notifications"
           deploy_service "${{ needs.detect.outputs.pdf-generator }}"       "vida-pdf-generator"
           deploy_service "${{ needs.detect.outputs.ml-service }}"          "vida-ml-service"
+          deploy_service "${{ needs.detect.outputs.underwriting-service }}" "vida-underwriting"
 
   health-check:
     needs: deploy
