@@ -232,7 +232,9 @@ describe('employers collection', () => {
   });
 
   it('employer cannot update restricted fields', async () => {
-    await seedEmployer('employer1');
+    // Seed with status 'pending' so updating to 'active' is a real field change,
+    // ensuring affectedKeys() is non-empty and the hasOnly() check is actually exercised.
+    await seedEmployer('employer1', { status: 'pending' });
 
     const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
     // 'status' is not in the allowed-update list for employers
