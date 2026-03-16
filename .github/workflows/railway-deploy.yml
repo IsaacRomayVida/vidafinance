@@ -16,17 +16,8 @@ jobs:
       pdf-generator: ${{ steps.changes.outputs.pdf-generator }}
       ml-service: ${{ steps.changes.outputs.ml-service }}
       underwriting-service: ${{ steps.changes.outputs.underwriting-service }}
-      environment: ${{ steps.env.outputs.environment }}
     steps:
       - uses: actions/checkout@v4
-      - name: Determine environment
-        id: env
-        run: |
-          if [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "environment=production" >> "$GITHUB_OUTPUT"
-          else
-            echo "environment=staging" >> "$GITHUB_OUTPUT"
-          fi
       - uses: dorny/paths-filter@v3
         id: changes
         with:
@@ -47,7 +38,6 @@ jobs:
   deploy:
     needs: detect
     runs-on: ubuntu-latest
-    environment: ${{ needs.detect.outputs.environment }}
     if: |
       needs.detect.outputs.payment-server == 'true' ||
       needs.detect.outputs.softcredito-adapter == 'true' ||
@@ -60,9 +50,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - run: npm install -g @railway/cli
+      - name: Set Railway token based on branch
+        id: token
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "RAILWAY_TOKEN=${{ secrets.RAILWAY_TOKEN }}" >> "$GITHUB_ENV"
+          else
+            echo "RAILWAY_TOKEN=${{ secrets.RAILWAY_TOKEN_STAGING }}" >> "$GITHUB_ENV"
+          fi
       - name: Deploy changed services
-        env:
-          RAILWAY_TOKEN: ${{ github.ref_name == 'main' && secrets.RAILWAY_TOKEN || secrets.RAILWAY_TOKEN_STAGING }}
         run: |
           if [ "${{ needs.detect.outputs.payment-server }}" = "true" ]; then
             railway redeploy --service payment-server --yes
