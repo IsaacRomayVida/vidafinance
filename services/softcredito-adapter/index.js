@@ -193,4 +193,4 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3004, () => console.log('vida-softcredito-adapter on', process.env.PORT || 3004));
+app.listen(process.env.PORT || 3002, () => console.log('vida-softcredito-adapter on', process.env.PORT || 3002));

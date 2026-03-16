@@ -19,7 +19,7 @@ const redis = new IORedis(process.env.REDIS_URL, {
 });
 
 const cors = require('cors');
-const ALLOWED = ['https://vida-finance.web.app'];
+const ALLOWED = (process.env.ALLOWED_ORIGINS || 'https://vida-finance.web.app').split(',').map(s => s.trim());
 const app = express();
 app.use(helmet());
 app.use((req, res, next) => {
@@ -31,13 +31,6 @@ app.use((req, res, next) => {
 });
 app.use('/webhooks', express.raw({ type: 'application/json', limit: '10kb' }));
 app.use(express.json({ limit: '100kb' }));
-
-const ALLOWED = ['https://vida-finance.web.app'];
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin || ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin || '');
-  next();
-});
 
 const requireInternal = (req, res, next) => {
   if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)

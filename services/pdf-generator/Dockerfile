@@ -1,8 +1,10 @@
-FROM node:20
+FROM ghcr.io/puppeteer/puppeteer:21
+USER root
 WORKDIR /app
-RUN apt-get update && apt-get install -y fonts-liberation libatk-bridge2.0-0 libatk1.0-0 libcups2 libdrm2 libgbm1 libgtk-3-0 libnss3 libxcomposite1 libxdamage1 libxrandr2 xdg-utils --no-install-recommends && rm -rf /var/lib/apt/lists/*
 COPY package*.json .
-RUN npm ci --production
+RUN npm ci --only=production
 COPY . .
-EXPOSE 3003
+EXPOSE 3004
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO- http://localhost:3004/health || exit 1
 CMD ["node", "index.js"]
