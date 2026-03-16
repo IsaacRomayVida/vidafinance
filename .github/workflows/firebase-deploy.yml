@@ -57,7 +57,7 @@ jobs:
         run: |
           firebase deploy \
             --only functions,firestore:rules,firestore:indexes \
-            --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
+            --project vida-finance \
             --non-interactive
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
@@ -67,7 +67,7 @@ jobs:
         run: |
           firebase deploy \
             --only functions,firestore:rules,firestore:indexes \
-            --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
+            --project vida-finance \
             --non-interactive
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
