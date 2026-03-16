@@ -30,7 +30,7 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-const PORT = Number(process.env.PORT ?? 3002);
+const PORT = Number(process.env.PORT ?? 3003);
 app.listen(PORT, () =>
   console.log(`[notification-service] Listening on port ${PORT}`),
 );
