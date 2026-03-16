@@ -56,7 +56,7 @@ jobs:
         if: github.ref == 'refs/heads/develop'
         run: |
           firebase deploy \
-            --only functions,hosting,firestore:rules,storage \
+            --only functions,firestore:rules,firestore:indexes,storage \
             --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
             --non-interactive
         env:
@@ -66,7 +66,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           firebase deploy \
-            --only functions,hosting,firestore:rules,storage \
+            --only functions,firestore:rules,firestore:indexes,storage \
             --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
             --non-interactive
         env:
