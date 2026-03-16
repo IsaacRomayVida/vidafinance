@@ -1,0 +1,235 @@
+name: VIDA Platform — Deploy
+
+on:
+  push:
+    branches:
+      - main       # → production
+      - develop    # → staging
+  pull_request:
+    branches:
+      - main
+
+env:
+  NODE_VERSION: '20'
+  ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1: Lint & Test
+  # ─────────────────────────────────────────────
+  test:
+    name: Lint, Type-check & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install functions deps
+        run: cd functions && npm ci
+
+      - name: TypeScript check
+        run: npm run type-check
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Unit tests (root — non-emulator)
+        run: npm test
+
+      - name: Install Firebase CLI (for emulator)
+        run: npm install -g firebase-tools
+
+      - name: Start Firebase Emulators
+        run: firebase emulators:start --only firestore,auth --project vida-finance-test &
+        env:
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+          FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
+
+      - name: Wait for emulators to be ready
+        run: |
+          timeout 30 bash -c \
+            'until curl -sf http://localhost:8080; do sleep 1; done' || \
+          echo "Emulator not ready — skipping rules tests"
+
+      - name: Unit tests (Firestore Rules)
+        run: npm run test:rules
+        env:
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+          FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
+
+      - name: Unit tests (Firebase Functions)
+        run: cd functions && npm test
+        env:
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+          FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
+
+      - name: Unit tests (Railway services)
+        run: |
+          cd services/payment-server && npm ci && npm test
+          cd ../../services/notification-service && npm ci && npm test
+
+  # ─────────────────────────────────────────────
+  # JOB 2: Deploy Firebase
+  # ─────────────────────────────────────────────
+  deploy-firebase:
+    name: Deploy Firebase (Hosting + Functions + Rules)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci && cd functions && npm ci
+
+      - name: Write functions env (Staging)
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          cat > functions/.env << 'ENVEOF'
+          REDIS_URL=${{ secrets.REDIS_URL_STAGING }}
+          CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY_STAGING }}
+          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
+          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL_STAGING }}
+          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL_STAGING }}
+          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL_STAGING }}
+          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL_STAGING }}
+          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_STAGING }}
+          ENVEOF
+
+      - name: Write functions env (Production)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cat > functions/.env << 'ENVEOF'
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
+          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
+          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
+          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
+          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
+          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
+          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
+          ENVEOF
+
+      - name: Build Cloud Functions
+        run: cd functions && npm run build
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy to Firebase (Staging)
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          firebase deploy \
+            --only hosting,functions,firestore:rules,firestore:indexes,storage \
+            --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }}
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Deploy to Firebase (Production)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          firebase deploy \
+            --only hosting,functions,firestore:rules,firestore:indexes,storage \
+            --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }}
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+  # ─────────────────────────────────────────────
+  # JOB 3: Deploy Railway Microservices
+  # ─────────────────────────────────────────────
+  deploy-railway:
+    name: Deploy Railway Microservices
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: payment-server
+            dir: services/payment-server
+          - name: softcredito-adapter
+            dir: services/softcredito-adapter
+          - name: notification-service
+            dir: services/notification-service
+          - name: pdf-generator
+            dir: services/pdf-generator
+          - name: ml-service
+            dir: services/ml-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy ${{ matrix.service.name }} to Staging
+        if: github.ref == 'refs/heads/develop'
+        run: railway up --service ${{ matrix.service.name }} --detach
+        working-directory: ${{ matrix.service.dir }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+
+      - name: Deploy ${{ matrix.service.name }} to Production
+        if: github.ref == 'refs/heads/main'
+        run: railway up --service ${{ matrix.service.name }} --detach
+        working-directory: ${{ matrix.service.dir }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  # ─────────────────────────────────────────────
+  # JOB 4: Health Check Post-Deploy
+  # ─────────────────────────────────────────────
+  health-check:
+    name: Post-Deploy Health Checks
+    runs-on: ubuntu-latest
+    needs: [deploy-firebase, deploy-railway]
+    if: github.event_name == 'push'
+    steps:
+      - name: Wait 30s for services to stabilize
+        run: sleep 30
+
+      - name: Set base URL (Staging)
+        if: github.ref != 'refs/heads/main'
+        run: echo "BASE_URL=${{ secrets.RAILWAY_BASE_URL_STAGING }}" >> $GITHUB_ENV
+
+      - name: Set base URL (Production)
+        if: github.ref == 'refs/heads/main'
+        run: echo "BASE_URL=${{ secrets.RAILWAY_BASE_URL_PROD }}" >> $GITHUB_ENV
+
+      - name: Health check all Railway services
+        run: |
+          for service in payment-server softcredito notification pdf-gen ml; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/$service/health")
+            if [ "$STATUS" != "200" ]; then
+              echo "❌ $service health check failed (HTTP $STATUS)"
+              exit 1
+            fi
+            echo "✅ $service: OK"
+          done
+
+      - name: Notify Slack on success
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+            -H 'Content-type: application/json' \
+            --data '{"text":"✅ VIDA Deploy to *${{ env.ENVIRONMENT }}* succeeded — all services healthy"}'
+
+      - name: Notify Slack on failure
+        if: failure()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+            -H 'Content-type: application/json' \
+            --data '{"text":"🚨 VIDA Deploy to *${{ env.ENVIRONMENT }}* FAILED — check GitHub Actions"}'
