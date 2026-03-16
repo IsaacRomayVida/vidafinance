@@ -46,9 +46,17 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - run: npm install -g @railway/cli
+
+      # Supports both RAILWAY_TOKEN and the legacy RAILWAY_API_TOKEN secret name
+      - name: Resolve Railway token
+        run: |
+          TOKEN="${{ secrets.RAILWAY_TOKEN }}"
+          if [ -z "$TOKEN" ]; then
+            TOKEN="${{ secrets.RAILWAY_API_TOKEN }}"
+          fi
+          echo "RAILWAY_TOKEN=$TOKEN" >> $GITHUB_ENV
+
       - name: Deploy changed services
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           if [ "${{ needs.detect.outputs.payment-server }}" = "true" ]; then
             railway redeploy --service vida-payment-server --yes
