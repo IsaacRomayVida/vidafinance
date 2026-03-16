@@ -1,5 +1,8 @@
 FROM python:3.11-slim
 WORKDIR /app
+# curl for HEALTHCHECK; libgomp1 for LightGBM parallel processing
+RUN apt-get update && apt-get install -y --no-install-recommends curl libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /models
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+.env*
+!.env.example
+.venv
+venv
+models/*.joblib
+models/*.pkl
+tests/
+scripts/
+README.md
