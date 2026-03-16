@@ -15,7 +15,7 @@ import {
   assertSucceeds,
 } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'fs';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import * as path from 'path';
 
 let testEnv: RulesTestEnvironment;

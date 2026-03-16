@@ -246,7 +246,59 @@ gh auth login
 
 ---
 
-## 10. Troubleshooting
+## 10. CI/CD Pipeline (GitHub Actions)
+
+The pipeline lives at `.github/workflows/deploy.yml` and has four jobs:
+
+| Job | Trigger | What it does |
+|-----|---------|-------------|
+| `test` | all pushes + PRs | Lint, type-check, unit tests |
+| `deploy-firebase` | push to `main` or `develop` | Deploys Hosting, Functions, Firestore & Storage rules |
+| `deploy-railway` | push to `main` or `develop` | Deploys all 5 Railway microservices (matrix) |
+| `health-check` | after both deploy jobs | Curls `/health` on each service, Slack notification |
+
+**Environments:** Push to `develop` → staging. Push to `main` → production.
+
+### Required GitHub Secrets
+
+Add all secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Description |
+|--------|-------------|
+| `FIREBASE_TOKEN` | `firebase login:ci` output |
+| `FIREBASE_PROJECT_ID_STAGING` | e.g. `vida-finance-staging` |
+| `FIREBASE_PROJECT_ID_PRODUCTION` | e.g. `vida-finance-prod` |
+| `RAILWAY_TOKEN` | Railway API token (production) |
+| `RAILWAY_TOKEN_STAGING` | Railway API token (staging) |
+| `RAILWAY_BASE_URL_PROD` | Base URL for Railway production services |
+| `RAILWAY_BASE_URL_STAGING` | Base URL for Railway staging services |
+| `REDIS_URL` | Redis connection URL (production) |
+| `REDIS_URL_STAGING` | Redis connection URL (staging) |
+| `CONEKTA_API_KEY` | Conekta secret key (production) |
+| `CONEKTA_API_KEY_STAGING` | Conekta secret key (staging) |
+| `INTERNAL_SECRET` | Shared secret for inter-service auth |
+| `SOFTCREDITO_ADAPTER_URL` | production URL |
+| `SOFTCREDITO_ADAPTER_URL_STAGING` | staging URL |
+| `PAYMENT_SERVER_URL` | production URL |
+| `PAYMENT_SERVER_URL_STAGING` | staging URL |
+| `NOTIFICATION_SERVICE_URL` | production URL |
+| `NOTIFICATION_SERVICE_URL_STAGING` | staging URL |
+| `PDF_GENERATOR_URL` | production URL |
+| `PDF_GENERATOR_URL_STAGING` | staging URL |
+| `ML_SERVICE_URL` | production URL |
+| `ML_SERVICE_URL_STAGING` | staging URL |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL |
+
+### Generating `FIREBASE_TOKEN`
+
+```bash
+firebase login:ci
+# Copy the token printed to stdout
+```
+
+---
+
+## 11. Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
