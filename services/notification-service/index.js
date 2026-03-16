@@ -92,4 +92,4 @@ app.get('/health', async (req,res) => {
   const redisOk = await redis.ping().then(()=>true).catch(()=>false);
   res.json({status:redisOk?'ok':'degraded',service:'vida-notification-service',redis:redisOk,worker:worker.isRunning()});
 });
-app.listen(process.env.PORT||3002, ()=>console.log('vida-notification-service on', process.env.PORT||3002));
+app.listen(process.env.PORT||3003, ()=>console.log('vida-notification-service on', process.env.PORT||3003));

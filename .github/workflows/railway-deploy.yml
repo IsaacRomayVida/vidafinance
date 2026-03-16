@@ -2,7 +2,7 @@ name: Deploy Railway Services
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - "services/**"
 
@@ -48,20 +48,44 @@ jobs:
       - run: npm install -g @railway/cli
       - name: Deploy changed services
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           if [ "${{ needs.detect.outputs.payment-server }}" = "true" ]; then
-            railway redeploy --service payment-server --yes
+            railway redeploy --service vida-payment-server --yes
           fi
           if [ "${{ needs.detect.outputs.softcredito-adapter }}" = "true" ]; then
-            railway redeploy --service softcredito-adapter --yes
+            railway redeploy --service vida-softcredito --yes
           fi
           if [ "${{ needs.detect.outputs.notification-service }}" = "true" ]; then
-            railway redeploy --service notification-service --yes
+            railway redeploy --service vida-notifications --yes
           fi
           if [ "${{ needs.detect.outputs.pdf-generator }}" = "true" ]; then
-            railway redeploy --service pdf-generator --yes
+            railway redeploy --service vida-pdf-generator --yes
           fi
           if [ "${{ needs.detect.outputs.ml-service }}" = "true" ]; then
-            railway redeploy --service ml-service --yes
+            railway redeploy --service vida-ml-service --yes
           fi
+
+  health-check:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for services to start
+        run: sleep 30
+      - name: Verify health endpoints
+        run: |
+          check_health() {
+            local url="$1"
+            local service="$2"
+            local status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "✅ $service is healthy ($status)"
+            else
+              echo "⚠️  $service returned $status (may still be starting)"
+            fi
+          }
+          check_health "https://vida-payment-server.railway.app/health" "payment-server"
+          check_health "https://vida-softcredito.railway.app/health" "softcredito-adapter"
+          check_health "https://vida-notifications.railway.app/health" "notification-service"
+          check_health "https://vida-pdf-generator.railway.app/health" "pdf-generator"
+          check_health "https://vida-ml-service.railway.app/health" "ml-service"
