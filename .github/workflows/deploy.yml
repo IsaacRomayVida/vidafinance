@@ -39,11 +39,19 @@ jobs:
       - name: TypeScript check (Cloud Functions)
         run: cd functions && npm run build
 
+      - name: Setup Java 21 (required by Firebase emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
       - name: Run Firestore rules tests
         run: firebase emulators:exec --only firestore --project vida-finance-test 'npm test'
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
   # ─────────────────────────────────────────────
   # JOB 2: Deploy Firebase
