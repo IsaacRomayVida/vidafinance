@@ -2,7 +2,7 @@ name: Deploy Railway Services
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - "services/**"
 
@@ -15,8 +15,18 @@ jobs:
       notification-service: ${{ steps.changes.outputs.notification-service }}
       pdf-generator: ${{ steps.changes.outputs.pdf-generator }}
       ml-service: ${{ steps.changes.outputs.ml-service }}
+      underwriting-service: ${{ steps.changes.outputs.underwriting-service }}
+      environment: ${{ steps.env.outputs.environment }}
     steps:
       - uses: actions/checkout@v4
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "environment=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=staging" >> "$GITHUB_OUTPUT"
+          fi
       - uses: dorny/paths-filter@v3
         id: changes
         with:
@@ -31,16 +41,20 @@ jobs:
               - "services/pdf-generator/**"
             ml-service:
               - "services/ml-service/**"
+            underwriting-service:
+              - "services/underwriting-service/**"
 
   deploy:
     needs: detect
     runs-on: ubuntu-latest
+    environment: ${{ needs.detect.outputs.environment }}
     if: |
       needs.detect.outputs.payment-server == 'true' ||
       needs.detect.outputs.softcredito-adapter == 'true' ||
       needs.detect.outputs.notification-service == 'true' ||
       needs.detect.outputs.pdf-generator == 'true' ||
-      needs.detect.outputs.ml-service == 'true'
+      needs.detect.outputs.ml-service == 'true' ||
+      needs.detect.outputs.underwriting-service == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,7 +62,7 @@ jobs:
       - run: npm install -g @railway/cli
       - name: Deploy changed services
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ github.ref_name == 'main' && secrets.RAILWAY_TOKEN || secrets.RAILWAY_TOKEN_STAGING }}
         run: |
           if [ "${{ needs.detect.outputs.payment-server }}" = "true" ]; then
             railway redeploy --service payment-server --yes
@@ -64,4 +78,7 @@ jobs:
           fi
           if [ "${{ needs.detect.outputs.ml-service }}" = "true" ]; then
             railway redeploy --service ml-service --yes
+          fi
+          if [ "${{ needs.detect.outputs.underwriting-service }}" = "true" ]; then
+            railway redeploy --service underwriting-service --yes
           fi
