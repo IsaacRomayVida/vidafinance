@@ -2,7 +2,8 @@
   "scripts": {
     "verify": "node scripts/verify-production.js",
     "test": "jest",
-    "test:rules": "jest firestore.rules.test"
+    "test:rules": "jest firestore.rules.test",
+    "prepare": "husky"
   },
   "jest": {
     "preset": "ts-jest",
@@ -28,8 +29,23 @@
     "@firebase/rules-unit-testing": "^5.0.0",
     "@types/jest": "^30.0.0",
     "firebase": "^12.10.0",
+    "husky": "^9.1.7",
     "jest": "^30.3.0",
+    "lint-staged": "^16.4.0",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3"
+  },
+  "lint-staged": {
+    "functions/src/**/*.ts": [
+      "eslint --fix --max-warnings 0",
+      "tsc --noEmit -p functions/tsconfig.json"
+    ],
+    "services/**/*.ts": [
+      "eslint --fix --max-warnings 0"
+    ],
+    "services/ml-service/**/*.py": [
+      "python -m black --check",
+      "python -m flake8"
+    ]
   }
 }
