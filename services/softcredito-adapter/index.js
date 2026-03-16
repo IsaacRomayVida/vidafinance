@@ -16,7 +16,6 @@ const redis = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,
   tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
-const cors = require('cors');
 const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
 app.use(helmet());
