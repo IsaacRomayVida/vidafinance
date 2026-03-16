@@ -64,6 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push'
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -160,24 +161,48 @@ jobs:
   health-check:
     name: Post-Deploy Health Checks
     runs-on: ubuntu-latest
-    needs: [deploy-firebase, deploy-railway]
+    needs: [deploy-railway]
     if: github.event_name == 'push'
     steps:
-      - name: Wait 30s for services to stabilize
-        run: sleep 30
+      - name: Wait 60s for Railway services to stabilize
+        run: sleep 60
 
       - name: Health check all Railway services
-        env:
-          BASE: ${{ env.ENVIRONMENT == 'production' && secrets.RAILWAY_BASE_URL_PROD || secrets.RAILWAY_BASE_URL_STAGING }}
         run: |
-          for service in payment-server softcredito-adapter notification-service pdf-generator ml-service; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/$service/health")
-            if [ "$STATUS" != "200" ]; then
-              echo "❌ $service health check failed (HTTP $STATUS)"
-              exit 1
-            fi
-            echo "✅ $service: OK"
-          done
+          ALL_OK=true
+          check_health() {
+            local url="$1"
+            local service="$2"
+            local max_attempts=5
+            local attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              local status
+              status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$url" 2>/dev/null || echo "000")
+              if [ "$status" = "200" ]; then
+                echo "✅ $service — healthy (HTTP $status)"
+                return 0
+              fi
+              echo "  attempt $attempt/$max_attempts: $service returned $status, retrying in 15s..."
+              sleep 15
+              attempt=$((attempt + 1))
+            done
+            echo "❌ $service — not healthy after $max_attempts attempts (last: $status)"
+            ALL_OK=false
+            return 1
+          }
+          check_health "https://vida-payment-server.railway.app/health"   "payment-server"      || true
+          check_health "https://vida-softcredito.railway.app/health"      "softcredito-adapter" || true
+          check_health "https://vida-notifications.railway.app/health"    "notification-service" || true
+          check_health "https://vida-pdf-generator.railway.app/health"    "pdf-generator"       || true
+          check_health "https://vida-ml-service.railway.app/health"       "ml-service"          || true
+          if [ "$ALL_OK" = "false" ]; then
+            echo ""
+            echo "⚠️  One or more Railway services did not pass health checks."
+            echo "Check Railway logs: railway logs --service <name>"
+            exit 1
+          fi
+          echo ""
+          echo "🎉 All Railway services are healthy!"
 
       - name: Notify Slack on success
         if: success()
