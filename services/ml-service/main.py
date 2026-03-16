@@ -1,3 +1,8 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, HTTPException, Header
 import os, json, time
 import redis as Redis
@@ -6,13 +11,45 @@ from dotenv import load_dotenv
 load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
 
-app = FastAPI(title="vida-ml-service")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ml-service")
+
 rdb = Redis.from_url(
     os.environ.get("REDIS_URL", "redis://localhost:6379"), decode_responses=True
 )
 SEC = os.environ.get("INTERNAL_SECRET", "")
 AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
+
+_worker_task: asyncio.Task | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _worker_task
+    has_firebase = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
+    if os.environ.get("REDIS_URL") and has_firebase:
+        try:
+            from workers.underwriting_worker import start_worker
+            _worker_task = asyncio.create_task(start_worker())
+            logger.info("Underwriting worker task started")
+        except Exception as e:
+            logger.warning("Could not start underwriting worker: %s", e)
+    else:
+        logger.warning(
+            "Underwriting worker not started: REDIS_URL or Firebase credentials missing"
+        )
+    yield
+    if _worker_task and not _worker_task.done():
+        _worker_task.cancel()
+        try:
+            await _worker_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Underwriting worker stopped")
+
+
+app = FastAPI(title="vida-ml-service", lifespan=lifespan)
 
 
 def auth(s):
@@ -27,7 +64,14 @@ def health():
         r = True
     except Exception:
         r = False
-    return {"status": "ok" if r else "degraded", "service": "vida-ml-service", "redis": r}
+    worker_alive = _worker_task is not None and not _worker_task.done()
+    return {
+        "status": "ok" if r else "degraded",
+        "service": "vida-ml-service",
+        "redis": r,
+        "worker": "running" if worker_alive else "stopped",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.post("/underwrite/employer")
@@ -150,3 +194,54 @@ def clear_cache(uid: str, x_internal_secret: str = Header(None)):
     except Exception:
         pass
     return {"cleared": f"ml:employer:{uid}"}
+
+
+@app.post("/score")
+async def score_loan_direct(
+    payload: dict, x_internal_secret: str = Header(None)
+):
+    """
+    Direct synchronous scoring endpoint.
+    Accepts the same payload as the BullMQ job data so other services
+    can call underwriting synchronously without going through the queue.
+    """
+    auth(x_internal_secret)
+    from workers.underwriting_worker import (
+        process_underwrite_loan,
+        encode_pay_freq,
+        encode_industry,
+        get_rejection_reason,
+        APPROVAL_THRESHOLD,
+    )
+    from models.underwriting_model import UnderwritingModel
+    import os as _os
+
+    borrower = payload.get("borrowerSnapshot", {})
+    principal = float(payload.get("principalAmount", 0))
+    monthly_salary = float(borrower.get("monthlySalary", 1))
+
+    features = {
+        "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
+        "monthly_salary": monthly_salary,
+        "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
+        "loan_to_salary_ratio": principal / max(monthly_salary, 1),
+        "employer_industry_encoded": float(encode_industry(borrower.get("employerIndustry", ""))),
+        "principal_amount": principal,
+        "bureau_score": 500.0,
+        "has_bureau_record": 0.0,
+    }
+
+    model_path = _os.environ.get("MODEL_PATH", "models/underwriting_v1.joblib")
+    model = UnderwritingModel.load(model_path)
+    prob = model.predict_proba(features)
+    decision = "approved" if prob >= APPROVAL_THRESHOLD else "rejected"
+
+    if features["employment_tenure_months"] < 3:
+        decision = "rejected"
+
+    return {
+        "decision": decision,
+        "score": round(prob, 4),
+        "threshold": APPROVAL_THRESHOLD,
+        "model": "logistic_v1.0",
+    }
