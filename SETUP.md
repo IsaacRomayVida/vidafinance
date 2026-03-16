@@ -246,7 +246,56 @@ gh auth login
 
 ---
 
-## 10. Troubleshooting
+## 10. CI/CD Pipeline (GitHub Actions)
+
+The unified pipeline lives in `.github/workflows/deploy.yml`. It runs automatically:
+
+| Trigger | Target |
+|---------|--------|
+| Push to `develop` | Staging |
+| Push to `main` | Production |
+| PR to `main` | Tests only (no deploy) |
+
+### Pipeline Jobs
+
+1. **Build & Test** — TypeScript compile + Firestore rules tests (emulator)
+2. **Deploy Firebase** — Hosting + Functions + Firestore/Storage rules
+3. **Deploy Railway** — All 5 microservices (matrix, parallel)
+4. **Health Checks** — `/health` on each service + Slack notification
+
+### Required GitHub Secrets
+
+Add all secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Description |
+|--------|-------------|
+| `FIREBASE_TOKEN` | Generated via `firebase login:ci` |
+| `FIREBASE_PROJECT_ID_STAGING` | e.g. `vida-finance-staging` |
+| `FIREBASE_PROJECT_ID_PRODUCTION` | e.g. `vida-finance` |
+| `REDIS_URL` | Redis connection string (used by Cloud Functions) |
+| `CONEKTA_API_KEY` | Conekta payment gateway API key |
+| `INTERNAL_SECRET` | Internal service-to-service auth secret |
+| `SOFTCREDITO_ADAPTER_URL` | Railway URL of softcredito-adapter |
+| `PAYMENT_SERVER_URL` | Railway URL of payment-server |
+| `NOTIFICATION_SERVICE_URL` | Railway URL of notification-service |
+| `PDF_GENERATOR_URL` | Railway URL of pdf-generator |
+| `ML_SERVICE_URL` | Railway URL of ml-service |
+| `RAILWAY_TOKEN` | Railway project token (production) |
+| `RAILWAY_TOKEN_STAGING` | Railway project token (staging) |
+| `RAILWAY_BASE_URL_PROD` | Base URL for production health checks |
+| `RAILWAY_BASE_URL_STAGING` | Base URL for staging health checks |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook for deploy notifications |
+
+### Generate FIREBASE_TOKEN
+
+```bash
+firebase login:ci
+# Copy the token printed at the end
+```
+
+---
+
+## 11. Troubleshooting
 
 | Issue | Fix |
 |-------|-----|

@@ -1,0 +1,176 @@
+name: VIDA Platform — Deploy
+
+on:
+  push:
+    branches:
+      - main      # → production
+      - develop   # → staging
+  pull_request:
+    branches:
+      - main
+
+env:
+  NODE_VERSION: '20'
+  ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1: Build & Test
+  # ─────────────────────────────────────────────
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install functions deps
+        run: cd functions && npm ci
+
+      - name: Build Cloud Functions (TypeScript check)
+        run: cd functions && npm run build
+
+      - name: Firestore security rules tests
+        run: npx firebase-tools emulators:exec --only firestore --project vida-finance-test "npm test"
+
+  # ─────────────────────────────────────────────
+  # JOB 2: Deploy Firebase
+  # ─────────────────────────────────────────────
+  deploy-firebase:
+    name: Deploy Firebase (Hosting + Functions + Rules)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install functions deps
+        run: cd functions && npm ci
+
+      - name: Write functions .env
+        run: |
+          echo "REDIS_URL=${{ secrets.REDIS_URL }}" >> functions/.env
+          echo "CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}" >> functions/.env
+          echo "INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}" >> functions/.env
+          echo "SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}" >> functions/.env
+          echo "PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}" >> functions/.env
+          echo "NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}" >> functions/.env
+          echo "PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}" >> functions/.env
+          echo "ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}" >> functions/.env
+
+      - name: Build Cloud Functions
+        run: cd functions && npm run build
+
+      - name: Deploy to Firebase Staging
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          npx firebase-tools deploy \
+            --only hosting,functions,firestore:rules,firestore:indexes,storage \
+            --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
+            --token ${{ secrets.FIREBASE_TOKEN }} \
+            --non-interactive
+
+      - name: Deploy to Firebase Production
+        if: github.ref == 'refs/heads/main'
+        run: |
+          npx firebase-tools deploy \
+            --only hosting,functions,firestore:rules,firestore:indexes,storage \
+            --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
+            --token ${{ secrets.FIREBASE_TOKEN }} \
+            --non-interactive
+
+  # ─────────────────────────────────────────────
+  # JOB 3: Deploy Railway Microservices
+  # ─────────────────────────────────────────────
+  deploy-railway:
+    name: Deploy Railway — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - payment-server
+          - softcredito-adapter
+          - notification-service
+          - pdf-generator
+          - ml-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy ${{ matrix.service }} to Staging
+        if: github.ref == 'refs/heads/develop'
+        working-directory: services/${{ matrix.service }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: railway up --service ${{ matrix.service }} --detach
+
+      - name: Deploy ${{ matrix.service }} to Production
+        if: github.ref == 'refs/heads/main'
+        working-directory: services/${{ matrix.service }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service ${{ matrix.service }} --detach
+
+  # ─────────────────────────────────────────────
+  # JOB 4: Post-Deploy Health Checks
+  # ─────────────────────────────────────────────
+  health-check:
+    name: Post-Deploy Health Checks
+    runs-on: ubuntu-latest
+    needs: [deploy-firebase, deploy-railway]
+    if: github.event_name == 'push'
+    steps:
+      - name: Wait for services to stabilize
+        run: sleep 30
+
+      - name: Health check Railway services
+        env:
+          BASE_URL: ${{ github.ref == 'refs/heads/main' && secrets.RAILWAY_BASE_URL_PROD || secrets.RAILWAY_BASE_URL_STAGING }}
+        run: |
+          for service in payment-server softcredito-adapter notification-service pdf-generator ml-service; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/$service/health")
+            if [ "$STATUS" != "200" ]; then
+              echo "❌ $service health check failed (HTTP $STATUS)"
+              exit 1
+            fi
+            echo "✅ $service: OK"
+          done
+
+      - name: Notify Slack on success
+        if: success()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK" \
+            -H 'Content-type: application/json' \
+            --data "{\"text\":\"✅ VIDA Deploy to *${{ env.ENVIRONMENT }}* succeeded — all services healthy\"}"
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK" \
+            -H 'Content-type: application/json' \
+            --data "{\"text\":\"🚨 VIDA Deploy to *${{ env.ENVIRONMENT }}* FAILED — check GitHub Actions\"}"
