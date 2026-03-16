@@ -35,7 +35,7 @@ app.use(curpRouter);
 app.use(bureauRouter);
 app.use(internalRouter);
 
-const PORT = parseInt(process.env.PORT ?? '3004', 10);
+const PORT = parseInt(process.env.PORT ?? '3002', 10);
 app.listen(PORT, () => {
   console.log(`vida-softcredito-adapter listening on port ${PORT}`);
 });
