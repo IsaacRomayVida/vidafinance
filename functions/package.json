@@ -2,16 +2,18 @@
   "name": "vida-finance-functions",
   "description": "Cloud Functions for Vida Finance MVP",
   "scripts": {
-    "serve": "firebase emulators:start --only functions",
-    "shell": "firebase functions:shell",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
-    "deploy": "firebase deploy --only functions",
+    "deploy": "npm run build && firebase deploy --only functions",
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "22"
+    "node": "20"
   },
-  "main": "index.js",
+  "main": "lib/index.js",
   "dependencies": {
     "bullmq": "^5.71.0",
     "firebase-admin": "^13.7.0",
@@ -19,6 +21,11 @@
     "ioredis": "^5.10.0",
     "nanoid": "^3.3.11",
     "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/node-fetch": "^2.6.11",
+    "typescript": "^5.4.5"
   },
   "private": true
 }
