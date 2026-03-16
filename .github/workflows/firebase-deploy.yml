@@ -52,18 +52,22 @@ jobs:
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_PRODUCTION }}
           ENVEOF
 
-      - name: Authenticate Firebase (Staging)
+      - name: Deploy Firebase (Staging)
         if: github.ref == 'refs/heads/develop'
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
         run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" | base64 -d > /tmp/sa.json
-          firebase deploy --only functions,hosting,firestore:rules,storage --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }}
+          firebase deploy \
+            --only functions,hosting,firestore:rules,storage \
+            --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
+            --non-interactive
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
-      - name: Authenticate Firebase (Production)
+      - name: Deploy Firebase (Production)
         if: github.ref == 'refs/heads/main'
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
         run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}" | base64 -d > /tmp/sa.json
-          firebase deploy --only functions,hosting,firestore:rules,storage --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }}
+          firebase deploy \
+            --only functions,hosting,firestore:rules,storage \
+            --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
+            --non-interactive
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
