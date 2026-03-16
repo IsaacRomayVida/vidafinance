@@ -19,3 +19,5 @@ services/**/.env
 services/**/*.pyc
 services/**/*.pyo
 services/**/dist/
+functions/coverage
+functions/lib
