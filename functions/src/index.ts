@@ -5,30 +5,18 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import fetch from 'node-fetch';
-import { nanoid } from 'nanoid';
-import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 
 import { withAuth, AuthContext } from './middleware/authMiddleware';
-import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
+import { withErrorHandling } from './utils/errorHandler';
+import { requestLoan } from './loans/requestLoan';
+
+export { requestLoan };
 
 initializeApp();
 const db = getFirestore();
 
 // ── Redis / BullMQ singletons ────────────────────────────────────────────────
-
-let _redis: IORedis | null = null;
-function getRedis(): IORedis {
-  if (!_redis) {
-    _redis = new IORedis(process.env['REDIS_URL'] ?? '', {
-      maxRetriesPerRequest: 3,
-      tls: process.env['REDIS_URL']?.startsWith('rediss://')
-        ? { rejectUnauthorized: false }
-        : undefined,
-    });
-  }
-  return _redis;
-}
 
 function getQueue(name: string): Queue {
   // Pass connection URL directly to avoid IORedis version mismatch with bullmq's bundled ioredis.
@@ -94,135 +82,6 @@ export const api = onRequest({ cors: true }, async (req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-// ── requestLoan — employee only ──────────────────────────────────────────────
-
-interface RequestLoanData {
-  amount: number;
-  term: number;
-}
-
-export const requestLoan = onCall(
-  { cors: true, enforceAppCheck: false },
-  withAuth<RequestLoanData, { loanId: string; status: string; total: number; dueDate: string }>(
-    ['employee'],
-    async (data, auth) =>
-      withErrorHandling({ functionName: 'requestLoan', uid: auth.uid }, async () => {
-        const { amount, term } = data;
-        const uid = auth.uid;
-
-        // Rate limit: max 3 requests per hour via Redis
-        try {
-          const r = getRedis();
-          const key = 'rate:loans:' + uid;
-          const cnt = await r.incr(key);
-          if (cnt === 1) await r.expire(key, 3600);
-          if (cnt > 3) throw new HttpsError('resource-exhausted', 'Máximo 3 solicitudes por hora');
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          console.warn('Redis rate limit unavailable:', (e as Error).message);
-        }
-
-        if (typeof amount !== 'number' || amount < 500 || amount > 5000)
-          throw new HttpsError('invalid-argument', 'El monto debe estar entre $500 y $5,000 MXN');
-        if (term !== 30) throw new HttpsError('invalid-argument', 'Plazo inválido');
-
-        const empRef = db.collection('employees').doc(uid);
-        const emplDoc = await empRef.get();
-        if (!emplDoc.exists) throw new HttpsError('not-found', VidaErrorCode.EMPLOYEE_NOT_FOUND);
-        const emp = emplDoc.data()!;
-
-        if (amount > emp['availableCredit'])
-          throw new HttpsError('invalid-argument', 'El monto excede tu crédito disponible');
-        if (amount > Math.round(emp['monthlySalary'] * 0.3))
-          throw new HttpsError('invalid-argument', 'El monto excede el 30% de tu salario mensual');
-
-        const active = await db
-          .collection('loans')
-          .where('employeeId', '==', uid)
-          .where('status', 'in', ['pending', 'approved', 'active'])
-          .limit(1)
-          .get();
-        if (!active.empty)
-          throw new HttpsError('failed-precondition', VidaErrorCode.DUPLICATE_LOAN_APPLICATION);
-
-        const employerSnap = await db.collection('employers').doc(emp['employerId']).get();
-        const employer = employerSnap.data() ?? {};
-
-        if (employer['status'] !== 'active')
-          throw new HttpsError('failed-precondition', VidaErrorCode.EMPLOYER_NOT_APPROVED);
-
-        const loanId = nanoid();
-        const fee = Math.round(amount * 0.3);
-        const dueDate = Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
-
-        const loanExtra: Record<string, unknown> = {};
-        try {
-          const ml = await callML('/underwrite/employee', {
-            employeeId: uid,
-            monthlySalary: emp['monthlySalary'] ?? 0,
-            employerTier: employer['riskTier'] ?? 2,
-            existingLoans: 0,
-            bankClabe: emp['bankClabe'] ?? null,
-            amount,
-            requestsLastHour: 0,
-          });
-          if (ml['fraud'] && (ml['fraud'] as Record<string, unknown>)['is_fraud'])
-            throw new HttpsError('permission-denied', 'Solicitud marcada como sospechosa');
-          if ((ml['default_probability'] as number) > 0.4)
-            throw new HttpsError('failed-precondition', 'No es posible aprobar tu solicitud en este momento');
-          Object.assign(loanExtra, {
-            mlDecisionId: ml['decisionId'],
-            mlCreditScore: ml['credit_score'],
-            mlDefaultProb: ml['default_probability'],
-          });
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          console.warn('ML unavailable:', (e as Error).message);
-        }
-
-        await db.runTransaction(async (tx) => {
-          tx.update(empRef, { availableCredit: FieldValue.increment(-amount) });
-          tx.set(db.collection('loans').doc(loanId), {
-            employeeId: uid,
-            employeeName: emp['name'],
-            employeeEmail: emp['email'],
-            employeePhone: emp['phone'] ?? null,
-            employerId: emp['employerId'],
-            employerName: emp['employerName'],
-            employerCode: employer['employerCode'],
-            amount,
-            fee,
-            total: amount + fee,
-            term: 30,
-            status: 'pending',
-            dueDate,
-            disbursedAt: null,
-            disbursementRef: null,
-            disbursementError: null,
-            paidAt: null,
-            paidAmount: null,
-            repaymentRef: null,
-            conektaOrderId: null,
-            paymentUrl: null,
-            paymentLinkGeneratedAt: null,
-            overdueDetectedAt: null,
-            softcreditoDeductionId: null,
-            contractUrl: null,
-            receiptUrl: null,
-            ...loanExtra,
-            createdAt: FieldValue.serverTimestamp(),
-            acceptedAt: FieldValue.serverTimestamp(),
-          });
-        });
-
-        try {
-          await auditLog(db, { action: 'loan.requested', actorUid: uid, actorRole: 'employee', targetId: loanId });
-        } catch (_) { /* non-critical */ }
-
-        return { loanId, status: 'pending', total: amount + fee, dueDate: dueDate.toDate().toISOString() };
-      })
-  )
-);
 
 // ── updateLoanStatus — employer approve/reject; ops/admin any status ─────────
 // Replaces the insecure direct Firestore write that loans rules previously allowed.
