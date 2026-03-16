@@ -8,7 +8,9 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "npm run build && firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "engines": {
     "node": "20"
@@ -20,11 +22,15 @@
     "firebase-functions": "^7.0.6",
     "ioredis": "^5.10.0",
     "nanoid": "^3.3.11",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.0.0",
     "@types/node-fetch": "^2.6.11",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6",
     "typescript": "^5.4.5"
   },
   "private": true
