@@ -77,7 +77,6 @@ worker.on('failed', async (job,err) => {
   await db.collection('incident_log').add({ source:'notification-worker', type:job?.data?.type, error:err.message, attempts:job?.attemptsMade, ts:admin.firestore.FieldValue.serverTimestamp() });
 });
 
-const cors = require('cors');
 const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
 app.use(helmet());
