@@ -1,8 +1,10 @@
 {
   "scripts": {
     "verify": "node scripts/verify-production.js",
-    "test": "jest",
-    "test:rules": "jest firestore.rules.test"
+    "test": "jest --testPathIgnorePatterns=firestore\\.rules\\.test --passWithNoTests",
+    "test:rules": "jest firestore.rules.test",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.js --max-warnings 0"
   },
   "jest": {
     "preset": "ts-jest",
@@ -27,6 +29,9 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
     "firebase": "^12.10.0",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.6",
