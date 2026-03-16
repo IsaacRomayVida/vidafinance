@@ -131,15 +131,13 @@ jobs:
 
       - name: Deploy ${{ matrix.service.name }} to Staging
         if: github.ref == 'refs/heads/develop'
-        run: railway up --service ${{ matrix.service.name }} --detach
-        working-directory: ${{ matrix.service.dir }}
+        run: railway redeploy --service ${{ matrix.service.name }} --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
 
       - name: Deploy ${{ matrix.service.name }} to Production
         if: github.ref == 'refs/heads/main'
-        run: railway up --service ${{ matrix.service.name }} --detach
-        working-directory: ${{ matrix.service.dir }}
+        run: railway redeploy --service ${{ matrix.service.name }} --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
