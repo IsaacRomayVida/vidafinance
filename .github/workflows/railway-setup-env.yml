@@ -1,0 +1,179 @@
+name: Setup Railway Environment Variables
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to configure (leave empty to configure all)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - vida-payment-server
+          - vida-softcredito
+          - vida-notifications
+          - vida-pdf-generator
+          - vida-ml-service
+      redis_url:
+        description: "Redis private URL (default: redis://vida-redis.railway.internal:6379)"
+        required: false
+        default: "redis://vida-redis.railway.internal:6379"
+
+jobs:
+  setup-env:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install -g @railway/cli
+
+      - name: Resolve Railway token
+        run: |
+          TOKEN="${{ secrets.RAILWAY_TOKEN }}"
+          if [ -z "$TOKEN" ]; then
+            TOKEN="${{ secrets.RAILWAY_API_TOKEN }}"
+          fi
+          if [ -z "$TOKEN" ]; then
+            echo "❌ RAILWAY_TOKEN secret is not set in this repository."
+            echo "Add it under Settings → Secrets → Actions → RAILWAY_TOKEN"
+            exit 1
+          fi
+          echo "RAILWAY_TOKEN=$TOKEN" >> $GITHUB_ENV
+          REDIS="${{ github.event.inputs.redis_url }}"
+          if [ -z "$REDIS" ]; then
+            REDIS="redis://vida-redis.railway.internal:6379"
+          fi
+          echo "REDIS_URL=$REDIS" >> $GITHUB_ENV
+
+      - name: Set env vars — vida-payment-server
+        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'vida-payment-server' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          CONEKTA_WEBHOOK_SECRET:       ${{ secrets.CONEKTA_WEBHOOK_SECRET }}
+          INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+        run: |
+          railway variables set \
+            NODE_ENV=staging \
+            PORT=3001 \
+            REDIS_URL="$REDIS_URL" \
+            FIREBASE_PROJECT_ID="vida-finance-staging" \
+            FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
+            CONEKTA_WEBHOOK_SECRET="$CONEKTA_WEBHOOK_SECRET" \
+            INTERNAL_SECRET="$INTERNAL_SECRET" \
+            ALLOWED_ORIGINS="https://vida-staging.web.app,https://admin-staging.vida.com" \
+            SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
+            NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
+            ML_SERVICE_URL="http://vida-ml-service.railway.internal:3005" \
+            --service vida-payment-server
+          echo "✅ vida-payment-server environment variables set"
+
+      - name: Set env vars — vida-softcredito
+        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'vida-softcredito' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT_B64:  ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          SOFTCREDITO_CLIENT_ID:         ${{ secrets.SOFTCREDITO_CLIENT_ID }}
+          SOFTCREDITO_CLIENT_SECRET:     ${{ secrets.SOFTCREDITO_CLIENT_SECRET }}
+          INTERNAL_SECRET:               ${{ secrets.INTERNAL_SECRET }}
+        run: |
+          railway variables set \
+            NODE_ENV=staging \
+            PORT=3002 \
+            REDIS_URL="$REDIS_URL" \
+            REDIS_CACHE_TTL=86400 \
+            FIREBASE_PROJECT_ID="vida-finance-staging" \
+            FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
+            INTERNAL_SECRET="$INTERNAL_SECRET" \
+            SOFTCREDITO_API_URL="https://api.softcredito.com.mx/v1" \
+            SOFTCREDITO_CLIENT_ID="$SOFTCREDITO_CLIENT_ID" \
+            SOFTCREDITO_CLIENT_SECRET="$SOFTCREDITO_CLIENT_SECRET" \
+            PAYMENT_SERVER_URL="http://vida-payment-server.railway.internal:3001" \
+            --service vida-softcredito
+          echo "✅ vida-softcredito environment variables set"
+
+      - name: Set env vars — vida-notifications
+        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'vida-notifications' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          TWILIO_ACCOUNT_SID:           ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN:            ${{ secrets.TWILIO_AUTH_TOKEN }}
+          SENDGRID_API_KEY:             ${{ secrets.SENDGRID_API_KEY }}
+          INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+        run: |
+          railway variables set \
+            NODE_ENV=staging \
+            PORT=3003 \
+            REDIS_URL="$REDIS_URL" \
+            FIREBASE_PROJECT_ID="vida-finance-staging" \
+            FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
+            INTERNAL_SECRET="$INTERNAL_SECRET" \
+            TWILIO_ACCOUNT_SID="$TWILIO_ACCOUNT_SID" \
+            TWILIO_AUTH_TOKEN="$TWILIO_AUTH_TOKEN" \
+            TWILIO_WHATSAPP_FROM="+14155238886" \
+            TWILIO_SMS_FROM="+15551234567" \
+            SENDGRID_API_KEY="$SENDGRID_API_KEY" \
+            SENDGRID_FROM_EMAIL="noreply@vida.finance" \
+            SENDGRID_FROM_NAME="VIDA Finance" \
+            --service vida-notifications
+          echo "✅ vida-notifications environment variables set"
+
+      - name: Set env vars — vida-pdf-generator
+        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'vida-pdf-generator' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          MIFIEL_APP_ID:                ${{ secrets.MIFIEL_APP_ID }}
+          MIFIEL_APP_SECRET:            ${{ secrets.MIFIEL_APP_SECRET }}
+          INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+        run: |
+          railway variables set \
+            NODE_ENV=staging \
+            PORT=3004 \
+            REDIS_URL="$REDIS_URL" \
+            FIREBASE_PROJECT_ID="vida-finance-staging" \
+            FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
+            FIREBASE_STORAGE_BUCKET="vida-finance-staging.appspot.com" \
+            INTERNAL_SECRET="$INTERNAL_SECRET" \
+            PDF_STORAGE_PATH="documents/" \
+            MAX_CONCURRENT_PDF_JOBS=3 \
+            SOFOM_RFC="VIDA240101XXX" \
+            SOFOM_ADDRESS="Paseo de la Reforma 250 Piso 12, CDMX" \
+            MIFIEL_APP_ID="$MIFIEL_APP_ID" \
+            MIFIEL_APP_SECRET="$MIFIEL_APP_SECRET" \
+            MIFIEL_ENV="sandbox" \
+            --service vida-pdf-generator
+          echo "✅ vida-pdf-generator environment variables set"
+
+      - name: Set env vars — vida-ml-service
+        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'vida-ml-service' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          ANTHROPIC_API_KEY:            ${{ secrets.ANTHROPIC_API_KEY }}
+          INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+        run: |
+          railway variables set \
+            PORT=3005 \
+            REDIS_URL="$REDIS_URL" \
+            FIREBASE_PROJECT_ID="vida-finance-staging" \
+            FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
+            INTERNAL_SECRET="$INTERNAL_SECRET" \
+            ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+            MODEL_PATH="models/underwriting_v1.joblib" \
+            USE_ML_MODELS="false" \
+            ML_CACHE_TTL=86400 \
+            --service vida-ml-service
+          echo "✅ vida-ml-service environment variables set"
+
+      - name: Summary
+        run: |
+          echo "✅ Railway environment variables setup complete!"
+          echo ""
+          echo "Services configured:"
+          echo "  - vida-payment-server  (port 3001)"
+          echo "  - vida-softcredito     (port 3002)"
+          echo "  - vida-notifications   (port 3003)"
+          echo "  - vida-pdf-generator   (port 3004)"
+          echo "  - vida-ml-service      (port 3005)"
+          echo ""
+          echo "Next: trigger a deployment to pick up new variables."
+          echo "  Go to Actions → Deploy Railway Services → Run workflow → service: all"
