@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "vida-finance",
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
