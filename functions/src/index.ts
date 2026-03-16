@@ -7,16 +7,9 @@ import fetch from 'node-fetch';
 import { nanoid } from 'nanoid';
 import { Queue } from 'bullmq';
 
-import { withAuth, AuthContext } from './middleware/authMiddleware';
+import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { getRedis } from './utils/redis';
-import { requestLoan } from './loans/requestLoan';
-
-export { requestLoan };
-export { getEmployerDashboard } from './employers/getEmployerDashboard';
-export { getAdminDashboard } from './admin/getAdminDashboard';
-export { updateLoanStatus } from './loans/updateLoanStatus';
-export { getPortfolioReport } from './admin/getPortfolioReport';
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
