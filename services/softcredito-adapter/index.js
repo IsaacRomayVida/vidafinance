@@ -1,8 +1,11 @@
 const express = require('express');
-const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Worker } = require('bullmq');
+const { securityHeaders } = require('../shared/securityHeaders');
+const { railwayCors } = require('../shared/cors');
+const { requireInternalSecret } = require('../shared/internalAuth');
+const { apiRateLimit } = require('../shared/rateLimiter');
 require('dotenv').config();
 
 const svcAcct = JSON.parse(
@@ -16,23 +19,12 @@ const redis = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,
   tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
-const cors = require('cors');
-const ALLOWED = ['https://vida-finance.web.app'];
-const app = express();
-app.use(helmet());
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
-  if (req.method === 'OPTIONS') { res.setHeader('Access-Control-Allow-Methods', 'GET,POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-internal-secret'); return res.sendStatus(204); }
-  next();
-});
-app.use(express.json({ limit: '100kb' }));
 
-const requireInternal = (req, res, next) => {
-  if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
-    return res.status(401).json({ error: 'Unauthorized' });
-  next();
-};
+const app = express();
+app.use(securityHeaders);
+app.use(railwayCors);
+app.use(apiRateLimit);
+app.use(express.json({ limit: '100kb' }));
 
 // ── SoftCrédito token cache ─────────────────────────────────────────
 let _token = null, _tokenExp = 0;
@@ -76,7 +68,7 @@ app.get('/health', async (req, res) => {
 });
 
 // ── SPEI disbursement ───────────────────────────────────────────────
-app.post('/internal/disburse', requireInternal, async (req, res) => {
+app.post('/internal/disburse', requireInternalSecret, async (req, res) => {
   const { loanId, clabe, amount, concept, employeeName, employeeId } = req.body;
   if (!loanId || !clabe || !amount) return res.status(400).json({ error: 'Missing fields' });
   try {
@@ -112,7 +104,7 @@ app.post('/internal/disburse', requireInternal, async (req, res) => {
 });
 
 // ── Register employer with SoftCrédito ─────────────────────────────
-app.post('/internal/register-employer', requireInternal, async (req, res) => {
+app.post('/internal/register-employer', requireInternalSecret, async (req, res) => {
   const { employerUid, companyName, rfc, clabe, contactEmail } = req.body;
   try {
     const r = await scCall('POST', '/employers/register', {
@@ -139,7 +131,7 @@ app.post('/internal/register-employer', requireInternal, async (req, res) => {
 });
 
 // ── Register payroll deduction for a loan ──────────────────────────
-app.post('/internal/register-deduction', requireInternal, async (req, res) => {
+app.post('/internal/register-deduction', requireInternalSecret, async (req, res) => {
   const { loanId, employeeId, employerId, amount, dueDate } = req.body;
   try {
     const emp = (await db.collection('employers').doc(employerId).get()).data();
@@ -161,7 +153,7 @@ app.post('/internal/register-deduction', requireInternal, async (req, res) => {
 });
 
 // ── Daily repayment sync ────────────────────────────────────────────
-app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
+app.post('/internal/sync-repayments', requireInternalSecret, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const data = await scCall('GET', '/deductions/completed?date=' + today);
