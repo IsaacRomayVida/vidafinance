@@ -91,7 +91,7 @@ interface RequestLoanData {
 }
 
 export const requestLoan = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   withAuth<RequestLoanData, { loanId: string; status: string; total: number; dueDate: string }>(
     ['employee'],
     async (data, auth) =>
@@ -223,7 +223,7 @@ interface UpdateLoanStatusData {
 }
 
 export const updateLoanStatus = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
 
@@ -289,7 +289,7 @@ interface ApproveEmployerData {
 }
 
 export const approveEmployer = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   withAuth<ApproveEmployerData, { success: boolean; approved: boolean; reason?: string }>(
     ['admin', 'super_admin'],
     async (data, auth) =>
@@ -385,7 +385,7 @@ export const approveEmployer = onCall(
 // ── getPortfolioReport — admin only ──────────────────────────────────────────
 
 export const getPortfolioReport = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   withAuth<Record<string, never>, { snapshots: unknown[] }>(
     ['admin', 'super_admin', 'ops'],
     async (_data, auth) =>
@@ -403,7 +403,7 @@ export const getPortfolioReport = onCall(
 // ── getAdminDashboard — ops/admin only ───────────────────────────────────────
 
 export const getAdminDashboard = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   withAuth<Record<string, never>, Record<string, unknown>>(
     ['admin', 'super_admin', 'ops'],
     async (_data, auth) =>
@@ -427,7 +427,7 @@ export const getAdminDashboard = onCall(
 // ── getEmployerDashboard — employer only ─────────────────────────────────────
 
 export const getEmployerDashboard = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
 
