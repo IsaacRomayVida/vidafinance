@@ -2,6 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { db, admin } from '../lib/firebase';
 import { renderTemplate } from '../services/templateService';
 import { renderPDF, uploadPDF } from '../services/pdfService';
+import { sendPagareForSigning } from '../services/mifielClient';
 
 export interface PdfJobData {
   type: 'loan_contract' | 'repayment_receipt' | 'deduction_report' | 'portfolio_report';
@@ -15,6 +16,9 @@ export interface PdfJobData {
   periodLabel?: string;
   // portfolio_report fields
   month?: string; // YYYY-MM
+  // e-signature fields (loan_contract)
+  borrowerEmail?: string;
+  borrowerRfc?: string;
 }
 
 const fmt = (n: number) =>
@@ -43,6 +47,9 @@ async function processJob(job: Job<PdfJobData>): Promise<void> {
         (Math.pow(1 + loan.fee / loan.amount, 365 / 30) - 1) * 100
       ).toFixed(0);
 
+      const borrowerEmail = job.data.borrowerEmail || loan.employeeEmail;
+      const borrowerRfc = job.data.borrowerRfc || loan.borrowerRfc || null;
+
       const html = renderTemplate('contract', {
         loanId: loanId.slice(0, 8).toUpperCase(),
         issuedDate: new Date().toLocaleDateString('es-MX'),
@@ -53,12 +60,15 @@ async function processJob(job: Job<PdfJobData>): Promise<void> {
         fee: fmt(loan.fee),
         total: fmt(loan.total),
         cat,
+        borrowerRfc,
+        borrowerEmail,
         sofomRfc: process.env.SOFOM_RFC || 'VIDA240101XXX',
         sofomAddress: process.env.SOFOM_ADDRESS || 'Paseo de la Reforma 250 Piso 12, CDMX',
       });
 
       const pdf = await renderPDF(html);
-      const url = await uploadPDF(pdf, `loans/${loanId}/contrato_${Date.now()}.pdf`);
+      const storagePath = `loans/${loanId}/contrato_${Date.now()}.pdf`;
+      const url = await uploadPDF(pdf, storagePath);
 
       await db.collection('loans').doc(loanId).update({
         contractUrl: url,
@@ -72,6 +82,53 @@ async function processJob(job: Job<PdfJobData>): Promise<void> {
           url,
           generatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+      }
+
+      // Send contract to Mifiel for e-signature
+      if (borrowerEmail) {
+        try {
+          const mifielResult = await sendPagareForSigning({
+            pdfPath: url,
+            borrowerName: loan.employeeName,
+            borrowerEmail,
+            borrowerRfc: borrowerRfc || '',
+            loanId,
+          });
+
+          await db.collection('loans').doc(loanId).update({
+            status: 'pending_signature',
+            mifielDocumentId: mifielResult.documentId,
+            signingUrl: mifielResult.signingUrl,
+            signingExpiresAt: mifielResult.expiresAt,
+            signatureSentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          console.log(`[pdf-worker] Contract sent to Mifiel for loan ${loanId}, docId=${mifielResult.documentId}`);
+
+          // Notify borrower with signing link
+          try {
+            await db.collection('notifications_queue').add({
+              type: 'contract_signing_requested',
+              loanId,
+              employeeId,
+              borrowerEmail,
+              signingUrl: mifielResult.signingUrl,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          } catch (notifyErr) {
+            console.warn('[pdf-worker] Failed to queue signing notification:', notifyErr);
+          }
+        } catch (mifielErr) {
+          console.error(`[pdf-worker] Mifiel signing failed for loan ${loanId}:`, mifielErr);
+          await db.collection('incident_log').add({
+            source: 'pdf-worker-mifiel',
+            error: mifielErr instanceof Error ? mifielErr.message : String(mifielErr),
+            loanId,
+            ts: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      } else {
+        console.warn(`[pdf-worker] No borrower email for loan ${loanId} — skipping Mifiel signing`);
       }
       break;
     }

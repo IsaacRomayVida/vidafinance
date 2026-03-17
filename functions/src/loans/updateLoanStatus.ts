@@ -10,6 +10,7 @@ const UpdateLoanStatusSchema = z.object({
   loanId: z.string().min(1),
   newStatus: z.enum([
     'approved',
+    'pending_signature',
     'disbursed',
     'repaid',
     'overdue',
@@ -23,7 +24,8 @@ const UpdateLoanStatusSchema = z.object({
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   pending: ['cancelled'],
-  approved: ['cancelled', 'disbursed'],
+  approved: ['pending_signature', 'cancelled', 'disbursed'],
+  pending_signature: ['disbursed', 'cancelled'],
   disbursed: ['repaid', 'overdue'],
   overdue: ['in_collections', 'repaid', 'written_off'],
   in_collections: ['repaid', 'written_off'],
