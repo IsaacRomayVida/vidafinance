@@ -41,7 +41,26 @@ interface StpWebhookBody {
 }
 
 router.post('/stp', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body as StpWebhookBody;
+  // Bearer token verification — STP sends a shared secret in the Authorization header
+  const stpWebhookToken = process.env.STP_WEBHOOK_TOKEN;
+  if (stpWebhookToken) {
+    const authHeader = req.headers['authorization'] ?? '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (token !== stpWebhookToken) {
+      console.warn('[payment-server] STP webhook: invalid bearer token');
+      await db.collection('incident_log').add({
+        source: 'stp-webhook',
+        error: 'invalid_bearer_token',
+        ts: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+  }
+
+  // Body arrives as raw Buffer due to express.raw() middleware on /webhooks
+  const rawBody = req.body as Buffer;
+  const body = JSON.parse(rawBody.toString()) as StpWebhookBody;
   const { id, folioOrigen, estado, claveRastreo, monto } = body;
 
   console.log(`[payment-server] STP webhook received: estado=${estado} folio=${folioOrigen}`);

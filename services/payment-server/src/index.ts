@@ -12,6 +12,7 @@ import { redis } from './lib/redis';
 import { internalRouter } from './routes/internal';
 import { webhooksRouter } from './routes/webhooks';
 import { paymentLinksRouter } from './routes/paymentLinks';
+import { disbursementsRouter } from './routes/disbursements';
 import { disbursementWorker, startRawQueuePoller } from './workers/disbursementWorker';
 
 const app = express();
@@ -40,6 +41,7 @@ app.use(express.json({ limit: '100kb' }));
 app.use('/internal', internalRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/payment-links', paymentLinksRouter);
+app.use('/disburse', disbursementsRouter);
 
 // ── Health ────────────────────────────────────────────────────────────────────
 
