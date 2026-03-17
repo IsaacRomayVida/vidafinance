@@ -33,7 +33,7 @@ const i18n = {
     trust_tag:'Confianza',trust_h2:'Construido sobre gobernanza institucional.',trust_p:'Regulado, encriptado, transparente.',trust_1_title:'Gobernanza Suiza',trust_1_desc:'Holding bajo regulación financiera suiza',trust_2_title:'Registrada en SOFOM',trust_2_desc:'Licenciada y regulada en México',trust_3_title:'Encriptación Bancaria',trust_3_desc:'Tus datos protegidos en cada capa',trust_4_title:'Precios Transparentes',trust_4_desc:'Sin comisiones ocultas, estructura de costos clara',trust_link:'Ver Cumplimiento',
     close_h2:'Vida financiera. <em>Reinventada.</em>',close_sub:'Únete a cientos de empleadores construyendo resiliencia financiera.',close_cta:'Comenzar',
     ft_tagline:'Crédito de emergencia habilitado por el empleador. Gobernanza suiza. Operación en México.',ft_platform:'Plataforma',ft_company:'Empresa',ft_about:'Acerca de',ft_security:'Seguridad',ft_privacy:'Privacidad',ft_terms:'Términos',ft_connect:'Conecta',ft_press:'Prensa',ft_privacy_policy:'Política de Privacidad',ft_terms_service:'Términos de Servicio',
-    auth_welcome:'Bienvenido de nuevo',auth_signin_sub:'Inicia sesión en tu cuenta',auth_email:'Correo electrónico',auth_email_placeholder:'tu@empresa.com',auth_password:'Contraseña',auth_password_placeholder:'Tu contraseña',auth_signin_btn:'Iniciar Sesión',auth_signing_in:'Iniciando sesión...',auth_no_account:'¿No tienes cuenta?',auth_signup_link:'Regístrate',auth_has_account:'¿Ya tienes cuenta?',auth_login_link:'Iniciar sesión',auth_invalid_code:'Código de empleador inválido. Consulta con tu departamento de RH.',
+    auth_welcome:'Bienvenido de nuevo',auth_signin_sub:'Inicia sesión en tu cuenta',auth_email:'Correo electrónico',auth_email_placeholder:'tu@empresa.com',auth_password:'Contraseña',auth_password_placeholder:'Tu contraseña',auth_signin_btn:'Iniciar Sesión',auth_signing_in:'Iniciando sesión...',auth_no_account:'¿No tienes cuenta?',auth_signup_link:'Regístrate',auth_has_account:'¿Ya tienes cuenta?',auth_login_link:'Iniciar sesión',auth_invalid_code:'Código de empleador inválido. Consulta con tu departamento de RH.',auth_tab_email:'Correo',auth_tab_phone:'Teléfono',auth_phone:'Número de teléfono',auth_phone_placeholder:'+52 10 dígitos',auth_send_code:'Enviar código',auth_sending_code:'Enviando...',auth_verify_code:'Código de verificación',auth_code_placeholder:'123456',auth_verify_btn:'Verificar',auth_verifying:'Verificando...',auth_code_sent:'Código enviado. Revisa tus mensajes SMS.',auth_phone_error:'Error al enviar el código. Verifica tu número.',auth_code_error:'Código inválido. Intenta de nuevo.',
     dash_dashboard:'Panel',dash_employees:'Empleados',dash_loans:'Préstamos',dash_signout:'Cerrar sesión',dash_employer_code:'Código de Empleador',dash_total_employees:'Total Empleados',dash_active_loans:'Préstamos Activos',dash_pending_requests:'Solicitudes Pendientes',dash_total_disbursed:'Total Desembolsado',dash_recent_loans:'Solicitudes de Préstamo Recientes',dash_th_employee:'Empleado',dash_th_amount:'Monto',dash_th_term:'Plazo',dash_th_status:'Estado',dash_th_docs:'Documentos',dash_th_action:'Acción',dash_approve:'Aprobar',dash_reject:'Rechazar',dash_no_loans_employer:'Aún no hay solicitudes. Comparte tu código de empleador',dash_no_loans_employer_2:'con tus empleados.',dash_days:'días',dash_doc_contract:'Contrato',dash_doc_receipt:'Recibo',dash_doc_generating:'Generando...',
     dash_welcome:'Bienvenido',dash_available_credit:'Crédito Disponible',dash_credit_limit:'Límite de Crédito',dash_utilization:'Utilización',dash_quick_action:'Acción Rápida',dash_request_funds:'Solicitar Fondos',dash_your_loans:'Tus Préstamos',dash_my_loans:'Mis Préstamos',dash_th_repayment:'Pago',dash_th_date:'Fecha',dash_no_loans_employee:'Aún no tienes préstamos. Solicita tu primer fondo de emergencia arriba.',
     modal_request:'Solicitar Fondos',modal_available:'Disponible',modal_amount:'Monto (MXN)',modal_term:'Plazo de Pago',modal_term_30:'30 días',modal_rate:'30% mensual',modal_loan_amount:'Monto del préstamo',modal_fee:'Comisión (30%)',modal_total:'Pago total',modal_confirm:'Confirmar Solicitud',modal_submitting:'Enviando...',modal_exceed:'El monto excede el crédito disponible',modal_minimum:'El monto mínimo es $500 MXN',
@@ -316,7 +316,7 @@ const i18n = {
     trust_tag:'Trust',trust_h2:'Built on institutional governance.',trust_p:'Regulated, encrypted, transparent.',trust_1_title:'Swiss Governance',trust_1_desc:'Holding under Swiss financial regulation',trust_2_title:'SOFOM Registered',trust_2_desc:'Licensed and regulated in Mexico',trust_3_title:'Bank-grade Encryption',trust_3_desc:'Your data protected at every layer',trust_4_title:'Transparent Pricing',trust_4_desc:'No hidden fees, clear cost structure',trust_link:'View Compliance',
     close_h2:'Financial life. <em>Reinvented.</em>',close_sub:'Join hundreds of employers building financial resilience.',close_cta:'Get Started',
     ft_tagline:'Employer-enabled emergency credit. Swiss-governed. Mexico-operating.',ft_platform:'Platform',ft_company:'Company',ft_about:'About',ft_security:'Security',ft_privacy:'Privacy',ft_terms:'Terms',ft_connect:'Connect',ft_press:'Press',ft_privacy_policy:'Privacy Policy',ft_terms_service:'Terms of Service',
-    auth_welcome:'Welcome back',auth_signin_sub:'Sign in to your account',auth_email:'Email',auth_email_placeholder:'you@company.com',auth_password:'Password',auth_password_placeholder:'Your password',auth_signin_btn:'Sign In',auth_signing_in:'Signing in...',auth_no_account:'Don\'t have an account?',auth_signup_link:'Sign up',auth_has_account:'Already have an account?',auth_login_link:'Sign in',auth_invalid_code:'Invalid employer code. Please check with your HR department.',
+    auth_welcome:'Welcome back',auth_signin_sub:'Sign in to your account',auth_email:'Email',auth_email_placeholder:'you@company.com',auth_password:'Password',auth_password_placeholder:'Your password',auth_signin_btn:'Sign In',auth_signing_in:'Signing in...',auth_no_account:'Don\'t have an account?',auth_signup_link:'Sign up',auth_has_account:'Already have an account?',auth_login_link:'Sign in',auth_invalid_code:'Invalid employer code. Please check with your HR department.',auth_tab_email:'Email',auth_tab_phone:'Phone',auth_phone:'Phone number',auth_phone_placeholder:'+52 10 digits',auth_send_code:'Send code',auth_sending_code:'Sending...',auth_verify_code:'Verification code',auth_code_placeholder:'123456',auth_verify_btn:'Verify',auth_verifying:'Verifying...',auth_code_sent:'Code sent. Check your SMS messages.',auth_phone_error:'Error sending code. Check your number.',auth_code_error:'Invalid code. Try again.',
     dash_dashboard:'Dashboard',dash_employees:'Employees',dash_loans:'Loans',dash_signout:'Sign out',dash_employer_code:'Employer Code',dash_total_employees:'Total Employees',dash_active_loans:'Active Loans',dash_pending_requests:'Pending Requests',dash_total_disbursed:'Total Disbursed',dash_recent_loans:'Recent Loan Requests',dash_th_employee:'Employee',dash_th_amount:'Amount',dash_th_term:'Term',dash_th_status:'Status',dash_th_docs:'Documents',dash_th_action:'Action',dash_approve:'Approve',dash_reject:'Reject',dash_no_loans_employer:'No loan requests yet. Share your employer code',dash_no_loans_employer_2:'with employees.',dash_days:'days',dash_doc_contract:'Contract',dash_doc_receipt:'Receipt',dash_doc_generating:'Generating...',
     dash_welcome:'Welcome',dash_available_credit:'Available Credit',dash_credit_limit:'Credit Limit',dash_utilization:'Utilization',dash_quick_action:'Quick Action',dash_request_funds:'Request Funds',dash_your_loans:'Your Loans',dash_my_loans:'My Loans',dash_th_repayment:'Repayment',dash_th_date:'Date',dash_no_loans_employee:'No loans yet. Request your first emergency fund above.',
     modal_request:'Request Funds',modal_available:'Available',modal_amount:'Amount (MXN)',modal_term:'Repayment Term',modal_term_30:'30 days',modal_rate:'30% monthly',modal_loan_amount:'Loan amount',modal_fee:'Fee (30%)',modal_total:'Total repayment',modal_confirm:'Confirm Request',modal_submitting:'Submitting...',modal_exceed:'Amount exceeds available credit',modal_minimum:'Minimum amount is $500 MXN',
@@ -678,6 +678,12 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 // ─── Helpers ─────────────────────────────────────────────
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
 function showToast(msg, type = '') {
   let toast = document.getElementById('toast');
   if (!toast) { toast = document.createElement('div'); toast.id = 'toast'; toast.className = 'toast'; document.body.appendChild(toast); }
@@ -1035,7 +1041,9 @@ function renderOnboarding(app) {
           const cred = await auth.createUserWithEmailAndPassword(state.data.email, passIn.value);
           const uid = cred.user.uid;
           if (state.role === 'employer') {
-            const employerCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const arr = new Uint8Array(6);
+            crypto.getRandomValues(arr);
+            const employerCode = Array.from(arr, b => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
             state.data.employerCode = employerCode;
             await db.collection('employers').doc(uid).set({
               name: state.data.name, companyName: state.data.company, email: state.data.email,
@@ -1062,7 +1070,13 @@ function renderOnboarding(app) {
           renderStep();
           setTimeout(fireConfetti, 300);
         } catch (err) {
-          errEl.textContent = err.message;
+          const code = err.code || '';
+          let msg;
+          if (code === 'auth/email-already-in-use') msg = currentLang === 'es' ? 'Este correo ya está registrado.' : 'This email is already registered.';
+          else if (code === 'auth/weak-password') msg = currentLang === 'es' ? 'La contraseña es demasiado débil.' : 'Password is too weak.';
+          else if (code === 'auth/invalid-email') msg = currentLang === 'es' ? 'Correo electrónico inválido.' : 'Invalid email address.';
+          else msg = currentLang === 'es' ? 'Error al crear cuenta. Intenta de nuevo.' : 'Error creating account. Please try again.';
+          errEl.textContent = msg;
           errEl.classList.add('show');
           createBtn.disabled = false;
           createBtn.textContent = state.role === 'employer' ? t('onb_e_step5_btn') : t('onb_m_step4_btn');
@@ -1644,7 +1658,7 @@ ${pageFooter()}`;
       } catch (err) {
         btn.disabled = false;
         btn.textContent = t('pg_contact_form_send');
-        showToast(err.message, 'error');
+        showToast(currentLang === 'es' ? 'Error al enviar. Intenta de nuevo.' : 'Error sending. Please try again.', 'error');
       }
     });
   }
@@ -1664,15 +1678,38 @@ ${pageFooter()}`;
 
 // ─── LOGIN PAGE ──────────────────────────────────────────
 function renderLogin(app) {
-  app.innerHTML = `<div class="auth-page"><div class="auth-card"><div class="nav-logo">${vidaLogo()}</div><h2>${t('auth_welcome')}</h2><p class="auth-sub">${t('auth_signin_sub')}</p><div class="auth-error" id="authError"></div><form id="loginForm"><div class="form-group"><label>${t('auth_email')}</label><input type="email" id="loginEmail" placeholder="${t('auth_email_placeholder')}" required></div><div class="form-group"><label>${t('auth_password')}</label><input type="password" id="loginPass" placeholder="${t('auth_password_placeholder')}" required></div><button type="submit" class="btn-primary" id="loginBtn">${t('auth_signin_btn')}</button></form><p class="auth-footer">${t('auth_no_account')} <a href="/onboarding" onclick="event.preventDefault();navigate('/onboarding')">${t('auth_signup_link')}</a></p><p class="auth-footer" style="margin-top:12px"><a href="#" onclick="event.preventDefault();toggleLang()" style="color:var(--t3)">${t('lang_toggle')}</a></p></div></div>`;
+  app.innerHTML = `<div class="auth-page"><div class="auth-card"><div class="nav-logo">${vidaLogo()}</div><h2>${t('auth_welcome')}</h2><p class="auth-sub">${t('auth_signin_sub')}</p><div class="auth-tabs" style="display:flex;gap:0;margin-bottom:20px;border:1px solid rgba(25,68,69,0.08);border-radius:10px;overflow:hidden"><button class="auth-tab active" id="tabEmail" style="flex:1;padding:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:var(--brand);color:#fff;transition:all .2s">${t('auth_tab_email')}</button><button class="auth-tab" id="tabPhone" style="flex:1;padding:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--t2);transition:all .2s">${t('auth_tab_phone')}</button></div><div class="auth-error" id="authError"></div><div id="emailLogin"><form id="loginForm"><div class="form-group"><label>${t('auth_email')}</label><input type="email" id="loginEmail" placeholder="${t('auth_email_placeholder')}" required></div><div class="form-group"><label>${t('auth_password')}</label><input type="password" id="loginPass" placeholder="${t('auth_password_placeholder')}" required></div><button type="submit" class="btn-primary" id="loginBtn">${t('auth_signin_btn')}</button></form></div><div id="phoneLogin" style="display:none"><div id="phoneStep1"><div class="form-group"><label>${t('auth_phone')}</label><input type="tel" id="phoneNumber" placeholder="${t('auth_phone_placeholder')}"></div><button class="btn-primary" id="sendCodeBtn">${t('auth_send_code')}</button><div id="recaptcha-container"></div></div><div id="phoneStep2" style="display:none"><div class="form-group"><label>${t('auth_verify_code')}</label><input type="text" id="smsCode" placeholder="${t('auth_code_placeholder')}" maxlength="6" inputmode="numeric" pattern="[0-9]*"></div><button class="btn-primary" id="verifyCodeBtn">${t('auth_verify_btn')}</button></div></div><p class="auth-footer">${t('auth_no_account')} <a href="/onboarding" onclick="event.preventDefault();navigate('/onboarding')">${t('auth_signup_link')}</a></p><p class="auth-footer" style="margin-top:12px"><a href="#" onclick="event.preventDefault();toggleLang()" style="color:var(--t3)">${t('lang_toggle')}</a></p></div></div>`;
+
+  // Tab switching
+  const tabEmail = document.getElementById('tabEmail');
+  const tabPhone = document.getElementById('tabPhone');
+  const emailDiv = document.getElementById('emailLogin');
+  const phoneDiv = document.getElementById('phoneLogin');
+  const errEl = document.getElementById('authError');
+
+  tabEmail.addEventListener('click', () => {
+    tabEmail.style.background = 'var(--brand)'; tabEmail.style.color = '#fff';
+    tabPhone.style.background = 'transparent'; tabPhone.style.color = 'var(--t2)';
+    emailDiv.style.display = 'block'; phoneDiv.style.display = 'none';
+    errEl.classList.remove('show');
+  });
+  tabPhone.addEventListener('click', () => {
+    tabPhone.style.background = 'var(--brand)'; tabPhone.style.color = '#fff';
+    tabEmail.style.background = 'transparent'; tabEmail.style.color = 'var(--t2)';
+    phoneDiv.style.display = 'block'; emailDiv.style.display = 'none';
+    errEl.classList.remove('show');
+    setupRecaptcha();
+  });
+
+  // Email login
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
-    e.preventDefault(); const btn = document.getElementById('loginBtn'); const errEl = document.getElementById('authError');
+    e.preventDefault(); const btn = document.getElementById('loginBtn');
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>' + t('auth_signing_in'); errEl.classList.remove('show');
     try {
       await auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginPass').value);
       if (!auth.currentUser.emailVerified) {
         await auth.currentUser.sendEmailVerification();
-        errEl.textContent = 'Verifica tu correo electrónico. Te enviamos un enlace de verificación.';
+        errEl.textContent = currentLang === 'es' ? 'Verifica tu correo electrónico. Te enviamos un enlace de verificación.' : 'Verify your email. We sent you a verification link.';
         errEl.classList.add('show');
         errEl.style.background = '#fff8e1'; errEl.style.color = '#8d6e00';
         btn.disabled = false; btn.textContent = t('auth_signin_btn');
@@ -1680,7 +1717,78 @@ function renderLogin(app) {
         return;
       }
     }
-    catch (err) { errEl.textContent = err.message; errEl.classList.add('show'); btn.disabled = false; btn.textContent = t('auth_signin_btn'); }
+    catch (err) {
+      const code = err.code || '';
+      let msg;
+      if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') msg = currentLang === 'es' ? 'Correo o contraseña incorrectos.' : 'Invalid email or password.';
+      else if (code === 'auth/too-many-requests') msg = currentLang === 'es' ? 'Demasiados intentos. Intenta más tarde.' : 'Too many attempts. Try again later.';
+      else if (code === 'auth/invalid-email') msg = currentLang === 'es' ? 'Correo electrónico inválido.' : 'Invalid email address.';
+      else msg = currentLang === 'es' ? 'Error al iniciar sesión. Intenta de nuevo.' : 'Login failed. Please try again.';
+      errEl.textContent = msg; errEl.classList.add('show'); errEl.style.background = ''; errEl.style.color = '';
+      btn.disabled = false; btn.textContent = t('auth_signin_btn');
+    }
+  });
+
+  // Phone login with RecaptchaVerifier
+  let _recaptchaVerifier = null;
+  let _confirmationResult = null;
+
+  function setupRecaptcha() {
+    if (_recaptchaVerifier) return;
+    _recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+      size: 'invisible',
+      callback: function() { /* reCAPTCHA solved */ }
+    });
+    _recaptchaVerifier.render();
+  }
+
+  document.getElementById('sendCodeBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('sendCodeBtn');
+    const phoneInput = document.getElementById('phoneNumber').value.trim();
+    errEl.classList.remove('show');
+    // Normalize Mexican phone numbers
+    let phone = phoneInput.replace(/[\s\-()]/g, '');
+    if (!phone.startsWith('+')) phone = '+52' + phone.replace(/^0+/, '');
+    if (phone.length < 12) {
+      errEl.textContent = t('auth_phone_error'); errEl.classList.add('show'); errEl.style.background = ''; errEl.style.color = '';
+      return;
+    }
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>' + t('auth_sending_code');
+    try {
+      if (!_recaptchaVerifier) setupRecaptcha();
+      _confirmationResult = await auth.signInWithPhoneNumber(phone, _recaptchaVerifier);
+      document.getElementById('phoneStep1').style.display = 'none';
+      document.getElementById('phoneStep2').style.display = 'block';
+      errEl.textContent = t('auth_code_sent'); errEl.classList.add('show');
+      errEl.style.background = '#e8f5e9'; errEl.style.color = '#2e7d32';
+      document.getElementById('smsCode').focus();
+    } catch (err) {
+      let msg;
+      if (err.code === 'auth/too-many-requests') msg = currentLang === 'es' ? 'Demasiados intentos. Intenta más tarde.' : 'Too many attempts. Try again later.';
+      else if (err.code === 'auth/invalid-phone-number') msg = currentLang === 'es' ? 'Número de teléfono inválido.' : 'Invalid phone number.';
+      else msg = t('auth_phone_error');
+      errEl.textContent = msg; errEl.classList.add('show'); errEl.style.background = ''; errEl.style.color = '';
+      if (_recaptchaVerifier) { _recaptchaVerifier.clear(); _recaptchaVerifier = null; }
+      btn.disabled = false; btn.textContent = t('auth_send_code');
+    }
+  });
+
+  document.getElementById('verifyCodeBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('verifyCodeBtn');
+    const code = document.getElementById('smsCode').value.trim();
+    if (code.length !== 6) { errEl.textContent = t('auth_code_error'); errEl.classList.add('show'); errEl.style.background = ''; errEl.style.color = ''; return; }
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>' + t('auth_verifying');
+    errEl.classList.remove('show');
+    try {
+      await _confirmationResult.confirm(code);
+    } catch (err) {
+      let msg;
+      if (err.code === 'auth/invalid-verification-code') msg = t('auth_code_error');
+      else if (err.code === 'auth/code-expired') msg = currentLang === 'es' ? 'Código expirado. Solicita uno nuevo.' : 'Code expired. Request a new one.';
+      else msg = t('auth_code_error');
+      errEl.textContent = msg; errEl.classList.add('show'); errEl.style.background = ''; errEl.style.color = '';
+      btn.disabled = false; btn.textContent = t('auth_verify_btn');
+    }
   });
 }
 
@@ -1749,7 +1857,7 @@ async function renderEmployerDashboard(app) {
 
     const tabsHtml = `<div class="dash-tabs" style="display:flex;gap:0;border-bottom:1px solid rgba(25,68,69,0.08);margin-bottom:20px">${tabLabels.map(tb => `<button class="dash-tab-btn${tb.key===tab?' dash-tab-active':''}" data-tab="${tb.key}" style="padding:10px 16px;font-size:13px;font-weight:${tb.key===tab?'700':'500'};color:${tb.key===tab?'var(--brand)':'var(--t3)'};background:none;border:none;border-bottom:${tb.key===tab?'2px solid var(--brand)':'2px solid transparent'};cursor:pointer;transition:all .2s">${currentLang==='es'?tb.es:tb.en}${tb.key!=='all'?' ('+loans.filter(l=>{if(tb.key==='approved')return l.status==='approved'||l.status==='disbursement_queued';return l.status===tb.key}).length+')':' ('+loans.length+')'}</button>`).join('')}</div>`;
 
-    const tableHtml = filtered.length ? `<table><thead><tr><th>${t('dash_th_employee')}</th><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${filtered.map(l=>`<tr><td>${l.employeeName}</td><td>$${fmt(l.amount)}</td><td>${l.termDays} ${t('dash_days')}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.status==='pending'?`<button class="btn-sm btn-approve" onclick="approveLoan('${l.id}',this)">${t('dash_approve')}</button> <button class="btn-sm btn-reject" onclick="rejectLoan('${l.id}',this)">${t('dash_reject')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><p>${t('dash_no_loans_employer')} <strong>${emp.employerCode}</strong> ${t('dash_no_loans_employer_2')}</p></div>`;
+    const tableHtml = filtered.length ? `<table><thead><tr><th>${t('dash_th_employee')}</th><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${filtered.map(l=>`<tr><td>${esc(l.employeeName)}</td><td>$${fmt(l.amount)}</td><td>${l.termDays} ${t('dash_days')}</td><td><span class="badge badge-${esc(l.status)}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.status==='pending'?`<button class="btn-sm btn-approve" onclick="approveLoan('${esc(l.id)}',this)">${t('dash_approve')}</button> <button class="btn-sm btn-reject" onclick="rejectLoan('${esc(l.id)}',this)">${t('dash_reject')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><p>${t('dash_no_loans_employer')} <strong>${emp.employerCode}</strong> ${t('dash_no_loans_employer_2')}</p></div>`;
 
     const container = document.getElementById('dashTabContent');
     if (container) {
@@ -1779,7 +1887,7 @@ async function renderEmployerDashboard(app) {
     const thAvail = currentLang === 'es' ? 'Disponible' : 'Available';
     const thDate = currentLang === 'es' ? 'Registro' : 'Registered';
 
-    container.innerHTML = `<div class="card"><div class="card-title">${t('dash_employees')}</div><div style="margin-bottom:16px"><input type="text" id="empSearchInput" placeholder="${searchLabel}" value="${query||''}" style="width:100%;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none;transition:border .2s"></div><div class="table-wrap">${filtered.length?`<table><thead><tr><th>${thName}</th><th>${thEmail}</th><th>${thLimit}</th><th>${thAvail}</th><th>${thDate}</th></tr></thead><tbody>${filtered.map(e=>`<tr><td>${e.name||'—'}</td><td>${e.email||'—'}</td><td>$${fmt(e.creditLimit||0)}</td><td>$${fmt(e.availableCredit||0)}</td><td>${e.createdAt?new Date(e.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><p>${currentLang==='es'?'No se encontraron empleados':'No employees found'}</p></div>`}</div></div>`;
+    container.innerHTML = `<div class="card"><div class="card-title">${t('dash_employees')}</div><div style="margin-bottom:16px"><input type="text" id="empSearchInput" placeholder="${searchLabel}" value="${esc(query)||''}" style="width:100%;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none;transition:border .2s"></div><div class="table-wrap">${filtered.length?`<table><thead><tr><th>${thName}</th><th>${thEmail}</th><th>${thLimit}</th><th>${thAvail}</th><th>${thDate}</th></tr></thead><tbody>${filtered.map(e=>`<tr><td>${esc(e.name)||'—'}</td><td>${esc(e.email)||'—'}</td><td>$${fmt(e.creditLimit||0)}</td><td>$${fmt(e.availableCredit||0)}</td><td>${e.createdAt?new Date(e.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><p>${currentLang==='es'?'No se encontraron empleados':'No employees found'}</p></div>`}</div></div>`;
     const searchIn = document.getElementById('empSearchInput');
     if (searchIn) searchIn.addEventListener('input', () => renderEmployeesContent(employees, container, searchIn.value));
   }
@@ -1788,10 +1896,10 @@ window.approveLoan = async function(id, btn) {
   if (btn && btn.dataset.loading === 'true') return;
   if (btn) { btn.dataset.loading = 'true'; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
-    await db.collection('loans').doc(id).update({ status: 'approved', approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await firebase.functions().httpsCallable('approveLoanRequest')({ loanId: id });
     showToast(t('toast_loan_approved'), 'success');
   } catch (e) {
-    showToast(e.message, 'error');
+    showToast(currentLang === 'es' ? 'Error al aprobar préstamo' : 'Error approving loan', 'error');
     if (btn) { btn.dataset.loading = 'false'; btn.textContent = t('dash_approve'); }
   }
 };
@@ -1799,12 +1907,10 @@ window.rejectLoan = async function(id, btn) {
   if (btn && btn.dataset.loading === 'true') return;
   if (btn) { btn.dataset.loading = 'true'; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
-    const l = (await db.collection('loans').doc(id).get()).data();
-    await db.collection('loans').doc(id).update({ status: 'rejected', rejectedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    await db.collection('employees').doc(l.employeeId).update({ availableCredit: firebase.firestore.FieldValue.increment(l.amount) });
+    await firebase.functions().httpsCallable('rejectLoanRequest')({ loanId: id });
     showToast(t('toast_loan_rejected'), 'error');
   } catch (e) {
-    showToast(e.message, 'error');
+    showToast(currentLang === 'es' ? 'Error al rechazar préstamo' : 'Error rejecting loan', 'error');
     if (btn) { btn.dataset.loading = 'false'; btn.textContent = t('dash_reject'); }
   }
 };
@@ -1826,7 +1932,7 @@ async function renderEmployeeDashboard(app) {
   function renderEmployeeLoansTable(loans) {
     const el = document.getElementById('empLoansTable');
     if (!el) return;
-    el.innerHTML = loans.length ? `<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_repayment')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_date')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${loans.map(l=>`<tr><td>$${fmt(l.amount)}</td><td>${l.termDays||30} ${t('dash_days')}</td><td>$${fmt(l.repaymentAmount||l.total||0)}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.createdAt?new Date(l.createdAt.seconds*1000).toLocaleDateString():'—'}</td><td>${['active','overdue'].includes(l.status)?`<button class="btn-sm btn-approve pay-now-btn" data-loan-id="${l.id}">${t('dash_pay_now')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_loans_employee')}</p></div>`;
+    el.innerHTML = loans.length ? `<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_repayment')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_date')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${loans.map(l=>`<tr><td>$${fmt(l.amount)}</td><td>${l.termDays||30} ${t('dash_days')}</td><td>$${fmt(l.repaymentAmount||l.total||0)}</td><td><span class="badge badge-${esc(l.status)}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.createdAt?new Date(l.createdAt.seconds*1000).toLocaleDateString():'—'}</td><td>${['active','overdue'].includes(l.status)?`<button class="btn-sm btn-approve pay-now-btn" data-loan-id="${esc(l.id)}">${t('dash_pay_now')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_loans_employee')}</p></div>`;
     el.querySelectorAll('.pay-now-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const loanId = btn.dataset.loanId;
@@ -1840,7 +1946,7 @@ async function renderEmployeeDashboard(app) {
   if (window._unsubEmp) window._unsubEmp();
   window._unsubEmp = db.collection('loans').where('employeeId','==',uid).orderBy('createdAt','desc')
     .onSnapshot(snap => { renderEmployeeLoansTable(snap.docs.map(d=>({id:d.id,...d.data()}))); });
-<div class="modal-overlay" id="loanModal"><div class="modal" style="position:relative"><div class="modal-close" onclick="closeLoanModal()">✕</div><h3>${t('modal_request')}</h3><p class="modal-sub">${t('modal_available')}: $${fmt(emp.availableCredit)} MXN</p><form id="loanForm"><div class="form-group"><label>${t('modal_amount')}</label><input type="number" id="loanAmount" min="500" max="${emp.availableCredit}" step="100" value="1000" required></div><div class="form-group" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_term')}</span><span style="font-size:14px;font-weight:700;color:var(--t1)">${t('modal_term_30')} · ${t('modal_rate')}</span></div><div style="border-top:1px solid rgba(25,68,69,0.06);border-bottom:1px solid rgba(25,68,69,0.06);padding:20px 0;margin-bottom:16px"><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_loan_amount')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalAmount">$1,000</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_fee')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalFee">$300</span></div><div style="height:1px;background:rgba(25,68,69,0.06);margin:4px 0"></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-family:var(--df);font-size:15px;color:var(--t1)">${t('modal_total')}</span><span style="font-family:var(--df);font-size:18px;color:var(--t1)" id="modalTotal">$1,300</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_due_date')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalDueDate"></span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">CAT (Costo Anual Total)</span><span class="cat-highlight" id="catDisplay"></span></div><p class="cat-note">El CAT es una medida estandarizada del costo. <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener">CONDUSEF</a></p></div><label style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-size:13px;color:var(--t2)"><input type="checkbox" id="termsCheck"><span>${t('modal_accept_terms')}</span></label><div class="auth-error" id="loanError" style="margin-bottom:12px"></div><button type="submit" class="btn-primary" id="loanSubmitBtn" disabled>${t('modal_confirm')}</button></form></div></div>`;
+  app.innerHTML += `<div class="modal-overlay" id="loanModal"><div class="modal" style="position:relative"><div class="modal-close" onclick="closeLoanModal()">✕</div><h3>${t('modal_request')}</h3><p class="modal-sub">${t('modal_available')}: $${fmt(emp.availableCredit)} MXN</p><form id="loanForm"><div class="form-group"><label>${t('modal_amount')}</label><input type="number" id="loanAmount" min="500" max="${emp.availableCredit}" step="100" value="1000" required></div><div class="form-group" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_term')}</span><span style="font-size:14px;font-weight:700;color:var(--t1)">${t('modal_term_30')} · ${t('modal_rate')}</span></div><div style="border-top:1px solid rgba(25,68,69,0.06);border-bottom:1px solid rgba(25,68,69,0.06);padding:20px 0;margin-bottom:16px"><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_loan_amount')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalAmount">$1,000</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_fee')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalFee">$300</span></div><div style="height:1px;background:rgba(25,68,69,0.06);margin:4px 0"></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-family:var(--df);font-size:15px;color:var(--t1)">${t('modal_total')}</span><span style="font-family:var(--df);font-size:18px;color:var(--t1)" id="modalTotal">$1,300</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_due_date')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalDueDate"></span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">CAT (Costo Anual Total)</span><span class="cat-highlight" id="catDisplay"></span></div><p class="cat-note">El CAT es una medida estandarizada del costo. <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener">CONDUSEF</a></p></div><label style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-size:13px;color:var(--t2)"><input type="checkbox" id="termsCheck"><span>${t('modal_accept_terms')}</span></label><div class="auth-error" id="loanError" style="margin-bottom:12px"></div><button type="submit" class="btn-primary" id="loanSubmitBtn" disabled>${t('modal_confirm')}</button></form></div></div>`;
   const amountIn=document.getElementById('loanAmount');
   const termsCheck=document.getElementById('termsCheck');
   const loanSubmitBtn=document.getElementById('loanSubmitBtn');
@@ -1921,18 +2027,18 @@ function renderEmployersTab(container) {
         const e = d.data();
         const mlScore = e.mlRiskScore != null ? e.mlRiskScore : null;
         const tier = mlScore != null ? (mlScore >= 70 ? 'tier-1' : mlScore >= 40 ? 'tier-2' : 'tier-3') : null;
-        const redFlags = (e.red_flags || []).map(f => `<span class="flag-pill red">${f}</span>`).join('');
-        const greenFlags = (e.green_flags || []).map(f => `<span class="flag-pill green">${f}</span>`).join('');
+        const redFlags = (e.red_flags || []).map(f => `<span class="flag-pill red">${esc(f)}</span>`).join('');
+        const greenFlags = (e.green_flags || []).map(f => `<span class="flag-pill green">${esc(f)}</span>`).join('');
         const docs = [
-          e.docRFC ? `<a href="${e.docRFC}" target="_blank" class="doc-link">RFC</a>` : '',
-          e.docId ? `<a href="${e.docId}" target="_blank" class="doc-link">ID</a>` : '',
-          e.docAddress ? `<a href="${e.docAddress}" target="_blank" class="doc-link">Domicilio</a>` : ''
+          e.docRFC ? `<a href="${esc(e.docRFC)}" target="_blank" class="doc-link">RFC</a>` : '',
+          e.docId ? `<a href="${esc(e.docId)}" target="_blank" class="doc-link">ID</a>` : '',
+          e.docAddress ? `<a href="${esc(e.docAddress)}" target="_blank" class="doc-link">Domicilio</a>` : ''
         ].filter(Boolean).join(' ');
         const manualBanner = e.requiresManualReview ? `<div style="background:#fdf7e8;color:#7a5a10;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:12px">⚠ Requiere revisión manual</div>` : '';
         const actions = sub === 'pending_verification'
-          ? `<div style="display:flex;gap:8px;margin-top:16px"><button class="btn-sm btn-approve" data-action="approve" data-id="${d.id}">Aprobar</button><button class="btn-sm btn-reject" data-action="reject" data-id="${d.id}">Rechazar</button></div>`
-          : sub === 'rejected' ? `<div style="margin-top:8px;font-size:12px;color:var(--t3)">Motivo: ${e.rejectionReason || '—'}</div>` : '';
-        return `<div class="employer-card">${manualBanner}<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px"><div><div style="font-size:16px;font-weight:700;color:var(--t1)">${e.companyName || '—'}</div><div style="font-size:13px;color:var(--t3);margin-top:2px">${e.name} · ${e.email} · Código: ${e.employerCode || '—'}</div><div style="margin-top:8px">${docs}</div></div><div style="text-align:right">${tier ? `<span class="ml-badge ${tier}">ML: ${mlScore}</span>` : ''}</div></div>${redFlags || greenFlags ? `<div style="margin-top:10px">${redFlags}${greenFlags}</div>` : ''}${actions}</div>`;
+          ? `<div style="display:flex;gap:8px;margin-top:16px"><button class="btn-sm btn-approve" data-action="approve" data-id="${esc(d.id)}">Aprobar</button><button class="btn-sm btn-reject" data-action="reject" data-id="${esc(d.id)}">Rechazar</button></div>`
+          : sub === 'rejected' ? `<div style="margin-top:8px;font-size:12px;color:var(--t3)">Motivo: ${esc(e.rejectionReason) || '—'}</div>` : '';
+        return `<div class="employer-card">${manualBanner}<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px"><div><div style="font-size:16px;font-weight:700;color:var(--t1)">${esc(e.companyName) || '—'}</div><div style="font-size:13px;color:var(--t3);margin-top:2px">${esc(e.name)} · ${esc(e.email)} · Código: ${esc(e.employerCode) || '—'}</div><div style="margin-top:8px">${docs}</div></div><div style="text-align:right">${tier ? `<span class="ml-badge ${tier}">ML: ${mlScore}</span>` : ''}</div></div>${redFlags || greenFlags ? `<div style="margin-top:10px">${redFlags}${greenFlags}</div>` : ''}${actions}</div>`;
       }).join('');
 
       list.querySelectorAll('[data-action="approve"]').forEach(btn => {
@@ -1944,7 +2050,7 @@ function renderEmployersTab(container) {
             await fn({ employerUid: btn.dataset.id });
             showToast('Empleador aprobado', 'success');
             render(activeSub);
-          } catch (err) { showToast(err.message, 'error'); btn.dataset.loading = 'false'; btn.textContent = 'Aprobar'; }
+          } catch (err) { showToast('Error al aprobar empleador', 'error'); btn.dataset.loading = 'false'; btn.textContent = 'Aprobar'; }
         });
       });
       list.querySelectorAll('[data-action="reject"]').forEach(btn => {
@@ -1966,7 +2072,7 @@ function renderEmployersTab(container) {
               });
               showToast('Empleador rechazado', 'error');
               render(activeSub);
-            } catch (err) { showToast(err.message, 'error'); }
+            } catch (err) { showToast('Error al rechazar empleador', 'error'); }
           });
         });
       });
@@ -2005,9 +2111,9 @@ function renderLoansTab(container) {
         const mlScore = l.mlCreditScore != null ? l.mlCreditScore : null;
         const tier = mlScore != null ? (mlScore >= 70 ? 'tier-1' : mlScore >= 40 ? 'tier-2' : 'tier-3') : null;
         let actions = '—';
-        if (sub === 'to_disburse') actions = `<button class="btn-sm btn-approve" data-action="disburse" data-id="${l.id}">Confirmar desembolso</button>`;
-        else if (sub === 'overdue' && l.employeePhone) actions = `<a href="https://wa.me/52${l.employeePhone}" target="_blank" class="btn-sm btn-approve" style="text-decoration:none;display:inline-block">Contactar</a>`;
-        return `<tr><td>${l.employeeName || '—'}</td><td>${l.employerName || l.employerId || '—'}</td><td>$${fmt(l.amount)}</td><td>$${fmt(l.repaymentAmount)}</td><td>${dueDate(l)}</td><td><span class="badge badge-${l.status}">${l.status}</span></td><td>${tier ? `<span class="ml-badge ${tier}">${mlScore}</span>` : '—'}</td><td>${actions}</td></tr>`;
+        if (sub === 'to_disburse') actions = `<button class="btn-sm btn-approve" data-action="disburse" data-id="${esc(l.id)}">Confirmar desembolso</button>`;
+        else if (sub === 'overdue' && l.employeePhone) actions = `<a href="https://wa.me/52${esc(l.employeePhone)}" target="_blank" class="btn-sm btn-approve" style="text-decoration:none;display:inline-block">Contactar</a>`;
+        return `<tr><td>${esc(l.employeeName) || '—'}</td><td>${esc(l.employerName) || esc(l.employerId) || '—'}</td><td>$${fmt(l.amount)}</td><td>$${fmt(l.repaymentAmount)}</td><td>${dueDate(l)}</td><td><span class="badge badge-${esc(l.status)}">${esc(l.status)}</span></td><td>${tier ? `<span class="ml-badge ${tier}">${mlScore}</span>` : '—'}</td><td>${actions}</td></tr>`;
       }).join('')}</tbody></table></div>`;
 
       list.querySelectorAll('[data-action="disburse"]').forEach(btn => {
@@ -2019,7 +2125,7 @@ function renderLoansTab(container) {
             await fn({ loanId: btn.dataset.id, disbursementRef: 'MANUAL' });
             showToast('Desembolso confirmado', 'success');
             render(activeSub);
-          } catch (err) { showToast(err.message, 'error'); btn.dataset.loading = 'false'; btn.textContent = 'Confirmar desembolso'; }
+          } catch (err) { showToast('Error al confirmar desembolso', 'error'); btn.dataset.loading = 'false'; btn.textContent = 'Confirmar desembolso'; }
         });
       });
     });
@@ -2085,7 +2191,8 @@ function renderFinanceTab(container) {
       })
     );
   }).catch(err => {
-    container.innerHTML = `<div style="padding:40px;color:#c0392b">${err.message}</div>`;
+    console.error('Finance tab error:', err);
+    container.innerHTML = `<div style="padding:40px;color:#c0392b">Error al cargar datos financieros. Intenta de nuevo.</div>`;
   });
 }
 
@@ -2096,7 +2203,7 @@ function renderAuditTab(container) {
 
   container.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-end"><div style="flex:1;min-width:180px"><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Buscar</label><input type="text" id="auditSearch" placeholder="UID, email, ID..." style="width:100%;padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Acción</label><select id="auditAction" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"><option value="">Todas</option></select></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Desde</label><input type="date" id="auditFrom" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hasta</label><input type="date" id="auditTo" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><button class="btn-sm btn-approve" id="auditExport" style="height:36px">Export CSV</button></div><div class="table-wrap" id="auditTable"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>`;
 
-  db.collection('audit_log').orderBy('timestamp', 'desc').limit(200).get().then(snap => {
+  db.collection('auditLogs').orderBy('timestamp', 'desc').limit(200).get().then(snap => {
     allLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const actions = [...new Set(allLogs.map(l => l.action).filter(Boolean))];
     const sel = document.getElementById('auditAction');

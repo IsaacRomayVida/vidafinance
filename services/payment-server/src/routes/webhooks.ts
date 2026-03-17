@@ -392,7 +392,7 @@ router.post('/mifiel/signed', async (req: Request, res: Response): Promise<void>
         console.warn('[payment-server] Failed to queue signing notification:', notifyErr);
       }
 
-      await db.collection('audit_log').add({
+      await db.collection('auditLogs').add({
         action: 'loan.contract_signed',
         actorUid: 'mifiel',
         actorRole: 'system',

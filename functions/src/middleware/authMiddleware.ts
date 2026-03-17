@@ -40,8 +40,10 @@ export async function validateAuth(
 
   const role = decodedToken['role'] as string | undefined;
 
-  if (requiredRoles && requiredRoles.length > 0 && role && !requiredRoles.includes(role)) {
-    throw new HttpsError('permission-denied', `Role '${role}' not authorized`);
+  if (requiredRoles && requiredRoles.length > 0) {
+    if (!role || !requiredRoles.includes(role)) {
+      throw new HttpsError('permission-denied', 'Insufficient permissions');
+    }
   }
 
   return {

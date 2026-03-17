@@ -3,9 +3,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { ALLOWED_ORIGINS } from '../utils/cors';
 
 export const getEmployerDashboard = onCall(
-  { enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth(['employer_admin'], async (_data, auth) =>
     withErrorHandling({ functionName: 'getEmployerDashboard', uid: auth.uid }, async () => {
       const db = getFirestore();

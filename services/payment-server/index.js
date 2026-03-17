@@ -173,7 +173,10 @@ app.post('/internal/repayment', requireInternal, async (req, res) => {
     });
     await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId, amount, method: method || 'payroll_deduction' });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('Internal repayment error:', err.message);
+    res.status(500).json({ error: 'Internal repayment processing failed' });
+  }
 });
 
 // ── Queue stats (for admin monitoring) ─────────────────────────────

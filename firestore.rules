@@ -25,11 +25,15 @@ service cloud.firestore {
     // =============================================
     // EMPLOYERS COLLECTION
     // Employers can read/update their own record (limited fields).
-    // Only admins can create or promote employer status.
+    // Authenticated users can self-register as employers (onboarding).
+    // Only admins can promote employer status.
     // =============================================
     match /employers/{employerId} {
       allow read: if isOwner(employerId) || isOps();
-      allow create: if isAdmin();
+      allow create: if isAdmin()
+        || (isAuthenticated() && isOwner(employerId)
+          && request.resource.data.keys().hasAll(['name', 'companyName', 'email', 'employerCode', 'status', 'createdAt'])
+          && request.resource.data.status == 'pending_verification');
       allow update: if isAdmin()
         || (isOwner(employerId)
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -41,13 +45,18 @@ service cloud.firestore {
     // EMPLOYEES COLLECTION
     // Employees can read/update their own record (limited fields).
     // Employers can read their own employees (via employerId match).
-    // Only ops/admin can create employees.
+    // Authenticated users can self-register as employees (onboarding).
     // =============================================
     match /employees/{employeeId} {
       allow read: if isOwner(employeeId)
                   || (isAuthenticated() && resource.data.employerId == request.auth.uid)
                   || isOps();
-      allow create: if isOps();
+      allow create: if isOps()
+        || (isAuthenticated() && isOwner(employeeId)
+          && request.resource.data.keys().hasAll(['name', 'email', 'employerId', 'employerName', 'monthlySalary', 'creditLimit', 'availableCredit', 'createdAt'])
+          && request.resource.data.employerId is string
+          && request.resource.data.monthlySalary is number
+          && request.resource.data.creditLimit is number);
       allow update: if isOps()
         || (isOwner(employeeId)
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -73,10 +82,24 @@ service cloud.firestore {
     }
 
     // =============================================
-    // CONTACT — PUBLIC SUBMIT, ADMIN READ/MANAGE
+    // CONTACTS — PUBLIC SUBMIT (validated), ADMIN READ/MANAGE
+    // Collection name: 'contacts' (plural) to match client code.
     // =============================================
-    match /contact/{docId} {
-      allow create: if true;
+    match /contacts/{docId} {
+      allow create: if
+        request.resource.data.keys().hasOnly(['name', 'email', 'type', 'message', 'createdAt'])
+        && request.resource.data.keys().hasAll(['name', 'email', 'type', 'message', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.email is string
+        && request.resource.data.email.size() >= 3
+        && request.resource.data.email.size() <= 320
+        && request.resource.data.type is string
+        && request.resource.data.type.size() <= 50
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 1
+        && request.resource.data.message.size() <= 5000;
       allow read, update, delete: if isAdmin();
     }
 
@@ -92,7 +115,7 @@ service cloud.firestore {
     // AUDIT & OPERATIONAL LOGS — ADMIN READ, IMMUTABLE
     // All writes go through Cloud Functions (Admin SDK).
     // =============================================
-    match /audit_log/{docId}         { allow read: if isAdmin();  allow write: if false; }
+    match /auditLogs/{docId}          { allow read: if isAdmin();  allow write: if false; }
     match /overdue_log/{d}           { allow read: if isAdmin();  allow write: if false; }
     match /spei_log/{d}              { allow read: if isAdmin();  allow write: if false; }
     match /payment_failures/{d}      { allow read: if isAdmin();  allow write: if false; }

@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { ALLOWED_ORIGINS } from '../utils/cors';
 
 const AdminClaimSchema = z.object({
   targetUid: z.string().min(1),
@@ -25,7 +26,7 @@ export interface AdminClaimResult {
 }
 
 export const setAdminClaim = onCall(
-  { enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth<SetAdminClaimInput, AdminClaimResult>(
     ['admin', 'super_admin'],
     async (data, auth) =>
@@ -69,7 +70,7 @@ export const setAdminClaim = onCall(
 );
 
 export const revokeAdminClaim = onCall(
-  { enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth<RevokeAdminClaimInput, AdminClaimResult>(
     ['admin', 'super_admin'],
     async (data, auth) =>

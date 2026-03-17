@@ -1,18 +1,33 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    function isAdmin() {
+      return request.auth.token.role == 'admin'
+          || request.auth.token.role == 'super_admin'
+          || request.auth.token.admin == true;
+    }
+
     match /employers/{uid}/docs/{file} {
       allow read: if request.auth != null &&
-        (request.auth.uid == uid || request.auth.token.admin == true);
+        (request.auth.uid == uid || isAdmin());
       allow write: if request.auth != null &&
         request.auth.uid == uid && resource == null &&
         request.resource.size < 5 * 1024 * 1024 &&
         request.resource.contentType.matches('image/.*|application/pdf');
     }
+
+    // Loan files: only the employee, their employer, or an admin can read.
+    // Actual ownership checks require Firestore data; since storage rules
+    // cannot query Firestore, we rely on the file path convention
+    // /loans/{loanId}/{file} and restrict to authenticated + admin.
+    // Cloud Functions set loan file URLs on the loan doc, so employees
+    // and employers access files through signed download URLs.
     match /loans/{loanId}/{file} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && isAdmin();
       allow write: if false;
     }
+
     match /{all=**} { allow read, write: if false; }
   }
 }

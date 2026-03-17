@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { ALLOWED_ORIGINS } from '../utils/cors';
 import { validateInput } from '../utils/validateInput';
 
 const PortfolioReportSchema = z.object({
@@ -19,7 +20,7 @@ function getPeriodCutoff(period: '7d' | '30d' | '90d' | 'all'): Timestamp {
 }
 
 export const getPortfolioReport = onCall(
-  { enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth(['admin', 'super_admin'], async (data, auth) =>
     withErrorHandling({ functionName: 'getPortfolioReport', uid: auth.uid }, async () => {
       const { period } = validateInput(PortfolioReportSchema, data);

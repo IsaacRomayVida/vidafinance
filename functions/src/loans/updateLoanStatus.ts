@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { ALLOWED_ORIGINS } from '../utils/cors';
 import { validateInput } from '../utils/validateInput';
 
 const UpdateLoanStatusSchema = z.object({
@@ -32,7 +33,7 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
 };
 
 export const updateLoanStatus = onCall(
-  { enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth(['ops', 'admin', 'super_admin'], async (data, auth) =>
     withErrorHandling({ functionName: 'updateLoanStatus', uid: auth.uid }, async () => {
       const input = validateInput(UpdateLoanStatusSchema, data);

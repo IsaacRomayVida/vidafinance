@@ -76,7 +76,7 @@ async function seedEmployee(employeeId: string, employerId: string, data: Record
 
 async function seedAuditLog(logId: string) {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), `audit_log/${logId}`), {
+    await setDoc(doc(ctx.firestore(), `auditLogs/${logId}`), {
       action: 'loan.requested',
       actorUid: 'employee1',
     });
@@ -302,13 +302,13 @@ describe('employees collection', () => {
   });
 });
 
-// ── audit_log collection ──────────────────────────────────────────────────────
+// ── auditLogs collection ──────────────────────────────────────────────────────
 
-describe('audit_log collection', () => {
+describe('auditLogs collection', () => {
   it('auditLog write is always denied from client SDK', async () => {
     const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'audit_log/log1'), {
+      setDoc(doc(ctx.firestore(), 'auditLogs/log1'), {
         action: 'malicious.write',
         actorUid: 'admin1',
       })
@@ -319,21 +319,21 @@ describe('audit_log collection', () => {
     await seedAuditLog('log1');
 
     const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
-    await assertSucceeds(getDoc(doc(ctx.firestore(), 'audit_log/log1')));
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'auditLogs/log1')));
   });
 
   it('non-admin cannot read audit logs', async () => {
     await seedAuditLog('log1');
 
     const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
-    await assertFails(getDoc(doc(ctx.firestore(), 'audit_log/log1')));
+    await assertFails(getDoc(doc(ctx.firestore(), 'auditLogs/log1')));
   });
 });
 
 // ── Anonymous user denied everywhere ─────────────────────────────────────────
 
 describe('unauthenticated user', () => {
-  const collections = ['loans', 'employers', 'employees', 'audit_log', 'repayments', 'portfolio_snapshots'];
+  const collections = ['loans', 'employers', 'employees', 'auditLogs', 'repayments', 'portfolio_snapshots'];
 
   it.each(collections)('is denied on %s collection', async (col) => {
     const ctx = testEnv.unauthenticatedContext();
@@ -349,8 +349,93 @@ describe('unauthenticated user', () => {
       setDoc(doc(ctx.firestore(), 'employers/anon-emp'), { name: 'Anon Corp' })
     );
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'audit_log/anon-log'), { action: 'test' })
+      setDoc(doc(ctx.firestore(), 'auditLogs/anon-log'), { action: 'test' })
     );
+  });
+});
+
+// ── contacts collection ──────────────────────────────────────────────────────
+
+describe('contacts collection', () => {
+  const validContact = {
+    name: 'Test User',
+    email: 'test@example.com',
+    type: 'general',
+    message: 'Hello, I have a question.',
+    createdAt: new Date(),
+  };
+
+  it('unauthenticated user can create a valid contact', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertSucceeds(
+      addDoc(collection(ctx.firestore(), 'contacts'), validContact)
+    );
+  });
+
+  it('rejects contact with missing required fields', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(
+      addDoc(collection(ctx.firestore(), 'contacts'), {
+        name: 'Test',
+        email: 'test@example.com',
+        // missing type, message, createdAt
+      })
+    );
+  });
+
+  it('rejects contact with extra fields', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(
+      addDoc(collection(ctx.firestore(), 'contacts'), {
+        ...validContact,
+        malicious: '<script>alert(1)</script>',
+      })
+    );
+  });
+
+  it('rejects contact with empty message', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(
+      addDoc(collection(ctx.firestore(), 'contacts'), {
+        ...validContact,
+        message: '',
+      })
+    );
+  });
+
+  it('rejects contact with name exceeding 200 characters', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(
+      addDoc(collection(ctx.firestore(), 'contacts'), {
+        ...validContact,
+        name: 'x'.repeat(201),
+      })
+    );
+  });
+
+  it('admin can read contacts', async () => {
+    // Seed a contact
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'contacts/c1'), validContact);
+    });
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'contacts/c1')));
+  });
+
+  it('non-admin cannot read contacts', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'contacts/c1'), validContact);
+    });
+    const ctx = testEnv.authenticatedContext('user1', { role: 'employee' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'contacts/c1')));
+  });
+
+  it('unauthenticated user cannot read contacts', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'contacts/c1'), validContact);
+    });
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), 'contacts/c1')));
   });
 });
 

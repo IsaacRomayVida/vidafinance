@@ -10,6 +10,7 @@ import { Queue } from 'bullmq';
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { getRedis } from './utils/redis';
+import { ALLOWED_ORIGINS } from './utils/cors';
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
@@ -20,6 +21,8 @@ export { getEmployerDashboard } from './employers/getEmployerDashboard';
 export { getAdminDashboard } from './admin/getAdminDashboard';
 export { updateLoanStatus } from './loans/updateLoanStatus';
 export { getPortfolioReport } from './admin/getPortfolioReport';
+export { approveLoanRequest } from './loans/approveLoanRequest';
+export { rejectLoanRequest } from './loans/rejectLoanRequest';
 
 initializeApp();
 const db = getFirestore();
@@ -48,7 +51,7 @@ interface AuditLogEntry {
 }
 
 async function auditLog(database: FirebaseFirestore.Firestore, entry: AuditLogEntry): Promise<void> {
-  await database.collection('audit_log').add({
+  await database.collection('auditLogs').add({
     action: entry.action,
     actorUid: entry.actorUid,
     actorRole: entry.actorRole,
@@ -80,7 +83,7 @@ async function callML(path: string, body: Record<string, unknown>): Promise<Reco
 
 // ── api — health endpoint ────────────────────────────────────────────────────
 
-export const api = onRequest({ cors: true }, async (req, res) => {
+export const api = onRequest({ cors: ALLOWED_ORIGINS }, async (req, res) => {
   if (req.path === '/api/health') {
     res.json({ status: 'ok', service: 'vida-finance', timestamp: new Date().toISOString() });
     return;
@@ -96,7 +99,7 @@ interface RequestLoanData {
 }
 
 export const requestLoan = onCall(
-  { cors: true, enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth<RequestLoanData, { loanId: string; status: string; total: number; dueDate: string }>(
     ['employee'],
     async (data, auth) =>
@@ -230,7 +233,7 @@ interface ApproveEmployerData {
 }
 
 export const approveEmployer = onCall(
-  { cors: true, enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth<ApproveEmployerData, { success: boolean; approved: boolean; reason?: string }>(
     ['admin', 'super_admin'],
     async (data, auth) =>
@@ -362,9 +365,8 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
   }
 
   if (beforeData['status'] === 'pending' && afterData['status'] === 'rejected') {
-    await db.collection('employees').doc(afterData['employeeId'] as string).update({
-      availableCredit: FieldValue.increment(afterData['amount'] as number),
-    });
+    // Credit restoration is handled transactionally inside rejectLoanRequest.
+    // Only log the audit entry here; do NOT increment availableCredit again.
     try {
       await auditLog(db, {
         action: 'loan.rejected',

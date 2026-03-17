@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { ALLOWED_ORIGINS } from '../utils/cors';
 
 const GeneratePaymentLinkSchema = z.object({
   loanId: z.string().min(1),
@@ -19,7 +20,7 @@ export interface GeneratePaymentLinkResult {
 }
 
 export const generatePaymentLink = onCall(
-  { enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth<GeneratePaymentLinkInput, GeneratePaymentLinkResult>(
     ['employee'],
     async (data, auth) =>
@@ -52,10 +53,10 @@ export const generatePaymentLink = onCall(
             throw new HttpsError('permission-denied', 'Not your loan');
           }
 
-          if (loan['status'] !== 'approved') {
+          if (!['active', 'overdue'].includes(loan['status'] as string)) {
             throw new HttpsError(
               'failed-precondition',
-              'Loan must be approved to generate payment link'
+              'Loan must be active or overdue to generate payment link'
             );
           }
 

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { getRedis } from '../utils/redis';
+import { ALLOWED_ORIGINS } from '../utils/cors';
 import { calculateNextPayrollDate } from './calculateNextPayrollDate';
 
 const MarkLoanDisbursedSchema = z.object({
@@ -25,7 +26,7 @@ export interface MarkLoanDisbursedResult {
 }
 
 export const markLoanDisbursed = onCall(
-  { enforceAppCheck: true },
+  { cors: ALLOWED_ORIGINS, enforceAppCheck: true },
   withAuth<MarkLoanDisbursedInput, MarkLoanDisbursedResult>(
     ['ops', 'admin', 'super_admin'],
     async (data, auth) =>
