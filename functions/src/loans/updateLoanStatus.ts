@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { validateInput } from '../utils/validateInput';
+import { CORS_ORIGINS } from '../utils/corsOrigins';
 
 const UpdateLoanStatusSchema = z.object({
   loanId: z.string().min(1),
@@ -32,7 +33,7 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
 };
 
 export const updateLoanStatus = onCall(
-  { enforceAppCheck: true },
+  { cors: CORS_ORIGINS, enforceAppCheck: true },
   withAuth(['ops', 'admin', 'super_admin'], async (data, auth) =>
     withErrorHandling({ functionName: 'updateLoanStatus', uid: auth.uid }, async () => {
       const input = validateInput(UpdateLoanStatusSchema, data);

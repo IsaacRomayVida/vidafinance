@@ -5,6 +5,8 @@ const ALLOWED_ORIGINS = [
   'https://vida-finance.web.app',
   'https://admin.vida.finance',
   'https://employer.vida.finance',
+  'https://beta.vidatravel.mx',
+  'https://vidatravel.mx',
 ];
 
 export const corsMiddleware = cors({

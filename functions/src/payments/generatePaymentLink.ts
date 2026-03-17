@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { CORS_ORIGINS } from '../utils/corsOrigins';
 
 const GeneratePaymentLinkSchema = z.object({
   loanId: z.string().min(1),
@@ -19,7 +20,7 @@ export interface GeneratePaymentLinkResult {
 }
 
 export const generatePaymentLink = onCall(
-  { enforceAppCheck: true },
+  { cors: CORS_ORIGINS, enforceAppCheck: true },
   withAuth<GeneratePaymentLinkInput, GeneratePaymentLinkResult>(
     ['employee'],
     async (data, auth) =>

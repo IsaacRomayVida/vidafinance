@@ -27,6 +27,8 @@ const ALLOWED_ORIGINS = [
   'https://vida-finance.web.app',
   'https://admin.vida.finance',
   'https://employer.vida.finance',
+  'https://beta.vidatravel.mx',
+  'https://vidatravel.mx',
 ];
 
 const corsMiddleware = cors({
@@ -73,6 +75,14 @@ const webhookLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const financialLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many financial requests.' },
+});
+
 const requireInternal = (req, res, next) => {
   const secret = process.env.INTERNAL_SECRET || process.env.INTERNAL_API_SECRET;
   if (!secret || req.headers['x-internal-secret'] !== secret)
@@ -86,6 +96,7 @@ app.use(corsMiddleware);
 app.options('*', corsMiddleware);
 app.use(generalLimiter);
 app.use('/webhooks', webhookLimiter);
+app.use('/internal/repayment', financialLimiter);
 app.use('/webhooks', express.raw({ type: 'application/json', limit: '10kb' }));
 app.use(express.json({ limit: '100kb' }));
 

@@ -10,6 +10,7 @@ import { Queue } from 'bullmq';
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { getRedis } from './utils/redis';
+import { CORS_ORIGINS } from './utils/corsOrigins';
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
@@ -80,7 +81,7 @@ async function callML(path: string, body: Record<string, unknown>): Promise<Reco
 
 // ── api — health endpoint ────────────────────────────────────────────────────
 
-export const api = onRequest({ cors: true }, async (req, res) => {
+export const api = onRequest({ cors: CORS_ORIGINS }, async (req, res) => {
   if (req.path === '/api/health') {
     res.json({ status: 'ok', service: 'vida-finance', timestamp: new Date().toISOString() });
     return;
@@ -96,7 +97,7 @@ interface RequestLoanData {
 }
 
 export const requestLoan = onCall(
-  { cors: true, enforceAppCheck: true },
+  { cors: CORS_ORIGINS, enforceAppCheck: true },
   withAuth<RequestLoanData, { loanId: string; status: string; total: number; dueDate: string }>(
     ['employee'],
     async (data, auth) =>
@@ -230,7 +231,7 @@ interface ApproveEmployerData {
 }
 
 export const approveEmployer = onCall(
-  { cors: true, enforceAppCheck: true },
+  { cors: CORS_ORIGINS, enforceAppCheck: true },
   withAuth<ApproveEmployerData, { success: boolean; approved: boolean; reason?: string }>(
     ['admin', 'super_admin'],
     async (data, auth) =>

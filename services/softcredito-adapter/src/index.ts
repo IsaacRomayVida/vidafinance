@@ -3,7 +3,7 @@ import express from 'express';
 
 import { securityHeaders } from './middleware/security';
 import { corsMiddleware } from './middleware/cors';
-import { generalLimiter, webhookLimiter } from './middleware/rateLimit';
+import { generalLimiter, webhookLimiter, verificationLimiter, financialLimiter } from './middleware/rateLimit';
 import healthRouter from './routes/health';
 import curpRouter from './routes/curp';
 import rfcRouter from './routes/rfc';
@@ -18,7 +18,13 @@ app.use(generalLimiter);
 app.use('/webhooks', webhookLimiter);
 app.use(express.json({ limit: '100kb' }));
 
-// Routes
+// Routes — external verification endpoints (paid API calls) use a stricter limiter
+app.use('/curp', verificationLimiter);
+app.use('/rfc', verificationLimiter);
+app.use('/bureau', verificationLimiter);
+app.use('/internal/disburse', financialLimiter);
+app.use('/internal/register-deduction', financialLimiter);
+
 app.use(healthRouter);
 app.use(curpRouter);
 app.use(rfcRouter);

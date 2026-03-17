@@ -369,4 +369,177 @@ describe('internal queue collections', () => {
     const opsCtx = testEnv.authenticatedContext('ops1', { role: 'ops' });
     await assertFails(getDoc(doc(opsCtx.firestore(), 'notification_queue/job1')));
   });
+
+  it('disbursement_queue write is denied even for super_admin', async () => {
+    const superAdmin = testEnv.authenticatedContext('super1', { role: 'super_admin' });
+    await assertFails(
+      setDoc(doc(superAdmin.firestore(), 'disbursement_queue/job2'), { loanId: 'loan2' })
+    );
+  });
+});
+
+// ── repayments collection ─────────────────────────────────────────────────────
+
+describe('repayments collection', () => {
+  async function seedRepayment(id: string, employeeId: string) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `repayments/${id}`), {
+        employeeId,
+        loanId: 'loan1',
+        amount: 1300,
+        method: 'card',
+        status: 'completed',
+      });
+    });
+  }
+
+  it('employee can read their own repayment', async () => {
+    await seedRepayment('rep1', 'employee1');
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'repayments/rep1')));
+  });
+
+  it('employee cannot read another employee repayment', async () => {
+    await seedRepayment('rep1', 'employee1');
+    const ctx = testEnv.authenticatedContext('employee2', { role: 'employee' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'repayments/rep1')));
+  });
+
+  it('admin can read any repayment', async () => {
+    await seedRepayment('rep1', 'employee1');
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'repayments/rep1')));
+  });
+
+  it('repayment write is denied for all clients', async () => {
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'repayments/rep2'), { employeeId: 'employee1', amount: 500 })
+    );
+  });
+
+  it('repayment update is denied even for employee', async () => {
+    await seedRepayment('rep1', 'employee1');
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(updateDoc(doc(ctx.firestore(), 'repayments/rep1'), { amount: 9999 }));
+  });
+});
+
+// ── contact collection — public writes ───────────────────────────────────────
+
+describe('contact collection', () => {
+  it('unauthenticated user can create a contact submission', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertSucceeds(
+      addDoc(collection(ctx.firestore(), 'contact'), {
+        name: 'Visitor',
+        email: 'visitor@example.com',
+        message: 'Hello',
+      })
+    );
+  });
+
+  it('authenticated non-admin cannot read contact submissions', async () => {
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'contact/some-contact')));
+  });
+
+  it('admin can read contact submissions', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'contact/contact1'), { name: 'Test', email: 'test@test.com' });
+    });
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'contact/contact1')));
+  });
+});
+
+// ── ops-readable collections ──────────────────────────────────────────────────
+
+describe('ops-readable operational collections', () => {
+  it('ops can read scheduler_runs', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'scheduler_runs/run1'), { job: 'dailyLoanCheck', status: 'complete' });
+    });
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'scheduler_runs/run1')));
+  });
+
+  it('employee cannot read scheduler_runs', async () => {
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'scheduler_runs/run1')));
+  });
+
+  it('ops can read portfolio_snapshots', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'portfolio_snapshots/2025-01-01'), { totalActive: 10 });
+    });
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'portfolio_snapshots/2025-01-01')));
+  });
+
+  it('scheduler_runs write is denied for ops', async () => {
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'scheduler_runs/fake'), { job: 'hacked' })
+    );
+  });
+
+  it('ops can read system_health', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'system_health/current'), { status: 'ok' });
+    });
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'system_health/current')));
+  });
+});
+
+// ── admin-only log collections ────────────────────────────────────────────────
+
+describe('admin-only log collections', () => {
+  it('ops cannot read spei_log', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spei_log/entry1'), { amount: 1000 });
+    });
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'spei_log/entry1')));
+  });
+
+  it('admin can read spei_log', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spei_log/entry1'), { amount: 1000 });
+    });
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'spei_log/entry1')));
+  });
+
+  it('admin cannot write to ml_decisions', async () => {
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'ml_decisions/decision1'), { score: 0.9 })
+    );
+  });
+
+  it('super_admin can read incident_log', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'incident_log/inc1'), { severity: 'critical' });
+    });
+    const ctx = testEnv.authenticatedContext('super1', { role: 'super_admin' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'incident_log/inc1')));
+  });
+});
+
+// ── catch-all: unknown collections denied ────────────────────────────────────
+
+describe('unknown / unlisted collections (catch-all deny)', () => {
+  it('authenticated user cannot access an unlisted collection', async () => {
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'unknown_collection/doc1')));
+  });
+
+  it('super_admin cannot write to an unlisted collection', async () => {
+    const ctx = testEnv.authenticatedContext('super1', { role: 'super_admin' });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'some_new_collection/doc1'), { data: 'value' })
+    );
+  });
 });
