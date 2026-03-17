@@ -55,10 +55,11 @@ export const markLoanDisbursed = onCall(
           }
 
           const loan = loanDoc.data()!;
-          if (loan['status'] !== 'approved') {
+          const validPreDisbursementStatuses = ['approved', 'pending_signature'];
+          if (!validPreDisbursementStatuses.includes(loan['status'] as string)) {
             throw new HttpsError(
               'failed-precondition',
-              `Loan must be in 'approved' status to disburse. Current: ${loan['status']}`
+              `Loan must be in 'approved' or 'pending_signature' status to disburse. Current: ${loan['status']}`
             );
           }
 

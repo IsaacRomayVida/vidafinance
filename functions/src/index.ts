@@ -348,6 +348,19 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
     } catch (_) { /* non-critical */ }
   }
 
+  if (afterData['status'] === 'pending_signature' && beforeData['status'] === 'approved') {
+    try {
+      await auditLog(db, {
+        action: 'loan.pending_signature',
+        actorUid: 'system',
+        actorRole: 'system',
+        targetId: loanId,
+        before: { status: 'approved' },
+        after: { status: 'pending_signature' },
+      });
+    } catch (_) { /* non-critical */ }
+  }
+
   if (beforeData['status'] === 'pending' && afterData['status'] === 'rejected') {
     await db.collection('employees').doc(afterData['employeeId'] as string).update({
       availableCredit: FieldValue.increment(afterData['amount'] as number),
@@ -392,31 +405,9 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
   const loanId = event.params['loanId'];
   const emp = (await db.collection('employees').doc(after['employeeId'] as string).get()).data() ?? {};
 
-  await db.collection('disbursement_queue').doc(loanId).set({
-    loanId,
-    employeeId: after['employeeId'],
-    employeeName: after['employeeName'],
-    employerName: after['employerName'],
-    amount: after['amount'],
-    total: after['total'],
-    clabe: emp['bankClabe'] ?? null,
-    bankName: emp['bankName'] ?? null,
-    concept: 'VIDA-' + loanId.slice(0, 8).toUpperCase(),
-    status: 'queued',
-    queuedAt: FieldValue.serverTimestamp(),
-  });
-  await db.collection('loans').doc(loanId).update({ status: 'disbursement_queued' });
-
+  // Do NOT queue disbursement yet — contract must be signed first.
+  // Flow: approved → generate PDF → Mifiel e-sign → pending_signature → signed → disburse
   try {
-    await getQueue('vida-disbursements').add('disburse', {
-      loanId,
-      employeeId: after['employeeId'],
-      amount: after['amount'],
-      clabe: emp['bankClabe'],
-      concept: 'VIDA-' + loanId.slice(0, 8).toUpperCase(),
-      employeeName: after['employeeName'],
-      employerName: after['employerName'],
-    });
     await getQueue('vida-notifications').add('loan_approved', {
       type: 'loan_approved',
       loanId,
@@ -435,10 +426,37 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       total: after['total'],
       fee: after['fee'],
       dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
+      // Borrower details for Mifiel e-signature
+      borrowerEmail: (emp['email'] as string) ?? (after['employeeEmail'] as string),
+      borrowerRfc: (emp['rfc'] as string) ?? null,
     });
   } catch (e: unknown) {
     console.warn('Queue unavailable:', (e as Error).message);
   }
+
+  return null;
+});
+
+// When a loan is signed (pending_signature → disbursed), queue the disbursement
+export const onLoanSigned = onDocumentUpdated('loans/{loanId}', async (event) => {
+  const before = event.data!.before.data();
+  const after = event.data!.after.data();
+  if (!(before['status'] === 'pending_signature' && after['status'] === 'disbursed')) return null;
+
+  // Disbursement was already triggered by the Mifiel webhook handler in payment-server.
+  // This trigger handles employer stats and audit logging.
+  const loanId = event.params['loanId'];
+
+  try {
+    await auditLog(db, {
+      action: 'loan.signed_and_disbursing',
+      actorUid: 'system',
+      actorRole: 'system',
+      targetId: loanId,
+      before: { status: 'pending_signature' },
+      after: { status: 'disbursed' },
+    });
+  } catch (_) { /* non-critical */ }
 
   return null;
 });

@@ -15,6 +15,11 @@ h2{color:#194445;font-size:12px;text-transform:uppercase;letter-spacing:2px;bord
 .br{display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px}
 .bt{font-size:14px;font-weight:bold;color:#194445;border-top:1px solid #194445;padding-top:6px;margin-top:6px;display:flex;justify-content:space-between}
 .terms{font-size:9.5px;line-height:1.7;color:#5a7070;margin-top:20px}
+.cat-box{background:#fffbe6;border:1px solid #e6d84d;padding:14px;margin:16px 0;border-radius:4px}
+.cat-title{font-size:11px;font-weight:bold;color:#8b6914;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+.cat-detail{font-size:10px;color:#5a5028;margin-bottom:4px}
+.cat-highlight{font-size:16px;font-weight:bold;color:#8b6914;text-align:center;margin:10px 0}
+.esig-notice{background:#e8f4e8;border:1px solid #9bc29b;padding:10px;margin:16px 0;border-radius:4px;font-size:9px;color:#2d5a2d}
 .sigs{margin-top:50px;display:flex;gap:60px}
 .sig{flex:1;border-top:1px solid #194445;padding-top:6px;font-size:9px;color:#7a9898}
 .foot{margin-top:30px;border-top:1px solid #e8e8e8;padding-top:8px;font-size:8.5px;color:#9aafaf;text-align:center}
@@ -36,26 +41,60 @@ h2{color:#194445;font-size:12px;text-transform:uppercase;letter-spacing:2px;bord
   <div class="fld"><div class="fl">Nombre</div><div class="fv">{{employeeName}}</div></div>
   <div class="fld"><div class="fl">Empresa</div><div class="fv">{{employerName}}</div></div>
 </div>
+{{#if borrowerRfc}}
+<div class="row">
+  <div class="fld"><div class="fl">RFC</div><div class="fv">{{borrowerRfc}}</div></div>
+  <div class="fld"><div class="fl">Correo electr&oacute;nico</div><div class="fv">{{borrowerEmail}}</div></div>
+</div>
+{{/if}}
 <h2>Condiciones del cr&eacute;dito</h2>
 <div class="box">
   <div class="br"><span>Monto del cr&eacute;dito</span><span>${{amount}} MXN</span></div>
-  <div class="br"><span>Comisi&oacute;n (30%)</span><span>${{fee}} MXN</span></div>
+  <div class="br"><span>Comisi&oacute;n por apertura (30%)</span><span>${{fee}} MXN</span></div>
+  <div class="br"><span>Tasa de inter&eacute;s ordinaria</span><span>0% (incluida en comisi&oacute;n)</span></div>
   <div class="br"><span>Plazo</span><span>30 d&iacute;as</span></div>
-  <div class="br" style="font-size:9px;color:#7a9898"><span>CAT (Costo Anual Total)</span><span>{{cat}}% anual</span></div>
+  <div class="br"><span>Forma de pago</span><span>Descuento v&iacute;a n&oacute;mina</span></div>
   <div class="bt"><span><strong>Total a reembolsar</strong></span><span><strong>${{total}} MXN</strong></span></div>
 </div>
-<p style="font-size:10px">El acreditado autoriza el descuento v&iacute;a n&oacute;mina de ${{total}} MXN en la fecha de vencimiento.</p>
-<h2>T&eacute;rminos</h2>
-<div class="terms">
-<p>1. Rige la LGTOC y dem&aacute;s ordenamientos aplicables.</p>
-<p>2. Intereses moratorios: 1.5% mensual sobre saldo insoluto por incumplimiento.</p>
-<p>3. El acreditado autoriza consulta ante Sociedades de Informaci&oacute;n Crediticia.</p>
-<p>4. Controversias ante tribunales competentes de la Ciudad de M&eacute;xico.</p>
-<p>5. Aclaraciones: CONDUSEF 01800 999 8080 &mdash; www.condusef.gob.mx</p>
+
+<h2>Costo Anual Total (CAT)</h2>
+<div class="cat-box">
+  <div class="cat-title">Car&aacute;tula de Costo Anual Total &mdash; Informativo</div>
+  <div class="cat-highlight">CAT: {{cat}}% sin IVA</div>
+  <div class="cat-detail"><strong>Monto del cr&eacute;dito:</strong> ${{amount}} MXN</div>
+  <div class="cat-detail"><strong>Comisi&oacute;n por apertura:</strong> ${{fee}} MXN (30% del monto)</div>
+  <div class="cat-detail"><strong>Tasa de inter&eacute;s ordinaria anual:</strong> 0%</div>
+  <div class="cat-detail"><strong>Tasa de inter&eacute;s moratoria:</strong> 1.5% mensual sobre saldo insoluto</div>
+  <div class="cat-detail"><strong>Monto total a pagar:</strong> ${{total}} MXN</div>
+  <div class="cat-detail"><strong>Frecuencia de pago:</strong> Pago &uacute;nico al vencimiento (30 d&iacute;as)</div>
+  <div class="cat-detail"><strong>N&uacute;mero de pagos:</strong> 1</div>
+  <div class="cat-detail" style="margin-top:8px;font-size:9px;color:#8b6914">
+    El CAT (Costo Anual Total) es una medida estandarizada del costo de financiamiento, expresada en t&eacute;rminos porcentuales anuales, que incorpora la totalidad de los costos y gastos inherentes al cr&eacute;dito. Calculado conforme a la metodolog&iacute;a del Banco de M&eacute;xico (Circular 21/2009). Fecha de c&aacute;lculo: {{issuedDate}}. Vigencia de la oferta: 5 d&iacute;as h&aacute;biles a partir de la fecha de emisi&oacute;n.
+  </div>
 </div>
+
+<p style="font-size:10px">El acreditado autoriza el descuento v&iacute;a n&oacute;mina de ${{total}} MXN en la fecha de vencimiento indicada.</p>
+
+<h2>T&eacute;rminos y condiciones</h2>
+<div class="terms">
+<p>1. El presente contrato se rige por la Ley General de T&iacute;tulos y Operaciones de Cr&eacute;dito (LGTOC), la Ley de Protecci&oacute;n y Defensa al Usuario de Servicios Financieros, y dem&aacute;s ordenamientos aplicables.</p>
+<p>2. Intereses moratorios: 1.5% mensual sobre saldo insoluto por cada d&iacute;a de incumplimiento despu&eacute;s de la fecha de vencimiento.</p>
+<p>3. El acreditado autoriza expresamente a VIDA Finance SOFOM E.N.R. a consultar y reportar su historial crediticio ante las Sociedades de Informaci&oacute;n Crediticia (SIC) de conformidad con la Ley para Regular las SIC.</p>
+<p>4. Pago anticipado: El acreditado podr&aacute; realizar pagos anticipados sin penalizaci&oacute;n, conforme al art&iacute;culo 10 de la Ley de Transparencia y Ordenamiento de los Servicios Financieros.</p>
+<p>5. Cancelaci&oacute;n: El acreditado podr&aacute; cancelar el cr&eacute;dito dentro de los 5 d&iacute;as h&aacute;biles posteriores a la firma, siempre que devuelva el monto &iacute;ntegro desembolsado.</p>
+<p>6. Para cualquier controversia, las partes se someten a la jurisdicci&oacute;n de los tribunales competentes de la Ciudad de M&eacute;xico.</p>
+<p>7. Aclaraciones y reclamaciones: CONDUSEF 01800 999 8080 &mdash; www.condusef.gob.mx &mdash; Unidad Especializada de Atenci&oacute;n a Usuarios: atencion@vidafinance.mx</p>
+</div>
+
+<h2>Consentimiento de firma electr&oacute;nica</h2>
+<div class="esig-notice">
+  <p style="margin:0 0 6px 0"><strong>Firma electr&oacute;nica avanzada (e.firma / NOM-151)</strong></p>
+  <p style="margin:0">Al firmar electr&oacute;nicamente este documento, el acreditado reconoce que: (a) su firma electr&oacute;nica tiene la misma validez jur&iacute;dica que una firma aut&oacute;grafa conforme al C&oacute;digo de Comercio (art&iacute;culos 89 al 114) y la NOM-151-SCFI-2016; (b) ha le&iacute;do y comprendido la totalidad de los t&eacute;rminos del presente contrato; (c) acepta las condiciones del cr&eacute;dito incluyendo el CAT informativo arriba detallado; (d) autoriza el descuento v&iacute;a n&oacute;mina del monto total a reembolsar.</p>
+</div>
+
 <div class="sigs">
   <div class="sig">VIDA Finance SOFOM E.N.R.<br>Representante legal</div>
-  <div class="sig">{{employeeName}}<br>Acreditado &mdash; Aceptaci&oacute;n digital</div>
+  <div class="sig">{{employeeName}}<br>Acreditado &mdash; Firma electr&oacute;nica</div>
 </div>
 <div class="foot">VIDA Finance SOFOM E.N.R. &middot; {{sofomAddress}} &middot; contacto@vidafinance.mx &middot; CONDUSEF 01800 999 8080</div>
 </body>

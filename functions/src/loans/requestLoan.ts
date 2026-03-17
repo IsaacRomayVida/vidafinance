@@ -45,6 +45,7 @@ export type LoanStatus =
   | 'pending'
   | 'under_review'
   | 'approved'
+  | 'pending_signature'
   | 'disbursed'
   | 'repaid'
   | 'overdue'
@@ -67,6 +68,7 @@ export const ACTIVE_LOAN_STATUSES: LoanStatus[] = [
   'pending',
   'under_review',
   'approved',
+  'pending_signature',
   'disbursed',
 ];
 

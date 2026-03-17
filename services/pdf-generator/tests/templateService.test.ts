@@ -34,7 +34,7 @@ describe('templateService', () => {
       expect(html).toContain('$5,000.00 MXN');
       expect(html).toContain('$1,500.00 MXN');
       expect(html).toContain('$6,500.00 MXN');
-      expect(html).toContain('1355% anual');
+      expect(html).toContain('1355% sin IVA');
       expect(html).toContain('VIDA240101XXX');
       expect(html).toContain('CONTRATO DE CR');
     });

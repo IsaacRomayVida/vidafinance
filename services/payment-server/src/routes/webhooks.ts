@@ -265,4 +265,163 @@ router.post('/conekta', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// ── POST /webhooks/mifiel/signed ────────────────────────────────────────────
+
+interface MifielWebhookBody {
+  document_id?: string;
+  external_id?: string;
+  status?: string;
+  file_signed?: string;
+  certificate_detail?: unknown;
+  [key: string]: unknown;
+}
+
+router.post('/mifiel/signed', async (req: Request, res: Response): Promise<void> => {
+  // Mifiel sends webhook as JSON when a document is fully signed
+  const rawBody = req.body as Buffer;
+  let body: MifielWebhookBody;
+  try {
+    body = JSON.parse(rawBody.toString()) as MifielWebhookBody;
+  } catch {
+    res.status(400).json({ error: 'Invalid JSON body' });
+    return;
+  }
+
+  const { document_id: documentId, external_id: loanId, status, file_signed: signedPdfUrl } = body;
+
+  console.log(`[payment-server] Mifiel webhook received: documentId=${documentId} loanId=${loanId} status=${status}`);
+
+  if (!loanId) {
+    console.warn('[payment-server] Mifiel webhook: missing external_id (loanId)');
+    res.json({ ok: true, warning: 'missing_loan_id' });
+    return;
+  }
+
+  try {
+    const loanRef = db.collection('loans').doc(loanId);
+    const loanDoc = await loanRef.get();
+
+    if (!loanDoc.exists) {
+      console.warn(`[payment-server] Mifiel webhook: loan ${loanId} not found`);
+      res.json({ ok: true, warning: 'loan_not_found' });
+      return;
+    }
+
+    const loan = loanDoc.data()!;
+
+    if (status === 'signed' || status === 'completed') {
+      // Download signed PDF from Mifiel and upload to Firebase Storage
+      let signedContractUrl = signedPdfUrl || null;
+
+      if (signedPdfUrl) {
+        try {
+          const pdfResponse = await axios.get(signedPdfUrl, { responseType: 'arraybuffer', timeout: 30_000 });
+          const signedPdfBuffer = Buffer.from(pdfResponse.data as ArrayBuffer);
+          const storagePath = `loans/${loanId}/contrato_firmado_${Date.now()}.pdf`;
+
+          const bucket = admin.storage().bucket();
+          const file = bucket.file(storagePath);
+          await file.save(signedPdfBuffer, { metadata: { contentType: 'application/pdf' } });
+          await file.makePublic();
+          signedContractUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+
+          console.log(`[payment-server] Signed PDF uploaded for loan ${loanId}: ${signedContractUrl}`);
+        } catch (dlErr) {
+          console.error(`[payment-server] Failed to download/upload signed PDF for loan ${loanId}:`, dlErr);
+          // Continue with the Mifiel URL as fallback
+        }
+      }
+
+      // Update loan with signed contract details
+      await loanRef.update({
+        signedContractUrl,
+        signedAt: admin.firestore.Timestamp.now(),
+        mifielSignedStatus: status,
+        mifielCertificateDetail: body.certificate_detail || null,
+      });
+
+      // Queue disbursement now that contract is signed
+      const emp = loan['employeeId']
+        ? (await db.collection('employees').doc(loan['employeeId'] as string).get()).data() ?? {}
+        : {};
+
+      await db.collection('disbursement_queue').doc(loanId).set({
+        loanId,
+        employeeId: loan['employeeId'],
+        employeeName: loan['employeeName'],
+        employerName: loan['employerName'],
+        amount: loan['amount'],
+        total: loan['total'],
+        clabe: (emp as Record<string, unknown>)['bankClabe'] ?? null,
+        bankName: (emp as Record<string, unknown>)['bankName'] ?? null,
+        concept: 'VIDA-' + loanId.slice(0, 8).toUpperCase(),
+        status: 'queued',
+        queuedAt: admin.firestore.Timestamp.now(),
+      });
+
+      // Push to disbursement Redis queue
+      try {
+        await redis.lpush(
+          'jobs:disbursements',
+          JSON.stringify({
+            loanId,
+            employeeId: loan['employeeId'],
+            amount: loan['amount'],
+            clabe: (emp as Record<string, unknown>)['bankClabe'],
+            concept: 'VIDA-' + loanId.slice(0, 8).toUpperCase(),
+            employeeName: loan['employeeName'],
+            employerName: loan['employerName'],
+          }),
+        );
+      } catch (qErr) {
+        console.error(`[payment-server] Failed to queue disbursement for loan ${loanId}:`, qErr);
+      }
+
+      // Notify borrower that contract is signed
+      try {
+        await redis.lpush(
+          'jobs:notifications',
+          JSON.stringify({
+            type: 'contract_signed',
+            userId: loan['employeeId'],
+            loanId,
+            signedContractUrl,
+          }),
+        );
+      } catch (notifyErr) {
+        console.warn('[payment-server] Failed to queue signing notification:', notifyErr);
+      }
+
+      await db.collection('audit_log').add({
+        action: 'loan.contract_signed',
+        actorUid: 'mifiel',
+        actorRole: 'system',
+        targetId: loanId,
+        meta: { documentId, signedContractUrl },
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`[payment-server] Mifiel: loan ${loanId} contract signed, disbursement queued`);
+    } else {
+      console.log(`[payment-server] Mifiel webhook: unhandled status=${status} for loan ${loanId}`);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[payment-server] Mifiel webhook error:', message);
+
+    await db.collection('incident_log').add({
+      source: 'mifiel-webhook',
+      documentId,
+      loanId,
+      status,
+      error: message,
+      ts: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 export { router as webhooksRouter };
