@@ -36,6 +36,9 @@ const i18n = {
     auth_welcome:'Bienvenido de nuevo',auth_signin_sub:'Inicia sesión en tu cuenta',auth_email:'Correo electrónico',auth_email_placeholder:'tu@empresa.com',auth_password:'Contraseña',auth_password_placeholder:'Tu contraseña',auth_signin_btn:'Iniciar Sesión',auth_signing_in:'Iniciando sesión...',auth_no_account:'¿No tienes cuenta?',auth_signup_link:'Regístrate',auth_has_account:'¿Ya tienes cuenta?',auth_login_link:'Iniciar sesión',auth_invalid_code:'Código de empleador inválido. Consulta con tu departamento de RH.',
     dash_dashboard:'Panel',dash_employees:'Empleados',dash_loans:'Préstamos',dash_signout:'Cerrar sesión',dash_employer_code:'Código de Empleador',dash_total_employees:'Total Empleados',dash_active_loans:'Préstamos Activos',dash_pending_requests:'Solicitudes Pendientes',dash_total_disbursed:'Total Desembolsado',dash_recent_loans:'Solicitudes de Préstamo Recientes',dash_th_employee:'Empleado',dash_th_amount:'Monto',dash_th_term:'Plazo',dash_th_status:'Estado',dash_th_docs:'Documentos',dash_th_action:'Acción',dash_approve:'Aprobar',dash_reject:'Rechazar',dash_no_loans_employer:'Aún no hay solicitudes. Comparte tu código de empleador',dash_no_loans_employer_2:'con tus empleados.',dash_days:'días',dash_doc_contract:'Contrato',dash_doc_receipt:'Recibo',dash_doc_generating:'Generando...',
     dash_welcome:'Bienvenido',dash_available_credit:'Crédito Disponible',dash_credit_limit:'Límite de Crédito',dash_utilization:'Utilización',dash_quick_action:'Acción Rápida',dash_request_funds:'Solicitar Fondos',dash_your_loans:'Tus Préstamos',dash_my_loans:'Mis Préstamos',dash_th_repayment:'Pago',dash_th_date:'Fecha',dash_no_loans_employee:'Aún no tienes préstamos. Solicita tu primer fondo de emergencia arriba.',
+    dash_pay_now:'Pagar ahora',dash_pay_error:'Error al generar enlace de pago',
+    dash_repayments:'Pagos',dash_repayment_tracker:'Seguimiento de Pagos',dash_due_date:'Fecha de vencimiento',dash_days_remaining:'días restantes',dash_days_overdue:'días vencido',dash_due_today:'vence hoy',dash_amount_due:'Monto a pagar',dash_loan_amount:'Monto del préstamo',dash_fee:'Comisión',dash_total_due:'Total a pagar',dash_payment_history:'Historial de Pagos',dash_no_repayments:'Sin pagos registrados aún.',dash_no_active_loans:'No tienes préstamos activos. Solicita fondos desde el panel.',dash_overview:'Resumen',dash_of:'de',dash_paid_label:'Pagado',dash_credit_used:'Crédito Utilizado',dash_credit_free:'Crédito Libre',
+    dash_profile:'Perfil',dash_profile_info:'Información Personal',dash_profile_name:'Nombre',dash_profile_email:'Correo electrónico',dash_profile_employer:'Empleador',dash_profile_salary:'Salario mensual',dash_profile_bank:'Cuenta bancaria',dash_profile_bank_name:'Banco',dash_profile_clabe:'CLABE',dash_profile_registered:'Fecha de registro',dash_profile_credit_info:'Información de Crédito',dash_active_loan:'Préstamo Activo',dash_loan_progress:'Progreso del Préstamo',dash_disbursed_on:'Desembolsado el',dash_status:'Estado',dash_repayment_amount:'Monto de pago',dash_th_payment_date:'Fecha de pago',dash_th_payment_amount:'Monto',dash_th_payment_method:'Método',dash_th_payment_ref:'Referencia',
     modal_request:'Solicitar Fondos',modal_available:'Disponible',modal_amount:'Monto (MXN)',modal_term:'Plazo de Pago',modal_term_30:'30 días',modal_rate:'30% mensual',modal_loan_amount:'Monto del préstamo',modal_fee:'Comisión (30%)',modal_total:'Pago total',modal_confirm:'Confirmar Solicitud',modal_submitting:'Enviando...',modal_exceed:'El monto excede el crédito disponible',modal_minimum:'El monto mínimo es $500 MXN',
     toast_loan_approved:'Préstamo aprobado',toast_loan_rejected:'Préstamo rechazado',toast_loan_submitted:'Solicitud enviada. Tu empleador recibirá la notificación.',modal_accept_terms:'Acepto los términos y condiciones',modal_due_date:'Fecha de vencimiento',
     status_pending:'pendiente',status_approved:'aprobado',status_disbursement_queued:'desembolso en cola',status_active:'activo',status_rejected:'rechazado',status_paid:'pagado',status_overdue:'vencido',
@@ -319,6 +322,9 @@ const i18n = {
     auth_welcome:'Welcome back',auth_signin_sub:'Sign in to your account',auth_email:'Email',auth_email_placeholder:'you@company.com',auth_password:'Password',auth_password_placeholder:'Your password',auth_signin_btn:'Sign In',auth_signing_in:'Signing in...',auth_no_account:'Don\'t have an account?',auth_signup_link:'Sign up',auth_has_account:'Already have an account?',auth_login_link:'Sign in',auth_invalid_code:'Invalid employer code. Please check with your HR department.',
     dash_dashboard:'Dashboard',dash_employees:'Employees',dash_loans:'Loans',dash_signout:'Sign out',dash_employer_code:'Employer Code',dash_total_employees:'Total Employees',dash_active_loans:'Active Loans',dash_pending_requests:'Pending Requests',dash_total_disbursed:'Total Disbursed',dash_recent_loans:'Recent Loan Requests',dash_th_employee:'Employee',dash_th_amount:'Amount',dash_th_term:'Term',dash_th_status:'Status',dash_th_docs:'Documents',dash_th_action:'Action',dash_approve:'Approve',dash_reject:'Reject',dash_no_loans_employer:'No loan requests yet. Share your employer code',dash_no_loans_employer_2:'with employees.',dash_days:'days',dash_doc_contract:'Contract',dash_doc_receipt:'Receipt',dash_doc_generating:'Generating...',
     dash_welcome:'Welcome',dash_available_credit:'Available Credit',dash_credit_limit:'Credit Limit',dash_utilization:'Utilization',dash_quick_action:'Quick Action',dash_request_funds:'Request Funds',dash_your_loans:'Your Loans',dash_my_loans:'My Loans',dash_th_repayment:'Repayment',dash_th_date:'Date',dash_no_loans_employee:'No loans yet. Request your first emergency fund above.',
+    dash_pay_now:'Pay now',dash_pay_error:'Error generating payment link',
+    dash_repayments:'Repayments',dash_repayment_tracker:'Repayment Tracker',dash_due_date:'Due date',dash_days_remaining:'days remaining',dash_days_overdue:'days overdue',dash_due_today:'due today',dash_amount_due:'Amount due',dash_loan_amount:'Loan amount',dash_fee:'Fee',dash_total_due:'Total due',dash_payment_history:'Payment History',dash_no_repayments:'No payments recorded yet.',dash_no_active_loans:'No active loans. Request funds from the dashboard.',dash_overview:'Overview',dash_of:'of',dash_paid_label:'Paid',dash_credit_used:'Credit Used',dash_credit_free:'Credit Available',
+    dash_profile:'Profile',dash_profile_info:'Personal Information',dash_profile_name:'Name',dash_profile_email:'Email',dash_profile_employer:'Employer',dash_profile_salary:'Monthly salary',dash_profile_bank:'Bank account',dash_profile_bank_name:'Bank',dash_profile_clabe:'CLABE',dash_profile_registered:'Registration date',dash_profile_credit_info:'Credit Information',dash_active_loan:'Active Loan',dash_loan_progress:'Loan Progress',dash_disbursed_on:'Disbursed on',dash_status:'Status',dash_repayment_amount:'Repayment amount',dash_th_payment_date:'Payment date',dash_th_payment_amount:'Amount',dash_th_payment_method:'Method',dash_th_payment_ref:'Reference',
     modal_request:'Request Funds',modal_available:'Available',modal_amount:'Amount (MXN)',modal_term:'Repayment Term',modal_term_30:'30 days',modal_rate:'30% monthly',modal_loan_amount:'Loan amount',modal_fee:'Fee (30%)',modal_total:'Total repayment',modal_confirm:'Confirm Request',modal_submitting:'Submitting...',modal_exceed:'Amount exceeds available credit',modal_minimum:'Minimum amount is $500 MXN',
     toast_loan_approved:'Loan approved',toast_loan_rejected:'Loan rejected',toast_loan_submitted:'Request submitted. Your employer will be notified.',modal_accept_terms:'I accept the terms and conditions',modal_due_date:'Due date',
     status_pending:'pending',status_approved:'approved',status_disbursement_queued:'disbursement queued',status_active:'active',status_rejected:'rejected',status_paid:'paid',status_overdue:'overdue',
@@ -639,6 +645,8 @@ let onbPreselect = null;
 function navigate(path, opts) {
   if (window._unsubDash) { window._unsubDash(); window._unsubDash = null; }
   if (window._unsubEmp) { window._unsubEmp(); window._unsubEmp = null; }
+  if (window._unsubEmpProfile) { window._unsubEmpProfile(); window._unsubEmpProfile = null; }
+  if (window._unsubRepayments) { window._unsubRepayments(); window._unsubRepayments = null; }
   if (window._adminUnsubs) { window._adminUnsubs.forEach(u => u()); window._adminUnsubs = null; }
   if (opts?.role) onbPreselect = opts.role;
   history.pushState(null, '', path);
@@ -1819,15 +1827,128 @@ async function renderEmployeeDashboard(app) {
   const uid = auth.currentUser.uid;
   const empDoc = await db.collection('employees').doc(uid).get();
   if (!empDoc.exists) { navigate('/employer/dashboard'); return; }
-  const emp = empDoc.data();
-  const utilized = emp.creditLimit - emp.availableCredit;
-  const utilPct = Math.round((utilized / emp.creditLimit) * 100);
-  app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_my_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${t('dash_welcome')}, ${emp.name}</h1><div class="dash-user"><span>${emp.employerName}</span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_available_credit')}</div><div class="stat-value">$${fmt(emp.availableCredit)}</div><div class="stat-change">MXN</div></div><div class="stat-card"><div class="stat-label">${t('dash_credit_limit')}</div><div class="stat-value">$${fmt(emp.creditLimit)}</div></div><div class="stat-card"><div class="stat-label">${t('dash_utilization')}</div><div class="stat-value">${utilPct}%</div></div><div class="stat-card"><div class="stat-label">${t('dash_quick_action')}</div><button class="btn-primary" style="margin-top:8px" onclick="openLoanModal()">${t('dash_request_funds')}</button></div></div><div class="card"><div class="card-title">${t('dash_your_loans')}</div><div class="table-wrap" id="empLoansTable"><div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div></div></div></div></div></div>`;
-  function renderEmployeeLoansTable(loans) {
-    const el = document.getElementById('empLoansTable');
-    if (!el) return;
-    el.innerHTML = loans.length ? `<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_repayment')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_date')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${loans.map(l=>`<tr><td>$${fmt(l.amount)}</td><td>${l.termDays||30} ${t('dash_days')}</td><td>$${fmt(l.repaymentAmount||l.total||0)}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.createdAt?new Date(l.createdAt.seconds*1000).toLocaleDateString():'—'}</td><td>${['active','overdue'].includes(l.status)?`<button class="btn-sm btn-approve pay-now-btn" data-loan-id="${l.id}">${t('dash_pay_now')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_loans_employee')}</p></div>`;
-    el.querySelectorAll('.pay-now-btn').forEach(btn => {
+
+  let emp = empDoc.data();
+  let allLoans = [];
+  let allRepayments = [];
+  let activeTab = 'overview';
+
+  // Cleanup previous listeners
+  if (window._unsubEmpProfile) window._unsubEmpProfile();
+  if (window._unsubEmp) window._unsubEmp();
+  if (window._unsubRepayments) window._unsubRepayments();
+
+  function creditRingSvg(utilPct) {
+    const r = 54, c = 2 * Math.PI * r, offset = c - (utilPct / 100) * c;
+    const color = utilPct > 80 ? 'var(--danger)' : utilPct > 50 ? 'var(--gold)' : 'var(--brand-light)';
+    return `<svg class="credit-ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="${r}" fill="none" stroke="rgba(25,68,69,0.06)" stroke-width="10"/><circle cx="60" cy="60" r="${r}" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${offset}" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset .8s ease"/><text x="60" y="56" text-anchor="middle" fill="var(--t1)" font-family="var(--df)" font-size="24">${utilPct}%</text><text x="60" y="72" text-anchor="middle" fill="var(--t3)" font-family="var(--db)" font-size="9" font-weight="600">${t('dash_utilization')}</text></svg>`;
+  }
+
+  function renderShell() {
+    const navItems = [
+      { key: 'overview', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>', label: t('dash_overview') },
+      { key: 'loans', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>', label: t('dash_my_loans') },
+      { key: 'repayments', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>', label: t('dash_repayments') },
+      { key: 'profile', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>', label: t('dash_profile') },
+    ];
+    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav">${navItems.map(n => `<a href="#" data-tab="${n.key}" class="${n.key === activeTab ? 'active' : ''}">${n.icon}${n.label}</a>`).join('')}</nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${t('dash_welcome')}, ${emp.name}</h1><div class="dash-user"><span>${emp.employerName}</span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0) || 'E'}</div></div></div><div class="dash-content" id="empDashContent"></div></div></div>`;
+    app.querySelectorAll('.dash-nav a').forEach(el => {
+      el.addEventListener('click', e => {
+        e.preventDefault();
+        activeTab = el.dataset.tab;
+        app.querySelectorAll('.dash-nav a').forEach(a => a.classList.remove('active'));
+        el.classList.add('active');
+        renderActiveTab();
+      });
+    });
+    renderActiveTab();
+  }
+
+  function renderActiveTab() {
+    const container = document.getElementById('empDashContent');
+    if (!container) return;
+    if (activeTab === 'overview') renderOverviewTab(container);
+    else if (activeTab === 'loans') renderLoansTab(container);
+    else if (activeTab === 'repayments') renderRepaymentsTab(container);
+    else if (activeTab === 'profile') renderProfileTab(container);
+  }
+
+  function renderOverviewTab(container) {
+    const utilized = (emp.creditLimit || 0) - (emp.availableCredit || 0);
+    const utilPct = emp.creditLimit > 0 ? Math.round((utilized / emp.creditLimit) * 100) : 0;
+    const activeLoans = allLoans.filter(l => ['active', 'overdue'].includes(l.status));
+    const recentLoans = allLoans.slice(0, 5);
+    container.innerHTML = `<div class="credit-display"><div class="credit-display-ring">${creditRingSvg(utilPct)}</div><div class="credit-display-details"><div class="credit-detail-row"><span class="credit-detail-label">${t('dash_available_credit')}</span><span class="credit-detail-value credit-detail-primary">$${fmt(emp.availableCredit || 0)} <small>MXN</small></span></div><div class="credit-detail-row"><span class="credit-detail-label">${t('dash_credit_limit')}</span><span class="credit-detail-value">$${fmt(emp.creditLimit || 0)}</span></div><div class="credit-bar"><div class="credit-bar-used" style="width:${utilPct}%"></div></div><div class="credit-bar-labels"><span>${t('dash_credit_used')}: $${fmt(utilized)}</span><span>${t('dash_credit_free')}: $${fmt(emp.availableCredit || 0)}</span></div><button class="btn-primary" style="margin-top:16px;width:100%" onclick="openLoanModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-3px"><path d="M12 5v14M5 12h14"/></svg>${t('dash_request_funds')}</button></div></div>${activeLoans.length ? `<div class="card"><div class="card-title">${t('dash_repayment_tracker')}</div><div class="tracker-cards">${activeLoans.map(l => renderTrackerCard(l)).join('')}</div></div>` : ''}<div class="card"><div class="card-title">${t('dash_your_loans')}</div><div class="table-wrap">${recentLoans.length ? renderLoansTableHtml(recentLoans) : renderEmptyLoans()}</div></div>`;
+    bindPayButtons(container);
+  }
+
+  function renderLoansTab(container) {
+    container.innerHTML = `<div class="card" style="border-top:none;padding-top:0"><div class="card-title">${t('dash_my_loans')}</div><div class="table-wrap">${allLoans.length ? renderLoansTableHtml(allLoans) : renderEmptyLoans()}</div></div>`;
+    bindPayButtons(container);
+  }
+
+  function renderRepaymentsTab(container) {
+    const activeLoans = allLoans.filter(l => ['active', 'overdue'].includes(l.status));
+    container.innerHTML = `${activeLoans.length ? `<div class="card" style="border-top:none;padding-top:0"><div class="card-title">${t('dash_repayment_tracker')}</div><div class="tracker-cards">${activeLoans.map(l => renderTrackerCard(l)).join('')}</div></div>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_active_loans')}</p></div>`}<div class="card"><div class="card-title">${t('dash_payment_history')}</div><div class="table-wrap">${allRepayments.length ? `<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_date')}</th><th>${t('dash_th_status')}</th></tr></thead><tbody>${allRepayments.map(r => `<tr><td>$${fmt(r.amount || 0)}</td><td>${r.paidAt ? new Date(r.paidAt.seconds * 1000).toLocaleDateString() : '—'}</td><td><span class="badge badge-paid">${t('dash_paid_label')}</span></td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><p>${t('dash_no_repayments')}</p></div>`}</div></div>`;
+    bindPayButtons(container);
+  }
+
+  function renderTrackerCard(l) {
+    const due = l.dueDate ? new Date(l.dueDate.seconds * 1000) : null;
+    const now = new Date();
+    let daysInfo = '';
+    if (due) {
+      const diff = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+      if (diff > 0) daysInfo = `<span class="tracker-days">${diff} ${t('dash_days_remaining')}</span>`;
+      else if (diff === 0) daysInfo = `<span class="tracker-days tracker-days-warn">${t('dash_due_today')}</span>`;
+      else daysInfo = `<span class="tracker-days tracker-days-overdue">${Math.abs(diff)} ${t('dash_days_overdue')}</span>`;
+    }
+    const total = l.repaymentAmount || l.total || 0;
+    const paidSoFar = l.paidAmount || 0;
+    const remaining = total - paidSoFar;
+    const paidPct = total > 0 ? Math.round((paidSoFar / total) * 100) : 0;
+    return `<div class="tracker-card ${l.status === 'overdue' ? 'tracker-card-overdue' : ''}"><div class="tracker-card-header"><span class="badge badge-${l.status}">${t('status_' + l.status)}</span>${daysInfo}</div><div class="tracker-card-amounts"><div><span class="tracker-label">${t('dash_loan_amount')}</span><span class="tracker-value">$${fmt(l.amount)}</span></div><div><span class="tracker-label">${t('dash_fee')}</span><span class="tracker-value">$${fmt(l.fee || Math.round(l.amount * 0.3))}</span></div><div><span class="tracker-label">${t('dash_total_due')}</span><span class="tracker-value tracker-value-bold">$${fmt(total)}</span></div></div>${due ? `<div class="tracker-card-due"><span class="tracker-label">${t('dash_due_date')}</span><span class="tracker-value">${due.toLocaleDateString()}</span></div>` : ''}<div class="tracker-progress"><div class="tracker-progress-bar" style="width:${paidPct}%"></div></div><div class="tracker-progress-labels"><span>$${fmt(paidSoFar)} ${t('dash_paid_label').toLowerCase()}</span><span>$${fmt(remaining)} ${t('dash_of')} $${fmt(total)}</span></div><button class="btn-primary btn-sm pay-now-btn" data-loan-id="${l.id}" style="margin-top:12px;width:100%">${t('dash_pay_now')}</button></div>`;
+  }
+
+  function renderLoansTableHtml(loans) {
+    return `<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_repayment')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_date')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${loans.map(l => `<tr><td>$${fmt(l.amount)}</td><td>${l.termDays || 30} ${t('dash_days')}</td><td>$${fmt(l.repaymentAmount || l.total || 0)}</td><td><span class="badge badge-${l.status}">${t('status_' + l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.createdAt ? new Date(l.createdAt.seconds * 1000).toLocaleDateString() : '—'}</td><td>${['active', 'overdue'].includes(l.status) ? `<button class="btn-sm btn-approve pay-now-btn" data-loan-id="${l.id}">${t('dash_pay_now')}</button>` : '—'}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  function renderEmptyLoans() {
+    return `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_loans_employee')}</p></div>`;
+  }
+
+  function renderProfileTab(container) {
+    const utilized = (emp.creditLimit || 0) - (emp.availableCredit || 0);
+    const utilPct = emp.creditLimit > 0 ? Math.round((utilized / emp.creditLimit) * 100) : 0;
+    const regDate = emp.createdAt ? new Date(emp.createdAt.seconds * 1000).toLocaleDateString() : '—';
+    const maskedClabe = emp.bankClabe ? ('••••••••••••' + emp.bankClabe.slice(-4)) : '—';
+    container.innerHTML = `
+      <div class="card" style="border-top:none;padding-top:0">
+        <div class="card-title">${t('dash_profile_info')}</div>
+        <div class="profile-grid">
+          <div class="profile-row"><span class="profile-label">${t('dash_profile_name')}</span><span class="profile-value">${emp.name || '—'}</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_profile_email')}</span><span class="profile-value">${emp.email || auth.currentUser.email || '—'}</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_profile_employer')}</span><span class="profile-value">${emp.employerName || '—'}</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_profile_salary')}</span><span class="profile-value">$${fmt(emp.monthlySalary || 0)} MXN</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_profile_bank_name')}</span><span class="profile-value">${emp.bankName || '—'}</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_profile_clabe')}</span><span class="profile-value" style="font-family:monospace">${maskedClabe}</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_profile_registered')}</span><span class="profile-value">${regDate}</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">${t('dash_profile_credit_info')}</div>
+        <div class="profile-grid">
+          <div class="profile-row"><span class="profile-label">${t('dash_credit_limit')}</span><span class="profile-value" style="font-weight:700">$${fmt(emp.creditLimit || 0)} MXN</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_available_credit')}</span><span class="profile-value" style="font-weight:700;color:var(--brand)">$${fmt(emp.availableCredit || 0)} MXN</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_utilization')}</span><span class="profile-value">${utilPct}%</span></div>
+          <div class="profile-row"><span class="profile-label">${t('dash_my_loans')}</span><span class="profile-value">${allLoans.length} (${allLoans.filter(l => l.status === 'paid').length} ${t('dash_paid_label').toLowerCase()})</span></div>
+        </div>
+      </div>`;
+  }
+
+  function bindPayButtons(root) {
+    root.querySelectorAll('.pay-now-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const loanId = btn.dataset.loanId;
         btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
@@ -1837,24 +1958,56 @@ async function renderEmployeeDashboard(app) {
       });
     });
   }
-  if (window._unsubEmp) window._unsubEmp();
-  window._unsubEmp = db.collection('loans').where('employeeId','==',uid).orderBy('createdAt','desc')
-    .onSnapshot(snap => { renderEmployeeLoansTable(snap.docs.map(d=>({id:d.id,...d.data()}))); });
-<div class="modal-overlay" id="loanModal"><div class="modal" style="position:relative"><div class="modal-close" onclick="closeLoanModal()">✕</div><h3>${t('modal_request')}</h3><p class="modal-sub">${t('modal_available')}: $${fmt(emp.availableCredit)} MXN</p><form id="loanForm"><div class="form-group"><label>${t('modal_amount')}</label><input type="number" id="loanAmount" min="500" max="${emp.availableCredit}" step="100" value="1000" required></div><div class="form-group" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_term')}</span><span style="font-size:14px;font-weight:700;color:var(--t1)">${t('modal_term_30')} · ${t('modal_rate')}</span></div><div style="border-top:1px solid rgba(25,68,69,0.06);border-bottom:1px solid rgba(25,68,69,0.06);padding:20px 0;margin-bottom:16px"><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_loan_amount')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalAmount">$1,000</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_fee')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalFee">$300</span></div><div style="height:1px;background:rgba(25,68,69,0.06);margin:4px 0"></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-family:var(--df);font-size:15px;color:var(--t1)">${t('modal_total')}</span><span style="font-family:var(--df);font-size:18px;color:var(--t1)" id="modalTotal">$1,300</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_due_date')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalDueDate"></span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">CAT (Costo Anual Total)</span><span class="cat-highlight" id="catDisplay"></span></div><p class="cat-note">El CAT es una medida estandarizada del costo. <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener">CONDUSEF</a></p></div><label style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-size:13px;color:var(--t2)"><input type="checkbox" id="termsCheck"><span>${t('modal_accept_terms')}</span></label><div class="auth-error" id="loanError" style="margin-bottom:12px"></div><button type="submit" class="btn-primary" id="loanSubmitBtn" disabled>${t('modal_confirm')}</button></form></div></div>`;
-  const amountIn=document.getElementById('loanAmount');
-  const termsCheck=document.getElementById('termsCheck');
-  const loanSubmitBtn=document.getElementById('loanSubmitBtn');
-  const loanError=document.getElementById('loanError');
-  const dueDate=new Date(Date.now()+30*24*60*60*1000);
-  document.getElementById('modalDueDate').textContent=dueDate.toLocaleDateString();
-  termsCheck.addEventListener('change',()=>{loanSubmitBtn.disabled=!termsCheck.checked;});
-  function updateModal(){const a=parseInt(amountIn.value)||0,fee=Math.round(a*0.30);document.getElementById('modalAmount').textContent='$'+fmt(a);document.getElementById('modalFee').textContent='$'+fmt(fee);document.getElementById('modalTotal').textContent='$'+fmt(a+fee);const cat=a>0?((Math.pow(1+fee/a,365/30)-1)*100).toFixed(0):'0';document.getElementById('catDisplay').textContent=cat+'% anual';}
-  amountIn.addEventListener('input',updateModal);
-  updateModal();
-  document.getElementById('loanForm').addEventListener('submit',async(e)=>{e.preventDefault();loanError.classList.remove('show');loanSubmitBtn.disabled=true;loanSubmitBtn.innerHTML='<span class="spinner"></span>'+t('modal_submitting');try{const amount=parseInt(amountIn.value);if(amount>emp.availableCredit)throw new Error(t('modal_exceed'));if(amount<500)throw new Error(t('modal_minimum'));await firebase.functions().httpsCallable('requestLoan')({amount,term:30});closeLoanModal();showToast(t('toast_loan_submitted'),'success');}catch(err){const msg=err.message||err.toString();loanError.textContent=msg;loanError.classList.add('show');loanSubmitBtn.disabled=false;loanSubmitBtn.textContent=t('modal_confirm');}});
+
+  // Real-time Firestore listeners
+  window._unsubEmpProfile = db.collection('employees').doc(uid)
+    .onSnapshot(doc => {
+      if (!doc.exists) return;
+      emp = doc.data();
+      renderActiveTab();
+    });
+
+  window._unsubEmp = db.collection('loans').where('employeeId', '==', uid).orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      allLoans = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderActiveTab();
+    });
+
+  window._unsubRepayments = db.collection('repayments').where('employeeId', '==', uid).orderBy('paidAt', 'desc')
+    .onSnapshot(snap => {
+      allRepayments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (activeTab === 'repayments') renderActiveTab();
+    });
+
+  renderShell();
+
+  // Loan Request Modal
+  let modalEl = document.getElementById('loanModal');
+  if (!modalEl) {
+    modalEl = document.createElement('div');
+    modalEl.className = 'modal-overlay';
+    modalEl.id = 'loanModal';
+    document.body.appendChild(modalEl);
+  }
+  function refreshModalContent() {
+    modalEl.innerHTML = `<div class="modal" style="position:relative"><div class="modal-close" onclick="closeLoanModal()">✕</div><h3>${t('modal_request')}</h3><p class="modal-sub">${t('modal_available')}: $${fmt(emp.availableCredit)} MXN</p><form id="loanForm"><div class="form-group"><label>${t('modal_amount')}</label><input type="number" id="loanAmount" min="500" max="${emp.availableCredit}" step="100" value="1000" required></div><div class="form-group" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_term')}</span><span style="font-size:14px;font-weight:700;color:var(--t1)">${t('modal_term_30')} · ${t('modal_rate')}</span></div><div style="border-top:1px solid rgba(25,68,69,0.06);border-bottom:1px solid rgba(25,68,69,0.06);padding:20px 0;margin-bottom:16px"><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_loan_amount')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalAmount">$1,000</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_fee')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalFee">$300</span></div><div style="height:1px;background:rgba(25,68,69,0.06);margin:4px 0"></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-family:var(--df);font-size:15px;color:var(--t1)">${t('modal_total')}</span><span style="font-family:var(--df);font-size:18px;color:var(--t1)" id="modalTotal">$1,300</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_due_date')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalDueDate"></span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">CAT (Costo Anual Total)</span><span class="cat-highlight" id="catDisplay"></span></div><p class="cat-note">El CAT es una medida estandarizada del costo. <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener">CONDUSEF</a></p></div><label style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-size:13px;color:var(--t2)"><input type="checkbox" id="termsCheck"><span>${t('modal_accept_terms')}</span></label><div class="auth-error" id="loanError" style="margin-bottom:12px"></div><button type="submit" class="btn-primary" id="loanSubmitBtn" disabled>${t('modal_confirm')}</button></form></div>`;
+    const amountIn = document.getElementById('loanAmount'), termsCheck = document.getElementById('termsCheck'), loanSubmitBtn = document.getElementById('loanSubmitBtn'), loanError = document.getElementById('loanError');
+    const dueDateEl = document.getElementById('modalDueDate');
+    if (dueDateEl) dueDateEl.textContent = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString();
+    if (termsCheck) termsCheck.addEventListener('change', () => { loanSubmitBtn.disabled = !termsCheck.checked; });
+    function updateModal() { const a = parseInt(amountIn.value) || 0, fee = Math.round(a * 0.30); document.getElementById('modalAmount').textContent = '$' + fmt(a); document.getElementById('modalFee').textContent = '$' + fmt(fee); document.getElementById('modalTotal').textContent = '$' + fmt(a + fee); const cat = a > 0 ? ((Math.pow(1 + fee / a, 365 / 30) - 1) * 100).toFixed(0) : '0'; document.getElementById('catDisplay').textContent = cat + '% anual'; }
+    if (amountIn) { amountIn.addEventListener('input', updateModal); updateModal(); }
+    const loanForm = document.getElementById('loanForm');
+    if (loanForm) loanForm.addEventListener('submit', async (e) => {
+      e.preventDefault(); loanError.classList.remove('show'); loanSubmitBtn.disabled = true; loanSubmitBtn.innerHTML = '<span class="spinner"></span>' + t('modal_submitting');
+      try { const amount = parseInt(amountIn.value); if (amount > emp.availableCredit) throw new Error(t('modal_exceed')); if (amount < 500) throw new Error(t('modal_minimum')); await firebase.functions().httpsCallable('requestLoan')({ amount, term: 30 }); closeLoanModal(); showToast(t('toast_loan_submitted'), 'success'); }
+      catch (err) { const msg = err.message || err.toString(); loanError.textContent = msg; loanError.classList.add('show'); loanSubmitBtn.disabled = false; loanSubmitBtn.textContent = t('modal_confirm'); }
+    });
+  }
+  refreshModalContent();
 }
-window.openLoanModal = function() { document.getElementById('loanModal')?.classList.add('show'); };
-window.closeLoanModal = function() { document.getElementById('loanModal')?.classList.remove('show'); };
+window.openLoanModal = function() { const m = document.getElementById('loanModal'); if (m) m.classList.add('show'); };
+window.closeLoanModal = function() { const m = document.getElementById('loanModal'); if (m) m.classList.remove('show'); };
 
 // ─── ADMIN PORTAL ────────────────────────────────────────
 function renderAdminPortal(app, activeTab) {
