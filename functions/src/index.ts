@@ -16,6 +16,11 @@ export { markLoanDisbursed } from './loans/markLoanDisbursed';
 export { generatePaymentLink } from './payments/generatePaymentLink';
 export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
 
+export { getEmployerDashboard } from './employers/getEmployerDashboard';
+export { getAdminDashboard } from './admin/getAdminDashboard';
+export { updateLoanStatus } from './loans/updateLoanStatus';
+export { getPortfolioReport } from './admin/getPortfolioReport';
+
 initializeApp();
 const db = getFirestore();
 
@@ -91,7 +96,7 @@ interface RequestLoanData {
 }
 
 export const requestLoan = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   withAuth<RequestLoanData, { loanId: string; status: string; total: number; dueDate: string }>(
     ['employee'],
     async (data, auth) =>
@@ -213,70 +218,6 @@ export const requestLoan = onCall(
   )
 );
 
-// ── updateLoanStatus — employer approve/reject; ops/admin any status ─────────
-// Replaces the insecure direct Firestore write that loans rules previously allowed.
-
-interface UpdateLoanStatusData {
-  loanId: string;
-  status: string;
-  note?: string;
-}
-
-export const updateLoanStatus = onCall(
-  { cors: true, enforceAppCheck: false },
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
-
-    return withErrorHandling({ functionName: 'updateLoanStatus', uid: request.auth.uid }, async () => {
-      const { loanId, status, note } = request.data as UpdateLoanStatusData;
-
-      if (!loanId || !status) throw new HttpsError('invalid-argument', 'loanId and status are required');
-
-      const uid = request.auth!.uid;
-      const token = request.auth!.token;
-      const role = token['role'] as string | undefined;
-      const isAdminOrOps =
-        token['admin'] === true ||
-        role === 'admin' ||
-        role === 'super_admin' ||
-        role === 'ops';
-
-      const loanSnap = await db.collection('loans').doc(loanId).get();
-      if (!loanSnap.exists) throw new HttpsError('not-found', 'Loan not found');
-      const loan = loanSnap.data()!;
-
-      if (!isAdminOrOps) {
-        // Employers may only approve or reject their own pending loans
-        if (loan['employerId'] !== uid) {
-          throw new HttpsError('permission-denied', 'Not authorized for this loan');
-        }
-        if (loan['status'] !== 'pending') {
-          throw new HttpsError('failed-precondition', 'Loan is not in pending status');
-        }
-        if (!['approved', 'rejected'].includes(status)) {
-          throw new HttpsError('invalid-argument', 'Employers may only approve or reject pending loans');
-        }
-      }
-
-      const update: Record<string, unknown> = { status };
-      if (note) update['statusNote'] = note;
-      await db.collection('loans').doc(loanId).update(update);
-
-      try {
-        await auditLog(db, {
-          action: `loan.${status}`,
-          actorUid: uid,
-          actorRole: role ?? (isAdminOrOps ? 'admin' : 'employer'),
-          targetId: loanId,
-          before: { status: loan['status'] },
-          after: { status },
-        });
-      } catch (_) { /* non-critical */ }
-
-      return { success: true, loanId, status };
-    });
-  }
-);
 
 // markLoanDisbursed is exported from ./loans/markLoanDisbursed
 
@@ -289,7 +230,7 @@ interface ApproveEmployerData {
 }
 
 export const approveEmployer = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   withAuth<ApproveEmployerData, { success: boolean; approved: boolean; reason?: string }>(
     ['admin', 'super_admin'],
     async (data, auth) =>
@@ -382,74 +323,6 @@ export const approveEmployer = onCall(
 
 // setAdminClaim and revokeAdminClaim are exported from ./admin/adminClaims
 
-// ── getPortfolioReport — admin only ──────────────────────────────────────────
-
-export const getPortfolioReport = onCall(
-  { cors: true, enforceAppCheck: false },
-  withAuth<Record<string, never>, { snapshots: unknown[] }>(
-    ['admin', 'super_admin', 'ops'],
-    async (_data, auth) =>
-      withErrorHandling({ functionName: 'getPortfolioReport', uid: auth.uid }, async () => {
-        const snap = await db
-          .collection('portfolio_snapshots')
-          .orderBy('snapshotDate', 'desc')
-          .limit(52)
-          .get();
-        return { snapshots: snap.docs.map((d) => ({ id: d.id, ...d.data() })) };
-      })
-  )
-);
-
-// ── getAdminDashboard — ops/admin only ───────────────────────────────────────
-
-export const getAdminDashboard = onCall(
-  { cors: true, enforceAppCheck: false },
-  withAuth<Record<string, never>, Record<string, unknown>>(
-    ['admin', 'super_admin', 'ops'],
-    async (_data, auth) =>
-      withErrorHandling({ functionName: 'getAdminDashboard', uid: auth.uid }, async () => {
-        const [healthDoc, queueDoc, pendingLoans, activeLoans] = await Promise.all([
-          db.collection('system_health').doc('current').get(),
-          db.collection('system_health').doc('queues').get(),
-          db.collection('loans').where('status', '==', 'pending').get(),
-          db.collection('loans').where('status', '==', 'active').get(),
-        ]);
-        return {
-          systemHealth: healthDoc.data() ?? {},
-          queues: queueDoc.data() ?? {},
-          pendingLoans: pendingLoans.size,
-          activeLoans: activeLoans.size,
-        };
-      })
-  )
-);
-
-// ── getEmployerDashboard — employer only ─────────────────────────────────────
-
-export const getEmployerDashboard = onCall(
-  { cors: true, enforceAppCheck: false },
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
-
-    return withErrorHandling({ functionName: 'getEmployerDashboard', uid: request.auth.uid }, async () => {
-      const uid = request.auth!.uid;
-
-      const [empDoc, loans, employees] = await Promise.all([
-        db.collection('employers').doc(uid).get(),
-        db.collection('loans').where('employerId', '==', uid).orderBy('createdAt', 'desc').limit(50).get(),
-        db.collection('employees').where('employerId', '==', uid).get(),
-      ]);
-
-      if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
-
-      return {
-        employer: empDoc.data(),
-        loans: loans.docs.map((d) => ({ id: d.id, ...d.data() })),
-        employeeCount: employees.size,
-      };
-    });
-  }
-);
 
 // ── Firestore document triggers ──────────────────────────────────────────────
 

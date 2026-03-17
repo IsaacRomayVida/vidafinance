@@ -88,24 +88,32 @@ curl https://vida-ml-service.railway.app/health
 ## Required GitHub Secrets
 
 ```
-RAILWAY_TOKEN                     # Railway project deploy token
-FIREBASE_PROJECT_ID_STAGING
-FIREBASE_SERVICE_ACCOUNT_STAGING  # base64 encoded JSON
+# Firebase
+FIREBASE_PROJECT_ID_STAGING               # Firebase project ID for staging (e.g. vida-finance-staging)
+FIREBASE_PROJECT_ID_PRODUCTION            # Firebase project ID for production (e.g. vida-finance)
+FIREBASE_SERVICE_ACCOUNT_STAGING          # base64-encoded service account JSON for staging deploys + CI tests
+FIREBASE_SERVICE_ACCOUNT_PRODUCTION       # base64-encoded service account JSON for production deploys (push to main)
+
+# Railway
+RAILWAY_TOKEN                             # Railway production project deploy token
+RAILWAY_TOKEN_STAGING                     # Railway staging project deploy token
+
+# Application
 CONEKTA_API_KEY
 CONEKTA_WEBHOOK_SECRET
-INTERNAL_SECRET                   # shared inter-service auth token
+INTERNAL_SECRET                           # shared inter-service auth token
 SOFTCREDITO_CLIENT_ID
 SOFTCREDITO_CLIENT_SECRET
 TWILIO_ACCOUNT_SID
 TWILIO_AUTH_TOKEN
 SENDGRID_API_KEY
 ANTHROPIC_API_KEY
-REDIS_URL                         # for Firebase Functions
-SOFTCREDITO_ADAPTER_URL           # https://vida-softcredito.railway.app
-PAYMENT_SERVER_URL                # https://vida-payment-server.railway.app
-NOTIFICATION_SERVICE_URL          # https://vida-notifications.railway.app
-PDF_GENERATOR_URL                 # https://vida-pdf-generator.railway.app
-ML_SERVICE_URL                    # https://vida-ml-service.railway.app
+REDIS_URL                                 # for Firebase Functions
+SOFTCREDITO_ADAPTER_URL                   # https://vida-softcredito.railway.app
+PAYMENT_SERVER_URL                        # https://vida-payment-server.railway.app
+NOTIFICATION_SERVICE_URL                  # https://vida-notifications.railway.app
+PDF_GENERATOR_URL                         # https://vida-pdf-generator.railway.app
+ML_SERVICE_URL                            # https://vida-ml-service.railway.app
 ```
 
 ## Redis Service Configuration (Railway)

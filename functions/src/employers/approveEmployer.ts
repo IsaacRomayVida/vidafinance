@@ -325,7 +325,7 @@ export async function approveEmployerHandler(
 export const approveEmployer = onCall(
   {
     region: 'us-central1',
-    enforceAppCheck: false,
+    enforceAppCheck: true,
     maxInstances: 5,
     memory: '256MiB',
     timeoutSeconds: 30,

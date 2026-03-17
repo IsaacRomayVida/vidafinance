@@ -3,7 +3,11 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os, json, time
 import redis as Redis
 from dotenv import load_dotenv
@@ -17,11 +21,20 @@ logger = logging.getLogger("ml-service")
 rdb = Redis.from_url(
     os.environ.get("REDIS_URL", "redis://localhost:6379"), decode_responses=True
 )
-SEC = os.environ.get("INTERNAL_SECRET", "")
+SEC = os.environ.get("INTERNAL_SECRET", "") or os.environ.get("INTERNAL_API_SECRET", "")
 AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
 
 _worker_task: asyncio.Task | None = None
+
+ALLOWED_ORIGINS = [
+    "https://vida-staging.web.app",
+    "https://vida-finance.web.app",
+    "https://admin.vida.finance",
+    "https://employer.vida.finance",
+]
+
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -51,14 +64,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="vida-ml-service", lifespan=lifespan)
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "x-internal-secret"],
+)
+
 
 def auth(s):
-    if s != SEC:
+    if not SEC or s != SEC:
         raise HTTPException(401, "Unauthorized")
 
 
 @app.get("/health")
-def health():
+@limiter.limit("60/minute")
+def health(request: Request):
     try:
         rdb.ping()
         r = True
@@ -75,7 +100,8 @@ def health():
 
 
 @app.post("/underwrite/employer")
-async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+async def score_emp(request: Request, payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     uid = payload.get("employerUid", "")
     ck = f"ml:employer:{uid}"
@@ -134,7 +160,8 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
 
 
 @app.post("/underwrite/employee")
-async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+async def score_employee(request: Request, payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     uid = payload.get("employeeId", "")
     amt = payload.get("amount", 0)
@@ -167,7 +194,8 @@ async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
 
 
 @app.get("/explain/{decision_id}")
-def explain(decision_id: str, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+def explain(request: Request, decision_id: str, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     return {
         "decisionId": decision_id,
@@ -177,7 +205,8 @@ def explain(decision_id: str, x_internal_secret: str = Header(None)):
 
 
 @app.post("/monitor/drift")
-def drift(payload: dict, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+def drift(request: Request, payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     return {
         "drift_detected": False,
@@ -187,7 +216,8 @@ def drift(payload: dict, x_internal_secret: str = Header(None)):
 
 
 @app.delete("/cache/employer/{uid}")
-def clear_cache(uid: str, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+def clear_cache(request: Request, uid: str, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     try:
         rdb.delete(f"ml:employer:{uid}")
@@ -197,8 +227,9 @@ def clear_cache(uid: str, x_internal_secret: str = Header(None)):
 
 
 @app.post("/score")
+@limiter.limit("100/15minutes")
 async def score_loan_direct(
-    payload: dict, x_internal_secret: str = Header(None)
+    request: Request, payload: dict, x_internal_secret: str = Header(None)
 ):
     """
     Direct synchronous scoring endpoint.

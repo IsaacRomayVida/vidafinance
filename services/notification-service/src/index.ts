@@ -4,14 +4,18 @@ import 'dotenv/config';
 import './lib/firebase';
 
 import express from 'express';
-import helmet from 'helmet';
-import cors from 'cors';
 import { redis } from './lib/redis';
 import { notificationWorker } from './workers/notificationWorker';
+import { securityHeaders } from './middleware/security';
+import { corsMiddleware } from './middleware/cors';
+import { generalLimiter, webhookLimiter } from './middleware/rateLimit';
 
 const app = express();
-app.use(helmet());
-app.use(cors({ origin: ['https://vida-finance.web.app', 'https://employer.vida.finance'] }));
+app.use(securityHeaders);
+app.use(corsMiddleware);
+app.options('*', corsMiddleware);
+app.use(generalLimiter);
+app.use('/webhooks', webhookLimiter);
 app.use(express.json({ limit: '100kb' }));
 
 app.get('/health', async (_req, res) => {

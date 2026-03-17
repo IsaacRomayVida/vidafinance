@@ -1,32 +1,20 @@
 import 'dotenv/config';
 import express from 'express';
-import helmet from 'helmet';
 
+import { securityHeaders } from './middleware/security';
+import { corsMiddleware } from './middleware/cors';
+import { generalLimiter, webhookLimiter } from './middleware/rateLimit';
 import healthRouter from './routes/health';
 import curpRouter from './routes/curp';
 import bureauRouter from './routes/bureau';
 import internalRouter from './routes/internal';
 
-const ALLOWED_ORIGINS = ['https://vida-finance.web.app'];
-
 const app = express();
-app.use(helmet());
-
-// CORS — only allow internal and known frontend origins
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-internal-secret');
-    res.sendStatus(204);
-    return;
-  }
-  next();
-});
-
+app.use(securityHeaders);
+app.use(corsMiddleware);
+app.options('*', corsMiddleware);
+app.use(generalLimiter);
+app.use('/webhooks', webhookLimiter);
 app.use(express.json({ limit: '100kb' }));
 
 // Routes

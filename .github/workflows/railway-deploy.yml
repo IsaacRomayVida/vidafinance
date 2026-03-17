@@ -116,18 +116,19 @@ jobs:
           deploy_service() {
             local svc_flag="$1"
             local svc_name="$2"
+            local svc_dir="$3"
             if [ "$svc_flag" = "true" ]; then
               echo "🚀 Deploying $svc_name..."
-              railway redeploy --service "$svc_name" --yes || \
-              echo "⚠️  redeploy failed for $svc_name (service may not exist with that name)"
+              (cd "services/$svc_dir" && railway up --service "$svc_name" --detach) || \
+              echo "⚠️  deploy failed for $svc_name (service may not exist with that name)"
             fi
           }
-          deploy_service "${{ needs.detect.outputs.payment-server }}"      "vida-payment-server"
-          deploy_service "${{ needs.detect.outputs.softcredito-adapter }}" "vida-softcredito"
-          deploy_service "${{ needs.detect.outputs.notification-service }}" "vida-notifications"
-          deploy_service "${{ needs.detect.outputs.pdf-generator }}"       "vida-pdf-generator"
-          deploy_service "${{ needs.detect.outputs.ml-service }}"          "vida-ml-service"
-          deploy_service "${{ needs.detect.outputs.underwriting-service }}" "vida-underwriting"
+          deploy_service "${{ needs.detect.outputs.payment-server }}"      "vida-payment-server"      "payment-server"
+          deploy_service "${{ needs.detect.outputs.softcredito-adapter }}" "vida-softcredito"         "softcredito-adapter"
+          deploy_service "${{ needs.detect.outputs.notification-service }}" "vida-notifications"       "notification-service"
+          deploy_service "${{ needs.detect.outputs.pdf-generator }}"       "vida-pdf-generator"       "pdf-generator"
+          deploy_service "${{ needs.detect.outputs.ml-service }}"          "vida-ml-service"          "ml-service"
+          deploy_service "${{ needs.detect.outputs.underwriting-service }}" "vida-underwriting"        "underwriting-service"
 
   health-check:
     needs: deploy
