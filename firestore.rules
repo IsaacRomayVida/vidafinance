@@ -60,5 +60,41 @@ service cloud.firestore {
     match /notification_log/{d}    { allow read: if isAdmin(); allow write: if false; }
     match /softcredito_employers/{d}{ allow read: if isAdmin(); allow write: if false; }
     match /ml_decisions/{d}        { allow read: if isAdmin(); allow write: if false; }
+
+    // Franchise portal collections
+    function isFranchise() { return request.auth != null && request.auth.token.franchise == true; }
+
+    match /franchises/{uid} {
+      allow read:   if isOwner(uid) || isAdmin();
+      allow create: if false;
+      allow update: if isOwner(uid) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['createdAt','tier','totalDeposits','totalVolume']);
+      allow delete: if false;
+    }
+
+    match /franchise_clients/{clientId} {
+      allow read:   if isFranchise() && resource.data.franchiseId == request.auth.uid || isAdmin();
+      allow create: if isFranchise() && request.resource.data.franchiseId == request.auth.uid;
+      allow update: if isFranchise() && resource.data.franchiseId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /franchise_deposits/{depositId} {
+      allow read:   if isFranchise() && resource.data.franchiseId == request.auth.uid || isAdmin();
+      allow create: if isFranchise() && request.resource.data.franchiseId == request.auth.uid;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /franchise_payouts/{payoutId} {
+      allow read:   if isFranchise() && resource.data.franchiseId == request.auth.uid || isAdmin();
+      allow write:  if false;
+    }
+
+    match /franchise_training/{uid} {
+      allow read:   if isOwner(uid) || isAdmin();
+      allow write:  if isOwner(uid) && isFranchise();
+    }
   }
 }

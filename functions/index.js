@@ -761,3 +761,179 @@ exports.revokeAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true
   await getAuth().setCustomUserClaims(request.data.uid, { admin: false });
   return { success: true };
 });
+
+// ── FRANCHISE PORTAL ─────────────────────────────────────────────────
+
+// setFranchiseClaim — admin only
+exports.setFranchiseClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth?.token?.admin)
+    throw new HttpsError("permission-denied", "Admin only");
+  const { uid, name, email } = request.data;
+  if (!uid) throw new HttpsError("invalid-argument", "uid required");
+  await getAuth().setCustomUserClaims(uid, { franchise: true });
+  // Create franchise profile if not exists
+  const frRef = db.collection("franchises").doc(uid);
+  const frDoc = await frRef.get();
+  if (!frDoc.exists) {
+    await frRef.set({
+      name: name || "",
+      email: email || "",
+      status: "active",
+      tier: "bronze",
+      totalDeposits: 0,
+      totalVolume: 0,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
+  await auditLog(db, {
+    action: "franchise.created",
+    actorUid: request.auth.uid,
+    actorRole: "admin",
+    targetId: uid,
+  });
+  return { success: true };
+});
+
+// revokeFranchiseClaim — admin only
+exports.revokeFranchiseClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth?.token?.admin)
+    throw new HttpsError("permission-denied", "Admin only");
+  const { uid } = request.data;
+  if (!uid) throw new HttpsError("invalid-argument", "uid required");
+  await getAuth().setCustomUserClaims(uid, { franchise: false });
+  await auditLog(db, {
+    action: "franchise.revoked",
+    actorUid: request.auth.uid,
+    actorRole: "admin",
+    targetId: uid,
+  });
+  return { success: true };
+});
+
+// onFranchiseDeposit — update franchise aggregates when a deposit is created
+exports.onFranchiseDeposit = onDocumentUpdated(
+  { document: "franchise_deposits/{depositId}" },
+  async (event) => {
+    // Only runs on updates; initial creates are handled via client-side writes
+  }
+);
+
+// syncOfflineDeposits — callable function for batch syncing offline deposits
+exports.syncOfflineDeposits = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth?.token?.franchise)
+    throw new HttpsError("permission-denied", "Franchise access required");
+  const { deposits } = request.data;
+  if (!Array.isArray(deposits) || !deposits.length)
+    throw new HttpsError("invalid-argument", "deposits array required");
+
+  const franchiseUid = request.auth.uid;
+  const batch = db.batch();
+  let synced = 0;
+
+  for (const dep of deposits) {
+    if (!dep.clientId || !dep.amount || dep.amount < 50) continue;
+    const ref = db.collection("franchise_deposits").doc();
+    batch.set(ref, {
+      franchiseId: franchiseUid,
+      clientId: dep.clientId,
+      clientName: dep.clientName || "",
+      amount: Number(dep.amount),
+      reference: dep.reference || "",
+      createdAt: FieldValue.serverTimestamp(),
+      offlineCreatedAt: dep.createdAt || null,
+      source: "offline_sync",
+    });
+    // Update client aggregate
+    if (dep.clientId) {
+      const clientRef = db.collection("franchise_clients").doc(dep.clientId);
+      batch.update(clientRef, {
+        totalDeposited: FieldValue.increment(Number(dep.amount)),
+        depositCount: FieldValue.increment(1),
+        lastDepositAt: FieldValue.serverTimestamp(),
+      });
+    }
+    synced++;
+  }
+
+  if (synced > 0) await batch.commit();
+
+  await auditLog(db, {
+    action: "franchise.offline_sync",
+    actorUid: franchiseUid,
+    actorRole: "franchise",
+    targetId: franchiseUid,
+    meta: { count: synced },
+  });
+
+  return { success: true, synced };
+});
+
+// getFranchiseEarnings — calculate earnings for franchise
+exports.getFranchiseEarnings = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth?.token?.franchise)
+    throw new HttpsError("permission-denied", "Franchise access required");
+  const franchiseUid = request.auth.uid;
+
+  const depositsSnap = await db.collection("franchise_deposits")
+    .where("franchiseId", "==", franchiseUid)
+    .get();
+
+  const totalDeposits = depositsSnap.size;
+  const totalVolume = depositsSnap.docs.reduce((s, d) => s + (d.data().amount || 0), 0);
+
+  // Tier calculation
+  const tiers = [
+    { key: "bronze", min: 0, max: 49, rate: 0.05 },
+    { key: "silver", min: 50, max: 149, rate: 0.07 },
+    { key: "gold", min: 150, max: 349, rate: 0.10 },
+    { key: "platinum", min: 350, max: Infinity, rate: 0.12 },
+  ];
+  const tier = tiers.find(t => totalDeposits >= t.min && totalDeposits <= t.max) || tiers[0];
+  const totalEarnings = totalVolume * tier.rate;
+
+  const payoutsSnap = await db.collection("franchise_payouts")
+    .where("franchiseId", "==", franchiseUid)
+    .where("status", "==", "paid")
+    .get();
+  const totalPaid = payoutsSnap.docs.reduce((s, d) => s + (d.data().amount || 0), 0);
+
+  return {
+    success: true,
+    totalDeposits,
+    totalVolume,
+    tier: tier.key,
+    rate: tier.rate,
+    totalEarnings: Math.round(totalEarnings * 100) / 100,
+    totalPaid: Math.round(totalPaid * 100) / 100,
+    pendingPayout: Math.round((totalEarnings - totalPaid) * 100) / 100,
+  };
+});
+
+// recordQuizScore — save training quiz score for franchise user
+exports.recordQuizScore = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth?.token?.franchise)
+    throw new HttpsError("permission-denied", "Franchise access required");
+  const { moduleId, score, passed } = request.data;
+  if (!moduleId || score === undefined)
+    throw new HttpsError("invalid-argument", "moduleId and score required");
+
+  const franchiseUid = request.auth.uid;
+  await db.collection("franchise_training").doc(franchiseUid).set({
+    [moduleId]: {
+      score: Number(score),
+      passed: !!passed,
+      videoWatched: true,
+      completedAt: FieldValue.serverTimestamp(),
+    },
+  }, { merge: true });
+
+  await auditLog(db, {
+    action: "franchise.quiz_completed",
+    actorUid: franchiseUid,
+    actorRole: "franchise",
+    targetId: franchiseUid,
+    meta: { moduleId, score, passed },
+  });
+
+  return { success: true };
+});

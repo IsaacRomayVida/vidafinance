@@ -300,6 +300,14 @@ const i18n = {
     pg_press_brand_2_t:'Color principal',pg_press_brand_2_d:'Teal oscuro #194445 — usado en el logotipo, textos principales y elementos de marca.',
     pg_press_brand_3_t:'Color acento',pg_press_brand_3_d:'Dorado #C9A84C — usado como color de señal, nunca como fondo. Reservado para destacar datos clave.',
     pg_press_brand_4_t:'Tipografía',pg_press_brand_4_d:'DM Serif Display para titulares. DM Sans para cuerpo de texto. Ambas de Google Fonts.',
+    // Franchise Portal
+    fr_portal:'Portal Franquicia',fr_pos:'Punto de Venta',fr_clients:'Clientes',fr_earnings:'Ganancias',fr_training:'Capacitación',fr_kpis:'Desempeño',fr_signout:'Cerrar sesión',
+    fr_pos_title:'Punto de Venta',fr_pos_sub:'Procesa depósitos en efectivo',fr_pos_client_search:'Buscar cliente por nombre o teléfono...',fr_pos_amount:'Monto (MXN)',fr_pos_amount_ph:'0.00',fr_pos_reference:'Referencia',fr_pos_reference_ph:'Nota opcional',fr_pos_confirm:'Confirmar Depósito',fr_pos_processing:'Procesando...',fr_pos_success:'Depósito registrado exitosamente',fr_pos_offline_queued:'Sin conexión — depósito guardado localmente',fr_pos_offline_badge:'SIN CONEXIÓN',fr_pos_online_badge:'EN LÍNEA',fr_pos_pending_sync:'depósitos pendientes de sincronizar',fr_pos_sync_now:'Sincronizar ahora',fr_pos_syncing:'Sincronizando...',fr_pos_sync_complete:'Sincronización completada',fr_pos_no_client:'Selecciona un cliente primero',fr_pos_min_amount:'Monto mínimo: $50 MXN',fr_pos_receipt:'Recibo',fr_pos_recent:'Depósitos Recientes',fr_pos_no_deposits:'Aún no hay depósitos registrados.',
+    fr_clients_title:'Gestión de Clientes',fr_clients_sub:'Inscribe y administra clientes',fr_clients_search_ph:'Buscar por nombre, teléfono o email...',fr_clients_enroll:'Inscribir Cliente',fr_clients_total:'Total Clientes',fr_clients_active_plans:'Planes Activos',fr_clients_this_month:'Nuevos este Mes',fr_clients_name:'Nombre completo',fr_clients_name_ph:'Nombre del cliente',fr_clients_phone:'Teléfono',fr_clients_phone_ph:'10 dígitos',fr_clients_email:'Correo electrónico',fr_clients_email_ph:'cliente@correo.com',fr_clients_plan:'Plan de ahorro',fr_clients_plan_weekly:'Semanal — $500/semana',fr_clients_plan_biweekly:'Quincenal — $1,000/quincena',fr_clients_plan_monthly:'Mensual — $2,000/mes',fr_clients_plan_custom:'Personalizado',fr_clients_plan_amount:'Monto del plan (MXN)',fr_clients_plan_amount_ph:'Monto personalizado',fr_clients_save:'Inscribir',fr_clients_saving:'Guardando...',fr_clients_enrolled:'Cliente inscrito exitosamente',fr_clients_th_name:'Nombre',fr_clients_th_phone:'Teléfono',fr_clients_th_plan:'Plan',fr_clients_th_deposited:'Depositado',fr_clients_th_status:'Estado',fr_clients_th_enrolled:'Inscripción',fr_clients_status_active:'activo',fr_clients_status_paused:'pausado',fr_clients_status_completed:'completado',fr_clients_empty:'Aún no hay clientes. Inscribe tu primer cliente arriba.',
+    fr_earn_title:'Mis Ganancias',fr_earn_sub:'Comisiones y progresión de nivel',fr_earn_total:'Ganancia Total',fr_earn_this_month:'Este Mes',fr_earn_pending:'Pendiente de Pago',fr_earn_tier:'Nivel Actual',fr_earn_tier_bronze:'Bronce',fr_earn_tier_silver:'Plata',fr_earn_tier_gold:'Oro',fr_earn_tier_platinum:'Platino',fr_earn_commission_rate:'Tasa de Comisión',fr_earn_next_tier:'Próximo nivel',fr_earn_progress:'del objetivo',fr_earn_history:'Historial de Pagos',fr_earn_th_date:'Fecha',fr_earn_th_amount:'Monto',fr_earn_th_type:'Tipo',fr_earn_th_status:'Estado',fr_earn_type_commission:'Comisión',fr_earn_type_bonus:'Bono',fr_earn_status_paid:'pagado',fr_earn_status_pending:'pendiente',fr_earn_no_history:'Aún no hay historial de pagos.',fr_earn_deposits_needed:'depósitos para el siguiente nivel',
+    fr_train_title:'Centro de Capacitación',fr_train_sub:'Completa los módulos para certificarte',fr_train_progress:'Progreso General',fr_train_modules_done:'módulos completados',fr_train_module:'Módulo',fr_train_start:'Comenzar',fr_train_continue:'Continuar',fr_train_completed:'Completado',fr_train_locked:'Bloqueado',fr_train_quiz:'Cuestionario',fr_train_score:'Puntuación',fr_train_passing:'Mínimo para aprobar: 70%',fr_train_submit_quiz:'Enviar Respuestas',fr_train_submitting:'Evaluando...',fr_train_passed:'¡Aprobado!',fr_train_failed:'No aprobado — intenta de nuevo',fr_train_next_module:'Siguiente Módulo',fr_train_back:'Volver a Módulos',fr_train_watch_video:'Ver Video',fr_train_video_complete:'Video completado',
+    fr_train_m1_title:'Ventas',fr_train_m1_desc:'Técnicas de venta consultiva y cierre de inscripciones.',fr_train_m2_title:'Objeciones',fr_train_m2_desc:'Manejo de objeciones comunes y resolución de dudas.',fr_train_m3_title:'Operaciones',fr_train_m3_desc:'Uso del POS, registro de depósitos y gestión diaria.',fr_train_m4_title:'Marketing',fr_train_m4_desc:'Estrategias de captación de clientes y referidos.',fr_train_m5_title:'Cumplimiento',fr_train_m5_desc:'Normativas, prevención de fraude y ética profesional.',
+    fr_kpi_title:'Desempeño',fr_kpi_sub:'Métricas clave de tu operación',fr_kpi_deposits_processed:'Depósitos Procesados',fr_kpi_clients_enrolled:'Clientes Inscritos',fr_kpi_conversion_rate:'Tasa de Conversión',fr_kpi_avg_deposit:'Depósito Promedio',fr_kpi_training_progress:'Avance de Capacitación',fr_kpi_period_week:'Semana',fr_kpi_period_month:'Mes',fr_kpi_period_all:'Todo',fr_kpi_vs_last:'vs período anterior',fr_kpi_trend_up:'↑',fr_kpi_trend_down:'↓',fr_kpi_goal:'Meta',fr_kpi_actual:'Actual',
   },
   en: {
     nav_employers:'Employers',nav_employees:'Employees',nav_trust:'Trust',nav_how:'How it works',nav_login:'Log in',nav_get_started:'Get Started',nav_partners:'Partners',nav_investors:'Investors',nav_contact:'Contact',lang_toggle:'ES',
@@ -583,6 +591,14 @@ const i18n = {
     pg_press_brand_2_t:'Primary color',pg_press_brand_2_d:'Dark teal #194445 — used in the logo, main text, and brand elements.',
     pg_press_brand_3_t:'Accent color',pg_press_brand_3_d:'Gold #C9A84C — used as a signal color, never as background. Reserved for highlighting key data.',
     pg_press_brand_4_t:'Typography',pg_press_brand_4_d:'DM Serif Display for headlines. DM Sans for body text. Both from Google Fonts.',
+    // Franchise Portal
+    fr_portal:'Franchise Portal',fr_pos:'Point of Sale',fr_clients:'Clients',fr_earnings:'Earnings',fr_training:'Training',fr_kpis:'Performance',fr_signout:'Sign out',
+    fr_pos_title:'Point of Sale',fr_pos_sub:'Process cash deposits',fr_pos_client_search:'Search client by name or phone...',fr_pos_amount:'Amount (MXN)',fr_pos_amount_ph:'0.00',fr_pos_reference:'Reference',fr_pos_reference_ph:'Optional note',fr_pos_confirm:'Confirm Deposit',fr_pos_processing:'Processing...',fr_pos_success:'Deposit recorded successfully',fr_pos_offline_queued:'Offline — deposit saved locally',fr_pos_offline_badge:'OFFLINE',fr_pos_online_badge:'ONLINE',fr_pos_pending_sync:'deposits pending sync',fr_pos_sync_now:'Sync now',fr_pos_syncing:'Syncing...',fr_pos_sync_complete:'Sync completed',fr_pos_no_client:'Select a client first',fr_pos_min_amount:'Minimum amount: $50 MXN',fr_pos_receipt:'Receipt',fr_pos_recent:'Recent Deposits',fr_pos_no_deposits:'No deposits recorded yet.',
+    fr_clients_title:'Client Management',fr_clients_sub:'Enroll and manage clients',fr_clients_search_ph:'Search by name, phone, or email...',fr_clients_enroll:'Enroll Client',fr_clients_total:'Total Clients',fr_clients_active_plans:'Active Plans',fr_clients_this_month:'New this Month',fr_clients_name:'Full name',fr_clients_name_ph:'Client name',fr_clients_phone:'Phone',fr_clients_phone_ph:'10 digits',fr_clients_email:'Email',fr_clients_email_ph:'client@email.com',fr_clients_plan:'Savings plan',fr_clients_plan_weekly:'Weekly — $500/week',fr_clients_plan_biweekly:'Biweekly — $1,000/biweek',fr_clients_plan_monthly:'Monthly — $2,000/month',fr_clients_plan_custom:'Custom',fr_clients_plan_amount:'Plan amount (MXN)',fr_clients_plan_amount_ph:'Custom amount',fr_clients_save:'Enroll',fr_clients_saving:'Saving...',fr_clients_enrolled:'Client enrolled successfully',fr_clients_th_name:'Name',fr_clients_th_phone:'Phone',fr_clients_th_plan:'Plan',fr_clients_th_deposited:'Deposited',fr_clients_th_status:'Status',fr_clients_th_enrolled:'Enrolled',fr_clients_status_active:'active',fr_clients_status_paused:'paused',fr_clients_status_completed:'completed',fr_clients_empty:'No clients yet. Enroll your first client above.',
+    fr_earn_title:'My Earnings',fr_earn_sub:'Commissions and tier progression',fr_earn_total:'Total Earnings',fr_earn_this_month:'This Month',fr_earn_pending:'Pending Payout',fr_earn_tier:'Current Tier',fr_earn_tier_bronze:'Bronze',fr_earn_tier_silver:'Silver',fr_earn_tier_gold:'Gold',fr_earn_tier_platinum:'Platinum',fr_earn_commission_rate:'Commission Rate',fr_earn_next_tier:'Next tier',fr_earn_progress:'of goal',fr_earn_history:'Payout History',fr_earn_th_date:'Date',fr_earn_th_amount:'Amount',fr_earn_th_type:'Type',fr_earn_th_status:'Status',fr_earn_type_commission:'Commission',fr_earn_type_bonus:'Bonus',fr_earn_status_paid:'paid',fr_earn_status_pending:'pending',fr_earn_no_history:'No payout history yet.',fr_earn_deposits_needed:'deposits to next tier',
+    fr_train_title:'Training Center',fr_train_sub:'Complete modules to get certified',fr_train_progress:'Overall Progress',fr_train_modules_done:'modules completed',fr_train_module:'Module',fr_train_start:'Start',fr_train_continue:'Continue',fr_train_completed:'Completed',fr_train_locked:'Locked',fr_train_quiz:'Quiz',fr_train_score:'Score',fr_train_passing:'Minimum to pass: 70%',fr_train_submit_quiz:'Submit Answers',fr_train_submitting:'Evaluating...',fr_train_passed:'Passed!',fr_train_failed:'Not passed — try again',fr_train_next_module:'Next Module',fr_train_back:'Back to Modules',fr_train_watch_video:'Watch Video',fr_train_video_complete:'Video completed',
+    fr_train_m1_title:'Sales',fr_train_m1_desc:'Consultative selling techniques and enrollment closing.',fr_train_m2_title:'Objections',fr_train_m2_desc:'Handling common objections and resolving doubts.',fr_train_m3_title:'Operations',fr_train_m3_desc:'POS usage, deposit recording, and daily management.',fr_train_m4_title:'Marketing',fr_train_m4_desc:'Client acquisition strategies and referrals.',fr_train_m5_title:'Compliance',fr_train_m5_desc:'Regulations, fraud prevention, and professional ethics.',
+    fr_kpi_title:'Performance',fr_kpi_sub:'Key metrics for your operation',fr_kpi_deposits_processed:'Deposits Processed',fr_kpi_clients_enrolled:'Clients Enrolled',fr_kpi_conversion_rate:'Conversion Rate',fr_kpi_avg_deposit:'Average Deposit',fr_kpi_training_progress:'Training Progress',fr_kpi_period_week:'Week',fr_kpi_period_month:'Month',fr_kpi_period_all:'All',fr_kpi_vs_last:'vs previous period',fr_kpi_trend_up:'↑',fr_kpi_trend_down:'↓',fr_kpi_goal:'Goal',fr_kpi_actual:'Actual',
   }
 };
 
@@ -632,6 +648,12 @@ const routes = {
   '/admin/loans':      (app) => renderAdminPortal(app, 'loans'),
   '/admin/finance':    (app) => renderAdminPortal(app, 'finance'),
   '/admin/audit':      (app) => renderAdminPortal(app, 'audit'),
+  '/franchise':              (app) => renderFranchisePortal(app, 'pos'),
+  '/franchise/pos':          (app) => renderFranchisePortal(app, 'pos'),
+  '/franchise/clients':      (app) => renderFranchisePortal(app, 'clients'),
+  '/franchise/earnings':     (app) => renderFranchisePortal(app, 'earnings'),
+  '/franchise/training':     (app) => renderFranchisePortal(app, 'training'),
+  '/franchise/kpis':         (app) => renderFranchisePortal(app, 'kpis'),
 };
 
 let onbPreselect = null;
@@ -640,6 +662,7 @@ function navigate(path, opts) {
   if (window._unsubDash) { window._unsubDash(); window._unsubDash = null; }
   if (window._unsubEmp) { window._unsubEmp(); window._unsubEmp = null; }
   if (window._adminUnsubs) { window._adminUnsubs.forEach(u => u()); window._adminUnsubs = null; }
+  if (window._franchiseUnsubs) { window._franchiseUnsubs.forEach(u => u()); window._franchiseUnsubs = null; }
   if (opts?.role) onbPreselect = opts.role;
   history.pushState(null, '', path);
   router();
@@ -653,6 +676,14 @@ async function router() {
   const handler = routes[path];
   if (path.startsWith('/employer/') && !auth.currentUser) { navigate('/login'); return; }
   if (path.startsWith('/employee/') && !auth.currentUser) { navigate('/login'); return; }
+  if (path.startsWith('/franchise')) {
+    const user = auth.currentUser;
+    if (!user) { navigate('/login'); return; }
+    try {
+      const tok = await user.getIdTokenResult(true);
+      if (!tok.claims.franchise) { navigate('/'); return; }
+    } catch (_) { navigate('/'); return; }
+  }
   if (path.startsWith('/admin')) {
     const user = auth.currentUser;
     if (!user) { navigate('/login'); return; }
@@ -670,6 +701,7 @@ auth.onAuthStateChanged(async (user) => {
     if (path === '/login' || path === '/signup' || path === '/onboarding') {
       const tok = await user.getIdTokenResult();
       if (tok.claims.admin) { navigate('/admin'); return; }
+      if (tok.claims.franchise) { navigate('/franchise'); return; }
       const doc = await db.collection('employers').doc(user.uid).get();
       navigate(doc.exists ? '/employer/dashboard' : '/employee/dashboard');
     }
@@ -2168,9 +2200,745 @@ async function getDeviceFingerprint() {
   }
 }
 
+// ─── FRANCHISE PORTAL ─────────────────────────────────────
+// IndexedDB for offline POS deposits
+const OFFLINE_DB_NAME = 'vida_franchise_offline';
+const OFFLINE_DB_VERSION = 1;
+const OFFLINE_STORE = 'pending_deposits';
+
+function openOfflineDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const idb = e.target.result;
+      if (!idb.objectStoreNames.contains(OFFLINE_STORE)) {
+        idb.createObjectStore(OFFLINE_STORE, { keyPath: 'localId' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveOfflineDeposit(deposit) {
+  const idb = await openOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(OFFLINE_STORE, 'readwrite');
+    tx.objectStore(OFFLINE_STORE).put(deposit);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getPendingDeposits() {
+  const idb = await openOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(OFFLINE_STORE, 'readonly');
+    const req = tx.objectStore(OFFLINE_STORE).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function clearOfflineDeposit(localId) {
+  const idb = await openOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(OFFLINE_STORE, 'readwrite');
+    tx.objectStore(OFFLINE_STORE).delete(localId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function syncOfflineDeposits(franchiseUid) {
+  const pending = await getPendingDeposits();
+  if (!pending.length) return 0;
+  let synced = 0;
+  for (const dep of pending) {
+    try {
+      await db.collection('franchise_deposits').add({
+        franchiseId: franchiseUid,
+        clientId: dep.clientId,
+        clientName: dep.clientName,
+        amount: dep.amount,
+        reference: dep.reference,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        offlineCreatedAt: dep.createdAt,
+        source: 'offline_sync'
+      });
+      await clearOfflineDeposit(dep.localId);
+      synced++;
+    } catch (e) { console.warn('Sync failed for', dep.localId, e); }
+  }
+  return synced;
+}
+
+// Franchise tier definitions
+const FRANCHISE_TIERS = [
+  { key: 'bronze', min: 0, max: 49, rate: 0.05, color: '#cd7f32' },
+  { key: 'silver', min: 50, max: 149, rate: 0.07, color: '#c0c0c0' },
+  { key: 'gold', min: 150, max: 349, rate: 0.10, color: '#c9a84c' },
+  { key: 'platinum', min: 350, max: Infinity, rate: 0.12, color: '#8a9ea0' },
+];
+
+function getFranchiseTier(totalDeposits) {
+  return FRANCHISE_TIERS.find(tier => totalDeposits >= tier.min && totalDeposits <= tier.max) || FRANCHISE_TIERS[0];
+}
+
+// Training module definitions
+const TRAINING_MODULES = [
+  { id: 'm1', videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', questions: [
+    { q_es: '¿Cuál es el primer paso en una venta consultiva?', q_en: 'What is the first step in consultative selling?', opts_es: ['Cerrar inmediatamente','Escuchar las necesidades del cliente','Ofrecer descuentos','Hablar del producto'], opts_en: ['Close immediately','Listen to client needs','Offer discounts','Talk about product'], correct: 1 },
+    { q_es: '¿Qué porcentaje de clientes valora la confianza sobre el precio?', q_en: 'What percentage of clients value trust over price?', opts_es: ['20%','45%','70%','90%'], opts_en: ['20%','45%','70%','90%'], correct: 2 },
+    { q_es: '¿Cuál es la mejor forma de cerrar una inscripción?', q_en: 'What is the best way to close an enrollment?', opts_es: ['Presionar al cliente','Resumir beneficios y pedir acción','Dar más tiempo','Bajar el precio'], opts_en: ['Pressure the client','Summarize benefits and ask for action','Give more time','Lower the price'], correct: 1 },
+  ]},
+  { id: 'm2', videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', questions: [
+    { q_es: '¿Cuál es la objeción más común?', q_en: 'What is the most common objection?', opts_es: ['"No tengo tiempo"','"Es muy caro"','"No me interesa"','"Ya tengo algo similar"'], opts_en: ['"I don\'t have time"','"It\'s too expensive"','"I\'m not interested"','"I already have something similar"'], correct: 1 },
+    { q_es: 'Ante "Es muy caro", ¿qué responder?', q_en: 'When facing "It\'s too expensive", what to respond?', opts_es: ['Bajar el precio','Comparar con el costo de no ahorrar','Insistir','Cambiar de tema'], opts_en: ['Lower the price','Compare with cost of not saving','Insist','Change subject'], correct: 1 },
+    { q_es: '¿Qué técnica ayuda con "Lo tengo que pensar"?', q_en: 'What technique helps with "I need to think about it"?', opts_es: ['Presionar más','Agendar seguimiento concreto','Olvidar al cliente','Ofrecer todo gratis'], opts_en: ['Push harder','Schedule concrete follow-up','Forget the client','Offer everything free'], correct: 1 },
+  ]},
+  { id: 'm3', videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', questions: [
+    { q_es: '¿Qué hacer cuando el POS está sin conexión?', q_en: 'What to do when POS is offline?', opts_es: ['No aceptar depósitos','Registrar en papel','Usar modo offline del POS','Llamar a soporte'], opts_en: ['Don\'t accept deposits','Record on paper','Use POS offline mode','Call support'], correct: 2 },
+    { q_es: '¿Cuándo se sincronizan los depósitos offline?', q_en: 'When do offline deposits sync?', opts_es: ['Nunca','Al restaurar conexión','Solo manualmente','Al día siguiente'], opts_en: ['Never','When connection is restored','Only manually','Next day'], correct: 1 },
+    { q_es: '¿Qué información mínima necesita un depósito?', q_en: 'What minimum information does a deposit need?', opts_es: ['Solo monto','Cliente y monto','Solo referencia','Nombre del operador'], opts_en: ['Amount only','Client and amount','Reference only','Operator name'], correct: 1 },
+  ]},
+  { id: 'm4', videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', questions: [
+    { q_es: '¿Cuál es el canal más efectivo para captar clientes?', q_en: 'What is the most effective channel to acquire clients?', opts_es: ['TV','Referidos de clientes actuales','Volantes','Redes sociales'], opts_en: ['TV','Referrals from current clients','Flyers','Social media'], correct: 1 },
+    { q_es: '¿Qué incentivo funciona mejor para referidos?', q_en: 'What incentive works best for referrals?', opts_es: ['Nada','Bono por referido activo','Descuento','Producto gratis'], opts_en: ['Nothing','Bonus per active referral','Discount','Free product'], correct: 1 },
+    { q_es: '¿Cada cuánto se debe hacer seguimiento a prospectos?', q_en: 'How often should prospects be followed up?', opts_es: ['Nunca','Cada 2-3 días','Una vez al mes','Solo si llaman'], opts_en: ['Never','Every 2-3 days','Once a month','Only if they call'], correct: 1 },
+  ]},
+  { id: 'm5', videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', questions: [
+    { q_es: '¿Qué documento debe presentar todo cliente nuevo?', q_en: 'What document must every new client present?', opts_es: ['Nada','Identificación oficial vigente','Carta de trabajo','Estado de cuenta'], opts_en: ['Nothing','Valid official ID','Employment letter','Bank statement'], correct: 1 },
+    { q_es: '¿Qué hacer si sospechas de un depósito fraudulento?', q_en: 'What to do if you suspect a fraudulent deposit?', opts_es: ['Procesarlo normalmente','Detener y reportar al supervisor','Ignorarlo','Preguntar al cliente'], opts_en: ['Process it normally','Stop and report to supervisor','Ignore it','Ask the client'], correct: 1 },
+    { q_es: '¿Cuál es el monto máximo de depósito en efectivo sin reporte?', q_en: 'What is the max cash deposit amount without reporting?', opts_es: ['$5,000','$10,000','$15,000','$50,000'], opts_en: ['$5,000','$10,000','$15,000','$50,000'], correct: 2 },
+  ]},
+];
+
+async function renderFranchisePortal(app, activeTab) {
+  app.innerHTML = '<div class="loading-page"><div class="spinner"></div></div>';
+  const uid = auth.currentUser.uid;
+  const frDoc = await db.collection('franchises').doc(uid).get();
+  if (!frDoc.exists) { navigate('/'); return; }
+  const fr = frDoc.data();
+  if (window._franchiseUnsubs) window._franchiseUnsubs.forEach(u => u());
+  window._franchiseUnsubs = [];
+
+  const isOnline = navigator.onLine;
+  let pendingOffline = [];
+  try { pendingOffline = await getPendingDeposits(); } catch (_) {}
+
+  // Try to sync offline deposits when online
+  if (isOnline && pendingOffline.length) {
+    syncOfflineDeposits(uid).then(n => {
+      if (n > 0) showToast(t('fr_pos_sync_complete') + ` (${n})`, 'success');
+    });
+  }
+
+  const navItems = [
+    { tab: 'pos', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20"/><path d="M8 15h2m4 0h2"/></svg>' },
+    { tab: 'clients', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>' },
+    { tab: 'earnings', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>' },
+    { tab: 'training', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>' },
+    { tab: 'kpis', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>' },
+  ];
+
+  app.innerHTML = `<div class="fr-layout">
+    <aside class="fr-side">
+      <div class="nav-logo" style="padding:16px 20px">${vidaLogo()}</div>
+      <nav class="fr-nav">${navItems.map(n => `<a href="/franchise/${n.tab}" class="fr-nav-link${n.tab === activeTab ? ' active' : ''}" data-tab="${n.tab}">${n.icon}${t('fr_' + n.tab)}</a>`).join('')}</nav>
+      <div class="fr-side-footer">
+        <div class="fr-online-status ${isOnline ? 'online' : 'offline'}">
+          <span class="fr-status-dot"></span>
+          ${isOnline ? t('fr_pos_online_badge') : t('fr_pos_offline_badge')}
+          ${pendingOffline.length ? `<span class="fr-pending-count">${pendingOffline.length}</span>` : ''}
+        </div>
+        <button class="fr-logout" onclick="auth.signOut().then(()=>navigate('/'))">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          ${t('fr_signout')}
+        </button>
+      </div>
+    </aside>
+    <div class="fr-main">
+      <div class="fr-header">
+        <div>
+          <h1 class="fr-title">${t('fr_' + activeTab + '_title') || t('fr_' + activeTab)}</h1>
+          <p class="fr-subtitle">${t('fr_' + activeTab + '_sub') || ''}</p>
+        </div>
+        <div class="fr-header-right">
+          <a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand)">${t('lang_toggle')}</a>
+          <div class="dash-avatar">${fr.name?.charAt(0) || 'F'}</div>
+        </div>
+      </div>
+      <div id="frContent" class="fr-content"></div>
+    </div>
+  </div>`;
+
+  // Bind sidebar nav
+  app.querySelectorAll('.fr-nav-link').forEach(a => {
+    a.addEventListener('click', e => { e.preventDefault(); navigate('/franchise/' + a.dataset.tab); });
+  });
+
+  // Online/offline listener
+  const onlineHandler = () => {
+    const dot = app.querySelector('.fr-online-status');
+    if (dot) { dot.className = 'fr-online-status online'; dot.innerHTML = `<span class="fr-status-dot"></span>${t('fr_pos_online_badge')}`; }
+    syncOfflineDeposits(uid).then(n => { if (n > 0) showToast(t('fr_pos_sync_complete') + ` (${n})`, 'success'); });
+  };
+  const offlineHandler = () => {
+    const dot = app.querySelector('.fr-online-status');
+    if (dot) { dot.className = 'fr-online-status offline'; dot.innerHTML = `<span class="fr-status-dot"></span>${t('fr_pos_offline_badge')}`; }
+  };
+  window.addEventListener('online', onlineHandler);
+  window.addEventListener('offline', offlineHandler);
+  window._franchiseUnsubs.push(() => { window.removeEventListener('online', onlineHandler); window.removeEventListener('offline', offlineHandler); });
+
+  // Render active tab content
+  const content = document.getElementById('frContent');
+  if (activeTab === 'pos') renderFranchisePOS(content, uid, fr);
+  else if (activeTab === 'clients') renderFranchiseClients(content, uid, fr);
+  else if (activeTab === 'earnings') renderFranchiseEarnings(content, uid, fr);
+  else if (activeTab === 'training') renderFranchiseTraining(content, uid, fr);
+  else if (activeTab === 'kpis') renderFranchiseKPIs(content, uid, fr);
+}
+
+// ─── Franchise POS ────────────────────────────────────────
+function renderFranchisePOS(container, uid, fr) {
+  let clients = [], deposits = [], selectedClient = null;
+
+  const unsubClients = db.collection('franchise_clients')
+    .where('franchiseId', '==', uid).orderBy('name')
+    .onSnapshot(snap => { clients = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderPOSBody(); });
+  window._franchiseUnsubs.push(unsubClients);
+
+  const unsubDeposits = db.collection('franchise_deposits')
+    .where('franchiseId', '==', uid).orderBy('createdAt', 'desc').limit(20)
+    .onSnapshot(snap => { deposits = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderPOSBody(); });
+  window._franchiseUnsubs.push(unsubDeposits);
+
+  function renderPOSBody() {
+    container.innerHTML = `
+      <div class="fr-pos-grid">
+        <div class="fr-pos-panel">
+          <div class="fr-card">
+            <label class="fr-label">${t('fr_pos_client_search')}</label>
+            <div class="fr-client-search">
+              <input type="text" id="posClientSearch" class="fr-input" placeholder="${t('fr_pos_client_search')}">
+              <div id="posClientResults" class="fr-client-results"></div>
+            </div>
+            ${selectedClient ? `<div class="fr-selected-client"><span class="fr-client-name">${selectedClient.name}</span><span class="fr-client-phone">${selectedClient.phone || ''}</span><button class="fr-clear-client" onclick="document.getElementById('posClientSearch').value=''">&times;</button></div>` : ''}
+            <div class="fr-form-group">
+              <label class="fr-label">${t('fr_pos_amount')}</label>
+              <input type="number" id="posAmount" class="fr-input fr-input-lg" placeholder="${t('fr_pos_amount_ph')}" min="50" step="0.01">
+            </div>
+            <div class="fr-form-group">
+              <label class="fr-label">${t('fr_pos_reference')}</label>
+              <input type="text" id="posReference" class="fr-input" placeholder="${t('fr_pos_reference_ph')}" maxlength="100">
+            </div>
+            <button id="posConfirmBtn" class="fr-btn-primary">${t('fr_pos_confirm')}</button>
+          </div>
+        </div>
+        <div class="fr-pos-recent">
+          <div class="fr-card">
+            <div class="fr-card-title">${t('fr_pos_recent')}</div>
+            ${deposits.length ? `<div class="fr-deposit-list">${deposits.map(d => `
+              <div class="fr-deposit-item">
+                <div class="fr-deposit-info">
+                  <span class="fr-deposit-name">${d.clientName || '—'}</span>
+                  <span class="fr-deposit-meta">${d.createdAt ? new Date(d.createdAt.seconds * 1000).toLocaleString() : d.offlineCreatedAt || ''} ${d.source === 'offline_sync' ? '(sync)' : ''}</span>
+                </div>
+                <span class="fr-deposit-amount">$${fmt(d.amount)}</span>
+              </div>
+            `).join('')}</div>` : `<div class="empty-state"><p>${t('fr_pos_no_deposits')}</p></div>`}
+          </div>
+        </div>
+      </div>`;
+
+    // Client search
+    const searchInput = document.getElementById('posClientSearch');
+    const resultsDiv = document.getElementById('posClientResults');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.toLowerCase();
+        if (q.length < 2) { resultsDiv.innerHTML = ''; return; }
+        const matches = clients.filter(c => (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q)).slice(0, 5);
+        resultsDiv.innerHTML = matches.map(c => `<div class="fr-client-option" data-id="${c.id}">${c.name} <span style="color:var(--t3)">${c.phone || ''}</span></div>`).join('');
+        resultsDiv.querySelectorAll('.fr-client-option').forEach(opt => {
+          opt.addEventListener('click', () => {
+            selectedClient = clients.find(c => c.id === opt.dataset.id);
+            renderPOSBody();
+          });
+        });
+      });
+    }
+
+    // Confirm deposit
+    const confirmBtn = document.getElementById('posConfirmBtn');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', async () => {
+        if (!selectedClient) { showToast(t('fr_pos_no_client'), 'error'); return; }
+        const amount = parseFloat(document.getElementById('posAmount')?.value);
+        if (!amount || amount < 50) { showToast(t('fr_pos_min_amount'), 'error'); return; }
+        const reference = document.getElementById('posReference')?.value || '';
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = t('fr_pos_processing');
+
+        if (navigator.onLine) {
+          try {
+            await db.collection('franchise_deposits').add({
+              franchiseId: uid,
+              clientId: selectedClient.id,
+              clientName: selectedClient.name,
+              amount: amount,
+              reference: reference,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+              source: 'pos'
+            });
+            // Update client total deposited
+            await db.collection('franchise_clients').doc(selectedClient.id).update({
+              totalDeposited: firebase.firestore.FieldValue.increment(amount),
+              lastDepositAt: firebase.firestore.FieldValue.serverTimestamp(),
+              depositCount: firebase.firestore.FieldValue.increment(1)
+            });
+            showToast(t('fr_pos_success'), 'success');
+            selectedClient = null;
+            renderPOSBody();
+          } catch (e) {
+            showToast(e.message, 'error');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = t('fr_pos_confirm');
+          }
+        } else {
+          // Offline mode — save to IndexedDB
+          try {
+            await saveOfflineDeposit({
+              localId: 'off_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+              clientId: selectedClient.id,
+              clientName: selectedClient.name,
+              amount: amount,
+              reference: reference,
+              createdAt: new Date().toISOString(),
+            });
+            showToast(t('fr_pos_offline_queued'), 'success');
+            selectedClient = null;
+            renderPOSBody();
+          } catch (e) {
+            showToast(e.message, 'error');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = t('fr_pos_confirm');
+          }
+        }
+      });
+    }
+  }
+  renderPOSBody();
+}
+
+// ─── Franchise Clients ────────────────────────────────────
+function renderFranchiseClients(container, uid, fr) {
+  let clients = [], showForm = false, searchQuery = '';
+
+  const unsub = db.collection('franchise_clients')
+    .where('franchiseId', '==', uid).orderBy('createdAt', 'desc')
+    .onSnapshot(snap => { clients = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderClientsBody(); });
+  window._franchiseUnsubs.push(unsub);
+
+  function renderClientsBody() {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const activePlans = clients.filter(c => c.status === 'active').length;
+    const thisMonth = clients.filter(c => c.createdAt && new Date(c.createdAt.seconds * 1000) >= monthStart).length;
+    const q = searchQuery.toLowerCase();
+    const filtered = q ? clients.filter(c => (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q)) : clients;
+
+    container.innerHTML = `
+      <div class="stat-grid" style="margin-bottom:24px">
+        <div class="stat-card"><div class="stat-label">${t('fr_clients_total')}</div><div class="stat-value">${clients.length}</div></div>
+        <div class="stat-card"><div class="stat-label">${t('fr_clients_active_plans')}</div><div class="stat-value">${activePlans}</div></div>
+        <div class="stat-card"><div class="stat-label">${t('fr_clients_this_month')}</div><div class="stat-value">${thisMonth}</div></div>
+      </div>
+      <div class="fr-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <input type="text" id="clientSearch" class="fr-input" placeholder="${t('fr_clients_search_ph')}" value="${searchQuery}" style="max-width:320px">
+          <button id="toggleEnrollBtn" class="fr-btn-primary" style="white-space:nowrap">${showForm ? '✕' : '+ ' + t('fr_clients_enroll')}</button>
+        </div>
+        ${showForm ? `
+        <div class="fr-enroll-form" id="enrollForm">
+          <div class="fr-form-row">
+            <div class="fr-form-group"><label class="fr-label">${t('fr_clients_name')}</label><input type="text" id="enrollName" class="fr-input" placeholder="${t('fr_clients_name_ph')}" required></div>
+            <div class="fr-form-group"><label class="fr-label">${t('fr_clients_phone')}</label><input type="tel" id="enrollPhone" class="fr-input" placeholder="${t('fr_clients_phone_ph')}" maxlength="10"></div>
+          </div>
+          <div class="fr-form-row">
+            <div class="fr-form-group"><label class="fr-label">${t('fr_clients_email')}</label><input type="email" id="enrollEmail" class="fr-input" placeholder="${t('fr_clients_email_ph')}"></div>
+            <div class="fr-form-group"><label class="fr-label">${t('fr_clients_plan')}</label>
+              <select id="enrollPlan" class="fr-input">
+                <option value="weekly">${t('fr_clients_plan_weekly')}</option>
+                <option value="biweekly">${t('fr_clients_plan_biweekly')}</option>
+                <option value="monthly" selected>${t('fr_clients_plan_monthly')}</option>
+                <option value="custom">${t('fr_clients_plan_custom')}</option>
+              </select>
+            </div>
+          </div>
+          <div class="fr-form-group" id="customAmountGroup" style="display:none">
+            <label class="fr-label">${t('fr_clients_plan_amount')}</label>
+            <input type="number" id="enrollCustomAmount" class="fr-input" placeholder="${t('fr_clients_plan_amount_ph')}" min="100">
+          </div>
+          <button id="enrollSubmitBtn" class="fr-btn-primary">${t('fr_clients_save')}</button>
+        </div>` : ''}
+        <div class="table-wrap">
+          ${filtered.length ? `<table><thead><tr><th>${t('fr_clients_th_name')}</th><th>${t('fr_clients_th_phone')}</th><th>${t('fr_clients_th_plan')}</th><th>${t('fr_clients_th_deposited')}</th><th>${t('fr_clients_th_status')}</th><th>${t('fr_clients_th_enrolled')}</th></tr></thead><tbody>${filtered.map(c => `<tr><td>${c.name}</td><td>${c.phone || '—'}</td><td>${c.planType || '—'}</td><td>$${fmt(c.totalDeposited || 0)}</td><td><span class="badge badge-${c.status === 'active' ? 'approved' : c.status === 'paused' ? 'pending' : 'paid'}">${t('fr_clients_status_' + (c.status || 'active'))}</span></td><td>${c.createdAt ? new Date(c.createdAt.seconds * 1000).toLocaleDateString() : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><p>${t('fr_clients_empty')}</p></div>`}
+        </div>
+      </div>`;
+
+    // Bind events
+    document.getElementById('clientSearch')?.addEventListener('input', e => { searchQuery = e.target.value; renderClientsBody(); });
+    document.getElementById('toggleEnrollBtn')?.addEventListener('click', () => { showForm = !showForm; renderClientsBody(); });
+    document.getElementById('enrollPlan')?.addEventListener('change', e => {
+      const grp = document.getElementById('customAmountGroup');
+      if (grp) grp.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    });
+
+    const submitBtn = document.getElementById('enrollSubmitBtn');
+    if (submitBtn) {
+      submitBtn.addEventListener('click', async () => {
+        const name = document.getElementById('enrollName')?.value?.trim();
+        const phone = document.getElementById('enrollPhone')?.value?.trim();
+        const email = document.getElementById('enrollEmail')?.value?.trim();
+        const planType = document.getElementById('enrollPlan')?.value;
+        const customAmount = parseInt(document.getElementById('enrollCustomAmount')?.value) || 0;
+        if (!name) { showToast(t('fr_clients_name'), 'error'); return; }
+
+        const planAmounts = { weekly: 500, biweekly: 1000, monthly: 2000, custom: customAmount };
+        submitBtn.disabled = true;
+        submitBtn.textContent = t('fr_clients_saving');
+        try {
+          await db.collection('franchise_clients').add({
+            franchiseId: uid,
+            name, phone, email,
+            planType,
+            planAmount: planAmounts[planType] || 2000,
+            totalDeposited: 0,
+            depositCount: 0,
+            status: 'active',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          showToast(t('fr_clients_enrolled'), 'success');
+          showForm = false;
+          renderClientsBody();
+        } catch (e) {
+          showToast(e.message, 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = t('fr_clients_save');
+        }
+      });
+    }
+  }
+  renderClientsBody();
+}
+
+// ─── Franchise Earnings ───────────────────────────────────
+function renderFranchiseEarnings(container, uid, fr) {
+  let deposits = [], payouts = [];
+
+  const unsubDep = db.collection('franchise_deposits')
+    .where('franchiseId', '==', uid).orderBy('createdAt', 'desc')
+    .onSnapshot(snap => { deposits = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderEarningsBody(); });
+  window._franchiseUnsubs.push(unsubDep);
+
+  const unsubPay = db.collection('franchise_payouts')
+    .where('franchiseId', '==', uid).orderBy('createdAt', 'desc')
+    .onSnapshot(snap => { payouts = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderEarningsBody(); });
+  window._franchiseUnsubs.push(unsubPay);
+
+  function renderEarningsBody() {
+    const tier = getFranchiseTier(deposits.length);
+    const nextTier = FRANCHISE_TIERS[FRANCHISE_TIERS.indexOf(tier) + 1];
+    const totalVolume = deposits.reduce((s, d) => s + (d.amount || 0), 0);
+    const totalEarnings = totalVolume * tier.rate;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthDeposits = deposits.filter(d => d.createdAt && new Date(d.createdAt.seconds * 1000) >= monthStart);
+    const monthVolume = monthDeposits.reduce((s, d) => s + (d.amount || 0), 0);
+    const monthEarnings = monthVolume * tier.rate;
+    const totalPaid = payouts.filter(p => p.status === 'paid').reduce((s, p) => s + (p.amount || 0), 0);
+    const pendingPayout = totalEarnings - totalPaid;
+    const depositsToNext = nextTier ? nextTier.min - deposits.length : 0;
+    const progress = nextTier ? ((deposits.length - tier.min) / (nextTier.min - tier.min)) * 100 : 100;
+
+    container.innerHTML = `
+      <div class="stat-grid" style="margin-bottom:24px">
+        <div class="stat-card"><div class="stat-label">${t('fr_earn_total')}</div><div class="stat-value">$${fmt(Math.round(totalEarnings))}</div></div>
+        <div class="stat-card"><div class="stat-label">${t('fr_earn_this_month')}</div><div class="stat-value">$${fmt(Math.round(monthEarnings))}</div></div>
+        <div class="stat-card"><div class="stat-label">${t('fr_earn_pending')}</div><div class="stat-value">$${fmt(Math.round(pendingPayout > 0 ? pendingPayout : 0))}</div></div>
+      </div>
+      <div class="fr-card" style="margin-bottom:24px">
+        <div class="fr-card-title">${t('fr_earn_tier')}</div>
+        <div class="fr-tier-display">
+          <div class="fr-tier-badge" style="background:${tier.color}20;color:${tier.color};border:2px solid ${tier.color}">
+            ${t('fr_earn_tier_' + tier.key)}
+          </div>
+          <div class="fr-tier-info">
+            <div class="fr-tier-rate">${t('fr_earn_commission_rate')}: <strong>${(tier.rate * 100).toFixed(0)}%</strong></div>
+            ${nextTier ? `<div class="fr-tier-next">${t('fr_earn_next_tier')}: ${t('fr_earn_tier_' + nextTier.key)} — ${depositsToNext} ${t('fr_earn_deposits_needed')}</div>` : ''}
+            <div class="fr-progress-bar"><div class="fr-progress-fill" style="width:${Math.min(progress, 100)}%"></div></div>
+            <div class="fr-progress-label">${Math.round(progress)}% ${t('fr_earn_progress')}</div>
+          </div>
+        </div>
+      </div>
+      <div class="fr-card">
+        <div class="fr-card-title">${t('fr_earn_history')}</div>
+        ${payouts.length ? `<table><thead><tr><th>${t('fr_earn_th_date')}</th><th>${t('fr_earn_th_amount')}</th><th>${t('fr_earn_th_type')}</th><th>${t('fr_earn_th_status')}</th></tr></thead><tbody>${payouts.map(p => `<tr><td>${p.createdAt ? new Date(p.createdAt.seconds * 1000).toLocaleDateString() : '—'}</td><td>$${fmt(p.amount || 0)}</td><td>${t('fr_earn_type_' + (p.type || 'commission'))}</td><td><span class="badge badge-${p.status === 'paid' ? 'approved' : 'pending'}">${t('fr_earn_status_' + (p.status || 'pending'))}</span></td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><p>${t('fr_earn_no_history')}</p></div>`}
+      </div>`;
+  }
+  renderEarningsBody();
+}
+
+// ─── Franchise Training LMS ───────────────────────────────
+function renderFranchiseTraining(container, uid, fr) {
+  let trainingData = {};
+  let viewingModule = null;
+  let takingQuiz = false;
+
+  const unsubTraining = db.collection('franchise_training').doc(uid)
+    .onSnapshot(doc => { trainingData = doc.exists ? doc.data() : {}; renderTrainingBody(); });
+  window._franchiseUnsubs.push(unsubTraining);
+
+  function renderTrainingBody() {
+    if (viewingModule) { renderModuleDetail(); return; }
+    const completedModules = TRAINING_MODULES.filter(m => trainingData[m.id]?.passed).length;
+    const progressPct = Math.round((completedModules / TRAINING_MODULES.length) * 100);
+
+    container.innerHTML = `
+      <div class="fr-card" style="margin-bottom:24px">
+        <div class="fr-card-title">${t('fr_train_progress')}</div>
+        <div class="fr-progress-bar fr-progress-lg"><div class="fr-progress-fill" style="width:${progressPct}%"></div></div>
+        <div class="fr-progress-label">${completedModules}/${TRAINING_MODULES.length} ${t('fr_train_modules_done')} (${progressPct}%)</div>
+      </div>
+      <div class="fr-modules-grid">${TRAINING_MODULES.map((m, i) => {
+        const data = trainingData[m.id] || {};
+        const passed = data.passed;
+        const prevPassed = i === 0 || trainingData[TRAINING_MODULES[i - 1].id]?.passed;
+        const locked = !prevPassed;
+        const status = passed ? 'completed' : locked ? 'locked' : (data.videoWatched ? 'continue' : 'start');
+        return `<div class="fr-module-card ${status}" data-module="${m.id}" ${locked ? '' : 'style="cursor:pointer"'}>
+          <div class="fr-module-num">${t('fr_train_module')} ${i + 1}</div>
+          <div class="fr-module-title">${t('fr_train_m' + (i + 1) + '_title')}</div>
+          <div class="fr-module-desc">${t('fr_train_m' + (i + 1) + '_desc')}</div>
+          <div class="fr-module-status">
+            ${passed ? `<span class="badge badge-approved">${t('fr_train_completed')} — ${data.score}%</span>` :
+              locked ? `<span class="badge badge-pending">${t('fr_train_locked')}</span>` :
+              `<span class="badge badge-active">${status === 'continue' ? t('fr_train_continue') : t('fr_train_start')}</span>`}
+          </div>
+        </div>`;
+      }).join('')}</div>`;
+
+    container.querySelectorAll('.fr-module-card:not(.locked)').forEach(card => {
+      card.addEventListener('click', () => { viewingModule = card.dataset.module; renderTrainingBody(); });
+    });
+  }
+
+  function renderModuleDetail() {
+    const m = TRAINING_MODULES.find(mod => mod.id === viewingModule);
+    const idx = TRAINING_MODULES.indexOf(m);
+    const data = trainingData[m.id] || {};
+    const lang = currentLang;
+
+    if (takingQuiz) { renderQuiz(m, data); return; }
+
+    container.innerHTML = `
+      <div style="margin-bottom:20px">
+        <button class="fr-btn-back" id="backToModules">← ${t('fr_train_back')}</button>
+      </div>
+      <div class="fr-card" style="margin-bottom:24px">
+        <div class="fr-module-num">${t('fr_train_module')} ${idx + 1}</div>
+        <h2 style="font-family:var(--df);font-size:24px;margin-bottom:8px">${t('fr_train_m' + (idx + 1) + '_title')}</h2>
+        <p style="color:var(--t2);margin-bottom:20px">${t('fr_train_m' + (idx + 1) + '_desc')}</p>
+        <div class="fr-video-wrap">
+          <iframe id="trainingVideo" src="${m.videoUrl}?enablejsapi=1" frameborder="0" allowfullscreen style="width:100%;aspect-ratio:16/9;border-radius:12px"></iframe>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:12px;align-items:center">
+          ${data.videoWatched ? `<span class="badge badge-approved">${t('fr_train_video_complete')}</span>` : `<button id="markVideoBtn" class="fr-btn-secondary">${t('fr_train_watch_video')}</button>`}
+          ${data.videoWatched || true ? `<button id="startQuizBtn" class="fr-btn-primary">${data.passed ? t('fr_train_score') + ': ' + data.score + '%' : t('fr_train_quiz')}</button>` : ''}
+        </div>
+      </div>`;
+
+    document.getElementById('backToModules')?.addEventListener('click', () => { viewingModule = null; takingQuiz = false; renderTrainingBody(); });
+    document.getElementById('markVideoBtn')?.addEventListener('click', async () => {
+      await db.collection('franchise_training').doc(uid).set({ [m.id]: { ...data, videoWatched: true } }, { merge: true });
+    });
+    document.getElementById('startQuizBtn')?.addEventListener('click', () => { takingQuiz = true; renderTrainingBody(); });
+  }
+
+  function renderQuiz(m, data) {
+    const lang = currentLang;
+    const questions = m.questions;
+
+    container.innerHTML = `
+      <div style="margin-bottom:20px">
+        <button class="fr-btn-back" id="backToModule">← ${t('fr_train_back')}</button>
+      </div>
+      <div class="fr-card">
+        <div class="fr-card-title">${t('fr_train_quiz')} — ${t('fr_train_m' + (TRAINING_MODULES.indexOf(m) + 1) + '_title')}</div>
+        <p style="color:var(--t3);margin-bottom:20px">${t('fr_train_passing')}</p>
+        <form id="quizForm">
+          ${questions.map((q, qi) => `
+            <div class="fr-quiz-question">
+              <div class="fr-quiz-q">${qi + 1}. ${lang === 'es' ? q.q_es : q.q_en}</div>
+              <div class="fr-quiz-opts">${(lang === 'es' ? q.opts_es : q.opts_en).map((opt, oi) => `
+                <label class="fr-quiz-opt"><input type="radio" name="q${qi}" value="${oi}" required> ${opt}</label>
+              `).join('')}</div>
+            </div>
+          `).join('')}
+          <button type="submit" class="fr-btn-primary" id="submitQuizBtn">${t('fr_train_submit_quiz')}</button>
+        </form>
+      </div>`;
+
+    document.getElementById('backToModule')?.addEventListener('click', () => { takingQuiz = false; renderTrainingBody(); });
+    document.getElementById('quizForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitQuizBtn');
+      btn.disabled = true;
+      btn.textContent = t('fr_train_submitting');
+      let correct = 0;
+      questions.forEach((q, qi) => {
+        const sel = document.querySelector(`input[name="q${qi}"]:checked`);
+        if (sel && parseInt(sel.value) === q.correct) correct++;
+      });
+      const score = Math.round((correct / questions.length) * 100);
+      const passed = score >= 70;
+
+      await db.collection('franchise_training').doc(uid).set({
+        [m.id]: { videoWatched: true, score, passed, completedAt: new Date().toISOString() }
+      }, { merge: true });
+
+      if (passed) {
+        showToast(t('fr_train_passed') + ` ${score}%`, 'success');
+        takingQuiz = false;
+        viewingModule = null;
+        renderTrainingBody();
+      } else {
+        showToast(t('fr_train_failed') + ` ${score}%`, 'error');
+        btn.disabled = false;
+        btn.textContent = t('fr_train_submit_quiz');
+      }
+    });
+  }
+  renderTrainingBody();
+}
+
+// ─── Franchise KPIs ───────────────────────────────────────
+function renderFranchiseKPIs(container, uid, fr) {
+  let deposits = [], clients = [];
+  let period = 'month';
+
+  const unsubDep = db.collection('franchise_deposits')
+    .where('franchiseId', '==', uid).orderBy('createdAt', 'desc')
+    .onSnapshot(snap => { deposits = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderKPIsBody(); });
+  window._franchiseUnsubs.push(unsubDep);
+
+  const unsubCli = db.collection('franchise_clients')
+    .where('franchiseId', '==', uid).orderBy('createdAt', 'desc')
+    .onSnapshot(snap => { clients = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderKPIsBody(); });
+  window._franchiseUnsubs.push(unsubCli);
+
+  function renderKPIsBody() {
+    const now = new Date();
+    let periodStart, prevStart, prevEnd;
+    if (period === 'week') {
+      const dow = now.getDay();
+      periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow);
+      prevStart = new Date(periodStart.getTime() - 7 * 86400000);
+      prevEnd = new Date(periodStart.getTime() - 1);
+    } else if (period === 'month') {
+      periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    } else {
+      periodStart = new Date(0);
+      prevStart = null;
+    }
+
+    const periodDeposits = deposits.filter(d => d.createdAt && new Date(d.createdAt.seconds * 1000) >= periodStart);
+    const periodClients = clients.filter(c => c.createdAt && new Date(c.createdAt.seconds * 1000) >= periodStart);
+    const prevDeposits = prevStart ? deposits.filter(d => d.createdAt && new Date(d.createdAt.seconds * 1000) >= prevStart && new Date(d.createdAt.seconds * 1000) <= prevEnd) : [];
+    const prevClients = prevStart ? clients.filter(c => c.createdAt && new Date(c.createdAt.seconds * 1000) >= prevStart && new Date(c.createdAt.seconds * 1000) <= prevEnd) : [];
+
+    const totalDeposits = periodDeposits.length;
+    const totalClients = periodClients.length;
+    const totalVolume = periodDeposits.reduce((s, d) => s + (d.amount || 0), 0);
+    const avgDeposit = totalDeposits ? Math.round(totalVolume / totalDeposits) : 0;
+    const conversionRate = periodClients.length ? Math.round((periodDeposits.filter(d => periodClients.some(c => c.id === d.clientId)).length / periodClients.length) * 100) : 0;
+
+    const prevTotalDeposits = prevDeposits.length;
+    const prevTotalClients = prevClients.length;
+
+    function trendHtml(current, previous) {
+      if (!previous || period === 'all') return '';
+      const diff = current - previous;
+      const pct = previous ? Math.round((diff / previous) * 100) : 0;
+      if (diff === 0) return '';
+      return `<span class="fr-kpi-trend ${diff > 0 ? 'up' : 'down'}">${diff > 0 ? '↑' : '↓'} ${Math.abs(pct)}% ${t('fr_kpi_vs_last')}</span>`;
+    }
+
+    // Training progress
+    let trainingPct = 0;
+    db.collection('franchise_training').doc(uid).get().then(doc => {
+      if (doc.exists) {
+        const td = doc.data();
+        const completed = TRAINING_MODULES.filter(m => td[m.id]?.passed).length;
+        trainingPct = Math.round((completed / TRAINING_MODULES.length) * 100);
+        const el = document.getElementById('kpiTrainingVal');
+        if (el) el.textContent = trainingPct + '%';
+      }
+    });
+
+    container.innerHTML = `
+      <div style="display:flex;gap:8px;margin-bottom:24px">
+        ${['week', 'month', 'all'].map(p => `<button class="fr-period-btn ${p === period ? 'active' : ''}" data-period="${p}">${t('fr_kpi_period_' + p)}</button>`).join('')}
+      </div>
+      <div class="fr-kpi-grid">
+        <div class="fr-kpi-card">
+          <div class="fr-kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20"/></svg></div>
+          <div class="fr-kpi-value">${totalDeposits}</div>
+          <div class="fr-kpi-label">${t('fr_kpi_deposits_processed')}</div>
+          ${trendHtml(totalDeposits, prevTotalDeposits)}
+        </div>
+        <div class="fr-kpi-card">
+          <div class="fr-kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+          <div class="fr-kpi-value">${totalClients}</div>
+          <div class="fr-kpi-label">${t('fr_kpi_clients_enrolled')}</div>
+          ${trendHtml(totalClients, prevTotalClients)}
+        </div>
+        <div class="fr-kpi-card">
+          <div class="fr-kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+          <div class="fr-kpi-value">${conversionRate}%</div>
+          <div class="fr-kpi-label">${t('fr_kpi_conversion_rate')}</div>
+        </div>
+        <div class="fr-kpi-card">
+          <div class="fr-kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div>
+          <div class="fr-kpi-value">$${fmt(avgDeposit)}</div>
+          <div class="fr-kpi-label">${t('fr_kpi_avg_deposit')}</div>
+        </div>
+        <div class="fr-kpi-card">
+          <div class="fr-kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></div>
+          <div class="fr-kpi-value" id="kpiTrainingVal">${trainingPct}%</div>
+          <div class="fr-kpi-label">${t('fr_kpi_training_progress')}</div>
+        </div>
+      </div>`;
+
+    container.querySelectorAll('.fr-period-btn').forEach(btn => {
+      btn.addEventListener('click', () => { period = btn.dataset.period; renderKPIsBody(); });
+    });
+  }
+  renderKPIsBody();
+}
+
 // ─── Init ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.documentElement.lang = currentLang;
+  // Register service worker for offline POS support
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(e => console.warn('SW registration failed:', e));
+  }
   router();
   document.addEventListener('click', (e) => {
     const a = e.target.closest('a[href]');
