@@ -1,9 +1,12 @@
 const express = require('express');
 const crypto  = require('crypto');
-const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Queue, Worker } = require('bullmq');
+const { securityHeaders } = require('../shared/securityHeaders');
+const { railwayCors } = require('../shared/cors');
+const { requireInternalSecret } = require('../shared/internalAuth');
+const { apiRateLimit, webhookRateLimit } = require('../shared/rateLimiter');
 require('dotenv').config();
 
 const svcAcct = JSON.parse(
@@ -18,32 +21,15 @@ const redis = new IORedis(process.env.REDIS_URL, {
   tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
 
-const cors = require('cors');
-const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
-app.use(helmet());
-app.use((req, res, next) => {
-  if (req.path.startsWith('/webhooks')) return next();
-  const origin = req.headers.origin;
-  if (origin && ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
-  if (req.method === 'OPTIONS') { res.setHeader('Access-Control-Allow-Methods', 'GET,POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-internal-secret'); return res.sendStatus(204); }
-  next();
-});
+
+// Security middleware — applied globally
+app.use(securityHeaders);
+app.use(railwayCors);
+app.use(apiRateLimit);
+
 app.use('/webhooks', express.raw({ type: 'application/json', limit: '10kb' }));
 app.use(express.json({ limit: '100kb' }));
-
-const ALLOWED = ['https://vida-finance.web.app'];
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin || ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin || '');
-  next();
-});
-
-const requireInternal = (req, res, next) => {
-  if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
-    return res.status(401).json({ error: 'Unauthorized' });
-  next();
-};
 
 const queueOpts = { connection: redis };
 const getQueue = name => new Queue(name, {
@@ -57,8 +43,8 @@ app.get('/health', async (req, res) => {
   res.json({ status: r ? 'ok' : 'degraded', service: 'vida-payment-server', redis: r, ts: new Date().toISOString() });
 });
 
-// ── Conekta webhook ─────────────────────────────────────────────────
-app.post('/webhooks/conekta', async (req, res) => {
+// ── Conekta webhook (public — rate limited separately) ──────────────
+app.post('/webhooks/conekta', webhookRateLimit, async (req, res) => {
   const sig = req.headers['digest'] || req.headers['x-conekta-signature'];
   const payload = req.body;
   let valid = false;
@@ -114,7 +100,7 @@ app.post('/webhooks/conekta', async (req, res) => {
 });
 
 // ── Internal repayment (from SoftCrédito payroll deduction sync) ────
-app.post('/internal/repayment', requireInternal, async (req, res) => {
+app.post('/internal/repayment', requireInternalSecret, async (req, res) => {
   const { loanId, employeeId, amount, ref, method } = req.body;
   if (!loanId || !employeeId || !amount) return res.status(400).json({ error: 'Missing fields' });
   try {
@@ -133,7 +119,7 @@ app.post('/internal/repayment', requireInternal, async (req, res) => {
 });
 
 // ── Queue stats (for admin monitoring) ─────────────────────────────
-app.get('/internal/queue-stats', requireInternal, async (req, res) => {
+app.get('/internal/queue-stats', requireInternalSecret, async (req, res) => {
   const names = ['vida-disbursements', 'vida-notifications', 'vida-pdfs', 'vida-underwriting'];
   const stats = {};
   for (const n of names) {

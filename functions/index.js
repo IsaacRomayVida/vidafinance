@@ -12,6 +12,18 @@ const { Queue } = require("bullmq");
 initializeApp();
 const db = getFirestore();
 
+// ── CORS whitelist for HTTP functions ──────────────────────────────
+const ALLOWED_ORIGINS = [
+  'https://app.vida.finance',
+  'https://vida-finance-prod.web.app',
+  'https://vida-finance-prod.firebaseapp.com',
+  'https://staging.vida.finance',
+  'https://vida-finance-staging.web.app',
+  ...(process.env.NODE_ENV !== 'production'
+    ? ['http://localhost:3000', 'http://localhost:3001']
+    : []),
+];
+
 let _redis;
 function getRedis() {
   if (!_redis) {
@@ -72,14 +84,14 @@ async function callML(path, body) {
   return r.json();
 }
 
-exports.api = onRequest({ cors: true }, async (req, res) => {
+exports.api = onRequest({ cors: ALLOWED_ORIGINS }, async (req, res) => {
   if (req.path === "/api/health") {
     return res.json({ status: "ok", service: "vida-finance", timestamp: new Date().toISOString() });
   }
   return res.status(404).json({ error: "Not found" });
 });
 
-exports.requestLoan = onCall({ cors: true }, async (request) => {
+exports.requestLoan = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Login required");
   }
@@ -330,7 +342,7 @@ exports.onLoanApproved = onDocumentUpdated("loans/{loanId}", async (event) => {
 });
 
 // ── markLoanDisbursed — admin only ────────────────────────────────────
-exports.markLoanDisbursed = onCall({ cors: true }, async (request) => {
+exports.markLoanDisbursed = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
   if (!request.auth?.token?.admin)
     throw new HttpsError("permission-denied", "Admin only");
 
@@ -376,7 +388,7 @@ exports.markLoanDisbursed = onCall({ cors: true }, async (request) => {
 });
 
 // ── generatePaymentLink ───────────────────────────────────────────────
-exports.generatePaymentLink = onCall({ cors: true }, async (request) => {
+exports.generatePaymentLink = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
   const { loanId } = request.data;
@@ -644,7 +656,7 @@ exports.queueHealthCheck = onSchedule(
 );
 
 // ── approveEmployer — admin only ──────────────────────────────────────
-exports.approveEmployer = onCall({ cors: true }, async (request) => {
+exports.approveEmployer = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
   if (!request.auth?.token?.admin)
     throw new HttpsError("permission-denied", "Admin only");
 
@@ -735,7 +747,7 @@ exports.approveEmployer = onCall({ cors: true }, async (request) => {
 });
 
 // ── setAdminClaim — admin only ────────────────────────────────────────
-exports.setAdminClaim = onCall({ cors: true }, async (request) => {
+exports.setAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
   if (!request.auth?.token?.admin)
     throw new HttpsError("permission-denied", "Admin only");
   await getAuth().setCustomUserClaims(request.data.uid, { admin: true });
@@ -743,7 +755,7 @@ exports.setAdminClaim = onCall({ cors: true }, async (request) => {
 });
 
 // ── revokeAdminClaim — admin only ─────────────────────────────────────
-exports.revokeAdminClaim = onCall({ cors: true }, async (request) => {
+exports.revokeAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
   if (!request.auth?.token?.admin)
     throw new HttpsError("permission-denied", "Admin only");
   await getAuth().setCustomUserClaims(request.data.uid, { admin: false });

@@ -1,5 +1,4 @@
 const express    = require("express");
-const helmet     = require("helmet");
 const puppeteer  = require("puppeteer");
 const admin      = require("firebase-admin");
 const IORedis    = require("ioredis");
@@ -7,6 +6,9 @@ const { Worker } = require("bullmq");
 const Handlebars = require("handlebars");
 const fs         = require("fs");
 const path       = require("path");
+const { securityHeaders } = require("../shared/securityHeaders");
+const { railwayCors } = require("../shared/cors");
+const { apiRateLimit } = require("../shared/rateLimiter");
 require("dotenv").config();
 
 const svcAcct = JSON.parse(
@@ -31,7 +33,7 @@ const CONTRACT_TPL = Handlebars.compile(
 const fmt = (n) =>
   Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2 });
 
-/* ─── Puppeteer helpers ─── */
+/* --- Puppeteer helpers --- */
 
 let browser;
 async function getBrowser() {
@@ -64,7 +66,7 @@ async function upload(buf, filePath) {
   return `https://storage.googleapis.com/${storage.name}/${filePath}`;
 }
 
-/* ─── BullMQ Worker ─── */
+/* --- BullMQ Worker --- */
 
 const worker = new Worker(
   "vida-pdfs",
@@ -151,24 +153,12 @@ worker.on("failed", async (job, err) => {
   });
 });
 
-/* ─── Express server ─── */
+/* --- Express server --- */
 
-const requireInternal = (req, res, next) => {
-  if (req.headers["x-internal-secret"] !== process.env.INTERNAL_SECRET)
-    return res.status(401).json({ error: "Unauthorized" });
-  next();
-};
-
-const cors = require("cors");
-const ALLOWED = ["https://vida-finance.web.app"];
 const app = express();
-app.use(helmet());
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
-  if (req.method === "OPTIONS") { res.setHeader("Access-Control-Allow-Methods", "GET,POST"); res.setHeader("Access-Control-Allow-Headers", "Content-Type,x-internal-secret"); return res.sendStatus(204); }
-  next();
-});
+app.use(securityHeaders);
+app.use(railwayCors);
+app.use(apiRateLimit);
 app.use(express.json({ limit: "100kb" }));
 
 app.get("/health", async (req, res) => {
