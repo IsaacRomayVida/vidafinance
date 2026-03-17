@@ -3,6 +3,29 @@ import https from 'https';
 import redis from '../lib/redis';
 import { BureauQueryRequest, BureauQueryResult, SoftcreditoApiResponse } from '../types/bureau';
 
+/**
+ * Derives scDiasAtraso: maximum days past due across all accounts.
+ * Uses the top-level `diasAtraso` if present, otherwise scans individual `cuentas`.
+ */
+function extractMaxDiasAtraso(data: SoftcreditoApiResponse): number | undefined {
+  if (typeof data.diasAtraso === 'number') return data.diasAtraso;
+  if (!data.cuentas?.length) return undefined;
+  const values = data.cuentas
+    .map((c) => c.diasAtraso)
+    .filter((v): v is number => typeof v === 'number');
+  return values.length ? Math.max(...values) : undefined;
+}
+
+/**
+ * Derives scCarteraVencida: true when any account has saldoVencido > 0,
+ * or when the top-level flag is explicitly set.
+ */
+function extractCarteraVencida(data: SoftcreditoApiResponse): boolean | undefined {
+  if (typeof data.carteraVencida === 'boolean') return data.carteraVencida;
+  if (!data.cuentas?.length) return undefined;
+  return data.cuentas.some((c) => typeof c.saldoVencido === 'number' && c.saldoVencido > 0);
+}
+
 function mapSoftcreditoResponse(data: SoftcreditoApiResponse): Omit<BureauQueryResult, 'source'> {
   let paymentHistory: 'good' | 'irregular' | 'bad' | undefined;
   if (data.historialPagos) {
@@ -13,10 +36,14 @@ function mapSoftcreditoResponse(data: SoftcreditoApiResponse): Omit<BureauQueryR
 
   return {
     found: data.encontrado ?? false,
+    cdcScore: data.scoreCDC,
+    bdcScore: data.scoreBDC,
     riskScore: data.score,
     openAccounts: data.cuentasAbiertas,
     totalDebt: data.deudaTotal,
     paymentHistory,
+    scDiasAtraso: extractMaxDiasAtraso(data),
+    scCarteraVencida: extractCarteraVencida(data),
     fraudFlags: data.alertasFraude,
     queriedAt: new Date().toISOString(),
   };

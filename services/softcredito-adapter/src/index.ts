@@ -6,6 +6,7 @@ import { corsMiddleware } from './middleware/cors';
 import { generalLimiter, webhookLimiter } from './middleware/rateLimit';
 import healthRouter from './routes/health';
 import curpRouter from './routes/curp';
+import rfcRouter from './routes/rfc';
 import bureauRouter from './routes/bureau';
 import internalRouter from './routes/internal';
 
@@ -20,6 +21,7 @@ app.use(express.json({ limit: '100kb' }));
 // Routes
 app.use(healthRouter);
 app.use(curpRouter);
+app.use(rfcRouter);
 app.use(bureauRouter);
 app.use(internalRouter);
 
