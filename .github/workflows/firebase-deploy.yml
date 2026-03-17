@@ -55,6 +55,11 @@ jobs:
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_PRODUCTION }}
           ENVEOF
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+
       - name: Deploy to Firebase
         run: |
           firebase deploy \
