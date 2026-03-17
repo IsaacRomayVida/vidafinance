@@ -1,3 +1,11 @@
+FROM node:20-slim AS builder
+WORKDIR /app
+COPY package*.json .
+RUN npm ci
+COPY tsconfig.json .
+COPY src/ src/
+RUN npx tsc
+
 FROM node:20-slim
 WORKDIR /app
 
@@ -12,8 +20,9 @@ RUN apt-get update && apt-get install -y \
 
 COPY package*.json .
 RUN npm ci --only=production
-COPY . .
+COPY --from=builder /app/dist/ dist/
+COPY templates/ templates/
 EXPOSE 3004
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget -qO- http://localhost:3004/health || exit 1
-CMD ["node", "index.js"]
+CMD ["node", "dist/index.js"]
