@@ -39,4 +39,25 @@ export class FirestoreService {
       sentAt: (await import('firebase-admin')).firestore.FieldValue.serverTimestamp(),
     });
   }
+
+  async logIncident(data: Record<string, unknown>): Promise<void> {
+    await db.collection('incident_log').add({
+      ...data,
+      ts: (await import('firebase-admin')).firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  async updateNotificationStatus(
+    channel: string,
+    sid: string,
+    status: string,
+  ): Promise<void> {
+    const snap = await db.collection('notification_log')
+      .where('sid', '==', sid)
+      .limit(1)
+      .get();
+    if (!snap.empty) {
+      await snap.docs[0].ref.update({ deliveryStatus: status });
+    }
+  }
 }

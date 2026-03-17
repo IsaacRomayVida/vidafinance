@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { TwilioService } from '../services/twilioService';
+import { TwilioService, SendResult } from '../services/twilioService';
 import { SendGridService } from '../services/sendgridService';
 import { FirestoreService } from '../services/firestoreService';
 
@@ -58,7 +58,7 @@ async function resolvePhone(data: NotificationJobData): Promise<string> {
  * Format a due date string or Firestore Timestamp-like value into a human-readable Spanish date.
  */
 function formatDueDate(dueDate?: string | unknown): string {
-  if (!dueDate) return 'tu próxima quincena';
+  if (!dueDate) return 'tu proxima quincena';
   try {
     const d = typeof dueDate === 'string'
       ? new Date(dueDate)
@@ -67,6 +67,42 @@ function formatDueDate(dueDate?: string | unknown): string {
   } catch {
     return String(dueDate);
   }
+}
+
+/**
+ * Log a sent notification to Firestore.
+ */
+async function logSend(
+  channel: string,
+  to: string,
+  type: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await firestore.logNotification({ channel, to, type, ...extra });
+  } catch (err) {
+    console.error(`[notification] Failed to log notification:`, (err as Error).message);
+  }
+}
+
+/**
+ * Helper: send WhatsApp with SMS fallback, then log.
+ */
+async function sendAndLog(
+  phone: string,
+  waBody: string,
+  type: string,
+  refId?: string,
+  smsBody?: string,
+): Promise<SendResult> {
+  const result = await twilio.sendWithFallback(phone, waBody, smsBody);
+  await logSend(result.channel, phone, type, {
+    sid: result.sid,
+    status: result.status,
+    fallback: result.fallback,
+    refId,
+  });
+  return result;
 }
 
 // ── Queue name must match all producers ─────────────────────────────────────
@@ -91,9 +127,12 @@ export const notificationWorker = new Worker<NotificationJobData>(
       // ── Loan: requested ────────────────────────────────────────────────────
       case 'loan_requested': {
         const phone = await resolvePhone(data);
-        await twilio.sendWhatsApp(
+        await sendAndLog(
           phone,
-          `✅ *VIDA Finance*\n\nHemos recibido tu solicitud de préstamo por *$${fmt(data.amount!)} MXN*.\n\nTe notificaremos la decisión en los próximos minutos.`,
+          `✅ *VIDA Finance*\n\nHemos recibido tu solicitud de prestamo por *$${fmt(data.amount!)} MXN*.\n\nTe notificaremos la decision en los proximos minutos.`,
+          data.type,
+          data.loanId,
+          `VIDA: Recibimos tu solicitud de prestamo por $${fmt(data.amount!)} MXN. Te notificaremos pronto.`,
         );
         break;
       }
@@ -101,9 +140,12 @@ export const notificationWorker = new Worker<NotificationJobData>(
       // ── Loan: approved ─────────────────────────────────────────────────────
       case 'loan_approved': {
         const phone = await resolvePhone(data);
-        await twilio.sendWhatsApp(
+        await sendAndLog(
           phone,
-          `🎉 *VIDA Finance*\n\n¡Felicidades! Tu préstamo por *$${fmt(data.amount!)} MXN* fue *APROBADO*.\n\nEn breve recibirás el depósito en tu cuenta bancaria.`,
+          `🎉 *VIDA Finance*\n\n¡Felicidades! Tu prestamo por *$${fmt(data.amount!)} MXN* fue *APROBADO*.\n\nEn breve recibiras el deposito en tu cuenta bancaria.`,
+          data.type,
+          data.loanId,
+          `VIDA: Tu prestamo por $${fmt(data.amount!)} MXN fue APROBADO. Recibiras el deposito pronto.`,
         );
         break;
       }
@@ -114,9 +156,12 @@ export const notificationWorker = new Worker<NotificationJobData>(
         const reasonLine = data.rejectionReason
           ? `*Motivo:* ${data.rejectionReason}\n\n`
           : '';
-        await twilio.sendWhatsApp(
+        await sendAndLog(
           phone,
-          `ℹ️ *VIDA Finance*\n\nLamentamos informarte que tu solicitud de préstamo no fue aprobada en este momento.\n\n${reasonLine}Puedes volver a solicitar después de cumplir con los requisitos.`,
+          `ℹ️ *VIDA Finance*\n\nLamentamos informarte que tu solicitud de prestamo no fue aprobada en este momento.\n\n${reasonLine}Puedes volver a solicitar despues de cumplir con los requisitos.`,
+          data.type,
+          data.loanId,
+          `VIDA: Tu solicitud de prestamo no fue aprobada. Puedes volver a solicitar cuando cumplas los requisitos.`,
         );
         break;
       }
@@ -135,16 +180,30 @@ export const notificationWorker = new Worker<NotificationJobData>(
           }
         }
         const dueDateStr = formatDueDate(dueDateValue);
-        await Promise.all([
-          twilio.sendWhatsApp(
-            phone,
-            `💰 *VIDA Finance*\n\n¡Tu préstamo de *$${fmt(data.amount!)} MXN* fue depositado!\n\n*Fecha de pago:* ${dueDateStr}\nEl pago se descontará automáticamente de tu nómina.\n\n_Conserva este mensaje como comprobante._`,
-          ),
-          twilio.sendSMS(
-            phone,
-            `VIDA: Tu prestamo de $${data.amount} MXN fue depositado. Fecha de pago: ${dueDateStr}. El descuento es automatico de tu nomina.`,
-          ),
-        ]);
+        const smsBody = `VIDA: Tu prestamo de $${fmt(data.amount!)} MXN fue depositado. Fecha de pago: ${dueDateStr}. El descuento es automatico de tu nomina.`;
+
+        // Send WhatsApp with fallback + dedicated SMS confirmation
+        const waResult = await twilio.sendWithFallback(
+          phone,
+          `💰 *VIDA Finance*\n\n¡Tu prestamo de *$${fmt(data.amount!)} MXN* fue depositado!\n\n*Fecha de pago:* ${dueDateStr}\nEl pago se descontara automaticamente de tu nomina.\n\n_Conserva este mensaje como comprobante._`,
+          smsBody,
+        );
+        await logSend(waResult.channel, phone, data.type, {
+          sid: waResult.sid,
+          status: waResult.status,
+          fallback: waResult.fallback,
+          refId: data.loanId,
+        });
+
+        // Always send SMS for disbursement as a second confirmation (unless WA already fell back to SMS)
+        if (!waResult.fallback) {
+          try {
+            const smsMsg = await twilio.sendSMS(phone, smsBody);
+            await logSend('sms', phone, data.type, { sid: smsMsg.sid, refId: data.loanId });
+          } catch (err) {
+            console.warn(`[notification] SMS confirmation for disbursement failed:`, (err as Error).message);
+          }
+        }
         break;
       }
 
@@ -153,9 +212,12 @@ export const notificationWorker = new Worker<NotificationJobData>(
       case 'loan_paid':
       case 'loan_paid_payroll': {
         const phone = await resolvePhone(data);
-        await twilio.sendWhatsApp(
+        await sendAndLog(
           phone,
-          `✅ *VIDA Finance*\n\nTu préstamo ha sido *liquidado* exitosamente. ¡Gracias por tu puntualidad!\n\nYa puedes solicitar un nuevo préstamo cuando lo necesites.`,
+          `✅ *VIDA Finance*\n\nTu prestamo ha sido *liquidado* exitosamente. ¡Gracias por tu puntualidad!\n\nYa puedes solicitar un nuevo prestamo cuando lo necesites.`,
+          data.type,
+          data.loanId,
+          `VIDA: Tu prestamo ha sido liquidado. Gracias por tu puntualidad. Puedes solicitar un nuevo prestamo.`,
         );
         break;
       }
@@ -171,7 +233,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
         }
         await sendgrid.sendEmail({
           to,
-          subject: `¡Bienvenido a VIDA Finance! Tu empresa ${data.companyName} está activa`,
+          subject: `¡Bienvenido a VIDA Finance! Tu empresa ${data.companyName} esta activa`,
           templateId: 'd-employer-approved',
           dynamicData: {
             companyName: data.companyName,
@@ -180,6 +242,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
             name: data.name,
           },
         });
+        await logSend('email', to, data.type, { companyName: data.companyName });
         break;
       }
 
@@ -192,7 +255,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
         }
         await sendgrid.sendEmail({
           to,
-          subject: `Actualización de tu solicitud — VIDA Finance`,
+          subject: `Actualizacion de tu solicitud — VIDA Finance`,
           templateId: 'd-employer-rejected',
           dynamicData: {
             companyName: data.companyName,
@@ -200,6 +263,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
             supportEmail: 'soporte@vida.finance',
           },
         });
+        await logSend('email', to, data.type, { companyName: data.companyName });
         break;
       }
 
@@ -207,8 +271,11 @@ export const notificationWorker = new Worker<NotificationJobData>(
       case 'loan_overdue_reminder':
       case 'loan_overdue': {
         const phone = await resolvePhone(data);
-        await twilio.sendSMS(
+        await sendAndLog(
           phone,
+          `⚠️ *VIDA Finance*\n\nTu prestamo tiene un pago pendiente${data.daysOverdue ? ` de ${data.daysOverdue} dia(s)` : ''}.\n\nContactanos: soporte@vida.finance o 800-VIDA-MX`,
+          data.type,
+          data.loanId,
           `VIDA: Tu prestamo tiene un pago pendiente. Contactanos: soporte@vida.finance o 800-VIDA-MX`,
         );
         break;
@@ -217,9 +284,12 @@ export const notificationWorker = new Worker<NotificationJobData>(
       // ── Legacy: 24h reminder ───────────────────────────────────────────────
       case 'loan_reminder_24h': {
         const phone = await resolvePhone(data);
-        await twilio.sendWhatsApp(
+        await sendAndLog(
           phone,
-          `🔔 *VIDA Finance*\n\nMañana vence tu pago de *$${fmt(data.amount!)} MXN*. Si tu empresa ya hizo el descuento, no tienes que hacer nada.\n\nvida-finance.web.app`,
+          `🔔 *VIDA Finance*\n\nManana vence tu pago de *$${fmt(data.amount!)} MXN*. Si tu empresa ya hizo el descuento, no tienes que hacer nada.\n\nvida-finance.web.app`,
+          data.type,
+          data.loanId,
+          `VIDA: Manana vence tu pago de $${fmt(data.amount!)} MXN. Si tu empresa ya hizo el descuento, no tienes que hacer nada.`,
         );
         break;
       }
@@ -235,9 +305,22 @@ export const notificationWorker = new Worker<NotificationJobData>(
 );
 
 notificationWorker.on('completed', (job) => {
-  console.log(`[notification] ✅ ${job.data.type} job ${job.id} completed`);
+  console.log(`[notification] completed ${job.data.type} job ${job.id}`);
 });
 
-notificationWorker.on('failed', (job, err) => {
-  console.error(`[notification] ❌ ${job?.data.type} job ${job?.id} failed:`, err.message);
+notificationWorker.on('failed', async (job, err) => {
+  console.error(`[notification] failed ${job?.data.type} job ${job?.id}:`, err.message);
+  // Log failures to incident_log for observability
+  try {
+    await firestore.logIncident({
+      source: 'notification-worker',
+      type: job?.data.type,
+      jobId: job?.id,
+      error: err.message,
+      attempts: job?.attemptsMade,
+      jobData: job?.data,
+    });
+  } catch (logErr) {
+    console.error(`[notification] Failed to log incident:`, (logErr as Error).message);
+  }
 });

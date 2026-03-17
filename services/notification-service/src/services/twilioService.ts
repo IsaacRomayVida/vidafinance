@@ -1,5 +1,12 @@
 import twilio from 'twilio';
 
+export interface SendResult {
+  channel: 'whatsapp' | 'sms';
+  sid: string;
+  status: string;
+  fallback: boolean;
+}
+
 export class TwilioService {
   private client = twilio(
     process.env.TWILIO_ACCOUNT_SID,
@@ -21,7 +28,22 @@ export class TwilioService {
     });
   }
 
-  private normalizePhone(p: string): string {
+  /**
+   * Send WhatsApp message with automatic SMS fallback on failure.
+   * Returns which channel was used and whether fallback occurred.
+   */
+  async sendWithFallback(to: string, waBody: string, smsBody?: string): Promise<SendResult> {
+    try {
+      const msg = await this.sendWhatsApp(to, waBody);
+      return { channel: 'whatsapp', sid: msg.sid, status: msg.status, fallback: false };
+    } catch (err) {
+      console.warn(`[twilio] WhatsApp failed for ${to}, falling back to SMS:`, (err as Error).message);
+      const msg = await this.sendSMS(to, smsBody ?? waBody.replace(/[*_~`]/g, ''));
+      return { channel: 'sms', sid: msg.sid, status: msg.status, fallback: true };
+    }
+  }
+
+  normalizePhone(p: string): string {
     const digits = String(p).replace(/\D/g, '');
     // Already has country code (starts with 52 = Mexico, 12 digits total)
     if (digits.length === 12 && digits.startsWith('52')) return `+${digits}`;
