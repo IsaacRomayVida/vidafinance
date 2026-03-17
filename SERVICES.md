@@ -89,10 +89,7 @@ curl https://vida-ml-service.railway.app/health
 
 ```
 # Firebase
-FIREBASE_PROJECT_ID_STAGING               # Firebase project ID for staging (e.g. vida-finance-staging)
-FIREBASE_PROJECT_ID_PRODUCTION            # Firebase project ID for production (e.g. vida-finance)
-FIREBASE_SERVICE_ACCOUNT_STAGING          # base64-encoded service account JSON for staging deploys + CI tests
-FIREBASE_SERVICE_ACCOUNT_PRODUCTION       # base64-encoded service account JSON for production deploys (push to main)
+FIREBASE_SERVICE_ACCOUNT_KEY              # service account JSON for Firebase deploys (GOOGLE_APPLICATION_CREDENTIALS)
 
 # Railway
 RAILWAY_TOKEN                             # Railway production project deploy token
