@@ -13,6 +13,8 @@ import { internalRouter } from './routes/internal';
 import { webhooksRouter } from './routes/webhooks';
 import { paymentLinksRouter } from './routes/paymentLinks';
 import { disbursementWorker, startRawQueuePoller } from './workers/disbursementWorker';
+import { processDisbursementWorker } from './jobs/processDisbursement';
+import { db } from './lib/firebase';
 
 const app = express();
 
@@ -44,31 +46,29 @@ app.use('/payment-links', paymentLinksRouter);
 // ── Health ────────────────────────────────────────────────────────────────────
 
 app.get('/health', async (_req, res) => {
-  let redisOk = false;
-  let stpOk = false;
+  let redisStatus: 'ok' | 'error' = 'error';
+  let firestoreStatus: 'ok' | 'error' = 'error';
 
   try {
     await redis.ping();
-    redisOk = true;
+    redisStatus = 'ok';
   } catch {
     // degraded but still running
   }
 
   try {
-    const stpUrl = process.env.STP_API_URL ?? 'https://demo.stpmex.com:7002';
-    await axios.get(`${stpUrl}/`, { timeout: 5_000 });
-    stpOk = true;
+    await db.listCollections();
+    firestoreStatus = 'ok';
   } catch {
-    // STP may be unreachable in sandbox; not fatal
+    // Firestore may be temporarily unavailable
   }
 
-  const status = redisOk ? 'ok' : 'degraded';
-  res.status(redisOk ? 200 : 503).json({
-    status,
-    service: 'vida-payment-server',
-    redis: redisOk,
-    stp: stpOk,
-    worker: disbursementWorker.isRunning(),
+  const allOk = redisStatus === 'ok' && firestoreStatus === 'ok';
+  res.status(allOk ? 200 : 503).json({
+    status: allOk ? 'ok' : 'degraded',
+    redis: redisStatus,
+    firestore: firestoreStatus,
+    worker: processDisbursementWorker.isRunning(),
     ts: new Date().toISOString(),
   });
 });
