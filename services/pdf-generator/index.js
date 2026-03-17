@@ -1,5 +1,7 @@
 const express    = require("express");
 const helmet     = require("helmet");
+const cors       = require("cors");
+const rateLimit  = require("express-rate-limit");
 const puppeteer  = require("puppeteer");
 const admin      = require("firebase-admin");
 const IORedis    = require("ioredis");
@@ -151,24 +153,74 @@ worker.on("failed", async (job, err) => {
   });
 });
 
-/* ─── Express server ─── */
+/* ─── Security middleware ─── */
+
+const ALLOWED_ORIGINS = [
+  "https://vida-staging.web.app",
+  "https://vida-finance.web.app",
+  "https://admin.vida.finance",
+  "https://employer.vida.finance",
+];
+
+const corsMiddleware = cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-internal-secret"],
+});
+
+const securityHeaders = helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+    },
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  xFrameOptions: { action: "deny" },
+  xContentTypeOptions: true,
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later." },
+});
+
+const webhookLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const requireInternal = (req, res, next) => {
-  if (req.headers["x-internal-secret"] !== process.env.INTERNAL_SECRET)
-    return res.status(401).json({ error: "Unauthorized" });
+  const secret = process.env.INTERNAL_SECRET || process.env.INTERNAL_API_SECRET;
+  if (!secret || req.headers["x-internal-secret"] !== secret)
+    return res.status(401).json({ error: "Unauthorized: invalid internal secret" });
   next();
 };
 
-const cors = require("cors");
-const ALLOWED = ["https://vida-finance.web.app"];
+/* ─── Express server ─── */
+
 const app = express();
-app.use(helmet());
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
-  if (req.method === "OPTIONS") { res.setHeader("Access-Control-Allow-Methods", "GET,POST"); res.setHeader("Access-Control-Allow-Headers", "Content-Type,x-internal-secret"); return res.sendStatus(204); }
-  next();
-});
+app.use(securityHeaders);
+app.use(corsMiddleware);
+app.options("*", corsMiddleware);
+app.use(generalLimiter);
+app.use("/webhooks", webhookLimiter);
 app.use(express.json({ limit: "100kb" }));
 
 app.get("/health", async (req, res) => {
