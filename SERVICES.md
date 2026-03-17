@@ -89,8 +89,8 @@ curl https://vida-ml-service.railway.app/health
 
 ```
 # Firebase
-FIREBASE_SERVICE_ACCOUNT_STAGING         # base64-encoded service account JSON (staging Firebase deploys)
-FIREBASE_SERVICE_ACCOUNT_PRODUCTION      # base64-encoded service account JSON (production Firebase deploys)
+FIREBASE_SERVICE_ACCOUNT_STAGING         # raw service account JSON (staging Firebase deploys)
+FIREBASE_SERVICE_ACCOUNT_PRODUCTION      # raw service account JSON (production Firebase deploys)
 
 # Railway
 RAILWAY_TOKEN                             # Railway production project deploy token
