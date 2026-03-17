@@ -34,7 +34,7 @@ const i18n = {
     close_h2:'Vida financiera. <em>Reinventada.</em>',close_sub:'Únete a cientos de empleadores construyendo resiliencia financiera.',close_cta:'Comenzar',
     ft_tagline:'Crédito de emergencia habilitado por el empleador. Gobernanza suiza. Operación en México.',ft_platform:'Plataforma',ft_company:'Empresa',ft_about:'Acerca de',ft_security:'Seguridad',ft_privacy:'Privacidad',ft_terms:'Términos',ft_connect:'Conecta',ft_press:'Prensa',ft_privacy_policy:'Política de Privacidad',ft_terms_service:'Términos de Servicio',
     auth_welcome:'Bienvenido de nuevo',auth_signin_sub:'Inicia sesión en tu cuenta',auth_email:'Correo electrónico',auth_email_placeholder:'tu@empresa.com',auth_password:'Contraseña',auth_password_placeholder:'Tu contraseña',auth_signin_btn:'Iniciar Sesión',auth_signing_in:'Iniciando sesión...',auth_no_account:'¿No tienes cuenta?',auth_signup_link:'Regístrate',auth_has_account:'¿Ya tienes cuenta?',auth_login_link:'Iniciar sesión',auth_invalid_code:'Código de empleador inválido. Consulta con tu departamento de RH.',
-    dash_dashboard:'Panel',dash_employees:'Empleados',dash_loans:'Préstamos',dash_signout:'Cerrar sesión',dash_employer_code:'Código de Empleador',dash_total_employees:'Total Empleados',dash_active_loans:'Préstamos Activos',dash_pending_requests:'Solicitudes Pendientes',dash_total_disbursed:'Total Desembolsado',dash_recent_loans:'Solicitudes de Préstamo Recientes',dash_th_employee:'Empleado',dash_th_amount:'Monto',dash_th_term:'Plazo',dash_th_status:'Estado',dash_th_docs:'Documentos',dash_th_action:'Acción',dash_approve:'Aprobar',dash_reject:'Rechazar',dash_no_loans_employer:'Aún no hay solicitudes. Comparte tu código de empleador',dash_no_loans_employer_2:'con tus empleados.',dash_days:'días',dash_doc_contract:'Contrato',dash_doc_receipt:'Recibo',dash_doc_generating:'Generando...',
+    dash_dashboard:'Panel',dash_employees:'Empleados',dash_loans:'Préstamos',dash_payroll:'Nómina',dash_signout:'Cerrar sesión',dash_employer_code:'Código de Empleador',dash_total_employees:'Total Empleados',dash_active_loans:'Préstamos Activos',dash_pending_requests:'Solicitudes Pendientes',dash_total_disbursed:'Total Desembolsado',dash_recent_loans:'Solicitudes de Préstamo Recientes',dash_th_employee:'Empleado',dash_th_amount:'Monto',dash_th_term:'Plazo',dash_th_status:'Estado',dash_th_docs:'Documentos',dash_th_action:'Acción',dash_approve:'Aprobar',dash_reject:'Rechazar',dash_no_loans_employer:'Aún no hay solicitudes. Comparte tu código de empleador',dash_no_loans_employer_2:'con tus empleados.',dash_days:'días',dash_doc_contract:'Contrato',dash_doc_receipt:'Recibo',dash_doc_generating:'Generando...',dash_payroll_title:'Nómina e Integración',dash_payroll_upload_title:'Cargar CSV de Nómina',dash_payroll_upload_desc:'Arrastra tu archivo CSV de nómina o haz clic para seleccionar. Soporta encabezados en español e inglés.',dash_payroll_upload_btn:'Seleccionar archivo CSV',dash_payroll_drag:'Arrastra el CSV aquí',dash_payroll_uploading:'Subiendo...',dash_payroll_processing:'Procesando...',dash_payroll_upload_success:'Archivo cargado. Procesando en segundo plano.',dash_payroll_upload_error:'Error al cargar el archivo.',dash_payroll_batches_title:'Cargas Recientes',dash_payroll_no_batches:'Aún no hay cargas de nómina.',dash_payroll_th_file:'Archivo',dash_payroll_th_source:'Origen',dash_payroll_th_status:'Estado',dash_payroll_th_rows:'Filas',dash_payroll_th_valid:'Válidas',dash_payroll_th_invalid:'Inválidas',dash_payroll_th_date:'Fecha',dash_payroll_report_title:'Reporte de Deducciones',dash_payroll_report_desc:'Genera un reporte CSV con todos los descuentos de nómina pendientes para tus empleados con préstamos activos.',dash_payroll_period:'Período de pago (AAAA-MM-DD)',dash_payroll_generate_btn:'Generar Reporte',dash_payroll_generating:'Generando...',dash_payroll_download_btn:'Descargar CSV',dash_payroll_report_ready:'Reporte listo.',dash_payroll_report_error:'Error al generar el reporte.',dash_payroll_source_csv:'Carga manual',dash_payroll_source_sftp:'SFTP automático',dash_payroll_source_email:'Email',dash_payroll_status_queued:'En cola',dash_payroll_status_processing:'Procesando',dash_payroll_status_completed:'Completado',dash_payroll_status_partial:'Parcial',dash_payroll_status_failed:'Fallido',
     dash_welcome:'Bienvenido',dash_available_credit:'Crédito Disponible',dash_credit_limit:'Límite de Crédito',dash_utilization:'Utilización',dash_quick_action:'Acción Rápida',dash_request_funds:'Solicitar Fondos',dash_your_loans:'Tus Préstamos',dash_my_loans:'Mis Préstamos',dash_th_repayment:'Pago',dash_th_date:'Fecha',dash_no_loans_employee:'Aún no tienes préstamos. Solicita tu primer fondo de emergencia arriba.',
     modal_request:'Solicitar Fondos',modal_available:'Disponible',modal_amount:'Monto (MXN)',modal_term:'Plazo de Pago',modal_term_30:'30 días',modal_rate:'30% mensual',modal_loan_amount:'Monto del préstamo',modal_fee:'Comisión (30%)',modal_total:'Pago total',modal_confirm:'Confirmar Solicitud',modal_submitting:'Enviando...',modal_exceed:'El monto excede el crédito disponible',modal_minimum:'El monto mínimo es $500 MXN',
     toast_loan_approved:'Préstamo aprobado',toast_loan_rejected:'Préstamo rechazado',toast_loan_submitted:'Solicitud enviada. Tu empleador recibirá la notificación.',modal_accept_terms:'Acepto los términos y condiciones',modal_due_date:'Fecha de vencimiento',
@@ -317,7 +317,7 @@ const i18n = {
     close_h2:'Financial life. <em>Reinvented.</em>',close_sub:'Join hundreds of employers building financial resilience.',close_cta:'Get Started',
     ft_tagline:'Employer-enabled emergency credit. Swiss-governed. Mexico-operating.',ft_platform:'Platform',ft_company:'Company',ft_about:'About',ft_security:'Security',ft_privacy:'Privacy',ft_terms:'Terms',ft_connect:'Connect',ft_press:'Press',ft_privacy_policy:'Privacy Policy',ft_terms_service:'Terms of Service',
     auth_welcome:'Welcome back',auth_signin_sub:'Sign in to your account',auth_email:'Email',auth_email_placeholder:'you@company.com',auth_password:'Password',auth_password_placeholder:'Your password',auth_signin_btn:'Sign In',auth_signing_in:'Signing in...',auth_no_account:'Don\'t have an account?',auth_signup_link:'Sign up',auth_has_account:'Already have an account?',auth_login_link:'Sign in',auth_invalid_code:'Invalid employer code. Please check with your HR department.',
-    dash_dashboard:'Dashboard',dash_employees:'Employees',dash_loans:'Loans',dash_signout:'Sign out',dash_employer_code:'Employer Code',dash_total_employees:'Total Employees',dash_active_loans:'Active Loans',dash_pending_requests:'Pending Requests',dash_total_disbursed:'Total Disbursed',dash_recent_loans:'Recent Loan Requests',dash_th_employee:'Employee',dash_th_amount:'Amount',dash_th_term:'Term',dash_th_status:'Status',dash_th_docs:'Documents',dash_th_action:'Action',dash_approve:'Approve',dash_reject:'Reject',dash_no_loans_employer:'No loan requests yet. Share your employer code',dash_no_loans_employer_2:'with employees.',dash_days:'days',dash_doc_contract:'Contract',dash_doc_receipt:'Receipt',dash_doc_generating:'Generating...',
+    dash_dashboard:'Dashboard',dash_employees:'Employees',dash_loans:'Loans',dash_payroll:'Payroll',dash_signout:'Sign out',dash_employer_code:'Employer Code',dash_total_employees:'Total Employees',dash_active_loans:'Active Loans',dash_pending_requests:'Pending Requests',dash_total_disbursed:'Total Disbursed',dash_recent_loans:'Recent Loan Requests',dash_th_employee:'Employee',dash_th_amount:'Amount',dash_th_term:'Term',dash_th_status:'Status',dash_th_docs:'Documents',dash_th_action:'Action',dash_approve:'Approve',dash_reject:'Reject',dash_no_loans_employer:'No loan requests yet. Share your employer code',dash_no_loans_employer_2:'with employees.',dash_days:'days',dash_doc_contract:'Contract',dash_doc_receipt:'Receipt',dash_doc_generating:'Generating...',dash_payroll_title:'Payroll Integration',dash_payroll_upload_title:'Upload Payroll CSV',dash_payroll_upload_desc:'Drag your payroll CSV file here or click to select. Supports Spanish and English column headers.',dash_payroll_upload_btn:'Select CSV file',dash_payroll_drag:'Drag CSV here',dash_payroll_uploading:'Uploading...',dash_payroll_processing:'Processing...',dash_payroll_upload_success:'File uploaded. Processing in background.',dash_payroll_upload_error:'Error uploading file.',dash_payroll_batches_title:'Recent Uploads',dash_payroll_no_batches:'No payroll uploads yet.',dash_payroll_th_file:'File',dash_payroll_th_source:'Source',dash_payroll_th_status:'Status',dash_payroll_th_rows:'Rows',dash_payroll_th_valid:'Valid',dash_payroll_th_invalid:'Invalid',dash_payroll_th_date:'Date',dash_payroll_report_title:'Deduction Report',dash_payroll_report_desc:'Generate a CSV report with all pending payroll deductions for employees with active loans.',dash_payroll_period:'Pay period (YYYY-MM-DD)',dash_payroll_generate_btn:'Generate Report',dash_payroll_generating:'Generating...',dash_payroll_download_btn:'Download CSV',dash_payroll_report_ready:'Report ready.',dash_payroll_report_error:'Error generating report.',dash_payroll_source_csv:'Manual upload',dash_payroll_source_sftp:'Auto SFTP',dash_payroll_source_email:'Email',dash_payroll_status_queued:'Queued',dash_payroll_status_processing:'Processing',dash_payroll_status_completed:'Completed',dash_payroll_status_partial:'Partial',dash_payroll_status_failed:'Failed',
     dash_welcome:'Welcome',dash_available_credit:'Available Credit',dash_credit_limit:'Credit Limit',dash_utilization:'Utilization',dash_quick_action:'Quick Action',dash_request_funds:'Request Funds',dash_your_loans:'Your Loans',dash_my_loans:'My Loans',dash_th_repayment:'Repayment',dash_th_date:'Date',dash_no_loans_employee:'No loans yet. Request your first emergency fund above.',
     modal_request:'Request Funds',modal_available:'Available',modal_amount:'Amount (MXN)',modal_term:'Repayment Term',modal_term_30:'30 days',modal_rate:'30% monthly',modal_loan_amount:'Loan amount',modal_fee:'Fee (30%)',modal_total:'Total repayment',modal_confirm:'Confirm Request',modal_submitting:'Submitting...',modal_exceed:'Amount exceeds available credit',modal_minimum:'Minimum amount is $500 MXN',
     toast_loan_approved:'Loan approved',toast_loan_rejected:'Loan rejected',toast_loan_submitted:'Request submitted. Your employer will be notified.',modal_accept_terms:'I accept the terms and conditions',modal_due_date:'Due date',
@@ -1707,7 +1707,7 @@ async function renderEmployerDashboard(app) {
     const pending = allLoans.filter(l => l.status === 'pending').length;
     const active = allLoans.filter(l => l.status === 'approved' || l.status === 'active').length;
     const totalDisbursed = allLoans.filter(l => l.status !== 'rejected' && l.status !== 'pending').reduce((s, l) => s + l.amount, 0);
-    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="dash-nav-link active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#" class="dash-nav-link" data-tab="employees"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${t('dash_employees')}</a><a href="#" class="dash-nav-link" data-tab="loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div id="dashTabContent"></div></div></div></div>`;
+    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="dash-nav-link active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#" class="dash-nav-link" data-tab="employees"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${t('dash_employees')}</a><a href="#" class="dash-nav-link" data-tab="loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_loans')}</a><a href="#" class="dash-nav-link" data-tab="payroll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h12a2 2 0 002-2V9a2 2 0 00-2-2h-3"/><rect x="9" y="3" width="6" height="5" rx="1"/><path d="M9 14h.01M12 14h.01M15 14h.01M9 17h.01M12 17h.01M15 17h.01"/></svg>${t('dash_payroll')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div id="dashTabContent"></div></div></div></div>`;
     renderLoanTable(allLoans, currentTab);
     bindSideNav(uid, emp);
   }
@@ -1728,6 +1728,7 @@ async function renderEmployerDashboard(app) {
         const tab = a.dataset.tab;
         if (tab === 'dashboard' || tab === 'loans') renderLoanTable(allLoans, currentTab);
         else if (tab === 'employees') renderEmployeesTab(uid);
+        else if (tab === 'payroll') renderPayrollTab(uid);
       });
     });
   }
@@ -1782,6 +1783,136 @@ async function renderEmployerDashboard(app) {
     container.innerHTML = `<div class="card"><div class="card-title">${t('dash_employees')}</div><div style="margin-bottom:16px"><input type="text" id="empSearchInput" placeholder="${searchLabel}" value="${query||''}" style="width:100%;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none;transition:border .2s"></div><div class="table-wrap">${filtered.length?`<table><thead><tr><th>${thName}</th><th>${thEmail}</th><th>${thLimit}</th><th>${thAvail}</th><th>${thDate}</th></tr></thead><tbody>${filtered.map(e=>`<tr><td>${e.name||'—'}</td><td>${e.email||'—'}</td><td>$${fmt(e.creditLimit||0)}</td><td>$${fmt(e.availableCredit||0)}</td><td>${e.createdAt?new Date(e.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><p>${currentLang==='es'?'No se encontraron empleados':'No employees found'}</p></div>`}</div></div>`;
     const searchIn = document.getElementById('empSearchInput');
     if (searchIn) searchIn.addEventListener('input', () => renderEmployeesContent(employees, container, searchIn.value));
+  }
+
+  async function renderPayrollTab(eid) {
+    const container = document.getElementById('dashTabContent');
+    if (!container) return;
+    container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>';
+
+    // Load batches
+    let batches = [];
+    try {
+      const fn = firebase.functions().httpsCallable('getPayrollBatches');
+      const r = await fn({ limit: 20 });
+      batches = r.data.batches || [];
+    } catch (e) {
+      console.warn('[payroll] Could not load batches:', e.message);
+    }
+
+    const batchStatusLabel = s => {
+      const map = { queued:'dash_payroll_status_queued', processing:'dash_payroll_status_processing', completed:'dash_payroll_status_completed', partial:'dash_payroll_status_partial', failed:'dash_payroll_status_failed' };
+      return t(map[s] || ('dash_payroll_status_' + s));
+    };
+    const sourceLabel = s => {
+      const map = { csv_upload:'dash_payroll_source_csv', sftp:'dash_payroll_source_sftp', email:'dash_payroll_source_email' };
+      return t(map[s]) || s;
+    };
+    const batchStatusClass = s => {
+      if (s === 'completed') return 'badge-active'; if (s === 'failed') return 'badge-rejected';
+      if (s === 'partial') return 'badge-overdue'; return 'badge-pending';
+    };
+
+    const batchRows = batches.length
+      ? batches.map(b => `<tr><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${b.fileName}">${b.fileName}</td><td>${sourceLabel(b.source)}</td><td><span class="badge ${batchStatusClass(b.status)}">${batchStatusLabel(b.status)}</span></td><td>${b.totalRows}</td><td style="color:var(--brand)">${b.validRows}</td><td style="color:#e53e3e">${b.invalidRows}</td><td>${b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—'}</td></tr>`).join('')
+      : `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--t3)">${t('dash_payroll_no_batches')}</td></tr>`;
+
+    container.innerHTML = `
+<div style="display:flex;flex-direction:column;gap:20px">
+  <div class="card">
+    <div class="card-title">${t('dash_payroll_upload_title')}</div>
+    <p style="font-size:13px;color:var(--t3);margin-bottom:16px">${t('dash_payroll_upload_desc')}</p>
+    <div id="payrollDropZone" style="border:2px dashed rgba(25,68,69,0.2);border-radius:12px;padding:40px 24px;text-align:center;cursor:pointer;transition:all .2s;background:rgba(25,68,69,0.02)">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="1.5" style="margin-bottom:12px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <div id="payrollDropLabel" style="font-size:14px;font-weight:600;color:var(--t2);margin-bottom:8px">${t('dash_payroll_drag')}</div>
+      <input type="file" id="payrollFileInput" accept=".csv,text/csv" style="display:none">
+      <button class="btn-primary" id="payrollSelectBtn" style="margin-top:8px">${t('dash_payroll_upload_btn')}</button>
+      <div id="payrollUploadStatus" style="margin-top:12px;font-size:13px;color:var(--t3)"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">${t('dash_payroll_report_title')}</div>
+    <p style="font-size:13px;color:var(--t3);margin-bottom:16px">${t('dash_payroll_report_desc')}</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--t3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">${t('dash_payroll_period')}</label>
+        <input type="date" id="payrollPeriodInput" style="padding:10px 14px;border:1px solid rgba(25,68,69,0.15);border-radius:8px;font-size:13px;outline:none;color:var(--t1);background:#fff" value="${new Date().toISOString().split('T')[0]}">
+      </div>
+      <button class="btn-primary" id="payrollGenerateBtn">${t('dash_payroll_generate_btn')}</button>
+    </div>
+    <div id="payrollReportStatus" style="margin-top:12px;font-size:13px;color:var(--t3)"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">${t('dash_payroll_batches_title')}</div>
+    <div class="table-wrap">
+      <table><thead><tr><th>${t('dash_payroll_th_file')}</th><th>${t('dash_payroll_th_source')}</th><th>${t('dash_payroll_th_status')}</th><th>${t('dash_payroll_th_rows')}</th><th>${t('dash_payroll_th_valid')}</th><th>${t('dash_payroll_th_invalid')}</th><th>${t('dash_payroll_th_date')}</th></tr></thead>
+      <tbody>${batchRows}</tbody></table>
+    </div>
+  </div>
+</div>`;
+
+    // ── File drop zone ────────────────────────────────────────────────────────
+    const dropZone = document.getElementById('payrollDropZone');
+    const fileInput = document.getElementById('payrollFileInput');
+    const selectBtn = document.getElementById('payrollSelectBtn');
+    const statusEl = document.getElementById('payrollUploadStatus');
+
+    selectBtn.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--brand)'; dropZone.style.background = 'rgba(25,68,69,0.05)'; });
+    dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = 'rgba(25,68,69,0.2)'; dropZone.style.background = 'rgba(25,68,69,0.02)'; });
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault(); dropZone.style.borderColor = 'rgba(25,68,69,0.2)'; dropZone.style.background = 'rgba(25,68,69,0.02)';
+      const f = e.dataTransfer.files[0]; if (f) handlePayrollFile(f);
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files[0]) handlePayrollFile(fileInput.files[0]); });
+
+    async function handlePayrollFile(file) {
+      if (!file.name.toLowerCase().endsWith('.csv')) { showToast(currentLang === 'es' ? 'Solo se aceptan archivos CSV' : 'Only CSV files are accepted', 'error'); return; }
+      selectBtn.disabled = true; selectBtn.innerHTML = '<span class="spinner"></span>' + t('dash_payroll_uploading');
+      statusEl.textContent = '';
+      try {
+        const ts = Date.now();
+        const storageRef = storage.ref(`payroll_uploads/${eid}/${ts}_${file.name}`);
+        await storageRef.put(file, { contentType: 'text/csv' });
+        const storagePath = `payroll_uploads/${eid}/${ts}_${file.name}`;
+        const fn = firebase.functions().httpsCallable('uploadPayrollCSV');
+        await fn({ storagePath, fileName: file.name, source: 'csv_upload' });
+        statusEl.style.color = 'var(--brand)';
+        statusEl.textContent = '✓ ' + t('dash_payroll_upload_success');
+        showToast(t('dash_payroll_upload_success'), 'success');
+        setTimeout(() => renderPayrollTab(eid), 1500);
+      } catch (err) {
+        statusEl.style.color = '#e53e3e';
+        statusEl.textContent = '✗ ' + (err.message || t('dash_payroll_upload_error'));
+        showToast(err.message || t('dash_payroll_upload_error'), 'error');
+      } finally {
+        selectBtn.disabled = false; selectBtn.textContent = t('dash_payroll_upload_btn');
+        fileInput.value = '';
+      }
+    }
+
+    // ── Generate deduction report ─────────────────────────────────────────────
+    const generateBtn = document.getElementById('payrollGenerateBtn');
+    const periodInput = document.getElementById('payrollPeriodInput');
+    const reportStatusEl = document.getElementById('payrollReportStatus');
+
+    generateBtn.addEventListener('click', async () => {
+      generateBtn.disabled = true; generateBtn.innerHTML = '<span class="spinner"></span>' + t('dash_payroll_generating');
+      reportStatusEl.textContent = '';
+      try {
+        const fn = firebase.functions().httpsCallable('generateDeductionReport');
+        const r = await fn({ payPeriod: periodInput.value || undefined });
+        const { csvUrl, totalDeductions, totalAmount } = r.data;
+        reportStatusEl.innerHTML = `<span style="color:var(--brand)">✓ ${t('dash_payroll_report_ready')}</span> ${totalDeductions} ${currentLang==='es'?'deducciones':'deductions'} · $${fmt(totalAmount)} MXN &nbsp;<a href="${csvUrl}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 16px;font-size:12px;text-decoration:none">${t('dash_payroll_download_btn')}</a>`;
+      } catch (err) {
+        reportStatusEl.innerHTML = `<span style="color:#e53e3e">✗ ${err.message || t('dash_payroll_report_error')}</span>`;
+      } finally {
+        generateBtn.disabled = false; generateBtn.textContent = t('dash_payroll_generate_btn');
+      }
+    });
   }
 }
 window.approveLoan = async function(id, btn) {

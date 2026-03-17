@@ -21,6 +21,13 @@ export { getAdminDashboard } from './admin/getAdminDashboard';
 export { updateLoanStatus } from './loans/updateLoanStatus';
 export { getPortfolioReport } from './admin/getPortfolioReport';
 
+// Payroll integration module (VID-45)
+export { uploadPayrollCSV } from './payroll/uploadPayrollCSV';
+export { getPayrollBatches } from './payroll/getPayrollBatches';
+export { generateDeductionReport } from './payroll/generateDeductionReport';
+export { downloadDeductionReport } from './payroll/downloadDeductionReport';
+export { pollSFTP } from './payroll/pollSFTP';
+
 initializeApp();
 const db = getFirestore();
 
@@ -583,6 +590,7 @@ export const systemHealthCheck = onSchedule(
       { name: 'notification-service', url: process.env['NOTIFICATION_SERVICE_URL'] + '/health' },
       { name: 'pdf-generator', url: process.env['PDF_GENERATOR_URL'] + '/health' },
       { name: 'ml-service', url: process.env['ML_SERVICE_URL'] + '/health' },
+      { name: 'payroll-service', url: process.env['PAYROLL_SERVICE_URL'] + '/health' },
     ];
 
     const results = await Promise.allSettled(

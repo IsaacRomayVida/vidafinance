@@ -75,6 +75,7 @@ railway variables set \
   SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
   NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
   ML_SERVICE_URL="http://vida-ml-service.railway.internal:3005" \
+  PAYROLL_SERVICE_URL="http://vida-payroll-service.railway.internal:3006" \
   --service vida-payment-server 2>/dev/null || \
 railway variables set \
   NODE_ENV=staging \
@@ -88,6 +89,7 @@ railway variables set \
   SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
   NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
   ML_SERVICE_URL="http://vida-ml-service.railway.internal:3005" \
+  PAYROLL_SERVICE_URL="http://vida-payroll-service.railway.internal:3006" \
   --service payment-server
 echo "✅ vida-payment-server configured"
 
@@ -217,6 +219,28 @@ railway variables set \
   --service ml-service
 echo "✅ vida-ml-service configured"
 
+# ── service: vida-payroll-service ─────────────────────────────────────────────
+echo "⚙️  Configuring vida-payroll-service (port 3006)..."
+railway variables set \
+  PORT=3006 \
+  REDIS_URL="$REDIS_URL" \
+  INTERNAL_SECRET="$INTERNAL_SECRET" \
+  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
+  FIREBASE_STORAGE_BUCKET="${FIREBASE_STORAGE_BUCKET:-vida-finance.appspot.com}" \
+  CORS_ORIGIN="${CORS_ORIGIN:-https://vida-finance.web.app}" \
+  NODE_ENV=production \
+  --service payroll-service 2>/dev/null || \
+railway variables set \
+  PORT=3006 \
+  REDIS_URL="$REDIS_URL" \
+  INTERNAL_SECRET="$INTERNAL_SECRET" \
+  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
+  FIREBASE_STORAGE_BUCKET="${FIREBASE_STORAGE_BUCKET:-vida-finance.appspot.com}" \
+  CORS_ORIGIN="${CORS_ORIGIN:-https://vida-finance.web.app}" \
+  NODE_ENV=production \
+  --service vida-payroll-service
+echo "✅ vida-payroll-service configured"
+
 echo ""
 echo "🎉 All Railway environment variables configured!"
 echo ""
@@ -228,3 +252,4 @@ echo "     curl https://vida-softcredito.railway.app/health"
 echo "     curl https://vida-notifications.railway.app/health"
 echo "     curl https://vida-pdf-generator.railway.app/health"
 echo "     curl https://vida-ml-service.railway.app/health"
+echo "     curl https://vida-payroll-service.railway.app/health"

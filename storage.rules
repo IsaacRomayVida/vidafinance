@@ -13,6 +13,30 @@ service firebase.storage {
       allow read: if request.auth != null;
       allow write: if false;
     }
+    // Payroll CSV uploads: employer can upload CSVs to their own directory
+    match /payroll_uploads/{employerId}/{file} {
+      allow read: if request.auth != null && (
+        request.auth.uid == employerId ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'super_admin' ||
+        request.auth.token.role == 'ops'
+      );
+      allow create: if request.auth != null &&
+        request.auth.uid == employerId &&
+        request.resource.size < 20 * 1024 * 1024 &&
+        (request.resource.contentType == 'text/csv' || request.resource.contentType.matches('text/.*'));
+      allow update, delete: if false;
+    }
+    // Deduction reports: employer can read their own reports
+    match /deduction_reports/{employerId}/{file} {
+      allow read: if request.auth != null && (
+        request.auth.uid == employerId ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'super_admin' ||
+        request.auth.token.role == 'ops'
+      );
+      allow write: if false;
+    }
     match /{all=**} { allow read, write: if false; }
   }
 }

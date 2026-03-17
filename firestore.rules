@@ -116,6 +116,33 @@ service cloud.firestore {
     match /notification_queue/{d}    { allow read, write: if false; }
 
     // =============================================
+    // PAYROLL INTEGRATION (VID-45)
+    // payroll_batches: employer_admin can read their own batches (writes via Admin SDK).
+    // payroll_records: employer_admin can read records for their batches (writes via Admin SDK).
+    // deduction_reports: employer_admin can read their own reports (writes via Admin SDK).
+    // sftp_processed: internal tracking, deny all client access.
+    // =============================================
+    match /payroll_batches/{batchId} {
+      allow read: if isAuthenticated() && (
+        resource.data.employerId == request.auth.uid || isOps()
+      );
+      allow write: if false;
+    }
+    match /payroll_records/{recordId} {
+      allow read: if isAuthenticated() && (
+        resource.data.employerId == request.auth.uid || isOps()
+      );
+      allow write: if false;
+    }
+    match /deduction_reports/{reportId} {
+      allow read: if isAuthenticated() && (
+        resource.data.employerId == request.auth.uid || isOps()
+      );
+      allow write: if false;
+    }
+    match /sftp_processed/{d}        { allow read, write: if false; }
+
+    // =============================================
     // DENY ALL OTHER PATHS
     // Explicit catch-all to prevent accidental access.
     // =============================================

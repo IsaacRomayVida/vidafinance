@@ -206,7 +206,7 @@ router.get('/queue-stats', async (_req: Request, res: Response): Promise<void> =
     ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {}),
   };
 
-  const names = ['vida-disbursements', 'vida-notifications', 'vida-pdfs', 'vida-underwriting'];
+  const names = ['vida-disbursements', 'vida-notifications', 'vida-pdfs', 'vida-underwriting', 'vida-payroll'];
   const stats: Record<string, unknown> = {};
 
   for (const name of names) {
