@@ -5,7 +5,7 @@
 # Required env vars:
 #   GITHUB_TOKEN or GH_TOKEN    — GitHub PAT with repo + secrets scopes
 #   RAILWAY_TOKEN               — Railway project deploy token
-#   FIREBASE_SERVICE_ACCOUNT_STAGING — base64-encoded Firebase service account JSON
+#   FIREBASE_SERVICE_ACCOUNT_STAGING — raw Firebase service account JSON
 #
 # Optional (will prompt if missing):
 #   CONEKTA_WEBHOOK_SECRET, SOFTCREDITO_CLIENT_ID, SOFTCREDITO_CLIENT_SECRET,
@@ -52,7 +52,7 @@ echo "🔐 Setting GitHub Actions secrets for $REPO..."
 echo ""
 
 # ── Prompt for missing secrets ────────────────────────────────────────────────
-require_var "FIREBASE_SERVICE_ACCOUNT_STAGING" "Firebase service account (base64-encoded JSON)"
+require_var "FIREBASE_SERVICE_ACCOUNT_STAGING" "Firebase service account (raw JSON)"
 require_var "INTERNAL_SECRET"                  "Internal service-to-service shared secret"
 require_var "CONEKTA_WEBHOOK_SECRET"           "Conekta webhook secret"
 require_var "SOFTCREDITO_CLIENT_ID"            "SoftCrédito client ID"
