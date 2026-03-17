@@ -746,6 +746,253 @@ exports.approveEmployer = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true 
   return { success: true, approved: true };
 });
 
+// ── createBooking — customer selects package & creates payment plan ───
+exports.createBooking = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const uid = request.auth.uid;
+  const { packageId, adults, children, startDate, installments } = request.data;
+
+  if (!packageId || typeof packageId !== "string")
+    throw new HttpsError("invalid-argument", "packageId is required");
+  if (typeof adults !== "number" || adults < 1 || adults > 10)
+    throw new HttpsError("invalid-argument", "adults must be between 1 and 10");
+  if (typeof children !== "number" || children < 0 || children > 10)
+    throw new HttpsError("invalid-argument", "children must be between 0 and 10");
+  if (!startDate || typeof startDate !== "string")
+    throw new HttpsError("invalid-argument", "startDate is required (YYYY-MM-DD)");
+  if (typeof installments !== "number" || installments < 1 || installments > 12)
+    throw new HttpsError("invalid-argument", "installments must be between 1 and 12");
+
+  const pkgSnap = await db.collection("packages").doc(packageId).get();
+  if (!pkgSnap.exists) throw new HttpsError("not-found", "Package not found");
+  const pkg = pkgSnap.data();
+
+  if (!pkg.active)
+    throw new HttpsError("failed-precondition", "Package is no longer available");
+
+  const travelDate = new Date(startDate);
+  const availStart = new Date(pkg.availability.startDate);
+  const availEnd = new Date(pkg.availability.endDate);
+  if (travelDate < availStart || travelDate > availEnd)
+    throw new HttpsError("invalid-argument", "Travel date is outside availability window");
+
+  if (pkg.availability.spotsRemaining < (adults + children))
+    throw new HttpsError("resource-exhausted", "Not enough spots available");
+
+  const totalMXN = (adults * pkg.adultRate) + (children * pkg.childRate);
+  const depositAmount = Math.round(totalMXN * 0.2);
+  const remainingAfterDeposit = totalMXN - depositAmount;
+  const installmentAmount = Math.round(remainingAfterDeposit / installments);
+
+  const bookingId = nanoid();
+
+  const plan = [];
+  const now = new Date();
+  for (let i = 0; i < installments; i++) {
+    const dueDate = new Date(now);
+    dueDate.setMonth(dueDate.getMonth() + i + 1);
+    plan.push({
+      installmentNumber: i + 1,
+      amountMXN: i === installments - 1
+        ? remainingAfterDeposit - installmentAmount * (installments - 1)
+        : installmentAmount,
+      dueDate: dueDate.toISOString().split("T")[0],
+      status: "pending",
+      paidAt: null,
+    });
+  }
+
+  await db.runTransaction(async (tx) => {
+    const freshPkg = (await tx.get(pkgSnap.ref)).data();
+    if (freshPkg.availability.spotsRemaining < (adults + children))
+      throw new HttpsError("resource-exhausted", "Not enough spots available");
+
+    tx.update(pkgSnap.ref, {
+      "availability.spotsRemaining": FieldValue.increment(-(adults + children)),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    tx.set(db.collection("bookings").doc(bookingId), {
+      bookingId,
+      customerId: uid,
+      packageId,
+      packageName: pkg.name,
+      destination: pkg.destination,
+      hotel: pkg.hotel,
+      durationNights: pkg.durationNights,
+      adults,
+      children,
+      travelDate: startDate,
+      totalMXN,
+      depositAmountMXN: depositAmount,
+      depositStatus: "pending",
+      depositPaidAt: null,
+      installments,
+      plan,
+      paidMXN: 0,
+      remainingMXN: totalMXN,
+      status: "awaiting_deposit",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  try {
+    await auditLog(db, {
+      action: "booking.created",
+      actorUid: uid,
+      actorRole: "customer",
+      targetId: bookingId,
+      meta: { packageId, totalMXN, adults, children },
+    });
+  } catch (_) { /* non-critical */ }
+
+  return {
+    bookingId,
+    totalMXN,
+    depositAmountMXN: depositAmount,
+    installments,
+    plan,
+    status: "awaiting_deposit",
+  };
+});
+
+// ── makeDeposit — customer pays deposit for booking ──────────────────
+exports.makeDeposit = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const uid = request.auth.uid;
+  const { bookingId } = request.data;
+
+  if (!bookingId || typeof bookingId !== "string")
+    throw new HttpsError("invalid-argument", "bookingId is required");
+
+  const bookingSnap = await db.collection("bookings").doc(bookingId).get();
+  if (!bookingSnap.exists) throw new HttpsError("not-found", "Booking not found");
+  const booking = bookingSnap.data();
+
+  if (booking.customerId !== uid)
+    throw new HttpsError("permission-denied", "Not your booking");
+  if (booking.status !== "awaiting_deposit")
+    throw new HttpsError("failed-precondition", "Deposit already processed or booking cancelled");
+
+  const b64 = Buffer.from(process.env.CONEKTA_API_KEY + ":").toString("base64");
+  const resp = await fetch("https://api.conekta.io/orders", {
+    method: "POST",
+    headers: {
+      Authorization: "Basic " + b64,
+      "Content-Type": "application/json",
+      Accept: "application/vnd.conekta-v2.1.0+json",
+    },
+    body: JSON.stringify({
+      currency: "MXN",
+      customer_info: {
+        name: request.auth.token.name || "Customer",
+        email: request.auth.token.email || "customer@vida.finance",
+        phone: "0000000000",
+      },
+      line_items: [
+        {
+          name: "Depósito: " + (booking.packageName?.es || booking.packageName?.en || bookingId),
+          unit_price: Math.round(booking.depositAmountMXN * 100),
+          quantity: 1,
+        },
+      ],
+      checkout: {
+        type: "HostedPayment",
+        expires_at: Math.floor(Date.now() / 1000) + 86400,
+      },
+      metadata: { bookingId, customerId: uid, type: "deposit" },
+    }),
+  });
+
+  const order = await resp.json();
+  if (!resp.ok)
+    throw new HttpsError("internal", order.details?.[0]?.message || "Payment error");
+
+  await db.collection("bookings").doc(bookingId).update({
+    depositConektaOrderId: order.id,
+    depositPaymentUrl: order.checkout.url,
+    depositLinkGeneratedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  try {
+    await auditLog(db, {
+      action: "booking.deposit_initiated",
+      actorUid: uid,
+      actorRole: "customer",
+      targetId: bookingId,
+      meta: { conektaOrderId: order.id, amount: booking.depositAmountMXN },
+    });
+  } catch (_) { /* non-critical */ }
+
+  return { paymentUrl: order.checkout.url, depositAmountMXN: booking.depositAmountMXN };
+});
+
+// ── makeInstallmentPayment — customer pays an installment ────────────
+exports.makeInstallmentPayment = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const uid = request.auth.uid;
+  const { bookingId, installmentNumber } = request.data;
+
+  if (!bookingId) throw new HttpsError("invalid-argument", "bookingId is required");
+  if (typeof installmentNumber !== "number" || installmentNumber < 1)
+    throw new HttpsError("invalid-argument", "installmentNumber is required");
+
+  const bookingSnap = await db.collection("bookings").doc(bookingId).get();
+  if (!bookingSnap.exists) throw new HttpsError("not-found", "Booking not found");
+  const booking = bookingSnap.data();
+
+  if (booking.customerId !== uid)
+    throw new HttpsError("permission-denied", "Not your booking");
+  if (booking.status !== "active")
+    throw new HttpsError("failed-precondition", "Booking is not active — deposit may still be pending");
+
+  const installment = booking.plan.find((p) => p.installmentNumber === installmentNumber);
+  if (!installment) throw new HttpsError("not-found", "Installment not found");
+  if (installment.status === "paid")
+    throw new HttpsError("failed-precondition", "Installment already paid");
+
+  const b64 = Buffer.from(process.env.CONEKTA_API_KEY + ":").toString("base64");
+  const resp = await fetch("https://api.conekta.io/orders", {
+    method: "POST",
+    headers: {
+      Authorization: "Basic " + b64,
+      "Content-Type": "application/json",
+      Accept: "application/vnd.conekta-v2.1.0+json",
+    },
+    body: JSON.stringify({
+      currency: "MXN",
+      customer_info: {
+        name: request.auth.token.name || "Customer",
+        email: request.auth.token.email || "customer@vida.finance",
+        phone: "0000000000",
+      },
+      line_items: [
+        {
+          name: `Pago ${installmentNumber}/${booking.installments}: ${booking.packageName?.es || booking.packageName?.en || bookingId}`,
+          unit_price: Math.round(installment.amountMXN * 100),
+          quantity: 1,
+        },
+      ],
+      checkout: {
+        type: "HostedPayment",
+        expires_at: Math.floor(Date.now() / 1000) + 86400,
+      },
+      metadata: { bookingId, customerId: uid, type: "installment", installmentNumber },
+    }),
+  });
+
+  const order = await resp.json();
+  if (!resp.ok)
+    throw new HttpsError("internal", order.details?.[0]?.message || "Payment error");
+
+  return { paymentUrl: order.checkout.url, amountMXN: installment.amountMXN };
+});
+
 // ── setAdminClaim — admin only ────────────────────────────────────────
 exports.setAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
   if (!request.auth?.token?.admin)

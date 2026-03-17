@@ -67,24 +67,72 @@ app.post('/webhooks/conekta', webhookRateLimit, async (req, res) => {
   const { type, data } = JSON.parse(req.body.toString());
   try {
     if (type === 'order.paid') {
-      const { loanId, employeeId } = data.object.metadata || {};
-      if (!loanId || !employeeId) throw new Error('Missing metadata');
+      const meta = data.object.metadata || {};
       const amount = data.object.amount / 100;
       const chargeId = data.object.charges?.data?.[0]?.id;
 
-      await db.runTransaction(async tx => {
-        const ref = db.collection('loans').doc(loanId);
-        const doc = await tx.get(ref);
-        if (!doc.exists || doc.data().status === 'paid') return;
-        tx.update(ref, { status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), paidAmount: amount, repaymentRef: chargeId });
-        tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: 'card', conektaOrderId: data.object.id, conektaChargeId: chargeId, status: 'completed', paidAt: admin.firestore.FieldValue.serverTimestamp() });
-        const empRef = db.collection('employees').doc(employeeId);
-        const emp = await tx.get(empRef);
-        if (emp.exists) tx.update(empRef, { availableCredit: admin.firestore.FieldValue.increment(doc.data().amount) });
-      });
+      // ── Booking payments (deposit or installment) ──
+      if (meta.bookingId) {
+        const bookingRef = db.collection('bookings').doc(meta.bookingId);
 
-      await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId, amount, method: 'card' });
-      await getQueue('vida-pdfs').add('repayment_receipt', { type: 'repayment_receipt', loanId, employeeId, amount, chargeId });
+        if (meta.type === 'deposit') {
+          await db.runTransaction(async tx => {
+            const doc = await tx.get(bookingRef);
+            if (!doc.exists) return;
+            const booking = doc.data();
+            if (booking.depositStatus === 'paid') return;
+            tx.update(bookingRef, {
+              depositStatus: 'paid',
+              depositPaidAt: admin.firestore.FieldValue.serverTimestamp(),
+              depositConektaChargeId: chargeId,
+              paidMXN: admin.firestore.FieldValue.increment(amount),
+              remainingMXN: admin.firestore.FieldValue.increment(-amount),
+              status: 'active',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          });
+          await getQueue('vida-notifications').add('booking_deposit_paid', { type: 'booking_deposit_paid', bookingId: meta.bookingId, customerId: meta.customerId, amount });
+        }
+
+        if (meta.type === 'installment' && meta.installmentNumber) {
+          await db.runTransaction(async tx => {
+            const doc = await tx.get(bookingRef);
+            if (!doc.exists) return;
+            const booking = doc.data();
+            const plan = [...booking.plan];
+            const idx = plan.findIndex(p => p.installmentNumber === meta.installmentNumber);
+            if (idx === -1 || plan[idx].status === 'paid') return;
+            plan[idx] = { ...plan[idx], status: 'paid', paidAt: new Date().toISOString() };
+            const allPaid = plan.every(p => p.status === 'paid');
+            tx.update(bookingRef, {
+              plan,
+              paidMXN: admin.firestore.FieldValue.increment(amount),
+              remainingMXN: admin.firestore.FieldValue.increment(-amount),
+              status: allPaid ? 'paid_in_full' : 'active',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          });
+          await getQueue('vida-notifications').add('booking_installment_paid', { type: 'booking_installment_paid', bookingId: meta.bookingId, customerId: meta.customerId, installmentNumber: meta.installmentNumber, amount });
+        }
+      }
+
+      // ── Loan payments ──
+      const { loanId, employeeId } = meta;
+      if (loanId && employeeId) {
+        await db.runTransaction(async tx => {
+          const ref = db.collection('loans').doc(loanId);
+          const doc = await tx.get(ref);
+          if (!doc.exists || doc.data().status === 'paid') return;
+          tx.update(ref, { status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), paidAmount: amount, repaymentRef: chargeId });
+          tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: 'card', conektaOrderId: data.object.id, conektaChargeId: chargeId, status: 'completed', paidAt: admin.firestore.FieldValue.serverTimestamp() });
+          const empRef = db.collection('employees').doc(employeeId);
+          const emp = await tx.get(empRef);
+          if (emp.exists) tx.update(empRef, { availableCredit: admin.firestore.FieldValue.increment(doc.data().amount) });
+        });
+
+        await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId, amount, method: 'card' });
+        await getQueue('vida-pdfs').add('repayment_receipt', { type: 'repayment_receipt', loanId, employeeId, amount, chargeId });
+      }
     }
 
     if (type === 'order.payment_failed') {

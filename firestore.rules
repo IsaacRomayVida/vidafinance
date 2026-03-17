@@ -41,6 +41,23 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /packages/{packageId} {
+      allow read:   if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read:   if signedIn() && (
+        resource.data.customerId == request.auth.uid || isAdmin()
+      );
+      allow create: if signedIn() &&
+        request.resource.data.customerId == request.auth.uid;
+      allow update: if signedIn() && (
+        resource.data.customerId == request.auth.uid || isAdmin()
+      );
+      allow delete: if false;
+    }
+
     match /contact/{docId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();

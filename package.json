@@ -1,8 +1,12 @@
 {
   "scripts": {
-    "verify": "node scripts/verify-production.js"
+    "verify": "node scripts/verify-production.js",
+    "seed:packages": "node scripts/seed-packages.js",
+    "seed:packages:clean": "node scripts/seed-packages.js --clean",
+    "test:booking-flow": "node scripts/test-booking-flow.js"
   },
   "dependencies": {
+    "firebase-admin": "^13.7.0",
     "node-fetch": "^2.7.0",
     "dotenv": "^16.0.0"
   }
