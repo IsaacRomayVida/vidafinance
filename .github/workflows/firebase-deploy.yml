@@ -27,15 +27,10 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Write Firebase credentials
-        run: |
-          printenv FIREBASE_SA > "$RUNNER_TEMP/firebase-sa.json"
-          if [ ! -s "$RUNNER_TEMP/firebase-sa.json" ]; then
-            echo "::error::firebase-sa.json is empty — check FIREBASE_SERVICE_ACCOUNT secret"
-            exit 1
-          fi
-        env:
-          FIREBASE_SA: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
 
       - name: Write functions .env (Staging)
         if: github.ref == 'refs/heads/develop'
@@ -65,26 +60,9 @@ jobs:
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_PRODUCTION }}
           ENVEOF
 
-      - name: Deploy Firebase (Staging)
-        if: github.ref == 'refs/heads/develop'
+      - name: Deploy to Firebase
         run: |
           firebase deploy \
             --only functions,firestore:rules,firestore:indexes \
             --project vida-finance \
             --non-interactive
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-
-      - name: Deploy Firebase (Production)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          firebase deploy \
-            --only functions,firestore:rules,firestore:indexes \
-            --project vida-finance \
-            --non-interactive
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-
-      - name: Clean up credentials
-        if: always()
-        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
