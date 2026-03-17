@@ -746,6 +746,36 @@ exports.approveEmployer = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true 
   return { success: true, approved: true };
 });
 
+// ── regenerateEmployerCode — employer only ────────────────────────────
+exports.regenerateEmployerCode = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth)
+    throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+  const empRef = db.collection("employers").doc(uid);
+  const empDoc = await empRef.get();
+  if (!empDoc.exists)
+    throw new HttpsError("not-found", "Employer not found");
+  const emp = empDoc.data();
+  if (emp.status !== "active")
+    throw new HttpsError("failed-precondition", "Employer account not active");
+
+  const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+  await empRef.update({ employerCode: newCode });
+
+  try {
+    await auditLog(db, {
+      action: "employer.code_regenerated",
+      actorUid: uid,
+      actorRole: "employer",
+      targetId: uid,
+      before: { employerCode: emp.employerCode },
+      after: { employerCode: newCode },
+    });
+  } catch (_) { /* non-critical */ }
+
+  return { success: true, newCode };
+});
+
 // ── setAdminClaim — admin only ────────────────────────────────────────
 exports.setAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
   if (!request.auth?.token?.admin)
