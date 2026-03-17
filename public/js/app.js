@@ -627,11 +627,14 @@ const routes = {
   '/press': renderPress,
   '/employer/dashboard': renderEmployerDashboard,
   '/employee/dashboard': renderEmployeeDashboard,
-  '/admin':            (app) => renderAdminPortal(app, 'employers'),
-  '/admin/employers':  (app) => renderAdminPortal(app, 'employers'),
-  '/admin/loans':      (app) => renderAdminPortal(app, 'loans'),
-  '/admin/finance':    (app) => renderAdminPortal(app, 'finance'),
-  '/admin/audit':      (app) => renderAdminPortal(app, 'audit'),
+  '/admin':               (app) => renderAdminPortal(app, 'employers'),
+  '/admin/employers':     (app) => renderAdminPortal(app, 'employers'),
+  '/admin/loans':         (app) => renderAdminPortal(app, 'loans'),
+  '/admin/finance':       (app) => renderAdminPortal(app, 'finance'),
+  '/admin/audit':         (app) => renderAdminPortal(app, 'audit'),
+  '/admin/health':        (app) => renderAdminPortal(app, 'health'),
+  '/admin/delinquency':   (app) => renderAdminPortal(app, 'delinquency'),
+  '/admin/users':         (app) => renderAdminPortal(app, 'users'),
 };
 
 let onbPreselect = null;
@@ -658,7 +661,8 @@ async function router() {
     if (!user) { navigate('/login'); return; }
     try {
       const tok = await user.getIdTokenResult(true);
-      if (!tok.claims.admin) { navigate('/'); return; }
+      const isAdmin = tok.claims.admin || ['ops', 'admin', 'super_admin'].includes(tok.claims.role);
+      if (!isAdmin) { navigate('/'); return; }
     } catch (_) { navigate('/'); return; }
   }
   if (handler) { handler(app); } else { renderHome(app); }
@@ -669,7 +673,8 @@ auth.onAuthStateChanged(async (user) => {
     const path = location.pathname;
     if (path === '/login' || path === '/signup' || path === '/onboarding') {
       const tok = await user.getIdTokenResult();
-      if (tok.claims.admin) { navigate('/admin'); return; }
+      const isAdmin = tok.claims.admin || ['ops', 'admin', 'super_admin'].includes(tok.claims.role);
+      if (isAdmin) { navigate('/admin'); return; }
       const doc = await db.collection('employers').doc(user.uid).get();
       navigate(doc.exists ? '/employer/dashboard' : '/employee/dashboard');
     }
@@ -1864,7 +1869,10 @@ function renderAdminPortal(app, activeTab) {
   const navItems = [
     { key: 'employers', label: 'Empleadores', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12h6M12 9v6"/></svg>', badge: 'badge-employers' },
     { key: 'loans', label: 'Préstamos', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>', badge: 'badge-loans', badgeClass: 'red' },
+    { key: 'delinquency', label: 'Morosidad', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>', badge: 'badge-delinquency', badgeClass: 'red' },
     { key: 'finance', label: 'Finanzas', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>', badge: '' },
+    { key: 'health', label: 'Salud del Sistema', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>', badge: 'badge-health', badgeClass: 'red' },
+    { key: 'users', label: 'Usuarios / RBAC', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>', badge: '' },
     { key: 'audit', label: 'Auditoría', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>', badge: '' },
   ];
 
@@ -1879,16 +1887,28 @@ function renderAdminPortal(app, activeTab) {
     db.collection('employers').where('status','==','pending_verification')
       .onSnapshot(s => { const el = document.getElementById('badge-employers'); if (el) el.textContent = s.size || ''; }),
     db.collection('loans').where('status','==','overdue')
-      .onSnapshot(s => { const el = document.getElementById('badge-loans'); if (el) el.textContent = s.size || ''; }),
+      .onSnapshot(s => {
+        const el = document.getElementById('badge-loans'); if (el) el.textContent = s.size || '';
+        const el2 = document.getElementById('badge-delinquency'); if (el2) el2.textContent = s.size || '';
+      }),
     db.collection('system_health').doc('current')
       .onSnapshot(doc => {
         const el = document.getElementById('adminHealth');
         if (!el || !doc.exists) return;
         const d = doc.data();
-        const pills = Object.entries(d.services || {}).map(([k, v]) =>
-          `<span class="health-pill ${v === 'ok' ? 'ok' : v === 'degraded' ? 'warn' : 'down'}">${k}: ${v}</span>`
-        ).join('');
-        el.innerHTML = pills || '';
+        const serviceKeys = ['payment-server','softcredito-adapter','notification-service','pdf-generator','ml-service'];
+        const pills = serviceKeys.map(k => {
+          const v = d[k];
+          if (!v) return '';
+          const st = v.status || 'unknown';
+          const cls = st === 'ok' ? 'ok' : st === 'down' ? 'down' : 'warn';
+          return `<span class="health-pill ${cls}">${k}: ${st}</span>`;
+        }).filter(Boolean).join('');
+        el.innerHTML = pills;
+        // Update health badge if any service is down
+        const hasIssue = serviceKeys.some(k => d[k] && d[k].status !== 'ok');
+        const el2 = document.getElementById('badge-health');
+        if (el2) el2.textContent = hasIssue ? '!' : '';
       })
   );
 
@@ -1897,6 +1917,9 @@ function renderAdminPortal(app, activeTab) {
   else if (activeTab === 'loans') renderLoansTab(content);
   else if (activeTab === 'finance') renderFinanceTab(content);
   else if (activeTab === 'audit') renderAuditTab(content);
+  else if (activeTab === 'health') renderHealthTab(content);
+  else if (activeTab === 'delinquency') renderDelinquencyTab(content);
+  else if (activeTab === 'users') renderUsersTab(content);
 }
 
 // ─── ADMIN: Employers Tab ────────────────────────────────
@@ -1954,16 +1977,14 @@ function renderEmployersTab(container) {
           const form = document.createElement('div');
           form.className = 'reject-form';
           form.style.cssText = 'margin-top:12px';
-          form.innerHTML = `<textarea placeholder="Motivo del rechazo..." style="width:100%;padding:10px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;min-height:60px;resize:vertical;margin-bottom:8px"></textarea><button class="btn-sm btn-reject" style="font-size:12px">Confirmar rechazo</button>`;
+          form.innerHTML = `<textarea placeholder="Motivo del rechazo (mín. 10 caracteres)..." style="width:100%;padding:10px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;min-height:60px;resize:vertical;margin-bottom:8px"></textarea><button class="btn-sm btn-reject" style="font-size:12px">Confirmar rechazo</button>`;
           card.appendChild(form);
           form.querySelector('button').addEventListener('click', async () => {
             const reason = form.querySelector('textarea').value.trim();
-            if (!reason) { showToast('Ingresa un motivo', 'error'); return; }
+            if (!reason || reason.length < 10) { showToast('Ingresa un motivo (mín. 10 caracteres)', 'error'); return; }
             try {
-              await db.collection('employers').doc(btn.dataset.id).update({
-                status: 'rejected', rejectionReason: reason,
-                rejectedAt: firebase.firestore.FieldValue.serverTimestamp()
-              });
+              const fn = firebase.functions().httpsCallable('rejectEmployer');
+              await fn({ employerUid: btn.dataset.id, reason });
               showToast('Empleador rechazado', 'error');
               render(activeSub);
             } catch (err) { showToast(err.message, 'error'); }
@@ -1977,54 +1998,176 @@ function renderEmployersTab(container) {
 
 // ─── ADMIN: Loans Tab ────────────────────────────────────
 function renderLoansTab(container) {
-  const subTabs = ['to_disburse', 'active', 'overdue', 'all'];
-  const subLabels = { to_disburse: 'Por desembolsar', active: 'Activos', overdue: 'Vencidos', all: 'Todos' };
+  const subTabs = ['to_disburse', 'disbursed', 'overdue', 'in_collections', 'all'];
+  const subLabels = { to_disburse: 'Por desembolsar', disbursed: 'Activos', overdue: 'Vencidos', in_collections: 'En cobranza', all: 'Todos' };
+  const statusMap = { to_disburse: ['approved', 'pending_signature'], disbursed: ['disbursed'], overdue: ['overdue'], in_collections: ['in_collections'] };
   let activeSub = 'to_disburse';
+  let searchQuery = '';
+  let dateFrom = '';
+  let dateTo = '';
 
   function render(sub) {
     activeSub = sub;
     const tabBar = `<div class="admin-tab-bar">${subTabs.map(s => `<div class="admin-tab${s===sub?' active':''}" data-sub="${s}">${subLabels[s]}</div>`).join('')}</div>`;
-    container.innerHTML = tabBar + '<div id="loanList"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>';
+    const searchBar = `<div class="admin-search-bar">
+      <input type="text" id="loanSearch" placeholder="Buscar por empleado, email..." value="${searchQuery}" style="flex:1;min-width:160px;padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div><label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:2px">DESDE</label><input type="date" id="loanDateFrom" value="${dateFrom}" style="padding:6px 10px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:12px;outline:none"></div>
+        <div><label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:2px">HASTA</label><input type="date" id="loanDateTo" value="${dateTo}" style="padding:6px 10px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:12px;outline:none"></div>
+        <button class="btn-sm btn-approve" id="loanSearchBtn" style="align-self:flex-end">Buscar</button>
+        <button class="btn-sm" id="loanClearBtn" style="align-self:flex-end;background:#fff;border:1px solid rgba(25,68,69,.12);color:var(--t2)">Limpiar</button>
+      </div>
+    </div>`;
+    container.innerHTML = tabBar + searchBar + '<div id="loanList"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>';
     container.querySelectorAll('.admin-tab').forEach(el => {
       el.addEventListener('click', () => render(el.dataset.sub));
     });
+    document.getElementById('loanSearchBtn')?.addEventListener('click', () => {
+      searchQuery = document.getElementById('loanSearch')?.value || '';
+      dateFrom = document.getElementById('loanDateFrom')?.value || '';
+      dateTo = document.getElementById('loanDateTo')?.value || '';
+      loadLoans();
+    });
+    document.getElementById('loanClearBtn')?.addEventListener('click', () => {
+      searchQuery = ''; dateFrom = ''; dateTo = '';
+      document.getElementById('loanSearch').value = '';
+      document.getElementById('loanDateFrom').value = '';
+      document.getElementById('loanDateTo').value = '';
+      loadLoans();
+    });
+    document.getElementById('loanSearch')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('loanSearchBtn')?.click(); });
+    loadLoans();
+  }
 
-    let query;
-    if (sub === 'to_disburse') query = db.collection('loans').where('status', 'in', ['approved', 'disbursement_queued']).orderBy('createdAt', 'desc');
-    else if (sub === 'active') query = db.collection('loans').where('status', '==', 'active').orderBy('createdAt', 'desc');
-    else if (sub === 'overdue') query = db.collection('loans').where('status', '==', 'overdue').orderBy('createdAt', 'desc');
-    else query = db.collection('loans').orderBy('createdAt', 'desc').limit(200);
+  async function loadLoans() {
+    const list = document.getElementById('loanList');
+    if (!list) return;
+    list.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+    try {
+      const fnInput = { limit: 200 };
+      if (activeSub !== 'all') {
+        if (activeSub === 'to_disburse') {
+          // Multi-status: approved or pending_signature — query each separately
+          const [snap1, snap2] = await Promise.all([
+            db.collection('loans').where('status', '==', 'approved').orderBy('createdAt','desc').limit(100).get(),
+            db.collection('loans').where('status', '==', 'pending_signature').orderBy('createdAt','desc').limit(100).get(),
+          ]);
+          let loans = [...snap1.docs, ...snap2.docs].map(d => ({ id: d.id, ...d.data() }));
+          if (searchQuery) { const q = searchQuery.toLowerCase(); loans = loans.filter(l => (l.employeeName||'').toLowerCase().includes(q)||(l.employeeEmail||'').toLowerCase().includes(q)); }
+          if (dateFrom) { const f = new Date(dateFrom).getTime(); loans = loans.filter(l => l.createdAt && l.createdAt.seconds*1000 >= f); }
+          if (dateTo) { const t = new Date(dateTo).getTime()+86400000; loans = loans.filter(l => l.createdAt && l.createdAt.seconds*1000 < t); }
+          loans.sort((a,b) => (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+          renderLoanTable(loans, list, activeSub);
+          return;
+        }
+        fnInput.status = statusMap[activeSub][0];
+      }
+      if (searchQuery) fnInput.employeeQuery = searchQuery;
+      if (dateFrom) fnInput.dateFrom = dateFrom;
+      if (dateTo) fnInput.dateTo = dateTo;
 
-    query.get().then(snap => {
-      const list = document.getElementById('loanList');
-      if (!list) return;
-      if (snap.empty) { list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">Sin préstamos</div>'; return; }
-      const loans = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const dueDate = (l) => l.dueDate ? new Date(l.dueDate.seconds * 1000).toLocaleDateString() : '—';
-      list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Empleado</th><th>Empresa</th><th>Monto</th><th>Total</th><th>Vence</th><th>Estado</th><th>ML Score</th><th>Acciones</th></tr></thead><tbody>${loans.map(l => {
-        const mlScore = l.mlCreditScore != null ? l.mlCreditScore : null;
-        const tier = mlScore != null ? (mlScore >= 70 ? 'tier-1' : mlScore >= 40 ? 'tier-2' : 'tier-3') : null;
-        let actions = '—';
-        if (sub === 'to_disburse') actions = `<button class="btn-sm btn-approve" data-action="disburse" data-id="${l.id}">Confirmar desembolso</button>`;
-        else if (sub === 'overdue' && l.employeePhone) actions = `<a href="https://wa.me/52${l.employeePhone}" target="_blank" class="btn-sm btn-approve" style="text-decoration:none;display:inline-block">Contactar</a>`;
-        return `<tr><td>${l.employeeName || '—'}</td><td>${l.employerName || l.employerId || '—'}</td><td>$${fmt(l.amount)}</td><td>$${fmt(l.repaymentAmount)}</td><td>${dueDate(l)}</td><td><span class="badge badge-${l.status}">${l.status}</span></td><td>${tier ? `<span class="ml-badge ${tier}">${mlScore}</span>` : '—'}</td><td>${actions}</td></tr>`;
-      }).join('')}</tbody></table></div>`;
+      const fn = firebase.functions().httpsCallable('searchLoans');
+      const result = await fn(fnInput);
+      renderLoanTable(result.data.loans, list, activeSub);
+    } catch (err) {
+      list.innerHTML = `<div style="padding:24px;color:#c0392b">${err.message}</div>`;
+    }
+  }
 
-      list.querySelectorAll('[data-action="disburse"]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          if (btn.dataset.loading === 'true') return;
-          btn.dataset.loading = 'true'; btn.innerHTML = '<span class="spinner"></span>';
-          try {
-            const fn = firebase.functions().httpsCallable('markLoanDisbursed');
-            await fn({ loanId: btn.dataset.id, disbursementRef: 'MANUAL' });
-            showToast('Desembolso confirmado', 'success');
-            render(activeSub);
-          } catch (err) { showToast(err.message, 'error'); btn.dataset.loading = 'false'; btn.textContent = 'Confirmar desembolso'; }
-        });
+  function renderLoanTable(loans, list, sub) {
+    if (!loans.length) { list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">Sin préstamos</div>'; return; }
+    const dueDate = (l) => l.dueDate ? new Date((l.dueDate.seconds||0) * 1000).toLocaleDateString() : '—';
+    const createdAt = (l) => l.createdAt ? new Date((l.createdAt.seconds||0) * 1000).toLocaleDateString() : '—';
+    list.innerHTML = `<div style="font-size:12px;color:var(--t3);padding:0 4px 12px">${loans.length} resultados</div><div class="table-wrap"><table><thead><tr><th>Empleado</th><th>Empresa</th><th>Monto</th><th>Total</th><th>Vence</th><th>Estado</th><th>ML Score</th><th>Creado</th><th>Acciones</th></tr></thead><tbody>${loans.map(l => {
+      const mlScore = l.mlCreditScore != null ? l.mlCreditScore : null;
+      const tier = mlScore != null ? (mlScore >= 70 ? 'tier-1' : mlScore >= 40 ? 'tier-2' : 'tier-3') : null;
+      let actions = '—';
+      if (sub === 'to_disburse') {
+        actions = `<button class="btn-sm btn-approve" data-action="disburse" data-id="${l.id}">Confirmar desembolso</button>`;
+      } else if ((sub === 'overdue' || sub === 'in_collections') && l.employeePhone) {
+        actions = `<a href="https://wa.me/52${l.employeePhone}" target="_blank" class="btn-sm btn-approve" style="text-decoration:none;display:inline-block">WhatsApp</a>`;
+      }
+      // Add update status button for ops/admin
+      const updateBtn = (sub !== 'to_disburse') ? ` <button class="btn-sm" data-action="update-status" data-id="${l.id}" data-status="${l.status}" style="font-size:11px;margin-top:4px">Cambiar estado</button>` : '';
+      return `<tr><td><div style="font-weight:600;font-size:13px">${l.employeeName || '—'}</div><div style="font-size:11px;color:var(--t3)">${l.employeeEmail||''}</div></td><td style="font-size:13px">${l.employerName || l.employerId || '—'}</td><td>$${fmt(l.amount||0)}</td><td>$${fmt(l.total||0)}</td><td style="font-size:12px">${dueDate(l)}</td><td><span class="badge badge-${l.status}">${l.status}</span></td><td>${tier ? `<span class="ml-badge ${tier}">${mlScore}</span>` : '—'}</td><td style="font-size:12px">${createdAt(l)}</td><td>${actions}${updateBtn}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
+
+    list.querySelectorAll('[data-action="disburse"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.loading === 'true') return;
+        btn.dataset.loading = 'true'; btn.innerHTML = '<span class="spinner"></span>';
+        try {
+          const fn = firebase.functions().httpsCallable('markLoanDisbursed');
+          await fn({ loanId: btn.dataset.id, disbursementRef: 'MANUAL' });
+          showToast('Desembolso confirmado', 'success');
+          loadLoans();
+        } catch (err) { showToast(err.message, 'error'); btn.dataset.loading = 'false'; btn.textContent = 'Confirmar desembolso'; }
       });
     });
+
+    list.querySelectorAll('[data-action="update-status"]').forEach(btn => {
+      btn.addEventListener('click', () => openUpdateStatusModal(btn.dataset.id, btn.dataset.status, () => loadLoans()));
+    });
   }
+
   render(activeSub);
+}
+
+function openUpdateStatusModal(loanId, currentStatus, onSuccess) {
+  const ALLOWED = {
+    pending: ['cancelled'],
+    approved: ['pending_signature', 'cancelled', 'disbursed'],
+    pending_signature: ['disbursed', 'cancelled'],
+    disbursed: ['repaid', 'overdue'],
+    overdue: ['in_collections', 'repaid', 'written_off'],
+    in_collections: ['repaid', 'written_off'],
+  };
+  const allowed = ALLOWED[currentStatus] || [];
+  if (!allowed.length) { showToast('No hay transiciones permitidas desde este estado', 'error'); return; }
+
+  const existing = document.getElementById('statusModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'statusModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `<div style="background:#fff;border-radius:16px;padding:28px;max-width:420px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.18)">
+    <h3 style="font-family:var(--df);font-size:20px;color:var(--t1);margin-bottom:4px">Actualizar Estado</h3>
+    <p style="font-size:13px;color:var(--t3);margin-bottom:20px">Préstamo: <code style="background:#f5f5f5;padding:2px 6px;border-radius:4px;font-size:12px">${loanId}</code><br>Estado actual: <span class="badge badge-${currentStatus}">${currentStatus}</span></p>
+    <div style="margin-bottom:16px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:block;margin-bottom:6px">Nuevo estado</label>
+      <select id="newStatusSel" style="width:100%;padding:10px 12px;border:1px solid rgba(25,68,69,.15);border-radius:8px;font-size:14px;outline:none;background:#fff">
+        ${allowed.map(s => `<option value="${s}">${s}</option>`).join('')}
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:block;margin-bottom:6px">Motivo (requerido)</label>
+      <textarea id="statusReason" placeholder="Explica el motivo del cambio de estado..." style="width:100%;padding:10px 12px;border:1px solid rgba(25,68,69,.15);border-radius:8px;font-size:13px;outline:none;resize:vertical;min-height:80px;font-family:var(--db)"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button id="statusSubmitBtn" class="btn-sm btn-approve" style="flex:1;padding:12px">Confirmar</button>
+      <button id="statusCancelBtn" class="btn-sm" style="padding:12px;background:#fff;border:1px solid rgba(25,68,69,.15);color:var(--t2)">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+
+  document.getElementById('statusCancelBtn').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  document.getElementById('statusSubmitBtn').addEventListener('click', async () => {
+    const newStatus = document.getElementById('newStatusSel').value;
+    const reason = document.getElementById('statusReason').value.trim();
+    if (!reason || reason.length < 10) { showToast('Motivo requerido (mín. 10 caracteres)', 'error'); return; }
+    const btn = document.getElementById('statusSubmitBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+    try {
+      const fn = firebase.functions().httpsCallable('updateLoanStatus');
+      await fn({ loanId, newStatus, reason });
+      showToast('Estado actualizado', 'success');
+      modal.remove();
+      onSuccess();
+    } catch (err) { showToast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Confirmar'; }
+  });
 }
 
 // ─── ADMIN: Finance Tab ──────────────────────────────────
@@ -2092,61 +2235,113 @@ function renderFinanceTab(container) {
 // ─── ADMIN: Audit Tab ────────────────────────────────────
 function renderAuditTab(container) {
   let allLogs = [];
-  let filters = { search: '', action: '', dateFrom: '', dateTo: '' };
+  let filters = { search: '', action: '', dateFrom: '', dateTo: '', collection: 'all' };
 
-  container.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-end"><div style="flex:1;min-width:180px"><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Buscar</label><input type="text" id="auditSearch" placeholder="UID, email, ID..." style="width:100%;padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Acción</label><select id="auditAction" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"><option value="">Todas</option></select></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Desde</label><input type="date" id="auditFrom" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hasta</label><input type="date" id="auditTo" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><button class="btn-sm btn-approve" id="auditExport" style="height:36px">Export CSV</button></div><div class="table-wrap" id="auditTable"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>`;
+  container.innerHTML = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-end">
+      <div style="flex:1;min-width:160px">
+        <label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Buscar</label>
+        <input type="text" id="auditSearch" placeholder="UID, email, ID, acción..." style="width:100%;padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Acción</label>
+        <select id="auditAction" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"><option value="">Todas</option></select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Colección</label>
+        <select id="auditCollection" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none">
+          <option value="all">Todas</option>
+          <option value="audit_log">audit_log (legacy)</option>
+          <option value="auditLogs">auditLogs (nuevo)</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Desde</label>
+        <input type="date" id="auditFrom" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hasta</label>
+        <input type="date" id="auditTo" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none">
+      </div>
+      <button class="btn-sm btn-approve" id="auditLoadBtn" style="height:36px">Cargar</button>
+      <button class="btn-sm btn-approve" id="auditExport" style="height:36px;background:var(--t1)">Export CSV</button>
+    </div>
+    <div class="table-wrap" id="auditTable"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>`;
 
-  db.collection('audit_log').orderBy('timestamp', 'desc').limit(200).get().then(snap => {
-    allLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const actions = [...new Set(allLogs.map(l => l.action).filter(Boolean))];
-    const sel = document.getElementById('auditAction');
-    if (sel) actions.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; sel.appendChild(o); });
-    renderAuditTable();
-  });
+  async function loadAuditLogs() {
+    const el = document.getElementById('auditTable');
+    if (!el) return;
+    el.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+    try {
+      const fn = firebase.functions().httpsCallable('getAuditLogs');
+      const result = await fn({
+        search: filters.search || undefined,
+        action: filters.action || undefined,
+        dateFrom: filters.dateFrom || undefined,
+        dateTo: filters.dateTo || undefined,
+        collection: filters.collection,
+        limit: 300,
+      });
+      allLogs = result.data.logs || [];
 
-  function filterLogs() {
-    return allLogs.filter(l => {
-      if (filters.search) {
-        const s = filters.search.toLowerCase();
-        const haystack = [l.actorUid, l.actorEmail, l.targetId, l.action, l.details].filter(Boolean).join(' ').toLowerCase();
-        if (!haystack.includes(s)) return false;
+      // Populate action dropdown
+      const sel = document.getElementById('auditAction');
+      if (sel) {
+        const current = sel.value;
+        sel.innerHTML = '<option value="">Todas</option>';
+        (result.data.actions || []).forEach(a => {
+          const o = document.createElement('option');
+          o.value = a; o.textContent = a;
+          if (a === current) o.selected = true;
+          sel.appendChild(o);
+        });
       }
-      if (filters.action && l.action !== filters.action) return false;
-      if (filters.dateFrom) {
-        const ts = l.timestamp ? new Date(l.timestamp.seconds * 1000) : null;
-        if (!ts || ts < new Date(filters.dateFrom)) return false;
-      }
-      if (filters.dateTo) {
-        const ts = l.timestamp ? new Date(l.timestamp.seconds * 1000) : null;
-        const end = new Date(filters.dateTo); end.setDate(end.getDate() + 1);
-        if (!ts || ts >= end) return false;
-      }
-      return true;
-    });
+      renderAuditTable();
+    } catch (err) {
+      if (el) el.innerHTML = `<div style="padding:24px;color:#c0392b">${err.message}</div>`;
+    }
   }
 
   function renderAuditTable() {
-    const filtered = filterLogs();
     const el = document.getElementById('auditTable');
     if (!el) return;
-    if (!filtered.length) { el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">Sin registros</div>'; return; }
-    el.innerHTML = `<table><thead><tr><th>Fecha</th><th>Actor</th><th>Acción</th><th>Target</th><th>Detalles</th></tr></thead><tbody>${filtered.map(l => {
+    if (!allLogs.length) { el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">Sin registros</div>'; return; }
+    el.innerHTML = `<div style="font-size:12px;color:var(--t3);padding:0 4px 12px">${allLogs.length} registros</div>
+    <table><thead><tr><th>Fecha</th><th>Actor</th><th>Acción</th><th>Entidad</th><th>ID</th><th>Fuente</th><th>Detalles</th></tr></thead><tbody>${allLogs.map(l => {
       const ts = l.timestamp ? new Date(l.timestamp.seconds * 1000).toLocaleString() : '—';
-      return `<tr><td style="white-space:nowrap;font-size:12px">${ts}</td><td style="font-size:12px">${l.actorEmail || l.actorUid || '—'}</td><td><span class="badge badge-active" style="font-size:10px">${l.action || '—'}</span></td><td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${l.targetId || '—'}</td><td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">${l.details || '—'}</td></tr>`;
+      const actor = l.performedByEmail || l.actorEmail || l.performedBy || l.actorUid || '—';
+      const entityId = l.entityId || l.targetId || '—';
+      const details = l.details ? (l.details.length > 80 ? l.details.substring(0,80)+'…' : l.details) : '—';
+      return `<tr>
+        <td style="white-space:nowrap;font-size:11px">${ts}</td>
+        <td style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${actor}">${actor}</td>
+        <td><span class="badge badge-disbursed" style="font-size:10px;white-space:nowrap">${l.action || '—'}</span></td>
+        <td style="font-size:11px;color:var(--t3)">${l.entityType || '—'}</td>
+        <td style="font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace" title="${entityId}">${entityId}</td>
+        <td><span style="font-size:10px;padding:2px 6px;background:${l.source==='auditLogs'?'#e8f5e9':'#fff3e0'};color:${l.source==='auditLogs'?'#2e7d32':'#e65100'};border-radius:4px">${l.source}</span></td>
+        <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t3)" title="${details}">${details}</td>
+      </tr>`;
     }).join('')}</tbody></table>`;
   }
 
-  document.getElementById('auditSearch')?.addEventListener('input', (e) => { filters.search = e.target.value; renderAuditTable(); });
-  document.getElementById('auditAction')?.addEventListener('change', (e) => { filters.action = e.target.value; renderAuditTable(); });
-  document.getElementById('auditFrom')?.addEventListener('change', (e) => { filters.dateFrom = e.target.value; renderAuditTable(); });
-  document.getElementById('auditTo')?.addEventListener('change', (e) => { filters.dateTo = e.target.value; renderAuditTable(); });
+  document.getElementById('auditLoadBtn')?.addEventListener('click', () => {
+    filters.search = document.getElementById('auditSearch')?.value || '';
+    filters.action = document.getElementById('auditAction')?.value || '';
+    filters.dateFrom = document.getElementById('auditFrom')?.value || '';
+    filters.dateTo = document.getElementById('auditTo')?.value || '';
+    filters.collection = document.getElementById('auditCollection')?.value || 'all';
+    loadAuditLogs();
+  });
+  document.getElementById('auditSearch')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('auditLoadBtn')?.click(); });
 
   document.getElementById('auditExport')?.addEventListener('click', () => {
-    const filtered = filterLogs();
-    const header = 'Fecha,Actor,Email,Acción,Target,Detalles';
-    const rows = filtered.map(l => {
+    if (!allLogs.length) { showToast('No hay datos para exportar', 'error'); return; }
+    const header = 'Fecha,Actor,Email,Acción,EntityType,EntityId,Fuente,Detalles';
+    const rows = allLogs.map(l => {
       const ts = l.timestamp ? new Date(l.timestamp.seconds * 1000).toISOString() : '';
-      return [ts, l.actorUid || '', l.actorEmail || '', l.action || '', l.targetId || '', '"' + (l.details || '').replace(/"/g, '""') + '"'].join(',');
+      const actor = l.performedBy || l.actorUid || '';
+      const email = l.performedByEmail || l.actorEmail || '';
+      return [ts, actor, email, l.action||'', l.entityType||'', l.entityId||l.targetId||'', l.source||'', '"'+(l.details||'').replace(/"/g,'""')+'"'].join(',');
     });
     const csv = header + '\n' + rows.join('\n');
     const a = document.createElement('a');
@@ -2154,6 +2349,306 @@ function renderAuditTab(container) {
     a.download = 'audit_' + new Date().toISOString().split('T')[0] + '.csv';
     a.click();
   });
+
+  loadAuditLogs();
+}
+
+// ─── ADMIN: System Health Tab ────────────────────────────
+function renderHealthTab(container) {
+  container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+
+  async function load() {
+    try {
+      const fn = firebase.functions().httpsCallable('getSystemHealthStatus');
+      const result = await fn({});
+      const d = result.data;
+      const statusColor = d.overallStatus === 'healthy' ? '#27ae60' : d.overallStatus === 'degraded' ? '#e67e22' : '#c0392b';
+      const statusLabel = d.overallStatus === 'healthy' ? 'Saludable' : d.overallStatus === 'degraded' ? 'Degradado' : 'Problemas';
+
+      const lastChecked = d.lastChecked ? new Date(d.lastChecked.seconds * 1000).toLocaleString() : 'N/A';
+
+      const servicesHtml = (d.services || []).map(s => {
+        const st = s.status || 'unknown';
+        const cls = st === 'ok' ? 'ok' : st === 'down' ? 'down' : 'warn';
+        const latency = s.latencyMs != null ? `${s.latencyMs}ms` : '—';
+        const redis = s.redis || '—';
+        return `<div class="health-service-card ${cls}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-weight:700;font-size:14px;color:var(--t1)">${s.name}</div>
+            <span class="health-status-badge ${cls}">${st === 'ok' ? 'Operando' : st === 'down' ? 'Caído' : 'Degradado'}</span>
+          </div>
+          <div style="display:flex;gap:16px;font-size:12px;color:var(--t3)">
+            <span>Latencia: <strong style="color:${latency !== '—' && parseInt(latency) > 2000 ? '#e67e22' : 'var(--t2)'}">${latency}</strong></span>
+            <span>Redis: <strong>${redis}</strong></span>
+          </div>
+          ${s.error ? `<div style="margin-top:6px;font-size:11px;color:#c0392b;background:#fdf2f2;padding:6px 8px;border-radius:6px">${s.error}</div>` : ''}
+        </div>`;
+      }).join('');
+
+      const queues = d.queues || {};
+      const queueKeys = Object.keys(queues).filter(k => k !== 'checkedAt');
+      const queuesHtml = queueKeys.length ? `<div class="table-wrap"><table><thead><tr><th>Cola</th><th>En espera</th><th>Activo</th><th>Fallido</th><th>Completado</th></tr></thead><tbody>${queueKeys.map(k => {
+        const q = queues[k] || {};
+        const failed = q.failed || 0;
+        return `<tr><td style="font-weight:600">${k}</td><td>${q.waiting || 0}</td><td>${q.active || 0}</td><td style="${failed > 0 ? 'color:#c0392b;font-weight:700' : ''}">${failed}</td><td>${q.completed || 0}</td></tr>`;
+      }).join('')}</tbody></table></div>` : '<div style="color:var(--t3);font-size:13px;padding:16px">Sin datos de colas</div>';
+
+      const incidents = d.incidents || [];
+      const incidentsHtml = incidents.length ? `<div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Error</th><th>Severidad</th><th>Tiempo</th></tr></thead><tbody>${incidents.map(i => {
+        const ts = i.ts ? new Date(i.ts.seconds * 1000).toLocaleString() : '—';
+        return `<tr><td style="font-weight:600">${i.service || i.queue || '—'}</td><td style="font-size:12px;max-width:200px;color:#c0392b">${i.error || ''}</td><td><span style="font-size:11px;padding:2px 8px;border-radius:12px;background:${i.severity==='critical'?'#ffeaea':'#fff3cd'};color:${i.severity==='critical'?'#c0392b':'#856404'}">${i.severity || '—'}</span></td><td style="font-size:12px;white-space:nowrap">${ts}</td></tr>`;
+      }).join('')}</tbody></table></div>` : '<div style="color:#27ae60;font-size:13px;padding:16px">Sin incidentes activos</div>';
+
+      container.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-size:24px;font-weight:700;color:${statusColor}">${statusLabel}</div>
+            <div style="font-size:12px;color:var(--t3);margin-top:2px">Última verificación: ${lastChecked}</div>
+          </div>
+          <button class="btn-sm btn-approve" id="healthRefreshBtn">Actualizar</button>
+        </div>
+
+        <div style="margin-bottom:24px">
+          <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:12px">Microservicios</div>
+          <div class="health-services-grid">${servicesHtml}</div>
+        </div>
+
+        <div style="background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06);margin-bottom:20px">
+          <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:12px">Colas de Procesamiento</div>
+          ${queuesHtml}
+        </div>
+
+        <div style="background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06)">
+          <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:12px">Incidentes Activos</div>
+          ${incidentsHtml}
+        </div>`;
+
+      document.getElementById('healthRefreshBtn')?.addEventListener('click', () => {
+        container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+        load();
+      });
+    } catch (err) {
+      container.innerHTML = `<div style="padding:24px;color:#c0392b">${err.message}</div>`;
+    }
+  }
+
+  load();
+
+  // Auto-refresh every 30 seconds using onSnapshot for system_health
+  const unsub = db.collection('system_health').doc('current').onSnapshot(() => load());
+  if (window._adminUnsubs) window._adminUnsubs.push(unsub);
+}
+
+// ─── ADMIN: Delinquency Dashboard ────────────────────────
+function renderDelinquencyTab(container) {
+  container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+
+  async function load() {
+    try {
+      const fn = firebase.functions().httpsCallable('getDelinquencyReport');
+      const result = await fn({});
+      const d = result.data;
+      const s = d.summary;
+
+      const overdueRate = parseFloat(s.delinquencyRate);
+      const rateColor = overdueRate > 10 ? '#c0392b' : overdueRate > 5 ? '#e67e22' : '#27ae60';
+
+      const kpis = [
+        { label: 'Préstamos Vencidos', val: s.overdueCount, warn: s.overdueCount > 0 },
+        { label: 'En Cobranza', val: s.inCollectionsCount, warn: s.inCollectionsCount > 0 },
+        { label: 'Castigados', val: s.writtenOffCount, warn: false },
+        { label: 'Exposición Vencida', val: '$' + fmt(s.totalOverdueExposureMXN), warn: s.totalOverdueExposureMXN > 0 },
+        { label: 'Exposición Cobranza', val: '$' + fmt(s.totalCollectionsExposureMXN), warn: false },
+        { label: 'Tasa Morosidad', val: s.delinquencyRate, warn: overdueRate > 5 },
+      ];
+
+      const kpiHtml = `<div class="kpi-grid">${kpis.map(k => `<div class="kpi-card${k.warn?' warn':''}"><div class="kpi-val">${k.val}</div><div class="kpi-label">${k.label}</div></div>`).join('')}</div>`;
+
+      const buckets = d.buckets;
+      const bucketsHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px">
+        ${[['1-7_days','1–7 días','#27ae60'],['8-30_days','8–30 días','#f39c12'],['31-60_days','31–60 días','#e67e22'],['61plus_days','61+ días','#c0392b']].map(([k,label,color]) => `
+          <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid rgba(25,68,69,.06);border-left:3px solid ${color}">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${color};margin-bottom:8px">${label}</div>
+            <div style="font-size:22px;font-weight:700;color:var(--t1)">${buckets[k]?.count||0}</div>
+            <div style="font-size:12px;color:var(--t3);margin-top:2px">$${fmt(buckets[k]?.exposure||0)} MXN</div>
+          </div>`).join('')}
+      </div>`;
+
+      const employerRows = (d.byEmployer || []).sort((a,b) => b.totalExposure - a.totalExposure).slice(0,20).map(e =>
+        `<tr><td style="font-weight:600">${e.name}</td><td>${e.count}</td><td>$${fmt(e.totalExposure)}</td></tr>`
+      ).join('');
+      const employerTableHtml = employerRows ? `<div class="table-wrap"><table><thead><tr><th>Empresa</th><th>Préstamos</th><th>Exposición MXN</th></tr></thead><tbody>${employerRows}</tbody></table></div>` : '<div style="color:var(--t3);padding:16px;font-size:13px">Sin datos</div>';
+
+      const overdueRows = (d.overdueLoans || []).slice(0,50).map(l => {
+        const due = l.dueDate ? new Date(l.dueDate.seconds*1000).toLocaleDateString() : '—';
+        const wa = l.employeePhone ? `<a href="https://wa.me/52${l.employeePhone}" target="_blank" class="btn-sm btn-approve" style="text-decoration:none;display:inline-block;font-size:10px;padding:4px 8px">WA</a>` : '';
+        const updateBtn = `<button class="btn-sm" data-action="update-status" data-id="${l.id}" data-status="${l.status}" style="font-size:10px;padding:4px 8px;margin-top:4px">Estado</button>`;
+        return `<tr>
+          <td style="font-size:12px"><div style="font-weight:600">${l.employeeName||'—'}</div><div style="color:var(--t3);font-size:11px">${l.employerName||'—'}</div></td>
+          <td style="font-size:12px">$${fmt(l.total||0)}</td>
+          <td><span style="font-size:12px;font-weight:700;color:${l.daysOverdue>30?'#c0392b':'#e67e22'}">${l.daysOverdue} días</span></td>
+          <td style="font-size:12px">${due}</td>
+          <td><span class="badge badge-${l.status}" style="font-size:10px">${l.status}</span></td>
+          <td>${wa}${updateBtn}</td>
+        </tr>`;
+      }).join('');
+
+      const overdueTableHtml = overdueRows ? `<div class="table-wrap"><table><thead><tr><th>Empleado / Empresa</th><th>Total</th><th>Días Vencido</th><th>Vencía</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${overdueRows}</tbody></table></div>` : '<div style="color:var(--t3);padding:16px;font-size:13px">Sin préstamos vencidos</div>';
+
+      container.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-size:22px;font-weight:700;color:${rateColor}">Morosidad: ${s.delinquencyRate}</div>
+            <div style="font-size:12px;color:var(--t3);margin-top:2px">Actualizado: ${d.generatedAt ? new Date(d.generatedAt).toLocaleString() : '—'}</div>
+          </div>
+          <button class="btn-sm btn-approve" id="delinquencyRefreshBtn">Actualizar</button>
+        </div>
+        ${kpiHtml}
+        ${bucketsHtml}
+        <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:20px;margin-bottom:20px" class="lp-grid">
+          <div style="background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06)">
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:12px">Morosidad por Empresa</div>
+            ${employerTableHtml}
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06)">
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:12px">Préstamos Vencidos (top 50)</div>
+            ${overdueTableHtml}
+          </div>
+        </div>`;
+
+      document.getElementById('delinquencyRefreshBtn')?.addEventListener('click', () => {
+        container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+        load();
+      });
+      container.querySelectorAll('[data-action="update-status"]').forEach(btn => {
+        btn.addEventListener('click', () => openUpdateStatusModal(btn.dataset.id, btn.dataset.status, () => load()));
+      });
+    } catch (err) {
+      container.innerHTML = `<div style="padding:24px;color:#c0392b">${err.message}</div>`;
+    }
+  }
+
+  load();
+}
+
+// ─── ADMIN: Users / RBAC Tab ─────────────────────────────
+function renderUsersTab(container) {
+  let allUsers = [];
+  let searchQuery = '';
+  let roleFilter = 'all';
+
+  const roleColors = { admin:'#194445', super_admin:'#c0392b', ops:'#2980b9', employer_admin:'#8e44ad', employee:'#95a5a6' };
+  const roleLabels = { admin:'Admin', super_admin:'Super Admin', ops:'Ops', employer_admin:'Empleador Admin', employee:'Empleado' };
+
+  function renderShell() {
+    container.innerHTML = `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-end">
+        <div style="flex:1;min-width:160px">
+          <label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Buscar usuario</label>
+          <input type="text" id="userSearch" placeholder="Email, UID, nombre..." style="width:100%;padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Rol</label>
+          <select id="userRoleFilter" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none">
+            <option value="all">Todos</option>
+            <option value="admin">Admin</option>
+            <option value="super_admin">Super Admin</option>
+            <option value="ops">Ops</option>
+            <option value="employer_admin">Empleador Admin</option>
+            <option value="employee">Empleado</option>
+          </select>
+        </div>
+        <button class="btn-sm btn-approve" id="userLoadBtn">Cargar</button>
+      </div>
+      <div id="roleCounts" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px"></div>
+      <div id="userTable"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>`;
+
+    document.getElementById('userLoadBtn')?.addEventListener('click', loadUsers);
+    document.getElementById('userSearch')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadUsers(); });
+    loadUsers();
+  }
+
+  async function loadUsers() {
+    const list = document.getElementById('userTable');
+    if (!list) return;
+    list.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+    searchQuery = document.getElementById('userSearch')?.value || '';
+    roleFilter = document.getElementById('userRoleFilter')?.value || 'all';
+    try {
+      const fn = firebase.functions().httpsCallable('listUsers');
+      const result = await fn({ search: searchQuery || undefined, role: roleFilter, limit: 50 });
+      allUsers = result.data.users || [];
+
+      // Show role counts
+      const counts = result.data.roleCounts || {};
+      const countEl = document.getElementById('roleCounts');
+      if (countEl) {
+        countEl.innerHTML = Object.entries(counts).map(([role, count]) =>
+          `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:${roleColors[role]||'#94a3b8'}15;color:${roleColors[role]||'#64748b'};font-weight:600">${roleLabels[role]||role}: ${count}</span>`
+        ).join('');
+      }
+
+      renderUserTable();
+    } catch (err) {
+      if (list) list.innerHTML = `<div style="padding:24px;color:#c0392b">${err.message}</div>`;
+    }
+  }
+
+  function renderUserTable() {
+    const list = document.getElementById('userTable');
+    if (!list) return;
+    if (!allUsers.length) { list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">Sin usuarios</div>'; return; }
+
+    list.innerHTML = `<div style="font-size:12px;color:var(--t3);padding:0 4px 12px">${allUsers.length} usuarios</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Usuario</th><th>Email</th><th>Rol actual</th><th>Verificado</th><th>Último acceso</th><th>Acciones</th></tr></thead>
+      <tbody>${allUsers.map(u => {
+        const roleColor = roleColors[u.role] || '#64748b';
+        const roleLabel = roleLabels[u.role] || u.role;
+        const lastLogin = u.lastSignInTime ? new Date(u.lastSignInTime).toLocaleDateString() : '—';
+        const verified = u.emailVerified ? '<span style="color:#27ae60;font-size:12px">✓ Verificado</span>' : '<span style="color:#e67e22;font-size:12px">Sin verificar</span>';
+        return `<tr>
+          <td><div style="font-weight:600;font-size:13px">${u.displayName||'—'}</div><div style="font-size:11px;color:var(--t3);font-family:monospace">${u.uid}</div></td>
+          <td style="font-size:13px">${u.email||'—'}</td>
+          <td><span style="font-size:12px;padding:3px 10px;border-radius:12px;background:${roleColor}15;color:${roleColor};font-weight:700">${roleLabel}</span></td>
+          <td>${verified}</td>
+          <td style="font-size:12px">${lastLogin}</td>
+          <td>
+            <select class="role-select btn-sm" data-uid="${u.uid}" data-current="${u.role}" style="font-size:12px;padding:4px 8px;border:1px solid rgba(25,68,69,.12);border-radius:6px;margin-right:6px">
+              <option value="">— Cambiar rol —</option>
+              <option value="employee">Empleado</option>
+              <option value="employer_admin">Empleador Admin</option>
+              <option value="ops">Ops</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button class="btn-sm btn-approve role-apply-btn" data-uid="${u.uid}" style="font-size:11px;padding:4px 8px">Aplicar</button>
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+
+    list.querySelectorAll('.role-apply-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const uid = btn.dataset.uid;
+        const sel = list.querySelector(`.role-select[data-uid="${uid}"]`);
+        const newRole = sel?.value;
+        if (!newRole) { showToast('Selecciona un rol', 'error'); return; }
+        if (!confirm(`¿Cambiar rol de este usuario a "${newRole}"?`)) return;
+        btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+        try {
+          const fn = firebase.functions().httpsCallable('setAdminClaim');
+          await fn({ targetUid: uid, role: newRole });
+          showToast('Rol actualizado correctamente', 'success');
+          loadUsers();
+        } catch (err) {
+          showToast(err.message, 'error');
+          btn.disabled = false; btn.textContent = 'Aplicar';
+        }
+      });
+    });
+  }
+
+  renderShell();
 }
 
 // ─── Device Fingerprint (Stage 0 fraud detection) ────────
