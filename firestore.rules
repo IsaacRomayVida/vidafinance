@@ -2,63 +2,125 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
-    function isAdmin()    { return request.auth != null && request.auth.token.admin == true; }
-    function signedIn()   { return request.auth != null; }
+    // =============================================
+    // HELPER FUNCTIONS
+    // =============================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    function hasRole(role) {
+      return request.auth.token.role == role;
+    }
+    function isAdmin() {
+      // Support both legacy token.admin boolean and new role-based claims
+      return hasRole('admin') || hasRole('super_admin') || request.auth.token.admin == true;
+    }
+    function isOps() {
+      return hasRole('ops') || isAdmin();
+    }
 
-    match /employers/{uid} {
-      allow read:   if isOwner(uid) || isAdmin();
-      allow create: if isOwner(uid);
-      allow update: if isOwner(uid) &&
-        !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['employerCode','createdAt','totalEmployees','activeLoans','totalDisbursed']);
+    // =============================================
+    // EMPLOYERS COLLECTION
+    // Employers can read/update their own record (limited fields).
+    // Only admins can create or promote employer status.
+    // =============================================
+    match /employers/{employerId} {
+      allow read: if isOwner(employerId) || isOps();
+      allow create: if isAdmin();
+      allow update: if isAdmin()
+        || (isOwner(employerId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['name', 'email', 'phone', 'contactName', 'contactEmail', 'contactPhone']));
       allow delete: if false;
     }
 
-    match /employees/{uid} {
-      allow read:   if isOwner(uid) ||
-        (signedIn() && get(/databases/$(database)/documents/employees/$(uid)).data.employerId == request.auth.uid) ||
-        isAdmin();
-      allow create: if isOwner(uid);
-      allow update: if isOwner(uid) &&
-        !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['creditLimit','availableCredit','employerId','createdAt']);
+    // =============================================
+    // EMPLOYEES COLLECTION
+    // Employees can read/update their own record (limited fields).
+    // Employers can read their own employees (via employerId match).
+    // Only ops/admin can create employees.
+    // =============================================
+    match /employees/{employeeId} {
+      allow read: if isOwner(employeeId)
+                  || (isAuthenticated() && resource.data.employerId == request.auth.uid)
+                  || isOps();
+      allow create: if isOps();
+      allow update: if isOps()
+        || (isOwner(employeeId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['bankClabe', 'bankName', 'phone', 'address']));
       allow delete: if false;
     }
 
+    // =============================================
+    // LOANS COLLECTION
+    // Employees can read their own loans; employers can read loans under them.
+    // ALL writes are Cloud Function only (Admin SDK bypasses rules).
+    // Client SDK can NEVER create or modify loans.
+    // =============================================
     match /loans/{loanId} {
-      allow read: if signedIn() && (
+      allow read: if isAuthenticated() && (
         resource.data.employeeId == request.auth.uid ||
         resource.data.employerId == request.auth.uid ||
-        isAdmin()
+        isOps()
       );
-      allow create: if false;
-      allow update: if signedIn() &&
-        resource.data.employerId == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
-        resource.data.status == 'pending' &&
-        request.resource.data.status in ['approved','rejected'];
-      allow delete: if false;
+      allow create: if false;  // Only Cloud Functions via Admin SDK
+      allow update: if false;  // Only Cloud Functions via Admin SDK
+      allow delete: if false;  // Loans are never deleted, only marked
     }
 
+    // =============================================
+    // CONTACT — PUBLIC SUBMIT, ADMIN READ/MANAGE
+    // =============================================
     match /contact/{docId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
-    match /audit_log/{docId}       { allow read: if isAdmin(); allow write: if false; }
-    match /disbursement_queue/{d}  { allow read, write: if false; }
-    match /notification_queue/{d}  { allow read, write: if false; }
-    match /overdue_log/{d}         { allow read: if isAdmin(); allow write: if false; }
-    match /repayments/{d}          { allow read: if isAdmin() || resource.data.employeeId == request.auth.uid; allow write: if false; }
-    match /spei_log/{d}            { allow read: if isAdmin(); allow write: if false; }
-    match /payment_failures/{d}    { allow read: if isAdmin(); allow write: if false; }
-    match /incident_log/{d}        { allow read: if isAdmin(); allow write: if false; }
-    match /scheduler_runs/{d}      { allow read: if isAdmin(); allow write: if false; }
-    match /portfolio_snapshots/{d} { allow read: if isAdmin(); allow write: if false; }
-    match /system_health/{d}       { allow read: if isAdmin(); allow write: if false; }
-    match /notification_log/{d}    { allow read: if isAdmin(); allow write: if false; }
-    match /softcredito_employers/{d}{ allow read: if isAdmin(); allow write: if false; }
-    match /ml_decisions/{d}        { allow read: if isAdmin(); allow write: if false; }
+    // =============================================
+    // REPAYMENTS — EMPLOYEE + ADMIN READ, IMMUTABLE
+    // =============================================
+    match /repayments/{d} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.employeeId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // =============================================
+    // AUDIT & OPERATIONAL LOGS — ADMIN READ, IMMUTABLE
+    // All writes go through Cloud Functions (Admin SDK).
+    // =============================================
+    match /audit_log/{docId}         { allow read: if isAdmin();  allow write: if false; }
+    match /overdue_log/{d}           { allow read: if isAdmin();  allow write: if false; }
+    match /spei_log/{d}              { allow read: if isAdmin();  allow write: if false; }
+    match /payment_failures/{d}      { allow read: if isAdmin();  allow write: if false; }
+    match /incident_log/{d}          { allow read: if isAdmin();  allow write: if false; }
+    match /notification_log/{d}      { allow read: if isAdmin();  allow write: if false; }
+    match /softcredito_employers/{d} { allow read: if isAdmin();  allow write: if false; }
+    match /ml_decisions/{d}          { allow read: if isAdmin();  allow write: if false; }
+
+    // =============================================
+    // OPS-READABLE OPERATIONAL COLLECTIONS
+    // =============================================
+    match /scheduler_runs/{d}        { allow read: if isOps();    allow write: if false; }
+    match /portfolio_snapshots/{d}   { allow read: if isOps();    allow write: if false; }
+    match /system_health/{d}         { allow read: if isOps();    allow write: if false; }
+
+    // =============================================
+    // INTERNAL QUEUES — DENY ALL CLIENT ACCESS
+    // Only accessed by Cloud Functions via Admin SDK.
+    // =============================================
+    match /disbursement_queue/{d}    { allow read, write: if false; }
+    match /notification_queue/{d}    { allow read, write: if false; }
+
+    // =============================================
+    // DENY ALL OTHER PATHS
+    // Explicit catch-all to prevent accidental access.
+    // =============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }

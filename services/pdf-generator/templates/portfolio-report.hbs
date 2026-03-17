@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+body{font-family:Georgia,serif;font-size:11px;line-height:1.6;color:#1a2634;margin:0;padding:40px}
+.logo{text-align:center;border-bottom:2px solid #194445;padding-bottom:16px;margin-bottom:24px}
+.logo-name{font-size:22px;font-weight:bold;color:#194445;letter-spacing:8px}
+.logo-sub{font-size:9px;color:#7a9898;margin-top:4px}
+h2{color:#194445;font-size:12px;text-transform:uppercase;letter-spacing:2px;border-bottom:1px solid #d4eaeb;padding-bottom:6px;margin-top:20px}
+.row{display:flex;gap:20px;margin-bottom:8px}
+.fld{flex:1} .fl{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#7a9898}
+.fv{font-size:12px;font-weight:bold;color:#194445}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:10px}
+thead th{background:#194445;color:#fff;text-align:left;padding:8px 10px;font-size:9px;text-transform:uppercase;letter-spacing:1px}
+tbody td{padding:7px 10px;border-bottom:1px solid #e8eef0}
+tbody tr:nth-child(even){background:#f0f6f6}
+.kpi-grid{display:flex;gap:16px;margin:16px 0;flex-wrap:wrap}
+.kpi-card{flex:1;min-width:120px;background:#f0f6f6;border:1px solid #d4eaeb;border-radius:4px;padding:14px;text-align:center}
+.kpi-label{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#7a9898}
+.kpi-value{font-size:18px;font-weight:bold;color:#194445;margin-top:4px}
+.kpi-sub{font-size:9px;color:#7a9898;margin-top:2px}
+.status-active{color:#194445;font-weight:bold}
+.status-paid{color:#2e7d32}
+.status-overdue{color:#c62828}
+.status-default{color:#e65100}
+.breakdown-box{background:#f0f6f6;border:1px solid #d4eaeb;padding:14px;margin:16px 0;border-radius:4px}
+.breakdown-row{display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px}
+.breakdown-total{font-size:14px;font-weight:bold;color:#194445;border-top:1px solid #194445;padding-top:6px;margin-top:6px;display:flex;justify-content:space-between}
+.foot{margin-top:30px;border-top:1px solid #e8e8e8;padding-top:8px;font-size:8.5px;color:#9aafaf;text-align:center}
+.note{font-size:9px;color:#7a9898;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="logo">
+  <div class="logo-name">V I D A</div>
+  <div class="logo-sub">VIDA Finance SOFOM E.N.R. &middot; RFC: {{sofomRfc}}</div>
+  <div style="margin-top:6px;font-size:9px;color:#7a9898">REPORTE MENSUAL DE CARTERA</div>
+</div>
+
+<div class="row" style="margin-bottom:16px">
+  <div class="fld"><div class="fl">Periodo</div><div class="fv">{{periodLabel}}</div></div>
+  <div class="fld"><div class="fl">Fecha de generaci&oacute;n</div><div class="fv">{{generatedDate}}</div></div>
+  <div class="fld"><div class="fl">Folio</div><div class="fv">{{reportId}}</div></div>
+</div>
+
+<h2>Indicadores clave</h2>
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-label">Cartera total</div>
+    <div class="kpi-value">${{totalPortfolio}}</div>
+    <div class="kpi-sub">MXN</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Pr&eacute;stamos activos</div>
+    <div class="kpi-value">{{activeLoans}}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Tasa de morosidad</div>
+    <div class="kpi-value">{{delinquencyRate}}%</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Empresas activas</div>
+    <div class="kpi-value">{{activeEmployers}}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Desembolsos del mes</div>
+    <div class="kpi-value">${{monthlyDisbursed}}</div>
+    <div class="kpi-sub">MXN</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Cobros del mes</div>
+    <div class="kpi-value">${{monthlyCollected}}</div>
+    <div class="kpi-sub">MXN</div>
+  </div>
+</div>
+
+<h2>Desglose por estatus</h2>
+<div class="breakdown-box">
+  <div class="breakdown-row"><span>Al corriente</span><span>{{currentCount}} pr&eacute;stamos &mdash; ${{currentAmount}} MXN</span></div>
+  <div class="breakdown-row"><span>Vencidos (1-30 d&iacute;as)</span><span>{{overdue30Count}} pr&eacute;stamos &mdash; ${{overdue30Amount}} MXN</span></div>
+  <div class="breakdown-row"><span>Vencidos (31-60 d&iacute;as)</span><span>{{overdue60Count}} pr&eacute;stamos &mdash; ${{overdue60Amount}} MXN</span></div>
+  <div class="breakdown-row"><span>Vencidos (61-90 d&iacute;as)</span><span>{{overdue90Count}} pr&eacute;stamos &mdash; ${{overdue90Amount}} MXN</span></div>
+  <div class="breakdown-row"><span>Cartera vencida (&gt;90 d&iacute;as)</span><span>{{overdueOver90Count}} pr&eacute;stamos &mdash; ${{overdueOver90Amount}} MXN</span></div>
+  <div class="breakdown-total"><span><strong>Total cartera</strong></span><span><strong>${{totalPortfolio}} MXN</strong></span></div>
+</div>
+
+<h2>Top empresas por cartera</h2>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Empresa</th>
+      <th>Pr&eacute;stamos activos</th>
+      <th>Cartera vigente</th>
+      <th>Cartera vencida</th>
+      <th>Tasa morosidad</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each employers}}
+    <tr>
+      <td>{{rowNum}}</td>
+      <td>{{name}}</td>
+      <td>{{activeLoans}}</td>
+      <td>${{currentPortfolio}}</td>
+      <td>${{overduePortfolio}}</td>
+      <td>{{delinquencyRate}}%</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+<div class="note">
+  <p>Este reporte es confidencial y de uso exclusivo interno de VIDA Finance SOFOM E.N.R. La informaci&oacute;n contenida refleja el estado de la cartera al cierre del periodo indicado.</p>
+</div>
+
+<div class="foot">VIDA Finance SOFOM E.N.R. &middot; {{sofomAddress}} &middot; contacto@vidafinance.mx &middot; CONDUSEF 01800 999 8080</div>
+</body>
+</html>

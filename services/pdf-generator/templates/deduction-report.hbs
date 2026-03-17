@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+body{font-family:Georgia,serif;font-size:11px;line-height:1.6;color:#1a2634;margin:0;padding:40px}
+.logo{text-align:center;border-bottom:2px solid #194445;padding-bottom:16px;margin-bottom:24px}
+.logo-name{font-size:22px;font-weight:bold;color:#194445;letter-spacing:8px}
+.logo-sub{font-size:9px;color:#7a9898;margin-top:4px}
+h2{color:#194445;font-size:12px;text-transform:uppercase;letter-spacing:2px;border-bottom:1px solid #d4eaeb;padding-bottom:6px;margin-top:20px}
+.row{display:flex;gap:20px;margin-bottom:8px}
+.fld{flex:1} .fl{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#7a9898}
+.fv{font-size:12px;font-weight:bold;color:#194445}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:10px}
+thead th{background:#194445;color:#fff;text-align:left;padding:8px 10px;font-size:9px;text-transform:uppercase;letter-spacing:1px}
+tbody td{padding:7px 10px;border-bottom:1px solid #e8eef0}
+tbody tr:nth-child(even){background:#f0f6f6}
+.total-row{background:#d4eaeb !important;font-weight:bold}
+.total-row td{border-top:2px solid #194445;padding-top:10px}
+.summary-box{background:#f0f6f6;border:1px solid #d4eaeb;padding:14px;margin:16px 0;border-radius:4px;display:flex;gap:30px}
+.summary-item{flex:1;text-align:center}
+.summary-label{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#7a9898}
+.summary-value{font-size:16px;font-weight:bold;color:#194445;margin-top:4px}
+.foot{margin-top:30px;border-top:1px solid #e8e8e8;padding-top:8px;font-size:8.5px;color:#9aafaf;text-align:center}
+.note{font-size:9px;color:#7a9898;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="logo">
+  <div class="logo-name">V I D A</div>
+  <div class="logo-sub">VIDA Finance SOFOM E.N.R. &middot; RFC: {{sofomRfc}}</div>
+  <div style="margin-top:6px;font-size:9px;color:#7a9898">REPORTE DE DEDUCCIONES V&Iacute;A N&Oacute;MINA</div>
+</div>
+
+<div class="row" style="margin-bottom:16px">
+  <div class="fld"><div class="fl">Empresa</div><div class="fv">{{employerName}}</div></div>
+  <div class="fld"><div class="fl">RFC Empresa</div><div class="fv">{{employerRfc}}</div></div>
+  <div class="fld"><div class="fl">Periodo</div><div class="fv">{{periodLabel}}</div></div>
+</div>
+<div class="row">
+  <div class="fld"><div class="fl">Fecha de generaci&oacute;n</div><div class="fv">{{generatedDate}}</div></div>
+  <div class="fld"><div class="fl">Folio</div><div class="fv">{{reportId}}</div></div>
+</div>
+
+<h2>Resumen</h2>
+<div class="summary-box">
+  <div class="summary-item">
+    <div class="summary-label">Empleados con descuento</div>
+    <div class="summary-value">{{totalEmployees}}</div>
+  </div>
+  <div class="summary-item">
+    <div class="summary-label">Pr&eacute;stamos activos</div>
+    <div class="summary-value">{{totalLoans}}</div>
+  </div>
+  <div class="summary-item">
+    <div class="summary-label">Total a descontar</div>
+    <div class="summary-value">${{totalAmount}} MXN</div>
+  </div>
+</div>
+
+<h2>Detalle de deducciones</h2>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Empleado</th>
+      <th>No. Empleado</th>
+      <th>Folio Pr&eacute;stamo</th>
+      <th>Monto Pr&eacute;stamo</th>
+      <th>Descuento</th>
+      <th>Saldo Restante</th>
+      <th>Vencimiento</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each deductions}}
+    <tr>
+      <td>{{rowNum}}</td>
+      <td>{{employeeName}}</td>
+      <td>{{employeeNumber}}</td>
+      <td>{{loanFolio}}</td>
+      <td>${{loanAmount}}</td>
+      <td>${{deductionAmount}}</td>
+      <td>${{remainingBalance}}</td>
+      <td>{{dueDate}}</td>
+    </tr>
+    {{/each}}
+    <tr class="total-row">
+      <td colspan="5">TOTAL</td>
+      <td>${{totalAmount}}</td>
+      <td colspan="2"></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <p>Este reporte es generado autom&aacute;ticamente por VIDA Finance. Los montos indicados deben ser descontados de la n&oacute;mina del periodo correspondiente y transferidos a la cuenta CLABE proporcionada por VIDA Finance.</p>
+  <p>Cuenta CLABE para transferencia: {{clabe}}</p>
+</div>
+
+<div class="foot">VIDA Finance SOFOM E.N.R. &middot; {{sofomAddress}} &middot; contacto@vidafinance.mx &middot; CONDUSEF 01800 999 8080</div>
+</body>
+</html>

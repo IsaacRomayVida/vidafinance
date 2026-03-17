@@ -1,4 +1,13 @@
-from fastapi import FastAPI, HTTPException, Header
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
+from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os, json, time
 import redis as Redis
 from dotenv import load_dotenv
@@ -6,32 +15,93 @@ from dotenv import load_dotenv
 load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
 
-app = FastAPI(title="vida-ml-service")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ml-service")
+
 rdb = Redis.from_url(
     os.environ.get("REDIS_URL", "redis://localhost:6379"), decode_responses=True
 )
-SEC = os.environ.get("INTERNAL_SECRET", "")
+SEC = os.environ.get("INTERNAL_SECRET", "") or os.environ.get("INTERNAL_API_SECRET", "")
 AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
 
+_worker_task: asyncio.Task | None = None
+
+ALLOWED_ORIGINS = [
+    "https://vida-staging.web.app",
+    "https://vida-finance.web.app",
+    "https://admin.vida.finance",
+    "https://employer.vida.finance",
+]
+
+limiter = Limiter(key_func=get_remote_address)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _worker_task
+    has_firebase = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
+    if os.environ.get("REDIS_URL") and has_firebase:
+        try:
+            from workers.underwriting_worker import start_worker
+            _worker_task = asyncio.create_task(start_worker())
+            logger.info("Underwriting worker task started")
+        except Exception as e:
+            logger.warning("Could not start underwriting worker: %s", e)
+    else:
+        logger.warning(
+            "Underwriting worker not started: REDIS_URL or Firebase credentials missing"
+        )
+    yield
+    if _worker_task and not _worker_task.done():
+        _worker_task.cancel()
+        try:
+            await _worker_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Underwriting worker stopped")
+
+
+app = FastAPI(title="vida-ml-service", lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "x-internal-secret"],
+)
+
 
 def auth(s):
-    if s != SEC:
+    if not SEC or s != SEC:
         raise HTTPException(401, "Unauthorized")
 
 
 @app.get("/health")
-def health():
+@limiter.limit("60/minute")
+def health(request: Request):
     try:
         rdb.ping()
         r = True
     except Exception:
         r = False
-    return {"status": "ok" if r else "degraded", "service": "vida-ml-service", "redis": r}
+    worker_alive = _worker_task is not None and not _worker_task.done()
+    return {
+        "status": "ok" if r else "degraded",
+        "service": "vida-ml-service",
+        "redis": r,
+        "worker": "running" if worker_alive else "stopped",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.post("/underwrite/employer")
-async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+async def score_emp(request: Request, payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     uid = payload.get("employerUid", "")
     ck = f"ml:employer:{uid}"
@@ -90,7 +160,8 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
 
 
 @app.post("/underwrite/employee")
-async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+async def score_employee(request: Request, payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     uid = payload.get("employeeId", "")
     amt = payload.get("amount", 0)
@@ -123,7 +194,8 @@ async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
 
 
 @app.get("/explain/{decision_id}")
-def explain(decision_id: str, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+def explain(request: Request, decision_id: str, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     return {
         "decisionId": decision_id,
@@ -133,7 +205,8 @@ def explain(decision_id: str, x_internal_secret: str = Header(None)):
 
 
 @app.post("/monitor/drift")
-def drift(payload: dict, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+def drift(request: Request, payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     return {
         "drift_detected": False,
@@ -143,10 +216,63 @@ def drift(payload: dict, x_internal_secret: str = Header(None)):
 
 
 @app.delete("/cache/employer/{uid}")
-def clear_cache(uid: str, x_internal_secret: str = Header(None)):
+@limiter.limit("100/15minutes")
+def clear_cache(request: Request, uid: str, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
     try:
         rdb.delete(f"ml:employer:{uid}")
     except Exception:
         pass
     return {"cleared": f"ml:employer:{uid}"}
+
+
+@app.post("/score")
+@limiter.limit("100/15minutes")
+async def score_loan_direct(
+    request: Request, payload: dict, x_internal_secret: str = Header(None)
+):
+    """
+    Direct synchronous scoring endpoint.
+    Accepts the same payload as the BullMQ job data so other services
+    can call underwriting synchronously without going through the queue.
+    """
+    auth(x_internal_secret)
+    from workers.underwriting_worker import (
+        process_underwrite_loan,
+        encode_pay_freq,
+        encode_industry,
+        get_rejection_reason,
+        APPROVAL_THRESHOLD,
+    )
+    from models.underwriting_model import UnderwritingModel
+    import os as _os
+
+    borrower = payload.get("borrowerSnapshot", {})
+    principal = float(payload.get("principalAmount", 0))
+    monthly_salary = float(borrower.get("monthlySalary", 1))
+
+    features = {
+        "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
+        "monthly_salary": monthly_salary,
+        "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
+        "loan_to_salary_ratio": principal / max(monthly_salary, 1),
+        "employer_industry_encoded": float(encode_industry(borrower.get("employerIndustry", ""))),
+        "principal_amount": principal,
+        "bureau_score": 500.0,
+        "has_bureau_record": 0.0,
+    }
+
+    model_path = _os.environ.get("MODEL_PATH", "models/underwriting_v1.joblib")
+    model = UnderwritingModel.load(model_path)
+    prob = model.predict_proba(features)
+    decision = "approved" if prob >= APPROVAL_THRESHOLD else "rejected"
+
+    if features["employment_tenure_months"] < 3:
+        decision = "rejected"
+
+    return {
+        "decision": decision,
+        "score": round(prob, 4),
+        "threshold": APPROVAL_THRESHOLD,
+        "model": "logistic_v1.0",
+    }

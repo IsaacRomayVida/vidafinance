@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install functions dependencies
+        run: cd functions && npm ci
+
+      - name: TypeScript typecheck (functions)
+        run: cd functions && npx tsc --noEmit
+
+      - name: Lint (functions)
+        run: cd functions && npx eslint src --ext .ts --max-warnings 0
+        continue-on-error: true
+
+  health-check:
+    name: Verify production endpoints
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm install
+      - run: npm run verify
+        env:
+          PAYMENT_SERVER_URL: ${{ secrets.PAYMENT_SERVER_URL }}
+          SOFTCREDITO_ADAPTER_URL: ${{ secrets.SOFTCREDITO_ADAPTER_URL }}
+          NOTIFICATION_SERVICE_URL: ${{ secrets.NOTIFICATION_SERVICE_URL }}
+          PDF_GENERATOR_URL: ${{ secrets.PDF_GENERATOR_URL }}
+          ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL }}
+        continue-on-error: true
