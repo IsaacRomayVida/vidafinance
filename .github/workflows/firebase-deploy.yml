@@ -27,11 +27,6 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
-
       - name: Write functions .env (Staging)
         if: github.ref == 'refs/heads/develop'
         run: |
@@ -66,3 +61,5 @@ jobs:
             --only functions,firestore:rules,firestore:indexes \
             --project vida-finance \
             --non-interactive
+        env:
+          FIREBASE_TOKEN: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
