@@ -38,9 +38,17 @@ const i18n = {
     dash_welcome:'Bienvenido',dash_available_credit:'Crédito Disponible',dash_credit_limit:'Límite de Crédito',dash_utilization:'Utilización',dash_quick_action:'Acción Rápida',dash_request_funds:'Solicitar Fondos',dash_your_loans:'Tus Préstamos',dash_my_loans:'Mis Préstamos',dash_th_repayment:'Pago',dash_th_date:'Fecha',dash_no_loans_employee:'Aún no tienes préstamos. Solicita tu primer fondo de emergencia arriba.',
     modal_request:'Solicitar Fondos',modal_available:'Disponible',modal_amount:'Monto (MXN)',modal_term:'Plazo de Pago',modal_term_30:'30 días',modal_rate:'30% mensual',modal_loan_amount:'Monto del préstamo',modal_fee:'Comisión (30%)',modal_total:'Pago total',modal_confirm:'Confirmar Solicitud',modal_submitting:'Enviando...',modal_exceed:'El monto excede el crédito disponible',modal_minimum:'El monto mínimo es $500 MXN',
     toast_loan_approved:'Préstamo aprobado',toast_loan_rejected:'Préstamo rechazado',toast_loan_submitted:'Solicitud enviada. Tu empleador recibirá la notificación.',modal_accept_terms:'Acepto los términos y condiciones',modal_due_date:'Fecha de vencimiento',
-    status_pending:'pendiente',status_approved:'aprobado',status_disbursement_queued:'desembolso en cola',status_active:'activo',status_rejected:'rechazado',status_paid:'pagado',status_overdue:'vencido',
+    status_pending:'pendiente',status_approved:'aprobado',status_disbursement_queued:'desembolso en cola',status_active:'activo',status_disbursed:'desembolsado',status_pending_signature:'firma pendiente',status_rejected:'rechazado',status_paid:'pagado',status_repaid:'pagado',status_overdue:'vencido',status_in_collections:'en cobranza',status_written_off:'cancelado',status_cancelled:'cancelado',
     tab_all:'Todos',tab_pending:'Pendientes',tab_approved:'Aprobados',tab_active:'Activos',tab_paid:'Completados',tab_rejected:'Rechazados',
     dash_emp_name:'Nombre',dash_emp_email:'Email',dash_emp_limit:'Límite',dash_emp_available:'Disponible',dash_emp_registered:'Registro',dash_emp_search_placeholder:'Buscar por nombre o email...',dash_no_employees:'Aún no hay empleados registrados.',
+    dash_roster:'Plantilla',dash_deductions:'Deducciones',dash_metrics:'Métricas',dash_settings:'Configuración',dash_communicate:'Comunicar',
+    dash_th_loan_status:'Estado Crédito',dash_th_salary:'Salario',dash_th_total_loans:'Préstamos',dash_no_active_loan:'Sin préstamo',
+    dash_ded_summary:'Resumen de Deducciones de Nómina',dash_ded_total:'Total a deducir',dash_ded_count:'Préstamos activos',dash_ded_overdue:'Vencidos',dash_download_csv:'Descargar CSV',dash_no_deductions:'Sin deducciones pendientes.',dash_th_fee:'Comisión',dash_th_total:'Total',dash_th_due:'Vencimiento',dash_th_disbursed:'Desembolsado',
+    dash_metrics_adoption:'Tasa de Adopción',dash_metrics_active:'Usuarios Activos',dash_metrics_total:'Total Préstamos',dash_metrics_avg:'Monto Promedio',dash_metrics_repayment:'Tasa de Repago',dash_metrics_outstanding:'Saldo Pendiente',dash_metrics_breakdown:'Distribución de Estados',dash_metrics_trend:'Tendencia Mensual',dash_metrics_month:'Mes',dash_metrics_count:'Préstamos',dash_metrics_amount:'Monto Total',
+    dash_code_section:'Código de Empleador',dash_code_copy:'Copiar',dash_code_copied:'¡Copiado!',dash_code_regenerate:'Regenerar Código',dash_code_regen_warning:'El código anterior dejará de funcionar. Los empleados deberán usar el nuevo código para registrarse.',dash_code_regen_confirm:'Confirmar Cambio',
+    toast_code_regenerated:'Código de empleador regenerado',
+    dash_comm_title:'Comunicar con Empleados',dash_comm_subject:'Asunto',dash_comm_message:'Mensaje',dash_comm_channel:'Canal de envío',dash_comm_recipients:'Destinatarios',dash_comm_all:'Todos los empleados',dash_comm_active_loan:'Con préstamo activo',dash_comm_no_loan:'Sin préstamo activo',dash_comm_email_ch:'Email',dash_comm_sms_ch:'SMS',dash_comm_both_ch:'Email + SMS',dash_comm_send:'Enviar Mensaje',dash_comm_sending:'Enviando...',dash_comm_subject_ph:'Asunto del mensaje...',dash_comm_message_ph:'Escribe tu mensaje aquí...',dash_comm_sent:'Mensaje enviado a {n} empleados',
+    dash_pay_now:'Pagar Ahora',dash_pay_error:'Error al generar enlace de pago',
 
     // Onboarding
     onb_welcome:'Bienvenido a <em>VIDA</em>',onb_welcome_sub:'Elige cómo quieres comenzar',onb_role_employer_title:'Soy Empleador',onb_role_employer_desc:'Quiero ofrecer VIDA como beneficio a mi equipo',onb_role_employee_title:'Soy Empleado',onb_role_employee_desc:'Mi empresa ya tiene VIDA y quiero acceder a mi crédito',onb_already_account:'¿Ya tienes cuenta?',onb_login:'Inicia sesión',
@@ -321,9 +329,17 @@ const i18n = {
     dash_welcome:'Welcome',dash_available_credit:'Available Credit',dash_credit_limit:'Credit Limit',dash_utilization:'Utilization',dash_quick_action:'Quick Action',dash_request_funds:'Request Funds',dash_your_loans:'Your Loans',dash_my_loans:'My Loans',dash_th_repayment:'Repayment',dash_th_date:'Date',dash_no_loans_employee:'No loans yet. Request your first emergency fund above.',
     modal_request:'Request Funds',modal_available:'Available',modal_amount:'Amount (MXN)',modal_term:'Repayment Term',modal_term_30:'30 days',modal_rate:'30% monthly',modal_loan_amount:'Loan amount',modal_fee:'Fee (30%)',modal_total:'Total repayment',modal_confirm:'Confirm Request',modal_submitting:'Submitting...',modal_exceed:'Amount exceeds available credit',modal_minimum:'Minimum amount is $500 MXN',
     toast_loan_approved:'Loan approved',toast_loan_rejected:'Loan rejected',toast_loan_submitted:'Request submitted. Your employer will be notified.',modal_accept_terms:'I accept the terms and conditions',modal_due_date:'Due date',
-    status_pending:'pending',status_approved:'approved',status_disbursement_queued:'disbursement queued',status_active:'active',status_rejected:'rejected',status_paid:'paid',status_overdue:'overdue',
+    status_pending:'pending',status_approved:'approved',status_disbursement_queued:'disbursement queued',status_active:'active',status_disbursed:'disbursed',status_pending_signature:'pending signature',status_rejected:'rejected',status_paid:'paid',status_repaid:'repaid',status_overdue:'overdue',status_in_collections:'in collections',status_written_off:'written off',status_cancelled:'cancelled',
     tab_all:'All',tab_pending:'Pending',tab_approved:'Approved',tab_active:'Active',tab_paid:'Completed',tab_rejected:'Rejected',
     dash_emp_name:'Name',dash_emp_email:'Email',dash_emp_limit:'Limit',dash_emp_available:'Available',dash_emp_registered:'Registered',dash_emp_search_placeholder:'Search by name or email...',dash_no_employees:'No employees registered yet.',
+    dash_roster:'Roster',dash_deductions:'Deductions',dash_metrics:'Metrics',dash_settings:'Settings',dash_communicate:'Communicate',
+    dash_th_loan_status:'Loan Status',dash_th_salary:'Salary',dash_th_total_loans:'Loans',dash_no_active_loan:'No loan',
+    dash_ded_summary:'Payroll Deduction Summary',dash_ded_total:'Total to deduct',dash_ded_count:'Active loans',dash_ded_overdue:'Overdue',dash_download_csv:'Download CSV',dash_no_deductions:'No pending deductions.',dash_th_fee:'Fee',dash_th_total:'Total',dash_th_due:'Due Date',dash_th_disbursed:'Disbursed',
+    dash_metrics_adoption:'Adoption Rate',dash_metrics_active:'Active Users',dash_metrics_total:'Total Loans',dash_metrics_avg:'Avg Loan Amount',dash_metrics_repayment:'Repayment Rate',dash_metrics_outstanding:'Outstanding Balance',dash_metrics_breakdown:'Status Breakdown',dash_metrics_trend:'Monthly Trend',dash_metrics_month:'Month',dash_metrics_count:'Loans',dash_metrics_amount:'Total Amount',
+    dash_code_section:'Employer Code',dash_code_copy:'Copy',dash_code_copied:'Copied!',dash_code_regenerate:'Regenerate Code',dash_code_regen_warning:'The old code will stop working. Employees will need to use the new code to register.',dash_code_regen_confirm:'Confirm Change',
+    toast_code_regenerated:'Employer code regenerated',
+    dash_comm_title:'Communicate with Employees',dash_comm_subject:'Subject',dash_comm_message:'Message',dash_comm_channel:'Send via',dash_comm_recipients:'Recipients',dash_comm_all:'All employees',dash_comm_active_loan:'With active loan',dash_comm_no_loan:'Without active loan',dash_comm_email_ch:'Email',dash_comm_sms_ch:'SMS',dash_comm_both_ch:'Email + SMS',dash_comm_send:'Send Message',dash_comm_sending:'Sending...',dash_comm_subject_ph:'Message subject...',dash_comm_message_ph:'Write your message here...',dash_comm_sent:'Message sent to {n} employees',
+    dash_pay_now:'Pay Now',dash_pay_error:'Error generating payment link',
 
     // Onboarding
     onb_welcome:'Welcome to <em>VIDA</em>',onb_welcome_sub:'Choose how you want to get started',onb_role_employer_title:'I\'m an Employer',onb_role_employer_desc:'I want to offer VIDA as a benefit for my team',onb_role_employee_title:'I\'m an Employee',onb_role_employee_desc:'My company already has VIDA and I want to access my credit',onb_already_account:'Already have an account?',onb_login:'Sign in',
@@ -1694,22 +1710,41 @@ async function renderEmployerDashboard(app) {
   const uid = auth.currentUser.uid;
   const empDoc = await db.collection('employers').doc(uid).get();
   if (!empDoc.exists) { navigate('/employee/dashboard'); return; }
-  const emp = empDoc.data();
+  let emp = empDoc.data();
   if (emp.status === 'pending_verification') {
     app.innerHTML = `<div class="onb"><div class="onb-blob ob1"></div><div class="onb-blob ob2"></div><div class="onb-top"><span class="onb-logo">${vidaLogo()}</span></div><div class="onb-body"><div class="onb-stage active"><div class="onb-content"><div class="onb-celebration"><div class="onb-check-circle" style="background:rgba(162,134,87,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><div class="onb-approved-tag"><span class="onb-approved-dot" style="background:var(--gold)"></span>${currentLang==='es'?'Verificación en proceso':'Verification in progress'}</div><h1 class="onb-h">${currentLang==='es'?'¡Cuenta<br><em>creada</em>!':'Account<br><em>created</em>!'}</h1><p class="onb-sub">${currentLang==='es'?'Nuestro equipo revisará tus documentos en 24–48 horas hábiles.':'Our team will review your documents within 24–48 business hours.'}</p><button class="onb-btn" onclick="auth.signOut().then(()=>navigate('/'))">${currentLang==='es'?'Ir al inicio':'Go to home'}</button></div></div></div></div></div>`;
     return;
   }
   if (emp.status && emp.status !== 'active' && emp.status !== 'pending_verification') { navigate('/'); return; }
-  let allLoans = [], currentTab = 'all';
+
+  let allLoans = [];
+  let activeNavTab = 'dashboard';
+  let currentLoanFilter = 'all';
   if (window._unsubDash) window._unsubDash();
+
+  const navItems = [
+    { key:'dashboard', label: ()=>t('dash_dashboard'), icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>' },
+    { key:'roster',    label: ()=>t('dash_roster'),     icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>' },
+    { key:'deductions',label: ()=>t('dash_deductions'), icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>' },
+    { key:'metrics',   label: ()=>t('dash_metrics'),    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>' },
+    { key:'communicate',label:()=>t('dash_communicate'),icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>' },
+    { key:'settings',  label: ()=>t('dash_settings'),   icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>' },
+  ];
 
   function renderDashShell() {
     const pending = allLoans.filter(l => l.status === 'pending').length;
-    const active = allLoans.filter(l => l.status === 'approved' || l.status === 'active').length;
-    const totalDisbursed = allLoans.filter(l => l.status !== 'rejected' && l.status !== 'pending').reduce((s, l) => s + l.amount, 0);
-    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="dash-nav-link active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#" class="dash-nav-link" data-tab="employees"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${t('dash_employees')}</a><a href="#" class="dash-nav-link" data-tab="loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div id="dashTabContent"></div></div></div></div>`;
-    renderLoanTable(allLoans, currentTab);
-    bindSideNav(uid, emp);
+    const active = allLoans.filter(l => ['approved','disbursed','active'].includes(l.status)).length;
+    const totalDisbursed = allLoans.filter(l => !['rejected','pending','cancelled'].includes(l.status)).reduce((s,l) => s+(l.amount||0), 0);
+    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav">${navItems.map(n=>`<a href="#" class="dash-nav-link${n.key===activeNavTab?' active':''}" data-tab="${n.key}">${n.icon}${n.label()}</a>`).join('')}</nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong id="empCodeDisplay">${emp.employerCode||'—'}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div id="dashTabContent"></div></div></div></div>`;
+    bindSideNav();
+    switch(activeNavTab) {
+      case 'dashboard':  renderLoanTable(allLoans, currentLoanFilter); break;
+      case 'roster':     renderRosterTab(); break;
+      case 'deductions': renderDeductionsTab(); break;
+      case 'metrics':    renderMetricsTab(); break;
+      case 'communicate':renderCommunicateTab(); break;
+      case 'settings':   renderSettingsTab(); break;
+    }
   }
 
   window._unsubDash = db.collection('loans')
@@ -1719,38 +1754,42 @@ async function renderEmployerDashboard(app) {
       renderDashShell();
     });
 
-  function bindSideNav(uid, emp) {
+  function bindSideNav() {
     document.querySelectorAll('.dash-nav-link').forEach(a => {
       a.addEventListener('click', e => {
         e.preventDefault();
         document.querySelectorAll('.dash-nav-link').forEach(x => x.classList.remove('active'));
         a.classList.add('active');
-        const tab = a.dataset.tab;
-        if (tab === 'dashboard' || tab === 'loans') renderLoanTable(allLoans, currentTab);
-        else if (tab === 'employees') renderEmployeesTab(uid);
+        activeNavTab = a.dataset.tab;
+        switch(activeNavTab) {
+          case 'dashboard':  renderLoanTable(allLoans, currentLoanFilter); break;
+          case 'roster':     renderRosterTab(); break;
+          case 'deductions': renderDeductionsTab(); break;
+          case 'metrics':    renderMetricsTab(); break;
+          case 'communicate':renderCommunicateTab(); break;
+          case 'settings':   renderSettingsTab(); break;
+        }
       });
     });
   }
 
   function renderLoanTable(loans, tab) {
-    currentTab = tab;
+    currentLoanFilter = tab;
     const tabLabels = [
-      {key:'all',       es:'Todos',       en:'All'},
-      {key:'pending',   es:'Pendientes',  en:'Pending'},
-      {key:'approved',  es:'Aprobados',   en:'Approved'},
-      {key:'active',    es:'Activos',     en:'Active'},
-      {key:'paid',      es:'Completados', en:'Completed'},
-      {key:'rejected',  es:'Rechazados',  en:'Rejected'}
+      {key:'all',es:'Todos',en:'All'},
+      {key:'pending',es:'Pendientes',en:'Pending'},
+      {key:'approved',es:'Aprobados',en:'Approved'},
+      {key:'disbursed',es:'Desembolsados',en:'Disbursed'},
+      {key:'paid',es:'Completados',en:'Completed'},
+      {key:'rejected',es:'Rechazados',en:'Rejected'}
     ];
     let filtered;
     if (tab === 'all') filtered = loans;
-    else if (tab === 'approved') filtered = loans.filter(l => l.status === 'approved' || l.status === 'disbursement_queued');
+    else if (tab === 'approved') filtered = loans.filter(l => l.status==='approved'||l.status==='disbursement_queued');
     else filtered = loans.filter(l => l.status === tab);
 
-    const tabsHtml = `<div class="dash-tabs" style="display:flex;gap:0;border-bottom:1px solid rgba(25,68,69,0.08);margin-bottom:20px">${tabLabels.map(tb => `<button class="dash-tab-btn${tb.key===tab?' dash-tab-active':''}" data-tab="${tb.key}" style="padding:10px 16px;font-size:13px;font-weight:${tb.key===tab?'700':'500'};color:${tb.key===tab?'var(--brand)':'var(--t3)'};background:none;border:none;border-bottom:${tb.key===tab?'2px solid var(--brand)':'2px solid transparent'};cursor:pointer;transition:all .2s">${currentLang==='es'?tb.es:tb.en}${tb.key!=='all'?' ('+loans.filter(l=>{if(tb.key==='approved')return l.status==='approved'||l.status==='disbursement_queued';return l.status===tb.key}).length+')':' ('+loans.length+')'}</button>`).join('')}</div>`;
-
-    const tableHtml = filtered.length ? `<table><thead><tr><th>${t('dash_th_employee')}</th><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${filtered.map(l=>`<tr><td>${l.employeeName}</td><td>$${fmt(l.amount)}</td><td>${l.termDays} ${t('dash_days')}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.status==='pending'?`<button class="btn-sm btn-approve" onclick="approveLoan('${l.id}',this)">${t('dash_approve')}</button> <button class="btn-sm btn-reject" onclick="rejectLoan('${l.id}',this)">${t('dash_reject')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><p>${t('dash_no_loans_employer')} <strong>${emp.employerCode}</strong> ${t('dash_no_loans_employer_2')}</p></div>`;
-
+    const tabsHtml = `<div class="dash-tabs" style="display:flex;gap:0;border-bottom:1px solid rgba(25,68,69,0.08);margin-bottom:20px">${tabLabels.map(tb=>`<button class="dash-tab-btn${tb.key===tab?' dash-tab-active':''}" data-tab="${tb.key}" style="padding:10px 16px;font-size:13px;font-weight:${tb.key===tab?'700':'500'};color:${tb.key===tab?'var(--brand)':'var(--t3)'};background:none;border:none;border-bottom:${tb.key===tab?'2px solid var(--brand)':'2px solid transparent'};cursor:pointer;transition:all .2s">${currentLang==='es'?tb.es:tb.en}${tb.key!=='all'?' ('+loans.filter(l=>{if(tb.key==='approved')return l.status==='approved'||l.status==='disbursement_queued';return l.status===tb.key}).length+')':' ('+loans.length+')'}</button>`).join('')}</div>`;
+    const tableHtml = filtered.length ? `<table><thead><tr><th>${t('dash_th_employee')}</th><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${filtered.map(l=>`<tr><td>${l.employeeName||'—'}</td><td>$${fmt(l.amount||0)}</td><td>${l.termDays||l.term||30} ${t('dash_days')}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)||l.status}</span></td><td>${renderDocLinks(l)}</td><td>${l.status==='pending'?`<button class="btn-sm btn-approve" onclick="approveLoan('${l.id}',this)">${t('dash_approve')}</button> <button class="btn-sm btn-reject" onclick="rejectLoan('${l.id}',this)">${t('dash_reject')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><p>${t('dash_no_loans_employer')} <strong>${emp.employerCode}</strong> ${t('dash_no_loans_employer_2')}</p></div>`;
     const container = document.getElementById('dashTabContent');
     if (container) {
       container.innerHTML = `<div class="card"><div class="card-title">${t('dash_recent_loans')}</div>${tabsHtml}<div class="table-wrap">${tableHtml}</div></div>`;
@@ -1760,28 +1799,161 @@ async function renderEmployerDashboard(app) {
     }
   }
 
-  async function renderEmployeesTab(uid) {
+  // ── Roster tab — employees with live loan status ──────────────────────────
+
+  async function renderRosterTab() {
     const container = document.getElementById('dashTabContent');
     if (!container) return;
     container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>';
-    const snap = await db.collection('employees').where('employerId','==',uid).get();
-    const employees = snap.docs.map(d => ({id:d.id,...d.data()}));
-    renderEmployeesContent(employees, container);
+    try {
+      const result = await firebase.functions().httpsCallable('getEmployeeRoster')({});
+      renderRosterContent(result.data.roster || [], container);
+    } catch (e) {
+      container.innerHTML = `<div style="padding:40px;text-align:center;color:#c0392b">${e.message}</div>`;
+    }
   }
 
-  function renderEmployeesContent(employees, container, query) {
-    const q = (query || '').toLowerCase();
-    const filtered = q ? employees.filter(e => (e.name||'').toLowerCase().includes(q) || (e.email||'').toLowerCase().includes(q)) : employees;
-    const searchLabel = currentLang === 'es' ? 'Buscar empleado...' : 'Search employee...';
-    const thName = currentLang === 'es' ? 'Nombre' : 'Name';
-    const thEmail = 'Email';
-    const thLimit = currentLang === 'es' ? 'Límite' : 'Limit';
-    const thAvail = currentLang === 'es' ? 'Disponible' : 'Available';
-    const thDate = currentLang === 'es' ? 'Registro' : 'Registered';
+  function renderRosterContent(roster, container, query) {
+    const q = (query||'').toLowerCase();
+    const filtered = q ? roster.filter(e=>(e.name||'').toLowerCase().includes(q)||(e.email||'').toLowerCase().includes(q)) : roster;
+    const loanBadge = e => e.loanStatus
+      ? `<span class="badge badge-${e.loanStatus}" style="font-size:11px">${t('status_'+e.loanStatus)||e.loanStatus}</span>`
+      : `<span style="font-size:12px;color:var(--t3)">${t('dash_no_active_loan')}</span>`;
+    container.innerHTML = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="card-title" style="margin:0">${t('dash_roster')}</div><span style="font-size:13px;color:var(--t3)">${roster.length} ${currentLang==='es'?'empleados':'employees'}</span></div><div style="margin-bottom:16px"><input type="text" id="rosterSearch" placeholder="${t('dash_emp_search_placeholder')}" value="${query||''}" style="width:100%;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none"></div><div class="table-wrap">${filtered.length?`<table><thead><tr><th>${t('dash_emp_name')}</th><th>${t('dash_emp_email')}</th><th>${t('dash_th_salary')}</th><th>${t('dash_emp_limit')}</th><th>${t('dash_emp_available')}</th><th>${t('dash_th_loan_status')}</th><th>${t('dash_th_total_loans')}</th></tr></thead><tbody>${filtered.map(e=>`<tr><td style="font-weight:600">${e.name||'—'}</td><td style="font-size:13px;color:var(--t3)">${e.email||'—'}</td><td>$${fmt(e.monthlySalary||0)}</td><td>$${fmt(e.creditLimit||0)}</td><td>$${fmt(e.availableCredit||0)}</td><td>${loanBadge(e)}</td><td style="text-align:center">${e.totalLoansCount||0}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><p>${t('dash_no_employees')}</p></div>`}</div></div>`;
+    const si = document.getElementById('rosterSearch');
+    if (si) si.addEventListener('input', ()=>renderRosterContent(roster, container, si.value));
+  }
 
-    container.innerHTML = `<div class="card"><div class="card-title">${t('dash_employees')}</div><div style="margin-bottom:16px"><input type="text" id="empSearchInput" placeholder="${searchLabel}" value="${query||''}" style="width:100%;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none;transition:border .2s"></div><div class="table-wrap">${filtered.length?`<table><thead><tr><th>${thName}</th><th>${thEmail}</th><th>${thLimit}</th><th>${thAvail}</th><th>${thDate}</th></tr></thead><tbody>${filtered.map(e=>`<tr><td>${e.name||'—'}</td><td>${e.email||'—'}</td><td>$${fmt(e.creditLimit||0)}</td><td>$${fmt(e.availableCredit||0)}</td><td>${e.createdAt?new Date(e.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><p>${currentLang==='es'?'No se encontraron empleados':'No employees found'}</p></div>`}</div></div>`;
-    const searchIn = document.getElementById('empSearchInput');
-    if (searchIn) searchIn.addEventListener('input', () => renderEmployeesContent(employees, container, searchIn.value));
+  // ── Deductions tab — payroll CSV report ───────────────────────────────────
+
+  async function renderDeductionsTab() {
+    const container = document.getElementById('dashTabContent');
+    if (!container) return;
+    container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>';
+    try {
+      const result = await firebase.functions().httpsCallable('getPayrollDeductions')({});
+      const { deductions, total, totalDeductionAmount, overdueCount, generatedAt } = result.data;
+      const tableHtml = deductions.length
+        ? `<table><thead><tr><th>${t('dash_emp_name')}</th><th>${t('dash_emp_email')}</th><th>${t('dash_th_amount')}</th><th>${t('dash_th_fee')}</th><th>${t('dash_th_total')}</th><th>${t('dash_th_due')}</th><th>${t('dash_th_disbursed')}</th><th>${t('dash_th_status')}</th></tr></thead><tbody>${deductions.map(d=>`<tr><td style="font-weight:600">${d.employeeName||'—'}</td><td style="font-size:13px;color:var(--t3)">${d.employeeEmail||'—'}</td><td>$${fmt(d.amount||0)}</td><td>$${fmt(d.fee||0)}</td><td style="font-weight:700">$${fmt(d.total||0)}</td><td>${d.dueDate?new Date(d.dueDate).toLocaleDateString():'—'}</td><td>${d.disbursedAt?new Date(d.disbursedAt).toLocaleDateString():'—'}</td><td><span class="badge badge-${d.status}" style="font-size:11px">${t('status_'+d.status)||d.status}</span></td></tr>`).join('')}</tbody></table>`
+        : `<div class="empty-state"><p>${t('dash_no_deductions')}</p></div>`;
+      container.innerHTML = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px"><div class="card-title" style="margin:0">${t('dash_ded_summary')}</div><button class="btn-sm btn-approve" id="downloadCsvBtn">${t('dash_download_csv')}</button></div><div class="stat-grid" style="margin-bottom:20px"><div class="stat-card"><div class="stat-label">${t('dash_ded_total')}</div><div class="stat-value" style="font-size:24px">$${fmt(totalDeductionAmount||0)}</div><div class="stat-change">MXN</div></div><div class="stat-card"><div class="stat-label">${t('dash_ded_count')}</div><div class="stat-value" style="font-size:24px">${total||0}</div></div><div class="stat-card${overdueCount>0?' warn':''}"><div class="stat-label">${t('dash_ded_overdue')}</div><div class="stat-value" style="font-size:24px${overdueCount>0?';color:#c0392b':''}">${overdueCount||0}</div></div></div><div class="table-wrap">${tableHtml}</div><div style="font-size:11px;color:var(--t3);margin-top:12px;text-align:right">${currentLang==='es'?'Generado':'Generated'}: ${new Date(generatedAt).toLocaleString()}</div></div>`;
+      document.getElementById('downloadCsvBtn')?.addEventListener('click', ()=>{
+        const header = currentLang==='es'
+          ? 'Empleado,Email,Monto,Comisión,Total,Vencimiento,Desembolsado,Estado,Loan ID'
+          : 'Employee,Email,Amount,Fee,Total,Due Date,Disbursed,Status,Loan ID';
+        const rows = deductions.map(d=>[
+          `"${(d.employeeName||'').replace(/"/g,'""')}"`,
+          `"${(d.employeeEmail||'').replace(/"/g,'""')}"`,
+          d.amount||0, d.fee||0, d.total||0,
+          d.dueDate?new Date(d.dueDate).toLocaleDateString():'',
+          d.disbursedAt?new Date(d.disbursedAt).toLocaleDateString():'',
+          d.status||'', d.loanId||''
+        ].join(','));
+        const csv = header+'\n'+rows.join('\n');
+        const a = document.createElement('a');
+        a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+        a.download = `deducciones_nomina_${emp.employerCode}_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+      });
+    } catch (e) {
+      container.innerHTML = `<div style="padding:40px;text-align:center;color:#c0392b">${e.message}</div>`;
+    }
+  }
+
+  // ── Metrics tab — adoption analytics ─────────────────────────────────────
+
+  async function renderMetricsTab() {
+    const container = document.getElementById('dashTabContent');
+    if (!container) return;
+    container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>';
+    try {
+      const result = await firebase.functions().httpsCallable('getAdoptionMetrics')({});
+      const m = result.data;
+      const kpis = [
+        { label:t('dash_metrics_adoption'), val:m.adoptionRate+'%',        sub:m.adoptedCount+'/'+m.totalEmployees },
+        { label:t('dash_metrics_active'),   val:m.activeCount,             sub:m.activeRate+'%' },
+        { label:t('dash_metrics_total'),    val:m.totalLoans,              sub:'' },
+        { label:t('dash_metrics_avg'),      val:'$'+fmt(m.avgLoanAmount||0),sub:'MXN' },
+        { label:t('dash_metrics_repayment'),val:m.repaymentRate+'%',       sub:'' },
+        { label:t('dash_metrics_outstanding'),val:'$'+fmt(m.outstandingBalance||0),sub:'MXN' },
+      ];
+      const kpiGrid = `<div class="stat-grid" style="margin-bottom:24px">${kpis.map(k=>`<div class="stat-card"><div class="stat-label">${k.label}</div><div class="stat-value" style="font-size:24px">${k.val}</div>${k.sub?`<div class="stat-change">${k.sub}</div>`:''}</div>`).join('')}</div>`;
+      const statusRows = Object.entries(m.statusBreakdown||{}).map(([s,n])=>`<tr><td><span class="badge badge-${s}" style="font-size:11px">${t('status_'+s)||s}</span></td><td style="text-align:right;font-weight:700">${n}</td></tr>`).join('');
+      const breakdownHtml = statusRows ? `<div class="card" style="margin-bottom:16px"><div class="card-title">${t('dash_metrics_breakdown')}</div><div class="table-wrap"><table><tbody>${statusRows}</tbody></table></div></div>` : '';
+      const trendRows = (m.monthlyTrend||[]).map(r=>`<tr><td>${r.month}</td><td style="text-align:right">${r.count}</td><td style="text-align:right;color:var(--t3)">$${fmt(r.amount||0)}</td></tr>`).join('');
+      const trendHtml = trendRows ? `<div class="card"><div class="card-title">${t('dash_metrics_trend')}</div><div class="table-wrap"><table><thead><tr><th>${t('dash_metrics_month')}</th><th style="text-align:right">${t('dash_metrics_count')}</th><th style="text-align:right">${t('dash_metrics_amount')}</th></tr></thead><tbody>${trendRows}</tbody></table></div></div>` : '';
+      container.innerHTML = kpiGrid + breakdownHtml + trendHtml;
+    } catch (e) {
+      container.innerHTML = `<div style="padding:40px;text-align:center;color:#c0392b">${e.message}</div>`;
+    }
+  }
+
+  // ── Settings tab — employer code management ───────────────────────────────
+
+  function renderSettingsTab() {
+    const container = document.getElementById('dashTabContent');
+    if (!container) return;
+    const code = emp.employerCode||'—';
+    container.innerHTML = `<div class="card"><div class="card-title">${t('dash_code_section')}</div><div style="display:flex;align-items:center;gap:12px;margin-bottom:20px"><div style="font-size:28px;font-weight:800;font-family:var(--df);color:var(--t1);letter-spacing:.1em;background:rgba(25,68,69,.05);padding:16px 24px;border-radius:12px">${code}</div><button class="btn-sm btn-approve" id="copyCodeBtn">${t('dash_code_copy')}</button></div><div style="background:#f0f9ff;border-radius:10px;padding:16px;margin-bottom:20px;font-size:13px;color:var(--t2)">${currentLang==='es'?'Comparte este código con tus empleados. Al registrarse en VIDA, deberán ingresarlo para vincularse automáticamente a tu empresa.':'Share this code with your employees. When they sign up for VIDA, they enter this code to automatically join your company.'}</div><div style="border-top:1px solid rgba(25,68,69,.06);padding-top:16px"><div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:6px">${currentLang==='es'?'Regenerar código':'Regenerate code'}</div><p style="font-size:13px;color:var(--t3);margin-bottom:12px">${t('dash_code_regen_warning')}</p><button class="btn-sm btn-reject" id="showRegenBtn">${t('dash_code_regenerate')}</button><div id="regenConfirmArea"></div></div></div>`;
+    document.getElementById('copyCodeBtn')?.addEventListener('click', async ()=>{
+      try { await navigator.clipboard.writeText(code); } catch(_){}
+      const btn = document.getElementById('copyCodeBtn');
+      if (btn) { btn.textContent = t('dash_code_copied'); setTimeout(()=>{if(btn)btn.textContent=t('dash_code_copy');},2000); }
+    });
+    document.getElementById('showRegenBtn')?.addEventListener('click', ()=>{
+      const area = document.getElementById('regenConfirmArea');
+      if (!area||area.innerHTML) return;
+      area.innerHTML = `<div style="margin-top:12px;padding:12px;background:#fef2f2;border-radius:8px"><strong style="font-size:13px;color:#c0392b">${currentLang==='es'?'¿Confirmar regeneración?':'Confirm regeneration?'}</strong><div style="margin-top:10px;display:flex;gap:8px"><button class="btn-sm btn-approve" id="confirmRegenBtn">${t('dash_code_regen_confirm')}</button><button class="btn-sm" id="cancelRegenBtn" style="background:transparent;border:1px solid rgba(25,68,69,.2);color:var(--t2);padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer">${currentLang==='es'?'Cancelar':'Cancel'}</button></div></div>`;
+      document.getElementById('cancelRegenBtn')?.addEventListener('click', ()=>{area.innerHTML='';});
+      document.getElementById('confirmRegenBtn')?.addEventListener('click', async ()=>{
+        const btn = document.getElementById('confirmRegenBtn');
+        if (btn) { btn.disabled=true; btn.innerHTML='<span class="spinner"></span>'; }
+        try {
+          const result = await firebase.functions().httpsCallable('regenerateEmployerCode')({});
+          emp = {...emp, employerCode: result.data.employerCode};
+          const codeEl = document.getElementById('empCodeDisplay');
+          if (codeEl) codeEl.textContent = emp.employerCode;
+          showToast(t('toast_code_regenerated'), 'success');
+          renderSettingsTab();
+        } catch (e) {
+          showToast(e.message, 'error');
+          if (btn) { btn.disabled=false; btn.textContent=t('dash_code_regen_confirm'); }
+        }
+      });
+    });
+  }
+
+  // ── Communicate tab — bulk employee messaging ─────────────────────────────
+
+  function renderCommunicateTab() {
+    const container = document.getElementById('dashTabContent');
+    if (!container) return;
+    container.innerHTML = `<div class="card"><div class="card-title">${t('dash_comm_title')}</div><form id="commForm"><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"><div><label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:block;margin-bottom:6px">${t('dash_comm_recipients')}</label><select id="commRecipients" style="width:100%;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:14px;outline:none;background:#fff"><option value="all">${t('dash_comm_all')}</option><option value="active_loan">${t('dash_comm_active_loan')}</option><option value="no_loan">${t('dash_comm_no_loan')}</option></select></div><div><label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:block;margin-bottom:6px">${t('dash_comm_channel')}</label><select id="commChannel" style="width:100%;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:14px;outline:none;background:#fff"><option value="email">${t('dash_comm_email_ch')}</option><option value="sms">${t('dash_comm_sms_ch')}</option><option value="both">${t('dash_comm_both_ch')}</option></select></div></div><div style="margin-bottom:16px"><label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:block;margin-bottom:6px">${t('dash_comm_subject')}</label><input type="text" id="commSubject" placeholder="${t('dash_comm_subject_ph')}" style="width:100%;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" required></div><div style="margin-bottom:20px"><label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:block;margin-bottom:6px">${t('dash_comm_message')}</label><textarea id="commMessage" placeholder="${t('dash_comm_message_ph')}" rows="6" style="width:100%;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:14px;outline:none;resize:vertical;box-sizing:border-box" required></textarea></div><div class="auth-error" id="commError" style="margin-bottom:12px"></div><button type="submit" class="btn-primary" id="commSendBtn" style="width:100%">${t('dash_comm_send')}</button></form></div>`;
+    document.getElementById('commForm')?.addEventListener('submit', async e=>{
+      e.preventDefault();
+      const errEl = document.getElementById('commError');
+      const sendBtn = document.getElementById('commSendBtn');
+      errEl.classList.remove('show');
+      sendBtn.disabled=true;
+      sendBtn.innerHTML='<span class="spinner"></span>'+t('dash_comm_sending');
+      try {
+        const result = await firebase.functions().httpsCallable('sendEmployeeCommunication')({
+          subject: document.getElementById('commSubject').value,
+          message: document.getElementById('commMessage').value,
+          channel: document.getElementById('commChannel').value,
+          recipientType: document.getElementById('commRecipients').value,
+        });
+        const msg = t('dash_comm_sent').replace('{n}', result.data.sent);
+        showToast(msg, 'success');
+        document.getElementById('commForm').reset();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.add('show');
+      } finally {
+        sendBtn.disabled=false;
+        sendBtn.textContent=t('dash_comm_send');
+      }
+    });
   }
 }
 window.approveLoan = async function(id, btn) {
