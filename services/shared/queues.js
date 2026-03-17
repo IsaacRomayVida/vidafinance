@@ -4,7 +4,7 @@ const connection = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null, enableReadyCheck: false,
   tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
-const QUEUES = { DISBURSEMENTS:'vida-disbursements', NOTIFICATIONS:'vida-notifications', PDFS:'vida-pdfs', UNDERWRITING:'vida-underwriting' };
+const QUEUES = { DISBURSEMENTS:'vida-disbursements', NOTIFICATIONS:'vida-notifications', PDFS:'vida-pdfs', UNDERWRITING:'vida-underwriting', PAYROLL:'vida-payroll' };
 const getQueue = name => new Queue(name, { connection, defaultJobOptions:{ removeOnComplete:{count:1000}, removeOnFail:{count:5000}, attempts:5, backoff:{type:'exponential',delay:2000} }});
 const getWorker = (name, processor) => new Worker(name, processor, { connection, concurrency: name===QUEUES.PDFS?2:5 });
 async function rateLimitCheck(key, limit, windowSec) {

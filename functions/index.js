@@ -584,6 +584,7 @@ exports.systemHealthCheck = onSchedule(
       { name: "notification-service", url: process.env.NOTIFICATION_SERVICE_URL + "/health" },
       { name: "pdf-generator", url: process.env.PDF_GENERATOR_URL + "/health" },
       { name: "ml-service", url: process.env.ML_SERVICE_URL + "/health" },
+      { name: "payroll-service", url: process.env.PAYROLL_SERVICE_URL + "/health" },
     ];
 
     const results = await Promise.allSettled(
@@ -761,3 +762,252 @@ exports.revokeAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true
   await getAuth().setCustomUserClaims(request.data.uid, { admin: false });
   return { success: true };
 });
+
+// ── PAYROLL INTEGRATION MODULE ────────────────────────────────────
+
+// ── uploadPayrollCSV — employer uploads CSV for payroll processing ─
+exports.uploadPayrollCSV = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+
+  const empDoc = await db.collection("employers").doc(uid).get();
+  if (!empDoc.exists) throw new HttpsError("permission-denied", "Employer account required");
+  const emp = empDoc.data();
+  if (emp.status !== "active") throw new HttpsError("failed-precondition", "Employer account not active");
+
+  const { csvContent, fileName } = request.data;
+  if (!csvContent || typeof csvContent !== "string")
+    throw new HttpsError("invalid-argument", "CSV content is required");
+  if (csvContent.length > 5 * 1024 * 1024)
+    throw new HttpsError("invalid-argument", "CSV file too large (max 5 MB)");
+
+  // Rate limit: max 10 uploads/hour
+  try {
+    const r = getRedis();
+    const key = "rate:payroll:" + uid;
+    const cnt = await r.incr(key);
+    if (cnt === 1) await r.expire(key, 3600);
+    if (cnt > 10) throw new HttpsError("resource-exhausted", "Máximo 10 cargas por hora");
+  } catch (e) {
+    if (e.code) throw e;
+    console.warn("Redis rate limit unavailable:", e.message);
+  }
+
+  const batchId = "batch_" + nanoid();
+
+  await db.collection("payroll_batches").doc(batchId).set({
+    employerId: uid,
+    employerName: emp.companyName,
+    source: "upload",
+    fileName: fileName || "payroll.csv",
+    fileSize: csvContent.length,
+    status: "processing",
+    totalRows: 0,
+    validRows: 0,
+    errors: [],
+    uploadedAt: FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  // Enqueue for async processing
+  try {
+    await getQueue("vida-payroll").add("process_csv", {
+      type: "process_csv",
+      batchId,
+      employerId: uid,
+      csvContent,
+    });
+  } catch (e) {
+    // Fallback: call payroll service directly
+    try {
+      const resp = await fetch(process.env.PAYROLL_SERVICE_URL + "/internal/process-csv", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": process.env.INTERNAL_SECRET,
+        },
+        body: JSON.stringify({ batchId, employerId: uid, csvContent }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!resp.ok) throw new Error("Processing failed");
+    } catch (err) {
+      await db.collection("payroll_batches").doc(batchId).update({
+        status: "failed",
+        error: err.message,
+      });
+    }
+  }
+
+  try {
+    await auditLog(db, {
+      action: "payroll.csv_uploaded",
+      actorUid: uid,
+      actorRole: "employer",
+      targetId: batchId,
+      meta: { fileName: fileName || "payroll.csv" },
+    });
+  } catch (_) { /* non-critical */ }
+
+  return { batchId, status: "processing" };
+});
+
+// ── getPayrollBatches — list payroll batches for employer ──────────
+exports.getPayrollBatches = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+
+  const empDoc = await db.collection("employers").doc(uid).get();
+  if (!empDoc.exists) throw new HttpsError("permission-denied", "Employer account required");
+
+  const snap = await db.collection("payroll_batches")
+    .where("employerId", "==", uid)
+    .orderBy("createdAt", "desc")
+    .limit(50)
+    .get();
+
+  const batches = snap.docs.map(d => {
+    const data = d.data();
+    return {
+      id: d.id,
+      source: data.source,
+      fileName: data.fileName,
+      status: data.status,
+      totalRows: data.totalRows || 0,
+      validRows: data.validRows || 0,
+      errorCount: (data.errors || []).length,
+      errors: (data.errors || []).slice(0, 10),
+      uploadedAt: data.uploadedAt,
+      processedAt: data.processedAt,
+    };
+  });
+
+  return { batches };
+});
+
+// ── generateDeductionReport — create deduction report for payroll ──
+exports.generateDeductionReport = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+
+  const empDoc = await db.collection("employers").doc(uid).get();
+  if (!empDoc.exists) throw new HttpsError("permission-denied", "Employer account required");
+  const emp = empDoc.data();
+  if (emp.status !== "active") throw new HttpsError("failed-precondition", "Employer account not active");
+
+  const { payrollPeriod } = request.data || {};
+  const reportId = "report_" + nanoid();
+
+  await db.collection("deduction_reports").doc(reportId).set({
+    employerId: uid,
+    employerName: emp.companyName,
+    payrollPeriod: payrollPeriod || null,
+    status: "generating",
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  // Enqueue report generation
+  try {
+    await getQueue("vida-payroll").add("generate_report", {
+      type: "generate_report",
+      employerId: uid,
+      payrollPeriod,
+      reportId,
+    });
+  } catch (e) {
+    // Fallback: direct call
+    try {
+      await fetch(process.env.PAYROLL_SERVICE_URL + "/internal/deduction-report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": process.env.INTERNAL_SECRET,
+        },
+        body: JSON.stringify({ employerId: uid, payrollPeriod, reportId }),
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (err) {
+      await db.collection("deduction_reports").doc(reportId).update({
+        status: "failed",
+        error: err.message,
+      });
+    }
+  }
+
+  try {
+    await auditLog(db, {
+      action: "payroll.report_requested",
+      actorUid: uid,
+      actorRole: "employer",
+      targetId: reportId,
+    });
+  } catch (_) { /* non-critical */ }
+
+  return { reportId, status: "generating" };
+});
+
+// ── downloadDeductionReport — get report download URL ─────────────
+exports.downloadDeductionReport = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+
+  const { reportId } = request.data;
+  if (!reportId) throw new HttpsError("invalid-argument", "reportId required");
+
+  const reportDoc = await db.collection("deduction_reports").doc(reportId).get();
+  if (!reportDoc.exists) throw new HttpsError("not-found", "Report not found");
+  const report = reportDoc.data();
+
+  if (report.employerId !== uid && !request.auth.token?.admin)
+    throw new HttpsError("permission-denied", "Not your report");
+
+  return {
+    reportId,
+    status: report.status,
+    downloadUrl: report.downloadUrl || null,
+    recordCount: report.recordCount || 0,
+    generatedAt: report.generatedAt || null,
+    error: report.status === "failed" ? report.error : null,
+  };
+});
+
+// ── pollSFTP — scheduled: poll SFTP for new payroll CSV files ─────
+exports.pollSFTP = onSchedule(
+  { schedule: "0 */4 * * *", timeZone: "America/Mexico_City" },
+  async () => {
+    if (!process.env.PAYROLL_SERVICE_URL) {
+      console.warn("PAYROLL_SERVICE_URL not configured, skipping SFTP poll");
+      return;
+    }
+
+    try {
+      const resp = await fetch(process.env.PAYROLL_SERVICE_URL + "/internal/sftp-poll", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": process.env.INTERNAL_SECRET,
+        },
+        body: JSON.stringify({}),
+        signal: AbortSignal.timeout(60000),
+      });
+
+      const result = await resp.json();
+
+      await db.collection("scheduler_runs").add({
+        job: "pollSFTP",
+        ranAt: FieldValue.serverTimestamp(),
+        filesProcessed: result.files?.length || 0,
+        files: result.files || [],
+        status: "complete",
+      });
+    } catch (e) {
+      console.warn("SFTP poll failed:", e.message);
+      await db.collection("incident_log").add({
+        source: "sftp-poll",
+        error: e.message,
+        severity: "warning",
+        ts: FieldValue.serverTimestamp(),
+        resolved: false,
+      });
+    }
+  }
+);

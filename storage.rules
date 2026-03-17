@@ -13,6 +13,11 @@ service firebase.storage {
       allow read: if request.auth != null;
       allow write: if false;
     }
+    match /payroll/{employerId}/{file} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == employerId || request.auth.token.admin == true);
+      allow write: if false;
+    }
     match /{all=**} { allow read, write: if false; }
   }
 }

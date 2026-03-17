@@ -120,7 +120,7 @@ app.post('/internal/repayment', requireInternalSecret, async (req, res) => {
 
 // ── Queue stats (for admin monitoring) ─────────────────────────────
 app.get('/internal/queue-stats', requireInternalSecret, async (req, res) => {
-  const names = ['vida-disbursements', 'vida-notifications', 'vida-pdfs', 'vida-underwriting'];
+  const names = ['vida-disbursements', 'vida-notifications', 'vida-pdfs', 'vida-underwriting', 'vida-payroll'];
   const stats = {};
   for (const n of names) {
     const q = new Queue(n, { connection: redis });

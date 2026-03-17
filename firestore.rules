@@ -60,5 +60,18 @@ service cloud.firestore {
     match /notification_log/{d}    { allow read: if isAdmin(); allow write: if false; }
     match /softcredito_employers/{d}{ allow read: if isAdmin(); allow write: if false; }
     match /ml_decisions/{d}        { allow read: if isAdmin(); allow write: if false; }
+
+    match /payroll_batches/{batchId} {
+      allow read: if signedIn() && (resource.data.employerId == request.auth.uid || isAdmin());
+      allow create, update, delete: if false;
+    }
+    match /payroll_records/{recordId} {
+      allow read: if signedIn() && (resource.data.employerId == request.auth.uid || isAdmin());
+      allow create, update, delete: if false;
+    }
+    match /deduction_reports/{reportId} {
+      allow read: if signedIn() && (resource.data.employerId == request.auth.uid || isAdmin());
+      allow create, update, delete: if false;
+    }
   }
 }

@@ -41,6 +41,7 @@ const i18n = {
     status_pending:'pendiente',status_approved:'aprobado',status_disbursement_queued:'desembolso en cola',status_active:'activo',status_rejected:'rechazado',status_paid:'pagado',status_overdue:'vencido',
     tab_all:'Todos',tab_pending:'Pendientes',tab_approved:'Aprobados',tab_active:'Activos',tab_paid:'Completados',tab_rejected:'Rechazados',
     dash_emp_name:'Nombre',dash_emp_email:'Email',dash_emp_limit:'Límite',dash_emp_available:'Disponible',dash_emp_registered:'Registro',dash_emp_search_placeholder:'Buscar por nombre o email...',dash_no_employees:'Aún no hay empleados registrados.',
+    dash_payroll:'Nómina',payroll_title:'Integración de Nómina',payroll_upload_title:'Cargar CSV de Nómina',payroll_upload_desc:'Arrastra tu archivo CSV aquí o haz clic para seleccionar',payroll_upload_formats:'CSV, máx 5 MB',payroll_upload_btn:'Subir CSV',payroll_uploading:'Procesando...',payroll_batches_title:'Cargas Recientes',payroll_no_batches:'Aún no hay cargas de nómina.',payroll_th_file:'Archivo',payroll_th_source:'Fuente',payroll_th_rows:'Filas',payroll_th_valid:'Válidas',payroll_th_errors:'Errores',payroll_th_status:'Estado',payroll_th_date:'Fecha',payroll_report_title:'Reporte de Deducciones',payroll_report_desc:'Genera un CSV con las deducciones activas de todos los préstamos.',payroll_report_btn:'Generar Reporte',payroll_report_generating:'Generando...',payroll_report_download:'Descargar',payroll_report_period:'Periodo de nómina',payroll_report_period_ph:'Ej: 2026-Q1-MAR',payroll_status_processing:'procesando',payroll_status_validated:'validado',payroll_status_validated_with_errors:'con errores',payroll_status_failed:'fallido',payroll_toast_uploaded:'CSV enviado para procesamiento',payroll_toast_error:'Error al procesar CSV',payroll_report_status_generating:'generando',payroll_report_status_completed:'listo',payroll_report_status_failed:'fallido',
 
     // Onboarding
     onb_welcome:'Bienvenido a <em>VIDA</em>',onb_welcome_sub:'Elige cómo quieres comenzar',onb_role_employer_title:'Soy Empleador',onb_role_employer_desc:'Quiero ofrecer VIDA como beneficio a mi equipo',onb_role_employee_title:'Soy Empleado',onb_role_employee_desc:'Mi empresa ya tiene VIDA y quiero acceder a mi crédito',onb_already_account:'¿Ya tienes cuenta?',onb_login:'Inicia sesión',
@@ -324,6 +325,7 @@ const i18n = {
     status_pending:'pending',status_approved:'approved',status_disbursement_queued:'disbursement queued',status_active:'active',status_rejected:'rejected',status_paid:'paid',status_overdue:'overdue',
     tab_all:'All',tab_pending:'Pending',tab_approved:'Approved',tab_active:'Active',tab_paid:'Completed',tab_rejected:'Rejected',
     dash_emp_name:'Name',dash_emp_email:'Email',dash_emp_limit:'Limit',dash_emp_available:'Available',dash_emp_registered:'Registered',dash_emp_search_placeholder:'Search by name or email...',dash_no_employees:'No employees registered yet.',
+    dash_payroll:'Payroll',payroll_title:'Payroll Integration',payroll_upload_title:'Upload Payroll CSV',payroll_upload_desc:'Drag your CSV file here or click to select',payroll_upload_formats:'CSV, max 5 MB',payroll_upload_btn:'Upload CSV',payroll_uploading:'Processing...',payroll_batches_title:'Recent Uploads',payroll_no_batches:'No payroll uploads yet.',payroll_th_file:'File',payroll_th_source:'Source',payroll_th_rows:'Rows',payroll_th_valid:'Valid',payroll_th_errors:'Errors',payroll_th_status:'Status',payroll_th_date:'Date',payroll_report_title:'Deduction Report',payroll_report_desc:'Generate a CSV with active deductions for all loans.',payroll_report_btn:'Generate Report',payroll_report_generating:'Generating...',payroll_report_download:'Download',payroll_report_period:'Payroll period',payroll_report_period_ph:'E.g. 2026-Q1-MAR',payroll_status_processing:'processing',payroll_status_validated:'validated',payroll_status_validated_with_errors:'with errors',payroll_status_failed:'failed',payroll_toast_uploaded:'CSV submitted for processing',payroll_toast_error:'Error processing CSV',payroll_report_status_generating:'generating',payroll_report_status_completed:'ready',payroll_report_status_failed:'failed',
 
     // Onboarding
     onb_welcome:'Welcome to <em>VIDA</em>',onb_welcome_sub:'Choose how you want to get started',onb_role_employer_title:'I\'m an Employer',onb_role_employer_desc:'I want to offer VIDA as a benefit for my team',onb_role_employee_title:'I\'m an Employee',onb_role_employee_desc:'My company already has VIDA and I want to access my credit',onb_already_account:'Already have an account?',onb_login:'Sign in',
@@ -1707,7 +1709,7 @@ async function renderEmployerDashboard(app) {
     const pending = allLoans.filter(l => l.status === 'pending').length;
     const active = allLoans.filter(l => l.status === 'approved' || l.status === 'active').length;
     const totalDisbursed = allLoans.filter(l => l.status !== 'rejected' && l.status !== 'pending').reduce((s, l) => s + l.amount, 0);
-    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="dash-nav-link active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#" class="dash-nav-link" data-tab="employees"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${t('dash_employees')}</a><a href="#" class="dash-nav-link" data-tab="loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div id="dashTabContent"></div></div></div></div>`;
+    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="dash-nav-link active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#" class="dash-nav-link" data-tab="employees"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${t('dash_employees')}</a><a href="#" class="dash-nav-link" data-tab="loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_loans')}</a><a href="#" class="dash-nav-link" data-tab="payroll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>${t('dash_payroll')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div id="dashTabContent"></div></div></div></div>`;
     renderLoanTable(allLoans, currentTab);
     bindSideNav(uid, emp);
   }
@@ -1728,6 +1730,7 @@ async function renderEmployerDashboard(app) {
         const tab = a.dataset.tab;
         if (tab === 'dashboard' || tab === 'loans') renderLoanTable(allLoans, currentTab);
         else if (tab === 'employees') renderEmployeesTab(uid);
+        else if (tab === 'payroll') renderPayrollTab(uid);
       });
     });
   }
@@ -1782,6 +1785,179 @@ async function renderEmployerDashboard(app) {
     container.innerHTML = `<div class="card"><div class="card-title">${t('dash_employees')}</div><div style="margin-bottom:16px"><input type="text" id="empSearchInput" placeholder="${searchLabel}" value="${query||''}" style="width:100%;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none;transition:border .2s"></div><div class="table-wrap">${filtered.length?`<table><thead><tr><th>${thName}</th><th>${thEmail}</th><th>${thLimit}</th><th>${thAvail}</th><th>${thDate}</th></tr></thead><tbody>${filtered.map(e=>`<tr><td>${e.name||'—'}</td><td>${e.email||'—'}</td><td>$${fmt(e.creditLimit||0)}</td><td>$${fmt(e.availableCredit||0)}</td><td>${e.createdAt?new Date(e.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><p>${currentLang==='es'?'No se encontraron empleados':'No employees found'}</p></div>`}</div></div>`;
     const searchIn = document.getElementById('empSearchInput');
     if (searchIn) searchIn.addEventListener('input', () => renderEmployeesContent(employees, container, searchIn.value));
+  }
+
+  // ── Payroll Tab ──────────────────────────────────────────
+  async function renderPayrollTab(uid) {
+    const container = document.getElementById('dashTabContent');
+    if (!container) return;
+    container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>';
+
+    // Load existing batches
+    let batches = [];
+    try {
+      const fn = firebase.functions().httpsCallable('getPayrollBatches');
+      const result = await fn({});
+      batches = result.data.batches || [];
+    } catch (_) {}
+
+    const statusBadge = (s) => {
+      const map = { processing: 'badge-pending', validated: 'badge-approved', validated_with_errors: 'badge-overdue', failed: 'badge-rejected' };
+      return `<span class="badge ${map[s] || 'badge-pending'}">${t('payroll_status_' + s) || s}</span>`;
+    };
+
+    const reportStatusBadge = (s) => {
+      const map = { generating: 'badge-pending', completed: 'badge-approved', failed: 'badge-rejected' };
+      return `<span class="badge ${map[s] || 'badge-pending'}">${t('payroll_report_status_' + s) || s}</span>`;
+    };
+
+    container.innerHTML = `
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">${t('payroll_upload_title')}</div>
+        <div id="payrollDropZone" style="border:2px dashed rgba(25,68,69,0.15);border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5" style="margin-bottom:12px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p style="font-size:14px;color:var(--t2);margin:0">${t('payroll_upload_desc')}</p>
+          <p style="font-size:12px;color:var(--t3);margin:4px 0 0">${t('payroll_upload_formats')}</p>
+          <input type="file" id="payrollFileInput" accept=".csv" style="display:none">
+        </div>
+        <div id="payrollUploadStatus" style="display:none;padding:12px;border-radius:8px;font-size:13px;margin-bottom:12px"></div>
+      </div>
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">${t('payroll_report_title')}</div>
+        <p style="font-size:13px;color:var(--t3);margin:0 0 16px">${t('payroll_report_desc')}</p>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:4px">${t('payroll_report_period')}</label>
+            <input type="text" id="payrollPeriodInput" placeholder="${t('payroll_report_period_ph')}" style="width:100%;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none">
+          </div>
+          <button class="btn-primary" id="generateReportBtn" style="white-space:nowrap">${t('payroll_report_btn')}</button>
+        </div>
+        <div id="reportStatus" style="display:none;margin-top:12px;padding:12px;border-radius:8px;font-size:13px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">${t('payroll_batches_title')}</div>
+        <div class="table-wrap">${batches.length ? `<table><thead><tr><th>${t('payroll_th_file')}</th><th>${t('payroll_th_source')}</th><th>${t('payroll_th_rows')}</th><th>${t('payroll_th_valid')}</th><th>${t('payroll_th_errors')}</th><th>${t('payroll_th_status')}</th><th>${t('payroll_th_date')}</th></tr></thead><tbody>${batches.map(b => `<tr><td>${b.fileName || '—'}</td><td>${b.source || '—'}</td><td>${b.totalRows}</td><td>${b.validRows}</td><td>${b.errorCount}</td><td>${statusBadge(b.status)}</td><td>${b.uploadedAt ? new Date(b.uploadedAt._seconds * 1000).toLocaleDateString() : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg><p>${t('payroll_no_batches')}</p></div>`}</div>
+      </div>`;
+
+    // CSV Upload: drag & drop + click
+    const dropZone = document.getElementById('payrollDropZone');
+    const fileInput = document.getElementById('payrollFileInput');
+    const uploadStatus = document.getElementById('payrollUploadStatus');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--brand)'; dropZone.style.background = 'rgba(25,68,69,0.03)'; });
+    dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = 'rgba(25,68,69,0.15)'; dropZone.style.background = 'transparent'; });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'rgba(25,68,69,0.15)';
+      dropZone.style.background = 'transparent';
+      const file = e.dataTransfer.files[0];
+      if (file) handleCSVUpload(file);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleCSVUpload(fileInput.files[0]);
+    });
+
+    async function handleCSVUpload(file) {
+      if (!file.name.endsWith('.csv')) {
+        showToast(t('payroll_toast_error'), 'error');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        showToast(t('payroll_toast_error'), 'error');
+        return;
+      }
+
+      uploadStatus.style.display = 'block';
+      uploadStatus.style.background = 'rgba(25,68,69,0.05)';
+      uploadStatus.style.color = 'var(--t2)';
+      uploadStatus.textContent = t('payroll_uploading');
+      dropZone.style.pointerEvents = 'none';
+      dropZone.style.opacity = '0.5';
+
+      try {
+        const csvContent = await file.text();
+        const fn = firebase.functions().httpsCallable('uploadPayrollCSV');
+        const result = await fn({ csvContent, fileName: file.name });
+
+        uploadStatus.style.background = 'rgba(39,174,96,0.08)';
+        uploadStatus.style.color = '#27ae60';
+        uploadStatus.textContent = t('payroll_toast_uploaded') + ' (ID: ' + result.data.batchId + ')';
+
+        // Refresh batches after brief delay
+        setTimeout(() => renderPayrollTab(uid), 3000);
+      } catch (err) {
+        uploadStatus.style.background = 'rgba(192,57,43,0.08)';
+        uploadStatus.style.color = '#c0392b';
+        uploadStatus.textContent = err.message || t('payroll_toast_error');
+        dropZone.style.pointerEvents = 'auto';
+        dropZone.style.opacity = '1';
+      }
+    }
+
+    // Deduction Report generation
+    const reportBtn = document.getElementById('generateReportBtn');
+    const reportStatusEl = document.getElementById('reportStatus');
+    const periodInput = document.getElementById('payrollPeriodInput');
+
+    reportBtn.addEventListener('click', async () => {
+      reportBtn.disabled = true;
+      reportBtn.textContent = t('payroll_report_generating');
+      reportStatusEl.style.display = 'block';
+      reportStatusEl.style.background = 'rgba(25,68,69,0.05)';
+      reportStatusEl.style.color = 'var(--t2)';
+      reportStatusEl.textContent = t('payroll_report_generating');
+
+      try {
+        const fn = firebase.functions().httpsCallable('generateDeductionReport');
+        const result = await fn({ payrollPeriod: periodInput.value || null });
+        const reportId = result.data.reportId;
+
+        // Poll for completion
+        let attempts = 0;
+        const poll = setInterval(async () => {
+          attempts++;
+          try {
+            const dlFn = firebase.functions().httpsCallable('downloadDeductionReport');
+            const dlResult = await dlFn({ reportId });
+            const report = dlResult.data;
+
+            if (report.status === 'completed' && report.downloadUrl) {
+              clearInterval(poll);
+              reportStatusEl.style.background = 'rgba(39,174,96,0.08)';
+              reportStatusEl.style.color = '#27ae60';
+              reportStatusEl.innerHTML = reportStatusBadge('completed') + ' ' + report.recordCount + ' records — <a href="' + report.downloadUrl + '" target="_blank" style="color:#27ae60;font-weight:700">' + t('payroll_report_download') + '</a>';
+              reportBtn.disabled = false;
+              reportBtn.textContent = t('payroll_report_btn');
+            } else if (report.status === 'failed') {
+              clearInterval(poll);
+              reportStatusEl.style.background = 'rgba(192,57,43,0.08)';
+              reportStatusEl.style.color = '#c0392b';
+              reportStatusEl.textContent = report.error || t('payroll_toast_error');
+              reportBtn.disabled = false;
+              reportBtn.textContent = t('payroll_report_btn');
+            } else if (attempts >= 20) {
+              clearInterval(poll);
+              reportStatusEl.textContent = t('payroll_report_generating') + '...';
+              reportBtn.disabled = false;
+              reportBtn.textContent = t('payroll_report_btn');
+            }
+          } catch (_) {
+            if (attempts >= 20) {
+              clearInterval(poll);
+              reportBtn.disabled = false;
+              reportBtn.textContent = t('payroll_report_btn');
+            }
+          }
+        }, 2000);
+      } catch (err) {
+        reportStatusEl.style.background = 'rgba(192,57,43,0.08)';
+        reportStatusEl.style.color = '#c0392b';
+        reportStatusEl.textContent = err.message || t('payroll_toast_error');
+        reportBtn.disabled = false;
+        reportBtn.textContent = t('payroll_report_btn');
+      }
+    });
   }
 }
 window.approveLoan = async function(id, btn) {
