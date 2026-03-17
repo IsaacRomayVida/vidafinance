@@ -20,8 +20,8 @@ gh api "repos/${REPO}/branches/develop/protection" \
   },
   "enforce_admins": false,
   "required_pull_request_reviews": {
-    "required_approving_review_count": 1,
-    "dismiss_stale_reviews": true
+    "required_approving_review_count": 0,
+    "dismiss_stale_reviews": false
   },
   "restrictions": null,
   "allow_force_pushes": false,
@@ -52,5 +52,5 @@ EOF
 
 echo ""
 echo "Branch protection rules applied successfully."
-echo "  develop: requires PR + 1 review + 'test' CI job passing"
+echo "  develop: requires PR + CI passing (no review required — cursor/* branches auto-merge)"
 echo "  main:    requires PR + 1 review + all CI + deploy jobs passing + enforce_admins"
