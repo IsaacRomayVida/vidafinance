@@ -9,6 +9,8 @@ import { notificationWorker } from './workers/notificationWorker';
 import { securityHeaders } from './middleware/security';
 import { corsMiddleware } from './middleware/cors';
 import { generalLimiter, webhookLimiter } from './middleware/rateLimit';
+import { notificationsRouter } from './routes/notifications';
+import { webhooksRouter } from './routes/webhooks';
 
 const app = express();
 app.use(securityHeaders);
@@ -17,6 +19,10 @@ app.options('*', corsMiddleware);
 app.use(generalLimiter);
 app.use('/webhooks', webhookLimiter);
 app.use(express.json({ limit: '100kb' }));
+
+// Routes
+app.use('/notifications', notificationsRouter);
+app.use('/webhooks', webhooksRouter);
 
 app.get('/health', async (_req, res) => {
   let redisOk = false;
