@@ -81,6 +81,10 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
+      - name: Authenticate with Firebase (service account)
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}' > "$RUNNER_TEMP/firebase-sa.json"
+
       - name: Deploy to Firebase (Staging)
         if: github.ref == 'refs/heads/develop'
         run: |
@@ -89,7 +93,7 @@ jobs:
             --project vida-finance \
             --non-interactive
         env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
 
       - name: Deploy to Firebase (Production)
         if: github.ref == 'refs/heads/main'
@@ -99,7 +103,11 @@ jobs:
             --project vida-finance \
             --non-interactive
         env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+
+      - name: Clean up credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
 
   # ─────────────────────────────────────────────
   # JOB 3: Deploy Railway Microservices
