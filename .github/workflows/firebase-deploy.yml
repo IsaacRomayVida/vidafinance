@@ -27,15 +27,15 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Authenticate with Firebase (Staging)
-        if: github.ref == 'refs/heads/develop'
+      - name: Write Firebase credentials
         run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}' > "$RUNNER_TEMP/firebase-sa.json"
-
-      - name: Authenticate with Firebase (Production)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}' > "$RUNNER_TEMP/firebase-sa.json"
+          printenv FIREBASE_SA > "$RUNNER_TEMP/firebase-sa.json"
+          if [ ! -s "$RUNNER_TEMP/firebase-sa.json" ]; then
+            echo "::error::firebase-sa.json is empty — check FIREBASE_SERVICE_ACCOUNT secret"
+            exit 1
+          fi
+        env:
+          FIREBASE_SA: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
 
       - name: Write functions .env (Staging)
         if: github.ref == 'refs/heads/develop'
