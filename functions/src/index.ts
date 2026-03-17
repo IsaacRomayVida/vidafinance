@@ -17,6 +17,11 @@ export { generatePaymentLink } from './payments/generatePaymentLink';
 export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
 
 export { getEmployerDashboard } from './employers/getEmployerDashboard';
+export { getEmployeeRoster } from './employers/getEmployeeRoster';
+export { getPayrollDeductions } from './employers/getPayrollDeductions';
+export { getAdoptionMetrics } from './employers/getAdoptionMetrics';
+export { regenerateEmployerCode } from './employers/regenerateEmployerCode';
+export { sendEmployeeCommunication } from './employers/sendEmployeeCommunication';
 export { getAdminDashboard } from './admin/getAdminDashboard';
 export { updateLoanStatus } from './loans/updateLoanStatus';
 export { getPortfolioReport } from './admin/getPortfolioReport';

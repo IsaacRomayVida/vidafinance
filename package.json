@@ -26,8 +26,12 @@
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@firebase/rules-unit-testing": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
+    "eslint": "^10.0.3",
     "firebase": "^12.10.0",
     "husky": "^9.1.7",
     "jest": "^30.3.0",
