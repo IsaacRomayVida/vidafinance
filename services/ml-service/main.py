@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
+from pipeline import run_pipeline, run_scorecard, run_fraud_detection, ApplicationInput
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ml-service")
@@ -224,6 +225,152 @@ def clear_cache(request: Request, uid: str, x_internal_secret: str = Header(None
     except Exception:
         pass
     return {"cleared": f"ml:employer:{uid}"}
+
+
+@app.post("/underwrite/pipeline")
+@limiter.limit("100/15minutes")
+async def underwrite_pipeline(request: Request, payload: dict, x_internal_secret: str = Header(None)):
+    """Full 6-stage Decision Tree underwriting pipeline (stages 0–5).
+
+    Caches results in Redis by applicant_id + principal_amount (TTL 1 hour).
+    """
+    auth(x_internal_secret)
+    applicant_id = payload.get("applicant_id", "") or payload.get("applicantId", "")
+    principal = payload.get("principal_amount", 0) or payload.get("principalAmount", 0)
+    ck = f"ml:pipeline:{applicant_id}:{principal}"
+
+    try:
+        cached = rdb.get(ck)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+
+    app_input = ApplicationInput(
+        applicant_id=applicant_id,
+        curp_hash=payload.get("curp_hash", "") or payload.get("curpHash", ""),
+        employment_type=payload.get("employment_type", "imss") or payload.get("employmentType", "imss"),
+        employer_type=payload.get("employer_type", "private"),
+        employment_tenure_months=int(payload.get("employment_tenure_months", 0) or payload.get("employmentTenureMonths", 0)),
+        monthly_salary=float(payload.get("monthly_salary", 0) or payload.get("monthlySalary", 0)),
+        pay_frequency=payload.get("pay_frequency", "biweekly") or payload.get("payFrequency", "biweekly"),
+        imss_enrolled_months=int(payload.get("imss_enrolled_months", 0)),
+        has_afore=bool(payload.get("has_afore", False)),
+        principal_amount=float(principal),
+        kyc_passed=bool(payload.get("kyc_passed", True)),
+        kyc_confidence=float(payload.get("kyc_confidence", 90)),
+        bureau_score=payload.get("bureau_score") or payload.get("bureauScore"),
+        bureau_inquiry_count=int(payload.get("bureau_inquiry_count", 0)),
+        has_bureau_record=bool(payload.get("has_bureau_record", False)),
+        device_fingerprint=payload.get("device_fingerprint", ""),
+        device_age_days=int(payload.get("device_age_days", 365)),
+        requests_last_hour=int(payload.get("requests_last_hour", 0)),
+        geo_distance_km=float(payload.get("geo_distance_km", 0)),
+        same_ip_applications=int(payload.get("same_ip_applications", 0)),
+        time_since_last_app_hours=float(payload.get("time_since_last_app_hours", 720)),
+        blacklisted_device=bool(payload.get("blacklisted_device", False)),
+        aml_clear=bool(payload.get("aml_clear", True)),
+        pep_flag=bool(payload.get("pep_flag", False)),
+        employer_industry=payload.get("employer_industry", "") or payload.get("employerIndustry", ""),
+        employer_size=payload.get("employer_size", "51-200"),
+    )
+
+    pipeline_result = run_pipeline(app_input, anthropic_api_key=AKEY or None)
+
+    output = {
+        "applicant_id": pipeline_result.applicant_id,
+        "decision": pipeline_result.decision,
+        "stage_reached": pipeline_result.stage_reached,
+        "stage_name": pipeline_result.stage_name,
+        "credit_score": pipeline_result.credit_score,
+        "pd_estimate": pipeline_result.pd_estimate,
+        "risk_grade": pipeline_result.risk_grade,
+        "fraud_score": pipeline_result.fraud_score,
+        "rejection_reason": pipeline_result.rejection_reason,
+        "approval_conditions": pipeline_result.approval_conditions,
+        "models_used": pipeline_result.models_used,
+        "processing_time_ms": pipeline_result.processing_time_ms,
+        "stage_results": [
+            {
+                "stage": r.stage,
+                "name": r.name,
+                "passed": r.passed,
+                "outcome": r.outcome,
+                "rejection_reason": r.rejection_reason,
+            }
+            for r in pipeline_result.stage_results
+        ],
+        "decisionId": f"{applicant_id}_{int(time.time())}",
+        "ts": int(time.time()),
+    }
+
+    try:
+        rdb.setex(ck, 3600, json.dumps(output))
+    except Exception:
+        pass
+
+    return output
+
+
+@app.post("/underwrite/scorecard")
+@limiter.limit("100/15minutes")
+async def underwrite_scorecard(request: Request, payload: dict, x_internal_secret: str = Header(None)):
+    """WoE logistic regression scorecard — returns credit score 300–850 and PD estimate."""
+    auth(x_internal_secret)
+
+    import hashlib
+    cache_key_data = json.dumps(payload, sort_keys=True)
+    ck = f"ml:scorecard:{hashlib.md5(cache_key_data.encode()).hexdigest()}"
+
+    try:
+        cached = rdb.get(ck)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+
+    sc = run_scorecard(payload)
+
+    output = {
+        "credit_score": sc.credit_score,
+        "pd_estimate": sc.pd_estimate,
+        "risk_grade": sc.risk_grade,
+        "log_odds": sc.log_odds,
+        "approved": sc.approved,
+        "woe_contributions": sc.woe_contributions,
+        "model": "woe_logistic_v1",
+        "ts": int(time.time()),
+    }
+
+    try:
+        rdb.setex(ck, TTL, json.dumps(output))
+    except Exception:
+        pass
+
+    return output
+
+
+@app.post("/underwrite/fraud")
+@limiter.limit("100/15minutes")
+async def underwrite_fraud(request: Request, payload: dict, x_internal_secret: str = Header(None)):
+    """Isolation Forest fraud detection — real-time behavioural anomaly scoring.
+
+    Results are NOT cached because fraud signals (velocity, geo, etc.) are time-sensitive.
+    """
+    auth(x_internal_secret)
+
+    fraud = run_fraud_detection(payload)
+
+    return {
+        "fraud_score": fraud.fraud_score,
+        "is_fraud": fraud.is_fraud,
+        "needs_review": fraud.needs_review,
+        "hard_flags": fraud.hard_flags,
+        "anomaly_contributions": fraud.anomaly_contributions,
+        "isolation_forest_score": fraud.isolation_forest_score,
+        "model": "isolation_forest_v1",
+        "ts": int(time.time()),
+    }
 
 
 @app.post("/score")
