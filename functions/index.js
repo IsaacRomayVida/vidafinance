@@ -761,3 +761,642 @@ exports.revokeAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true
   await getAuth().setCustomUserClaims(request.data.uid, { admin: false });
   return { success: true };
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// ── Travel Plan Scheduled Functions ──────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+
+// ── dailyDepositReminder — 09:00 CST every day ──────────────────────
+// Sends WhatsApp reminders to customers whose next deposit is due within 24h
+exports.dailyDepositReminder = onSchedule(
+  { schedule: "0 9 * * *", timeZone: "America/Mexico_City" },
+  async () => {
+    const now = Timestamp.now();
+    const in24h = Timestamp.fromMillis(Date.now() + 25 * 60 * 60 * 1000);
+
+    // Find active travel plans with a deposit due within the next 25 hours
+    const plansSnap = await db
+      .collection("travel_plans")
+      .where("status", "==", "active")
+      .where("nextDepositDate", "<=", in24h)
+      .get();
+
+    let reminded = 0;
+
+    for (const doc of plansSnap.docs) {
+      const plan = doc.data();
+
+      // Skip deposits already past due (handled by overdue logic)
+      if (plan.nextDepositDate.toMillis() < Date.now()) continue;
+
+      try {
+        await getQueue("vida-notifications").add("deposit_reminder_24h", {
+          type: "deposit_reminder_24h",
+          travelPlanId: doc.id,
+          customerId: plan.customerId,
+          customerName: plan.customerName,
+          phone: plan.customerPhone,
+          depositAmount: plan.depositAmount,
+          nextDepositDate: plan.nextDepositDate.toDate().toISOString(),
+          destination: plan.destination,
+          depositNumber: (plan.depositsPaid || 0) + 1,
+          totalDeposits: plan.totalDeposits,
+        });
+        reminded++;
+      } catch (_) { /* queue unavailable */ }
+    }
+
+    // Find overdue deposits (nextDepositDate < now)
+    const overdueSnap = await db
+      .collection("travel_plans")
+      .where("status", "==", "active")
+      .where("nextDepositDate", "<", now)
+      .get();
+
+    let overdueCount = 0;
+
+    for (const doc of overdueSnap.docs) {
+      const plan = doc.data();
+      const daysOver = Math.floor((Date.now() - plan.nextDepositDate.toMillis()) / 86400000);
+
+      // Only notify once per day (skip if already flagged today)
+      if (plan.lastOverdueNotifiedAt) {
+        const lastNotified = plan.lastOverdueNotifiedAt.toMillis();
+        if (Date.now() - lastNotified < 20 * 60 * 60 * 1000) continue;
+      }
+
+      await doc.ref.update({ lastOverdueNotifiedAt: now });
+
+      try {
+        await getQueue("vida-notifications").add("deposit_overdue", {
+          type: "deposit_overdue",
+          travelPlanId: doc.id,
+          customerId: plan.customerId,
+          customerName: plan.customerName,
+          phone: plan.customerPhone,
+          depositAmount: plan.depositAmount,
+          daysOverdue: daysOver,
+          destination: plan.destination,
+        });
+        overdueCount++;
+      } catch (_) { /* queue unavailable */ }
+    }
+
+    await db.collection("scheduler_runs").add({
+      job: "dailyDepositReminder",
+      ranAt: now,
+      reminded,
+      overdueNotified: overdueCount,
+      status: "complete",
+    });
+  }
+);
+
+// ── supplierPrePaymentT14 — 10:00 CST every day ────────────────────
+// 14 days before departure: trigger 50% hotel pre-payment
+exports.supplierPrePaymentT14 = onSchedule(
+  { schedule: "0 10 * * *", timeZone: "America/Mexico_City" },
+  async () => {
+    const now = Timestamp.now();
+
+    // Find travel plans departing in exactly 14 days (13–15 day window for safety)
+    const t14Start = Timestamp.fromMillis(Date.now() + 13 * 24 * 60 * 60 * 1000);
+    const t14End = Timestamp.fromMillis(Date.now() + 15 * 24 * 60 * 60 * 1000);
+
+    const plansSnap = await db
+      .collection("travel_plans")
+      .where("status", "==", "active")
+      .where("supplierPaymentStatus", "==", "pending")
+      .where("departureDate", ">=", t14Start)
+      .where("departureDate", "<=", t14End)
+      .get();
+
+    let triggered = 0;
+
+    for (const doc of plansSnap.docs) {
+      const plan = doc.data();
+      const prePaymentAmount = Math.round(plan.supplierTotalCost * 0.5 * 100) / 100;
+
+      // Create supplier payment record
+      const paymentId = nanoid();
+      await db.collection("supplier_payments").doc(paymentId).set({
+        travelPlanId: doc.id,
+        supplierId: plan.supplierId,
+        supplierName: plan.supplierName,
+        supplierClabe: plan.supplierClabe,
+        type: "pre_payment_t14",
+        amount: prePaymentAmount,
+        totalSupplierCost: plan.supplierTotalCost,
+        percentage: 50,
+        status: "queued",
+        concept: "VIDA-HTL-" + doc.id.slice(0, 6).toUpperCase(),
+        customerId: plan.customerId,
+        customerName: plan.customerName,
+        departureDate: plan.departureDate,
+        queuedAt: FieldValue.serverTimestamp(),
+        completedAt: null,
+        speiRef: null,
+      });
+
+      // Update travel plan
+      await doc.ref.update({
+        supplierPaymentStatus: "t14_queued",
+        supplierPrePaymentId: paymentId,
+        supplierPrePaymentAmount: prePaymentAmount,
+      });
+
+      // Queue SPEI disbursement
+      try {
+        await getQueue("vida-disbursements").add("supplier_payment", {
+          paymentId,
+          travelPlanId: doc.id,
+          supplierId: plan.supplierId,
+          amount: prePaymentAmount,
+          clabe: plan.supplierClabe,
+          concept: "VIDA-HTL-" + doc.id.slice(0, 6).toUpperCase(),
+          supplierName: plan.supplierName,
+          type: "pre_payment_t14",
+        });
+      } catch (e) {
+        console.warn("Disbursement queue unavailable:", e.message);
+        await db.collection("supplier_payments").doc(paymentId).update({ status: "queue_error" });
+        await doc.ref.update({ supplierPaymentStatus: "t14_error" });
+        continue;
+      }
+
+      // Notify customer about upcoming trip and supplier payment
+      try {
+        await getQueue("vida-notifications").add("supplier_payment_initiated", {
+          type: "supplier_payment_initiated",
+          travelPlanId: doc.id,
+          customerId: plan.customerId,
+          customerName: plan.customerName,
+          phone: plan.customerPhone,
+          destination: plan.destination,
+          departureDate: plan.departureDate.toDate().toISOString(),
+          paymentType: "pre_payment_t14",
+          amount: prePaymentAmount,
+        });
+      } catch (_) { /* queue unavailable */ }
+
+      try {
+        await auditLog(db, {
+          action: "supplier_payment.t14_triggered",
+          actorUid: "system",
+          actorRole: "system",
+          targetId: paymentId,
+          meta: { travelPlanId: doc.id, amount: prePaymentAmount, supplierId: plan.supplierId },
+        });
+      } catch (_) { /* non-critical */ }
+
+      triggered++;
+    }
+
+    await db.collection("scheduler_runs").add({
+      job: "supplierPrePaymentT14",
+      ranAt: now,
+      triggered,
+      status: "complete",
+    });
+  }
+);
+
+// ── supplierFinalPaymentT7 — 10:30 CST every day ───────────────────
+// 7 days before departure: trigger remaining 50% hotel payment (total = 100%)
+exports.supplierFinalPaymentT7 = onSchedule(
+  { schedule: "30 10 * * *", timeZone: "America/Mexico_City" },
+  async () => {
+    const now = Timestamp.now();
+
+    // Find travel plans departing in exactly 7 days (6–8 day window)
+    const t7Start = Timestamp.fromMillis(Date.now() + 6 * 24 * 60 * 60 * 1000);
+    const t7End = Timestamp.fromMillis(Date.now() + 8 * 24 * 60 * 60 * 1000);
+
+    const plansSnap = await db
+      .collection("travel_plans")
+      .where("status", "==", "active")
+      .where("supplierPaymentStatus", "==", "t14_completed")
+      .where("departureDate", ">=", t7Start)
+      .where("departureDate", "<=", t7End)
+      .get();
+
+    let triggered = 0;
+
+    for (const doc of plansSnap.docs) {
+      const plan = doc.data();
+      const finalAmount = Math.round((plan.supplierTotalCost - (plan.supplierPrePaymentAmount || 0)) * 100) / 100;
+
+      const paymentId = nanoid();
+      await db.collection("supplier_payments").doc(paymentId).set({
+        travelPlanId: doc.id,
+        supplierId: plan.supplierId,
+        supplierName: plan.supplierName,
+        supplierClabe: plan.supplierClabe,
+        type: "final_payment_t7",
+        amount: finalAmount,
+        totalSupplierCost: plan.supplierTotalCost,
+        percentage: 50,
+        status: "queued",
+        concept: "VIDA-HTL-" + doc.id.slice(0, 6).toUpperCase() + "-F",
+        customerId: plan.customerId,
+        customerName: plan.customerName,
+        departureDate: plan.departureDate,
+        queuedAt: FieldValue.serverTimestamp(),
+        completedAt: null,
+        speiRef: null,
+      });
+
+      await doc.ref.update({
+        supplierPaymentStatus: "t7_queued",
+        supplierFinalPaymentId: paymentId,
+        supplierFinalPaymentAmount: finalAmount,
+      });
+
+      try {
+        await getQueue("vida-disbursements").add("supplier_payment", {
+          paymentId,
+          travelPlanId: doc.id,
+          supplierId: plan.supplierId,
+          amount: finalAmount,
+          clabe: plan.supplierClabe,
+          concept: "VIDA-HTL-" + doc.id.slice(0, 6).toUpperCase() + "-F",
+          supplierName: plan.supplierName,
+          type: "final_payment_t7",
+        });
+      } catch (e) {
+        console.warn("Disbursement queue unavailable:", e.message);
+        await db.collection("supplier_payments").doc(paymentId).update({ status: "queue_error" });
+        await doc.ref.update({ supplierPaymentStatus: "t7_error" });
+        continue;
+      }
+
+      try {
+        await getQueue("vida-notifications").add("supplier_payment_initiated", {
+          type: "supplier_payment_initiated",
+          travelPlanId: doc.id,
+          customerId: plan.customerId,
+          customerName: plan.customerName,
+          phone: plan.customerPhone,
+          destination: plan.destination,
+          departureDate: plan.departureDate.toDate().toISOString(),
+          paymentType: "final_payment_t7",
+          amount: finalAmount,
+        });
+      } catch (_) { /* queue unavailable */ }
+
+      try {
+        await auditLog(db, {
+          action: "supplier_payment.t7_triggered",
+          actorUid: "system",
+          actorRole: "system",
+          targetId: paymentId,
+          meta: { travelPlanId: doc.id, amount: finalAmount, supplierId: plan.supplierId },
+        });
+      } catch (_) { /* non-critical */ }
+
+      triggered++;
+    }
+
+    await db.collection("scheduler_runs").add({
+      job: "supplierFinalPaymentT7",
+      ranAt: now,
+      triggered,
+      status: "complete",
+    });
+  }
+);
+
+// ── weeklyStreakNotification — Monday 09:00 CST ─────────────────────
+// Gamification: notify customers about consecutive on-time deposit streaks
+exports.weeklyStreakNotification = onSchedule(
+  { schedule: "0 9 * * 1", timeZone: "America/Mexico_City" },
+  async () => {
+    const now = Timestamp.now();
+
+    const plansSnap = await db
+      .collection("travel_plans")
+      .where("status", "==", "active")
+      .where("depositsPaid", ">", 0)
+      .get();
+
+    let notified = 0;
+
+    for (const doc of plansSnap.docs) {
+      const plan = doc.data();
+      const streak = plan.consecutiveOnTimeDeposits || 0;
+
+      // Only notify if the customer has a streak of 2+ consecutive on-time deposits
+      if (streak < 2) continue;
+
+      try {
+        await getQueue("vida-notifications").add("deposit_streak", {
+          type: "deposit_streak",
+          travelPlanId: doc.id,
+          customerId: plan.customerId,
+          customerName: plan.customerName,
+          phone: plan.customerPhone,
+          streak,
+          destination: plan.destination,
+          depositsPaid: plan.depositsPaid,
+          totalDeposits: plan.totalDeposits,
+          percentComplete: Math.round((plan.depositsPaid / plan.totalDeposits) * 100),
+        });
+        notified++;
+      } catch (_) { /* queue unavailable */ }
+    }
+
+    await db.collection("scheduler_runs").add({
+      job: "weeklyStreakNotification",
+      ranAt: now,
+      notified,
+      status: "complete",
+    });
+  }
+);
+
+// ── monthlyFranchiseCommissionPayout — 1st of month 08:00 CST ───────
+// Calculates and pays franchise commissions (15% of revenue) for prior month
+exports.monthlyFranchiseCommissionPayout = onSchedule(
+  { schedule: "0 8 1 * *", timeZone: "America/Mexico_City" },
+  async () => {
+    const now = Timestamp.now();
+
+    // Calculate previous month's date range
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
+    const periodLabel = monthStart.toISOString().slice(0, 7); // e.g. "2026-02"
+
+    const franchisesSnap = await db
+      .collection("franchises")
+      .where("status", "==", "active")
+      .get();
+
+    let totalCommissions = 0;
+    let franchisesPaid = 0;
+
+    for (const franchiseDoc of franchisesSnap.docs) {
+      const franchise = franchiseDoc.data();
+
+      // Find all completed deposits for this franchise's customers in the previous month
+      const depositsSnap = await db
+        .collection("deposits")
+        .where("franchiseId", "==", franchiseDoc.id)
+        .where("status", "==", "completed")
+        .where("paidAt", ">=", Timestamp.fromDate(monthStart))
+        .where("paidAt", "<=", Timestamp.fromDate(monthEnd))
+        .get();
+
+      if (depositsSnap.empty) continue;
+
+      const totalRevenue = depositsSnap.docs.reduce((sum, d) => sum + (d.data().amount || 0), 0);
+      const commissionRate = franchise.commissionRate || 0.15;
+      const commissionAmount = Math.round(totalRevenue * commissionRate * 100) / 100;
+
+      if (commissionAmount <= 0) continue;
+
+      const payoutId = nanoid();
+      await db.collection("commission_payouts").doc(payoutId).set({
+        franchiseId: franchiseDoc.id,
+        franchiseName: franchise.name,
+        franchiseClabe: franchise.bankClabe,
+        period: periodLabel,
+        totalRevenue,
+        commissionRate,
+        commissionAmount,
+        depositsCount: depositsSnap.size,
+        status: "queued",
+        concept: "VIDA-COM-" + periodLabel + "-" + franchiseDoc.id.slice(0, 4).toUpperCase(),
+        queuedAt: FieldValue.serverTimestamp(),
+        completedAt: null,
+        speiRef: null,
+      });
+
+      // Queue SPEI disbursement for commission
+      try {
+        await getQueue("vida-disbursements").add("commission_payout", {
+          payoutId,
+          franchiseId: franchiseDoc.id,
+          amount: commissionAmount,
+          clabe: franchise.bankClabe,
+          concept: "VIDA-COM-" + periodLabel + "-" + franchiseDoc.id.slice(0, 4).toUpperCase(),
+          franchiseName: franchise.name,
+        });
+      } catch (e) {
+        console.warn("Disbursement queue unavailable:", e.message);
+        await db.collection("commission_payouts").doc(payoutId).update({ status: "queue_error" });
+        continue;
+      }
+
+      // Notify franchise owner
+      try {
+        await getQueue("vida-notifications").add("franchise_commission_paid", {
+          type: "franchise_commission_paid",
+          franchiseId: franchiseDoc.id,
+          franchiseName: franchise.name,
+          phone: franchise.ownerPhone,
+          email: franchise.ownerEmail,
+          commissionAmount,
+          totalRevenue,
+          period: periodLabel,
+          depositsCount: depositsSnap.size,
+        });
+      } catch (_) { /* queue unavailable */ }
+
+      try {
+        await auditLog(db, {
+          action: "commission.payout_queued",
+          actorUid: "system",
+          actorRole: "system",
+          targetId: payoutId,
+          meta: { franchiseId: franchiseDoc.id, amount: commissionAmount, period: periodLabel },
+        });
+      } catch (_) { /* non-critical */ }
+
+      totalCommissions += commissionAmount;
+      franchisesPaid++;
+    }
+
+    await db.collection("scheduler_runs").add({
+      job: "monthlyFranchiseCommissionPayout",
+      ranAt: now,
+      period: periodLabel,
+      franchisesPaid,
+      totalCommissionsMXN: totalCommissions,
+      status: "complete",
+    });
+  }
+);
+
+// ── dailyReconciliation — 02:00 CST every day ───────────────────────
+// Cross-checks deposits received, supplier payments, and commission payouts
+exports.dailyReconciliation = onSchedule(
+  { schedule: "0 2 * * *", timeZone: "America/Mexico_City" },
+  async () => {
+    const now = Timestamp.now();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const yesterdayStart = Timestamp.fromDate(new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()));
+    const yesterdayEnd = Timestamp.fromDate(new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999));
+    const dateLabel = yesterday.toISOString().split("T")[0];
+
+    const discrepancies = [];
+
+    // 1. Reconcile deposits: expected vs received
+    const expectedDepositsSnap = await db
+      .collection("travel_plans")
+      .where("status", "==", "active")
+      .where("nextDepositDate", ">=", yesterdayStart)
+      .where("nextDepositDate", "<=", yesterdayEnd)
+      .get();
+
+    const receivedDepositsSnap = await db
+      .collection("deposits")
+      .where("status", "==", "completed")
+      .where("paidAt", ">=", yesterdayStart)
+      .where("paidAt", "<=", yesterdayEnd)
+      .get();
+
+    const receivedPlanIds = new Set(receivedDepositsSnap.docs.map((d) => d.data().travelPlanId));
+    const expectedPlanIds = new Set(expectedDepositsSnap.docs.map((d) => d.id));
+
+    // Deposits expected but not received
+    for (const planId of expectedPlanIds) {
+      if (!receivedPlanIds.has(planId)) {
+        const plan = expectedDepositsSnap.docs.find((d) => d.id === planId)?.data();
+        discrepancies.push({
+          type: "deposit_missing",
+          travelPlanId: planId,
+          customerId: plan?.customerId,
+          expectedAmount: plan?.depositAmount,
+          description: "Deposit expected but not received",
+        });
+      }
+    }
+
+    // Deposits received for plans not expecting them (unexpected payments)
+    for (const doc of receivedDepositsSnap.docs) {
+      const deposit = doc.data();
+      if (!expectedPlanIds.has(deposit.travelPlanId)) {
+        discrepancies.push({
+          type: "deposit_unexpected",
+          travelPlanId: deposit.travelPlanId,
+          depositId: doc.id,
+          amount: deposit.amount,
+          description: "Deposit received but not expected on this date",
+        });
+      }
+    }
+
+    // 2. Reconcile supplier payments: queued vs confirmed
+    const supplierPaymentsSnap = await db
+      .collection("supplier_payments")
+      .where("queuedAt", ">=", yesterdayStart)
+      .where("queuedAt", "<=", yesterdayEnd)
+      .get();
+
+    for (const doc of supplierPaymentsSnap.docs) {
+      const payment = doc.data();
+      if (payment.status === "queued") {
+        discrepancies.push({
+          type: "supplier_payment_unconfirmed",
+          supplierPaymentId: doc.id,
+          travelPlanId: payment.travelPlanId,
+          supplierId: payment.supplierId,
+          amount: payment.amount,
+          paymentType: payment.type,
+          description: "Supplier payment queued but not yet confirmed",
+        });
+      }
+      if (payment.status === "queue_error") {
+        discrepancies.push({
+          type: "supplier_payment_failed",
+          supplierPaymentId: doc.id,
+          travelPlanId: payment.travelPlanId,
+          supplierId: payment.supplierId,
+          amount: payment.amount,
+          paymentType: payment.type,
+          description: "Supplier payment failed to queue",
+        });
+      }
+    }
+
+    // 3. Reconcile loan disbursements (existing system)
+    const disbursementSnap = await db
+      .collection("disbursement_queue")
+      .where("status", "==", "queued")
+      .where("queuedAt", "<=", yesterdayEnd)
+      .get();
+
+    for (const doc of disbursementSnap.docs) {
+      const d = doc.data();
+      discrepancies.push({
+        type: "loan_disbursement_stuck",
+        loanId: d.loanId,
+        employeeId: d.employeeId,
+        amount: d.amount,
+        description: "Loan disbursement queued but not completed",
+      });
+    }
+
+    // 4. Check commission payouts still pending
+    const pendingCommissionsSnap = await db
+      .collection("commission_payouts")
+      .where("status", "==", "queued")
+      .get();
+
+    for (const doc of pendingCommissionsSnap.docs) {
+      const c = doc.data();
+      // Only flag if queued more than 24h ago
+      if (c.queuedAt && c.queuedAt.toMillis() < Date.now() - 24 * 60 * 60 * 1000) {
+        discrepancies.push({
+          type: "commission_payout_stuck",
+          payoutId: doc.id,
+          franchiseId: c.franchiseId,
+          amount: c.commissionAmount,
+          description: "Commission payout queued for more than 24h",
+        });
+      }
+    }
+
+    // 5. Summary totals for the day
+    const totalDepositsReceived = receivedDepositsSnap.docs.reduce((s, d) => s + (d.data().amount || 0), 0);
+    const totalSupplierPayments = supplierPaymentsSnap.docs
+      .filter((d) => d.data().status === "completed")
+      .reduce((s, d) => s + (d.data().amount || 0), 0);
+
+    // Write reconciliation report
+    await db.collection("reconciliation_runs").doc(dateLabel).set({
+      date: dateLabel,
+      ranAt: now,
+      depositsExpected: expectedDepositsSnap.size,
+      depositsReceived: receivedDepositsSnap.size,
+      totalDepositsReceivedMXN: totalDepositsReceived,
+      supplierPaymentsProcessed: supplierPaymentsSnap.size,
+      totalSupplierPaymentsMXN: totalSupplierPayments,
+      loanDisbursementsStuck: disbursementSnap.size,
+      discrepanciesCount: discrepancies.length,
+      discrepancies,
+      status: discrepancies.length === 0 ? "clean" : "has_discrepancies",
+    });
+
+    // Log incidents for critical discrepancies
+    if (discrepancies.length > 0) {
+      await db.collection("incident_log").add({
+        source: "daily-reconciliation",
+        severity: discrepancies.some((d) => d.type.includes("failed") || d.type.includes("stuck")) ? "critical" : "warning",
+        error: `Reconciliation found ${discrepancies.length} discrepancy(ies) for ${dateLabel}`,
+        discrepanciesCount: discrepancies.length,
+        ts: now,
+        resolved: false,
+      });
+    }
+
+    await db.collection("scheduler_runs").add({
+      job: "dailyReconciliation",
+      ranAt: now,
+      date: dateLabel,
+      discrepanciesFound: discrepancies.length,
+      status: "complete",
+    });
+  }
+);

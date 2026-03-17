@@ -31,6 +31,12 @@ const TEMPLATES = {
   loan_overdue:     d => '\u26A0\uFE0F *Préstamo vencido*\n\nTu préstamo de $'+fmt(d.amount)+' MXN venció hace '+(d.daysOverdue||1)+' día(s).\n\nRealiza tu pago: vida-finance.web.app',
   loan_reminder_24h:d => '\uD83D\uDD14 *Tu pago vence mañana*\n\nMañana vence tu pago de $'+fmt(d.amount)+' MXN. Si tu empresa ya hizo el descuento, no tienes que hacer nada.\n\nvida-finance.web.app',
   employer_activated:d=> '\uD83C\uDF89 *Empresa verificada en VIDA*\n\nHola '+d.name+', '+d.companyName+' fue activada.\n\nCódigo: *'+d.employerCode+'*\n\nCompártelo con tus empleados.',
+  // Travel plan notifications
+  deposit_reminder_24h: d => '\uD83D\uDD14 *Tu depósito vence mañana*\n\nHola '+d.name.split(' ')[0]+', mañana vence tu depósito #'+(d.depositNumber||'')+' de $'+fmt(d.depositAmount)+' MXN para tu viaje a *'+d.destination+'*.\n\nDepósito '+(d.depositNumber||'')+' de '+(d.totalDeposits||'')+'\n\n\uD83D\uDCB3 Realiza tu pago: app.vida.finance',
+  deposit_overdue:     d => '\u26A0\uFE0F *Depósito vencido*\n\nTu depósito de $'+fmt(d.depositAmount)+' MXN para tu viaje a *'+d.destination+'* lleva '+(d.daysOverdue||1)+' día(s) de retraso.\n\nRealiza tu pago para no perder tu racha: app.vida.finance',
+  deposit_streak:      d => '\uD83D\uDD25 *¡Racha de '+d.streak+' depósitos a tiempo!*\n\nHola '+d.name.split(' ')[0]+', llevas '+d.streak+' depósitos consecutivos a tiempo para tu viaje a *'+d.destination+'*.\n\n\uD83C\uDFAF Progreso: '+d.percentComplete+'% completado ('+d.depositsPaid+'/'+d.totalDeposits+')\n\n¡Sigue así! \uD83D\uDE80',
+  supplier_payment_initiated: d => '\u2708\uFE0F *Tu viaje se está confirmando*\n\nHola '+d.name.split(' ')[0]+', estamos procesando el pago '+(d.paymentType==='pre_payment_t14'?'anticipado':'final')+' al hotel para tu viaje a *'+d.destination+'*.\n\n\uD83D\uDCC5 Salida: '+new Date(d.departureDate).toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}),
+  franchise_commission_paid: d => '\uD83D\uDCB0 *Comisión depositada*\n\nHola, se ha depositado tu comisión de $'+fmt(d.commissionAmount)+' MXN por el periodo '+d.period+'.\n\n\uD83D\uDCCA '+d.depositsCount+' depósitos procesados\n\uD83D\uDCB5 Ingresos totales: $'+fmt(d.totalRevenue)+' MXN',
 };
 
 async function sendWA(phone, msg, type, refId) {
@@ -72,6 +78,28 @@ const worker = new Worker('vida-notifications', async job => {
   if (type==='employer_activated') {
     const er = (await db.collection('employers').doc(d.employerUid).get()).data();
     await sendEmail(er.email,'\uD83C\uDF89 VIDA: Tu empresa fue verificada',TEMPLATES.employer_activated({...d,name:er.name,employerCode:er.employerCode}));
+  }
+  // Travel plan notification types
+  if (type==='deposit_reminder_24h' && d.travelPlanId) {
+    const msg = TEMPLATES.deposit_reminder_24h({...d,name});
+    await sendWA(phone,msg,type,d.travelPlanId);
+  }
+  if (type==='deposit_overdue') {
+    const msg = TEMPLATES.deposit_overdue(d);
+    await sendWA(phone||d.phone,msg,type,d.travelPlanId);
+  }
+  if (type==='deposit_streak') {
+    const msg = TEMPLATES.deposit_streak({...d,name});
+    await sendWA(phone||d.phone,msg,type,d.travelPlanId);
+  }
+  if (type==='supplier_payment_initiated') {
+    const msg = TEMPLATES.supplier_payment_initiated({...d,name});
+    await sendWA(phone||d.phone,msg,type,d.travelPlanId);
+  }
+  if (type==='franchise_commission_paid') {
+    const msg = TEMPLATES.franchise_commission_paid(d);
+    await sendWA(d.phone,msg,type,d.franchiseId);
+    await sendEmail(d.email,'\uD83D\uDCB0 Comisión VIDA depositada — '+d.period,msg);
   }
 }, { connection:redis, concurrency:10 });
 
