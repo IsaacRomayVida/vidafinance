@@ -20,6 +20,13 @@ export { getEmployerDashboard } from './employers/getEmployerDashboard';
 export { getAdminDashboard } from './admin/getAdminDashboard';
 export { updateLoanStatus } from './loans/updateLoanStatus';
 export { getPortfolioReport } from './admin/getPortfolioReport';
+export { rejectEmployer } from './admin/rejectEmployer';
+export { getEmployerQueue } from './admin/getEmployerQueue';
+export { searchLoans } from './admin/searchLoans';
+export { getDelinquencyReport } from './admin/getDelinquencyReport';
+export { getSystemHealthStatus } from './admin/getSystemHealthStatus';
+export { getAuditLogs } from './admin/getAuditLogs';
+export { listUsers } from './admin/listUsers';
 
 initializeApp();
 const db = getFirestore();
