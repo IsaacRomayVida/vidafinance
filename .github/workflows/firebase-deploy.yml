@@ -27,9 +27,15 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Authenticate with Firebase (service account)
+      - name: Authenticate with Firebase (Staging)
+        if: github.ref == 'refs/heads/develop'
         run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}' > "$RUNNER_TEMP/firebase-sa.json"
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}' | base64 --decode > "$RUNNER_TEMP/firebase-sa.json"
+
+      - name: Authenticate with Firebase (Production)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}' | base64 --decode > "$RUNNER_TEMP/firebase-sa.json"
 
       - name: Write functions .env (Staging)
         if: github.ref == 'refs/heads/develop'
