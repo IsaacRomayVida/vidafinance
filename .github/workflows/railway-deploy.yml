@@ -51,17 +51,62 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           if [ "${{ needs.detect.outputs.payment-server }}" = "true" ]; then
-            railway redeploy --service payment-server --yes
+            echo "Deploying payment-server..."
+            railway redeploy --service "${{ secrets.RAILWAY_SERVICE_PAYMENT_SERVER }}" --yes
           fi
           if [ "${{ needs.detect.outputs.softcredito-adapter }}" = "true" ]; then
-            railway redeploy --service softcredito-adapter --yes
+            echo "Deploying softcredito-adapter..."
+            railway redeploy --service "${{ secrets.RAILWAY_SERVICE_SOFTCREDITO_ADAPTER }}" --yes
           fi
           if [ "${{ needs.detect.outputs.notification-service }}" = "true" ]; then
-            railway redeploy --service notification-service --yes
+            echo "Deploying notification-service..."
+            railway redeploy --service "${{ secrets.RAILWAY_SERVICE_NOTIFICATION_SERVICE }}" --yes
           fi
           if [ "${{ needs.detect.outputs.pdf-generator }}" = "true" ]; then
-            railway redeploy --service pdf-generator --yes
+            echo "Deploying pdf-generator..."
+            railway redeploy --service "${{ secrets.RAILWAY_SERVICE_PDF_GENERATOR }}" --yes
           fi
           if [ "${{ needs.detect.outputs.ml-service }}" = "true" ]; then
-            railway redeploy --service ml-service --yes
+            echo "Deploying ml-service..."
+            railway redeploy --service "${{ secrets.RAILWAY_SERVICE_ML_SERVICE }}" --yes
+          fi
+
+  healthcheck:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for services to start
+        run: sleep 30
+      - name: Verify health endpoints
+        env:
+          PAYMENT_SERVER_URL: ${{ secrets.RAILWAY_URL_PAYMENT_SERVER }}
+          NOTIFICATION_SERVICE_URL: ${{ secrets.RAILWAY_URL_NOTIFICATION_SERVICE }}
+          PDF_GENERATOR_URL: ${{ secrets.RAILWAY_URL_PDF_GENERATOR }}
+          SOFTCREDITO_ADAPTER_URL: ${{ secrets.RAILWAY_URL_SOFTCREDITO_ADAPTER }}
+          ML_SERVICE_URL: ${{ secrets.RAILWAY_URL_ML_SERVICE }}
+        run: |
+          failed=0
+          for pair in \
+            "payment-server:$PAYMENT_SERVER_URL" \
+            "notification-service:$NOTIFICATION_SERVICE_URL" \
+            "pdf-generator:$PDF_GENERATOR_URL" \
+            "softcredito-adapter:$SOFTCREDITO_ADAPTER_URL" \
+            "ml-service:$ML_SERVICE_URL"; do
+            name="${pair%%:*}"
+            url="${pair#*:}"
+            if [ -z "$url" ]; then
+              echo "⚠ Skipping $name (no URL configured)"
+              continue
+            fi
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url/health" || true)
+            if [ "$status" = "200" ]; then
+              echo "✓ $name healthy (HTTP $status)"
+            else
+              echo "✗ $name unhealthy (HTTP $status)"
+              failed=1
+            fi
+          done
+          if [ "$failed" = "1" ]; then
+            echo "One or more services failed health check"
+            exit 1
           fi
