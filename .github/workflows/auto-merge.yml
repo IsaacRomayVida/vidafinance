@@ -1,0 +1,23 @@
+name: Auto-merge approved PRs
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  auto-merge:
+    name: Auto-merge when approved
+    if: >-
+      github.event.review.state == 'approved' &&
+      (startsWith(github.event.pull_request.head.ref, 'cursor/') ||
+       startsWith(github.event.pull_request.head.ref, 'cyrus/'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Enable auto-merge (squash)
+        run: gh pr merge --auto --squash "$PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
