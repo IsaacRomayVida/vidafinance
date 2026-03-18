@@ -32,36 +32,82 @@ jobs:
             ml-service:
               - "services/ml-service/**"
 
-  deploy:
+  deploy-payment-server:
     needs: detect
+    if: needs.detect.outputs.payment-server == 'true'
     runs-on: ubuntu-latest
-    if: |
-      needs.detect.outputs.payment-server == 'true' ||
-      needs.detect.outputs.softcredito-adapter == 'true' ||
-      needs.detect.outputs.notification-service == 'true' ||
-      needs.detect.outputs.pdf-generator == 'true' ||
-      needs.detect.outputs.ml-service == 'true'
+    environment: staging
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "20" }
+        with:
+          node-version: "20"
       - run: npm install -g @railway/cli
-      - name: Deploy changed services
+      - name: Deploy payment-server
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-        run: |
-          if [ "${{ needs.detect.outputs.payment-server }}" = "true" ]; then
-            railway redeploy --service payment-server --yes
-          fi
-          if [ "${{ needs.detect.outputs.softcredito-adapter }}" = "true" ]; then
-            railway redeploy --service softcredito-adapter --yes
-          fi
-          if [ "${{ needs.detect.outputs.notification-service }}" = "true" ]; then
-            railway redeploy --service notification-service --yes
-          fi
-          if [ "${{ needs.detect.outputs.pdf-generator }}" = "true" ]; then
-            railway redeploy --service pdf-generator --yes
-          fi
-          if [ "${{ needs.detect.outputs.ml-service }}" = "true" ]; then
-            railway redeploy --service ml-service --yes
-          fi
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: railway redeploy --service payment-server --yes
+
+  deploy-notification-service:
+    needs: detect
+    if: needs.detect.outputs.notification-service == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g @railway/cli
+      - name: Deploy notification-service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: railway redeploy --service notification-service --yes
+
+  deploy-pdf-generator:
+    needs: detect
+    if: needs.detect.outputs.pdf-generator == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g @railway/cli
+      - name: Deploy pdf-generator
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: railway redeploy --service pdf-generator --yes
+
+  deploy-softcredito-adapter:
+    needs: detect
+    if: needs.detect.outputs.softcredito-adapter == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g @railway/cli
+      - name: Deploy softcredito-adapter
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: railway redeploy --service softcredito-adapter --yes
+
+  deploy-ml-service:
+    needs: detect
+    if: needs.detect.outputs.ml-service == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g @railway/cli
+      - name: Deploy ml-service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: railway redeploy --service ml-service --yes
