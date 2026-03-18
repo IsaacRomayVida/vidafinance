@@ -2,6 +2,7 @@ node_modules/
 .firebase/
 *.log
 .env
+.env.*
 .env.local
 functions/.env
 functions/node_modules/
