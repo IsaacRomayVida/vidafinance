@@ -2,28 +2,95 @@ name: Deploy Firebase
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths-ignore:
       - "services/**"
       - "*.md"
 
 jobs:
-  deploy:
+  lint-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: functions/package-lock.json
 
-      - run: cd functions && npm ci
+      - name: Install functions dependencies
+        run: cd functions && npm ci
+
+      - name: Check for syntax errors
+        run: cd functions && node --check index.js
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install functions dependencies
+        run: cd functions && npm ci
+
+      - name: Install firebase-tools
+        run: npm install -g firebase-tools
 
       - name: Write functions .env
         run: |
-          cat > functions/.env << ENVEOF
+          cat > functions/.env <<'ENVEOF'
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
+          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
+          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
+          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
+          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
+          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
+          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
+          ENVEOF
+
+      - name: Decode staging service account
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" | base64 --decode > /tmp/firebase-sa.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json" >> $GITHUB_ENV
+
+      - name: Deploy Firebase (staging)
+        run: firebase deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance-staging
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install functions dependencies
+        run: cd functions && npm ci
+
+      - name: Install firebase-tools
+        run: npm install -g firebase-tools
+
+      - name: Write functions .env
+        run: |
+          cat > functions/.env <<'ENVEOF'
           REDIS_URL=${{ secrets.REDIS_URL }}
           CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
           INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
@@ -40,4 +107,6 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json" >> $GITHUB_ENV
 
       - name: Deploy Firebase (production)
-        run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance
+        run: firebase deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
