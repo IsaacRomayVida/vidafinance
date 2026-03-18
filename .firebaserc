@@ -1,6 +1,8 @@
 {
   "projects": {
-    "default": "vida-finance"
+    "default": "vida-finance",
+    "staging": "vida-finance-staging",
+    "production": "vida-finance"
   },
   "targets": {},
   "etags": {}
