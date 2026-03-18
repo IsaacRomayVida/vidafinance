@@ -2,14 +2,16 @@ name: Deploy Firebase
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths-ignore:
       - "services/**"
       - "*.md"
 
 jobs:
-  deploy:
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
+    environment: staging
     steps:
       - uses: actions/checkout@v4
 
@@ -23,7 +25,7 @@ jobs:
 
       - name: Write functions .env
         run: |
-          cat > functions/.env << ENVEOF
+          cat > functions/.env << 'ENVEOF'
           REDIS_URL=${{ secrets.REDIS_URL }}
           CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
           INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
@@ -32,6 +34,44 @@ jobs:
           NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
+          NODE_ENV=staging
+          ENVEOF
+
+      - name: Decode staging service account
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" | base64 --decode > /tmp/firebase-sa.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json" >> $GITHUB_ENV
+
+      - name: Deploy Firebase (staging)
+        run: npx firebase-tools deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project vida-finance-staging
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: functions/package-lock.json
+
+      - run: cd functions && npm ci
+
+      - name: Write functions .env
+        run: |
+          cat > functions/.env << 'ENVEOF'
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
+          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
+          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
+          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
+          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
+          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
+          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
+          NODE_ENV=production
           ENVEOF
 
       - name: Decode production service account
