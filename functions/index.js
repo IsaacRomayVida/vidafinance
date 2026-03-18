@@ -50,8 +50,26 @@ function getBullRedis() {
   return _bullRedis;
 }
 
+const QUEUES = {
+  DISBURSEMENTS: "vida-disbursements",
+  NOTIFICATIONS: "vida-notifications",
+  PDFS: "vida-pdfs",
+  UNDERWRITING: "vida-underwriting",
+  RECONCILIATION: "vida-reconciliation",
+  ML_RETRAIN: "vida-ml-retrain",
+  ANALYST: "vida-analyst",
+};
+
 function getQueue(name) {
-  return new Queue(name, { connection: getBullRedis() });
+  return new Queue(name, {
+    connection: getBullRedis(),
+    defaultJobOptions: {
+      removeOnComplete: { count: 1000 },
+      removeOnFail: { count: 5000 },
+      attempts: 5,
+      backoff: { type: "exponential", delay: 2000 },
+    },
+  });
 }
 
 async function auditLog(database, { action, actorUid, actorRole, targetId, before = null, after = null, meta = {} }) {
@@ -295,7 +313,7 @@ exports.onLoanApproved = onDocumentUpdated("loans/{loanId}", async (event) => {
   await db.collection("loans").doc(loanId).update({ status: "disbursement_queued" });
 
   try {
-    await getQueue("vida-disbursements").add("disburse", {
+    await getQueue(QUEUES.DISBURSEMENTS).add("disburse", {
       loanId,
       employeeId: after.employeeId,
       amount: after.amount,
@@ -304,7 +322,7 @@ exports.onLoanApproved = onDocumentUpdated("loans/{loanId}", async (event) => {
       employeeName: after.employeeName,
       employerName: after.employerName,
     });
-    await getQueue("vida-notifications").add("loan_approved", {
+    await getQueue(QUEUES.NOTIFICATIONS).add("loan_approved", {
       type: "loan_approved",
       loanId,
       employeeId: after.employeeId,
@@ -312,7 +330,7 @@ exports.onLoanApproved = onDocumentUpdated("loans/{loanId}", async (event) => {
       phone: emp.phone,
       amount: after.amount,
     });
-    await getQueue("vida-pdfs").add("loan_contract", {
+    await getQueue(QUEUES.PDFS).add("loan_contract", {
       type: "loan_contract",
       loanId,
       employeeId: after.employeeId,
@@ -362,7 +380,7 @@ exports.markLoanDisbursed = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: tru
   });
 
   try {
-    await getQueue("vida-notifications").add("loan_disbursed", {
+    await getQueue(QUEUES.NOTIFICATIONS).add("loan_disbursed", {
       type: "loan_disbursed",
       loanId,
       employeeId: loan.employeeId,
@@ -492,7 +510,7 @@ exports.dailyLoanCheck = onSchedule(
       });
 
       try {
-        await getQueue("vida-notifications").add("loan_overdue", {
+        await getQueue(QUEUES.NOTIFICATIONS).add("loan_overdue", {
           type: "loan_overdue",
           loanId: doc.id,
           employeeId: loan.employeeId,
@@ -525,7 +543,7 @@ exports.dailyLoanCheck = onSchedule(
       if (doc.data().dueDate.toMillis() < Date.now()) continue;
       const loan = doc.data();
       try {
-        await getQueue("vida-notifications").add("loan_reminder_24h", {
+        await getQueue(QUEUES.NOTIFICATIONS).add("loan_reminder_24h", {
           type: "loan_reminder_24h",
           loanId: doc.id,
           employeeId: loan.employeeId,
@@ -722,7 +740,7 @@ exports.approveEmployer = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true 
 
   // Notify employer
   try {
-    await getQueue("vida-notifications").add("employer_activated", {
+    await getQueue(QUEUES.NOTIFICATIONS).add("employer_activated", {
       type: "employer_activated",
       employerUid,
       email: emp.email,
@@ -761,3 +779,9 @@ exports.revokeAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true
   await getAuth().setCustomUserClaims(request.data.uid, { admin: false });
   return { success: true };
 });
+
+// ── Exports for shared access ──────────────────────────────────────────
+exports.getRedis = getRedis;
+exports.getBullRedis = getBullRedis;
+exports.getQueue = getQueue;
+exports.QUEUES = QUEUES;
