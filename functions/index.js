@@ -50,8 +50,12 @@ function getBullRedis() {
   return _bullRedis;
 }
 
+const _queues = {};
 function getQueue(name) {
-  return new Queue(name, { connection: getBullRedis() });
+  if (!_queues[name]) {
+    _queues[name] = new Queue(name, { connection: getBullRedis() });
+  }
+  return _queues[name];
 }
 
 async function auditLog(database, { action, actorUid, actorRole, targetId, before = null, after = null, meta = {} }) {
@@ -761,3 +765,18 @@ exports.revokeAdminClaim = onCall({ cors: ALLOWED_ORIGINS, enforceAppCheck: true
   await getAuth().setCustomUserClaims(request.data.uid, { admin: false });
   return { success: true };
 });
+
+// ── Redis & BullMQ queue exports ──────────────────────────────────────
+exports.getRedis = getRedis;
+exports.getBullRedis = getBullRedis;
+exports.getQueue = getQueue;
+
+// Named BullMQ queue constants
+const QUEUE_NAMES = {
+  underwriting: "underwriting-queue",
+  reconciliation: "reconciliation-queue",
+  notification: "notification-queue",
+  mlRetrain: "ml-retrain-queue",
+  analyst: "analyst-queue",
+};
+exports.QUEUE_NAMES = QUEUE_NAMES;
