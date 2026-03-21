@@ -2,7 +2,7 @@
   "hosting": [
     {
       "site": "vida-finance",
-      "public": "public-v2/dist",
+      "public": "public",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [
         { "source": "/api/**", "function": "api" },
