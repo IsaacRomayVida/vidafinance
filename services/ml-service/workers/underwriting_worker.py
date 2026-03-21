@@ -1,10 +1,9 @@
 """
 BullMQ consumer for the 'vida-underwriting' queue.
 
-Processes 'underwrite_loan' jobs dispatched by the requestLoan Firebase
-Function. Each job runs the logistic regression model, applies hard
-business rules, writes the decision to Firestore, then pushes follow-up
-jobs to Redis lists for the disbursement and notification services.
+Coordinates underwriting decisions by calling the decision-engine HTTP
+service for the full 6-stage pipeline.  Falls back to the local logistic
+regression model when the decision engine is unreachable.
 
 Queue name matches shared/queues.js: QUEUES.UNDERWRITING = 'vida-underwriting'
 """
@@ -16,7 +15,7 @@ import os
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
-import structlog
+import httpx
 from bullmq import Worker
 from redis.asyncio import Redis as AsyncRedis
 
@@ -24,26 +23,20 @@ from models.underwriting_model import UnderwritingModel
 from services.firestore_client import FirestoreClient
 from services.softcredito_client import SoftcreditoClient
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-structlog.configure(
-    processors=[
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),
-    ],
-    wrapper_class=structlog.stdlib.BoundLogger,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-)
-logger = structlog.get_logger("underwriting_worker")
+logger = logging.getLogger("underwriting_worker")
 
 QUEUE_NAME = "vida-underwriting"
 APPROVAL_THRESHOLD = float(os.environ.get("APPROVAL_THRESHOLD", "0.65"))
 MODEL_PATH = os.environ.get("MODEL_PATH", "models/underwriting_v1.joblib")
+DECISION_ENGINE_URL = os.environ.get(
+    "DECISION_ENGINE_URL",
+    "http://vida-underwriting.railway.internal:3003",
+)
+DECISION_ENGINE_TIMEOUT = float(os.environ.get("DECISION_ENGINE_TIMEOUT", "30"))
 
 # Initialised lazily so the module can be imported without creds present
-_model: UnderwritingModel | None = None
-_firestore: FirestoreClient | None = None
+_model = None  # type: UnderwritingModel | None
+_firestore = None  # type: FirestoreClient | None
 _executor = ThreadPoolExecutor(max_workers=10)
 
 
@@ -51,7 +44,7 @@ def get_model() -> UnderwritingModel:
     global _model
     if _model is None:
         _model = UnderwritingModel.load(MODEL_PATH)
-        logger.info("Loaded underwriting model v1", model_path=MODEL_PATH, service="ml-service")
+        logger.info("Loaded underwriting model v1 from %s", MODEL_PATH)
     return _model
 
 
@@ -92,11 +85,84 @@ def get_rejection_reason(score: float, features: dict) -> str:
     return "Does not meet current lending criteria"
 
 
+# ── Decision engine caller ────────────────────────────────────────────────────
+
+async def call_decision_engine(data: dict) -> dict:
+    """Call the decision-engine HTTP service for the full 6-stage pipeline.
+
+    Returns the engine response dict on success, or raises on failure.
+    """
+    url = f"{DECISION_ENGINE_URL}/pipeline"
+    async with httpx.AsyncClient(timeout=DECISION_ENGINE_TIMEOUT) as client:
+        resp = await client.post(url, json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+
+# ── Local model fallback ─────────────────────────────────────────────────────
+
+async def run_local_model_fallback(data: dict) -> dict:
+    """Run the original logistic regression model as a fallback.
+
+    Returns a dict shaped like the decision-engine response so downstream
+    code can treat both paths uniformly.
+    """
+    borrower = data["borrowerSnapshot"]
+    principal = float(data["principalAmount"])
+    monthly_salary = float(borrower.get("monthlySalary", 1))
+
+    features = {
+        "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
+        "monthly_salary": monthly_salary,
+        "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
+        "loan_to_salary_ratio": principal / max(monthly_salary, 1),
+        "employer_industry_encoded": float(encode_industry(borrower.get("employerIndustry", ""))),
+        "principal_amount": principal,
+        "bureau_score": 500.0,
+        "has_bureau_record": 0.0,
+    }
+
+    # Optional bureau enrichment (graceful degradation)
+    try:
+        bureau = await SoftcreditoClient().query_bureau(
+            curp_hash=borrower.get("curpHash", ""),
+            full_name=borrower.get("fullName", ""),
+        )
+        features["bureau_score"] = float(bureau.get("riskScore", 500))
+        features["has_bureau_record"] = 1.0 if bureau.get("found") else 0.0
+    except Exception as e:
+        logger.warning("[underwriting] Bureau lookup failed (%s) — using defaults", e)
+
+    model = get_model()
+    prob_repayment = model.predict_proba(features)
+    decision = "approved" if prob_repayment >= APPROVAL_THRESHOLD else "rejected"
+    reason = None if decision == "approved" else get_rejection_reason(prob_repayment, features)
+
+    # Hard business rule override
+    if features["employment_tenure_months"] < 3:
+        decision = "rejected"
+        reason = "Minimum 3 months employment tenure required"
+
+    return {
+        "decision": decision,
+        "stage": "fallback",
+        "reason": reason,
+        "score": round(prob_repayment, 4),
+        "signals": {},
+        "cost": 0.0,
+        "model": "logistic_v1.0",
+    }
+
+
 # ── Core job processor ────────────────────────────────────────────────────────
 
 async def process_underwrite_loan(job, job_token=None):
     """
     Main BullMQ processor called for every job on the vida-underwriting queue.
+
+    Acts as a COORDINATOR: calls the decision-engine HTTP service for the
+    full 6-stage pipeline, falling back to the local logistic regression
+    model if the engine is unreachable.
 
     job.data schema:
       {
@@ -116,73 +182,69 @@ async def process_underwrite_loan(job, job_token=None):
     """
     data = job.data
     loan_id = data["loanId"]
-    correlation_id = data.get("correlationId")
-    borrower = data["borrowerSnapshot"]
     principal = float(data["principalAmount"])
-    monthly_salary = float(borrower.get("monthlySalary", 1))
+    used_fallback = False
 
-    log = logger.bind(correlation_id=correlation_id, loan_id=loan_id, service="ml-service")
-    log.info("Processing underwriting job")
+    logger.info("[underwriting] Processing loan %s", loan_id)
 
-    # ── 1. Build feature vector ───────────────────────────────────────────────
-    features = {
-        "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
-        "monthly_salary": monthly_salary,
-        "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
-        "loan_to_salary_ratio": principal / max(monthly_salary, 1),
-        "employer_industry_encoded": float(encode_industry(borrower.get("employerIndustry", ""))),
-        "principal_amount": principal,
-        "bureau_score": 500.0,
-        "has_bureau_record": 0.0,
-    }
-
-    # ── 2. Optional bureau enrichment (graceful degradation) ─────────────────
+    # ── 1. Call decision engine (with fallback) ──────────────────────────────
     try:
-        bureau = await SoftcreditoClient().query_bureau(
-            curp_hash=borrower.get("curpHash", ""),
-            full_name=borrower.get("fullName", ""),
+        engine_result = await call_decision_engine(data)
+        logger.info(
+            "[underwriting] Decision engine responded for loan %s: decision=%s, stage=%s",
+            loan_id, engine_result.get("decision"), engine_result.get("stage"),
         )
-        features["bureau_score"] = float(bureau.get("riskScore", 500))
-        features["has_bureau_record"] = 1.0 if bureau.get("found") else 0.0
-        log.info("Bureau enrichment ok", bureau_score=features["bureau_score"])
     except Exception as e:
-        log.warning("Bureau lookup failed — using defaults", error=str(e))
+        logger.warning(
+            "[underwriting] Decision engine unavailable for loan %s (%s) — falling back to local model",
+            loan_id, e,
+        )
+        engine_result = await run_local_model_fallback(data)
+        used_fallback = True
 
-    # ── 3. Run model ──────────────────────────────────────────────────────────
-    model = get_model()
-    prob_repayment = model.predict_proba(features)
-    decision = "approved" if prob_repayment >= APPROVAL_THRESHOLD else "rejected"
-    rejection_reason = None if decision == "approved" else get_rejection_reason(prob_repayment, features)
+    decision = engine_result["decision"]
+    score = engine_result.get("score", 0.0)
+    stage = engine_result.get("stage", "unknown")
+    reason = engine_result.get("reason")
+    signals = engine_result.get("signals", {})
+    cost = engine_result.get("cost", 0.0)
+    model_name = engine_result.get("model", "decision_engine_v1.0")
 
-    # ── 4. Hard business rule overrides ──────────────────────────────────────
-    if features["employment_tenure_months"] < 3:
-        decision = "rejected"
-        rejection_reason = "Minimum 3 months employment tenure required"
-
-    log.info(
-        "Underwriting decision",
-        decision=decision,
-        score=round(prob_repayment, 4),
-        threshold=APPROVAL_THRESHOLD,
+    logger.info(
+        "[underwriting] Loan %s → %s (score=%.3f, stage=%s, fallback=%s)",
+        loan_id, decision, score, stage, used_fallback,
     )
 
-    # ── 5. Write decision to Firestore (blocking SDK → run in executor) ───────
+    # ── 2. Write decision to Firestore (blocking SDK → run in executor) ───────
     now_iso = datetime.now(timezone.utc).isoformat()
     firestore = get_firestore()
 
     update_payload = {
         "status": decision,
-        "underwritingScore": round(prob_repayment, 4),
+        "underwritingScore": round(score, 4),
         "underwritingDecision": decision,
-        "underwritingModel": "logistic_v1.0",
-        "rejectionReason": rejection_reason,
+        "underwritingModel": model_name,
+        "underwritingStage": stage,
+        "underwritingReason": reason,
+        "underwritingCost": round(cost, 4),
+        "underwritingSignals": signals,
+        "rejectionReason": reason,
         "updatedAt": now_iso,
         "statusHistory": firestore.array_union({
             "from": "pending",
             "to": decision,
             "at": now_iso,
             "by": "system",
-            "reason": f"Underwriting model v1.0: score={prob_repayment:.3f}",
+            "reason": f"{model_name}: score={score:.3f}, stage={stage}",
+        }),
+        "stageHistory": firestore.array_union({
+            "stage": stage,
+            "decision": decision,
+            "score": round(score, 4),
+            "reason": reason,
+            "cost": round(cost, 4),
+            "usedFallback": used_fallback,
+            "at": now_iso,
         }),
     }
 
@@ -192,7 +254,7 @@ async def process_underwrite_loan(job, job_token=None):
         lambda: firestore.update_loan(loan_id, update_payload),
     )
 
-    # ── 6. Push downstream jobs via Redis ────────────────────────────────────
+    # ── 3. Push downstream jobs via Redis ────────────────────────────────────
     redis = AsyncRedis.from_url(
         os.environ["REDIS_URL"],
         decode_responses=True,
@@ -216,22 +278,22 @@ async def process_underwrite_loan(job, job_token=None):
                 "type": f"loan_{decision}",
                 "userId": data.get("userId"),
                 "loanId": loan_id,
-                "score": round(prob_repayment, 4),
-                "rejectionReason": rejection_reason,
+                "score": round(score, 4),
+                "rejectionReason": reason,
             }),
         )
     finally:
         await redis.aclose()
 
-    log.info("Underwriting job complete", decision=decision)
-    return {"decision": decision, "score": round(prob_repayment, 4)}
+    logger.info("[underwriting] Loan %s complete: %s", loan_id, decision)
+    return {"decision": decision, "score": round(score, 4)}
 
 
 # ── Worker entry point ────────────────────────────────────────────────────────
 
 async def start_worker():
     redis_url = os.environ["REDIS_URL"]
-    logger.info("Starting underwriting worker", queue=QUEUE_NAME, service="ml-service")
+    logger.info("[ml-service] Starting underwriting worker on queue '%s'", QUEUE_NAME)
 
     worker = Worker(
         QUEUE_NAME,
@@ -243,7 +305,7 @@ async def start_worker():
             "maxStalledCount": 1,
         },
     )
-    logger.info("Underwriting worker running", concurrency=5, service="ml-service")
+    logger.info("[ml-service] Underwriting worker running (concurrency=5)")
     await worker.run()
 
 

@@ -52,7 +52,7 @@ class FirestoreClient:
         """Update a loan document with the given fields."""
         self._db.collection("loans").document(loan_id).update(data)
 
-    def get_loan(self, loan_id: str) -> dict | None:
+    def get_loan(self, loan_id: str):
         doc = self._db.collection("loans").document(loan_id).get()
         return doc.to_dict() if doc.exists else None
 
