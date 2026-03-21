@@ -1,6 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { MarketingLayout } from './components/layout/MarketingLayout';
+import { RouteGuard } from './components/RouteGuard';
+import { EmployeeLayout } from './components/layouts/EmployeeLayout';
+import { EmployerLayout } from './components/layouts/EmployerLayout';
+import { AdminLayout } from './components/layouts/AdminLayout';
 import { HomePage } from './pages/HomePage';
 import { EmployerPage } from './pages/EmployerPage';
 import { EmployeePage } from './pages/EmployeePage';
@@ -12,6 +16,21 @@ import { PartnersPage } from './pages/PartnersPage';
 import { InvestorsPage } from './pages/InvestorsPage';
 import { ContactPage } from './pages/ContactPage';
 import { PressPage } from './pages/PressPage';
+import { Login } from './pages/Login';
+import { EmployeeDashboard } from './pages/EmployeeDashboard';
+import { LoanWizard } from './pages/LoanWizard';
+import { MyLoans } from './pages/MyLoans';
+import { EmployerDashboard } from './pages/EmployerDashboard';
+import { EmployeeRoster } from './pages/EmployeeRoster';
+import { DeductionReports } from './pages/DeductionReports';
+import { OnboardingWizard } from './pages/OnboardingWizard';
+import { AnalyticsPage } from './pages/AnalyticsPage';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { ReviewQueue } from './pages/ReviewQueue';
+import { PortfolioPage } from './pages/PortfolioPage';
+import { EmployerMgmt } from './pages/EmployerMgmt';
+import { AlertsPage } from './pages/AlertsPage';
+import { NotFound } from './pages/NotFound';
 import './i18n';
 
 export default function App() {
@@ -19,6 +38,7 @@ export default function App() {
     <HelmetProvider>
       <BrowserRouter>
         <Routes>
+          {/* Marketing pages */}
           <Route element={<MarketingLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/employers" element={<EmployerPage />} />
@@ -32,10 +52,45 @@ export default function App() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/press" element={<PressPage />} />
           </Route>
-          {/* Catch-all: redirect to home */}
-          <Route path="*" element={<MarketingLayout />}>
-            <Route path="*" element={<HomePage />} />
+
+          {/* Auth */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Employee portal */}
+          <Route element={<RouteGuard allowedRoles={['employee']} />}>
+            <Route element={<EmployeeLayout />}>
+              <Route path="/employee" element={<EmployeeDashboard />} />
+              <Route path="/employee/dashboard" element={<Navigate to="/employee" replace />} />
+              <Route path="/employee/apply" element={<LoanWizard />} />
+              <Route path="/employee/loans" element={<MyLoans />} />
+            </Route>
           </Route>
+
+          {/* Employer portal */}
+          <Route element={<RouteGuard allowedRoles={['employer_admin']} />}>
+            <Route element={<EmployerLayout />}>
+              <Route path="/employer" element={<EmployerDashboard />} />
+              <Route path="/employer/dashboard" element={<Navigate to="/employer" replace />} />
+              <Route path="/employer/employees" element={<EmployeeRoster />} />
+              <Route path="/employer/deductions" element={<DeductionReports />} />
+              <Route path="/employer/onboarding" element={<OnboardingWizard />} />
+              <Route path="/employer/analytics" element={<AnalyticsPage />} />
+            </Route>
+          </Route>
+
+          {/* Ops / Admin portal */}
+          <Route element={<RouteGuard allowedRoles={['ops', 'admin', 'super_admin']} />}>
+            <Route element={<AdminLayout />}>
+              <Route path="/ops" element={<AdminDashboard />} />
+              <Route path="/ops/review-queue" element={<ReviewQueue />} />
+              <Route path="/ops/portfolio" element={<PortfolioPage />} />
+              <Route path="/ops/employers" element={<EmployerMgmt />} />
+              <Route path="/ops/alerts" element={<AlertsPage />} />
+            </Route>
+          </Route>
+
+          {/* 404 catch-all */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </HelmetProvider>
