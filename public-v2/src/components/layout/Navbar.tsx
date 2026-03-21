@@ -36,8 +36,8 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
             <div className="nav-links">
               <Link to="/employers">{t('nav_employers')}</Link>
               <Link to="/employees">{t('nav_employees')}</Link>
-              <a href="/#trust">{t('nav_trust')}</a>
-              <a href="/#how">{t('nav_how')}</a>
+              <Link to="/#trust">{t('nav_trust')}</Link>
+              <Link to="/#how">{t('nav_how')}</Link>
             </div>
           </div>
           <div className="nav-right">
@@ -51,8 +51,8 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
         <div className="menu-close" onClick={() => setMenuOpen(false)}>&#x2715;</div>
         <Link to="/employers" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_employers')}</Link>
         <Link to="/employees" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_employees')}</Link>
-        <a href="/#trust" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_trust')}</a>
-        <a href="/#how" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_how')}</a>
+        <Link to="/#trust" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_trust')}</Link>
+        <Link to="/#how" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_how')}</Link>
         <Link to="/login" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_login')}</Link>
         <Link to={ctaHref} className="menu-link" onClick={() => setMenuOpen(false)}>{cta}</Link>
         <button className="menu-link" onClick={() => { toggleLang(); setMenuOpen(false); }}>{t('lang_toggle')}</button>
