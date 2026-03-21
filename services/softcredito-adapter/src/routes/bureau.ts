@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import pino from 'pino';
 import { requireInternalSecret } from '../lib/internalAuth';
 import { queryBureau } from '../services/softcreditoService';
 import { BureauQueryRequest } from '../types/bureau';
+
+const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
 const router = Router();
 
@@ -29,7 +32,7 @@ router.post('/bureau/query', requireInternalSecret, async (req, res) => {
     res.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal error';
-    console.error('[bureau/query] error:', message);
+    log.error({ error: message, service: 'softcredito-adapter' }, 'Bureau query error');
     res.status(502).json({ error: `Bureau API error: ${message}` });
   }
 });

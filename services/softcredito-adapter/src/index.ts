@@ -1,11 +1,14 @@
 import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
+import pino from 'pino';
 
 import healthRouter from './routes/health';
 import curpRouter from './routes/curp';
 import bureauRouter from './routes/bureau';
 import internalRouter from './routes/internal';
+
+const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
 const ALLOWED_ORIGINS = ['https://vida-finance.web.app'];
 
@@ -37,7 +40,7 @@ app.use(internalRouter);
 
 const PORT = parseInt(process.env.PORT ?? '3002', 10);
 app.listen(PORT, () => {
-  console.log(`vida-softcredito-adapter listening on port ${PORT}`);
+  log.info({ port: PORT }, 'vida-softcredito-adapter started');
 });
 
 export default app;

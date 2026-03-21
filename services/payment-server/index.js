@@ -4,7 +4,10 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Queue, Worker } = require('bullmq');
+const createLogger = require('../shared/logger');
 require('dotenv').config();
+
+const log = createLogger('vida-payment-server');
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -162,4 +165,4 @@ disburseWorker.on('failed', async (job, err) => {
   }
 });
 
-app.listen(process.env.PORT || 3001, () => console.log('vida-payment-server on', process.env.PORT || 3001));
+app.listen(process.env.PORT || 3001, () => log.info({ port: process.env.PORT || 3001 }, 'vida-payment-server started'));

@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
@@ -119,7 +120,7 @@ export const markLoanDisbursed = onCall(
               })
             );
           } catch (e: unknown) {
-            console.warn('Redis notification push failed (non-critical):', (e as Error).message);
+            logger.warn('Redis notification push failed (non-critical)', { error: (e as Error).message, service: 'functions' });
           }
 
           return {

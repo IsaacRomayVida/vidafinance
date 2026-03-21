@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
+import structlog
 from fastapi import FastAPI, HTTPException, Header
 import os, json, time
 import redis as Redis
@@ -11,8 +12,18 @@ from dotenv import load_dotenv
 load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("ml-service")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.stdlib.BoundLogger,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+)
+logger = structlog.get_logger("ml-service")
 
 rdb = Redis.from_url(
     os.environ.get("REDIS_URL", "redis://localhost:6379"), decode_responses=True
@@ -32,12 +43,13 @@ async def lifespan(app: FastAPI):
         try:
             from workers.underwriting_worker import start_worker
             _worker_task = asyncio.create_task(start_worker())
-            logger.info("Underwriting worker task started")
+            logger.info("Underwriting worker task started", service="ml-service")
         except Exception as e:
-            logger.warning("Could not start underwriting worker: %s", e)
+            logger.warning("Could not start underwriting worker", error=str(e), service="ml-service")
     else:
         logger.warning(
-            "Underwriting worker not started: REDIS_URL or Firebase credentials missing"
+            "Underwriting worker not started: REDIS_URL or Firebase credentials missing",
+            service="ml-service",
         )
     yield
     if _worker_task and not _worker_task.done():
@@ -46,7 +58,7 @@ async def lifespan(app: FastAPI):
             await _worker_task
         except asyncio.CancelledError:
             pass
-        logger.info("Underwriting worker stopped")
+        logger.info("Underwriting worker stopped", service="ml-service")
 
 
 app = FastAPI(title="vida-ml-service", lifespan=lifespan)
@@ -117,7 +129,7 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
             )
             llm = json.loads(msg.content[0].text)
         except Exception as e:
-            print("LLM error:", e)
+            logger.warning("LLM analysis failed", error=str(e), service="ml-service")
     final = {
         **result,
         "llm_analysis": llm,

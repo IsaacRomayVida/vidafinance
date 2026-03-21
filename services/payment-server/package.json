@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "lint": "eslint '*.js' 'src/**/*.js' 'routes/**/*.js'"
   },
   "dependencies": {
     "bullmq": "^5.0.0",
@@ -14,7 +15,8 @@
     "firebase-admin": "^12.0.0",
     "helmet": "^7.0.0",
     "ioredis": "^5.3.0",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "pino": "^10.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"
