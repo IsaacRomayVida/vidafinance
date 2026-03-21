@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  /* VIDA Brand Palette */
+  --color-teal-50: #e6eded;
+  --color-teal-100: #c0d3d4;
+  --color-teal-200: #97b7b8;
+  --color-teal-300: #6d9b9c;
+  --color-teal-400: #4d8687;
+  --color-teal-500: #2e7172;
+  --color-teal-600: #29696a;
+  --color-teal-700: #235e5f;
+  --color-teal-800: #1d5455;
+  --color-teal-900: #194445;
+  --color-teal-950: #0f2a2b;
+
+  --color-gold-50: #f5f0e7;
+  --color-gold-100: #e6d9c3;
+  --color-gold-200: #d5c09b;
+  --color-gold-300: #c4a773;
+  --color-gold-400: #b89455;
+  --color-gold-500: #a28657;
+  --color-gold-600: #977a4c;
+  --color-gold-700: #886b3f;
+  --color-gold-800: #7a5d33;
+  --color-gold-900: #644520;
+  --color-gold-950: #3a2710;
+
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+}
+
+/* Base styles */
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
