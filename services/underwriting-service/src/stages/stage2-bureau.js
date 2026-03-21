@@ -1,254 +1,152 @@
 "use strict";
 /**
- * stage2-bureau.js
- * Stage 2: Bureau + Employment verification.
+ * Stage 2: Bureau & Employment Verification
  *
- * Calls two external providers in parallel:
- *   1. Belvo IMSS — employment verification (tenure, employer match, AFORE)
- *   2. SoftCrédito — CDC/BDC bureau scoring + PLD
- *
- * Then calculates LTI and calls ML models (champion + challenger).
- *
- * Outputs:
- *   - IMSS employment status (reject if no record)
- *   - Bureau decision with stage escalation
- *   - LTI ratio
- *   - ML P(default) scores
+ * Checks:
+ *   1. Belvo IMSS employment verification + AFORE regularity
+ *   2. Bureau scores (via ML service SoftCrédito adapter)
+ *   3. LTI (loan-to-income) calculation
+ *   4. Champions model (WoE LR) + Challenger (XGBoost) via ML service
  */
 const { getIMSSEmployment, getAFORE } = require("../belvo-client");
-const { callUnderwrite, parseBureauDecision, parsePLD } = require("../../../softcredito-adapter/src/underwrite");
-const fetch = require("node-fetch");
 
-const ML_BASE = () => process.env.ML_SERVICE_URL || "http://localhost:8000";
-const ML_AUTH = () => ({ "x-internal-secret": process.env.INTERNAL_SECRET || "" });
+const ML_SERVICE_URL = () => process.env.ML_SERVICE_URL || "http://localhost:3005";
+const SOFTCREDITO_URL = () => process.env.SOFTCREDITO_ADAPTER_URL || "http://localhost:3004";
 
-/**
- * Call ML champion model (WoE scorecard) via POST /score/credit.
- * Returns P(default) calibrated via Platt scaling.
- */
-async function callChampionModel(features) {
-  try {
-    const res = await fetch(`${ML_BASE()}/score/credit`, {
-      method: "POST",
-      headers: { ...ML_AUTH(), "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "champion", ...features }),
-      timeout: 15000,
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`ML champion ${res.status}: ${text.slice(0, 200)}`);
-    }
-    return res.json();
-  } catch (e) {
-    console.error("[stage2] Champion model error:", e.message);
-    return { pDefault: null, error: e.message };
-  }
-}
-
-/**
- * Call ML challenger model (XGBoost) in shadow mode.
- * Logged but NOT used for decisions yet.
- */
-async function callChallengerModel(features) {
-  try {
-    const res = await fetch(`${ML_BASE()}/score/credit`, {
-      method: "POST",
-      headers: { ...ML_AUTH(), "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "challenger", ...features }),
-      timeout: 15000,
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`ML challenger ${res.status}: ${text.slice(0, 200)}`);
-    }
-    return res.json();
-  } catch (e) {
-    console.error("[stage2] Challenger model error (shadow):", e.message);
-    return { pDefault: null, error: e.message };
-  }
-}
-
-/**
- * Parse IMSS employment records from Belvo response.
- * Returns standardized employment data.
- */
-function parseIMSSEmployment(records, employerRfc) {
-  if (!records || records.length === 0) {
-    return {
-      found: false,
-      active: false,
-      pass: false,
-      reason: "no_imss_record",
-    };
-  }
-
-  const latest = records[0];
-  const active = !!latest.status && latest.status.toLowerCase() !== "inactivo";
-  const employerMatch = latest.employer_rfc === employerRfc;
-  const tenureMonths = latest.tenure_months || 0;
-
-  return {
-    found: true,
-    active,
-    employerMatch,
-    tenureMonths,
-    baseSalary: latest.base_salary || null,
-    employerRfc: latest.employer_rfc || null,
-    pass: active,
-    reason: active ? null : "imss_inactive",
-  };
-}
-
-/**
- * Parse AFORE contribution regularity from Belvo response.
- */
-function parseAFOREContributions(aforeData) {
-  if (!aforeData || aforeData.length === 0) {
-    return { regular: false, balance: 0 };
-  }
-  const latest = aforeData[0];
-  return {
-    regular: true,
-    balance: latest.total_balance || 0,
-  };
-}
-
-/**
- * Calculate Loan-to-Income ratio.
- * LTI > 0.25 → fails Stage 3 auto-approve condition.
- */
-function calculateLTI(loanAmount, monthlyNetIncome) {
-  if (!monthlyNetIncome || monthlyNetIncome <= 0) return Infinity;
-  return loanAmount / monthlyNetIncome;
-}
-
-/**
- * Run Stage 2: Bureau + Employment verification.
- *
- * @param {object} params
- * @param {string} params.curp - Employee CURP
- * @param {string} params.rfc - Employee RFC
- * @param {string} params.nombre - First name
- * @param {string} params.apellidoPaterno - Paternal surname
- * @param {string} params.apellidoMaterno - Maternal surname
- * @param {string} params.fechaNacimiento - Date of birth (YYYY-MM-DD)
- * @param {string} params.employerRfc - Employer RFC for match verification
- * @param {number} params.loanAmount - Requested loan amount
- * @param {number} params.monthlyNetIncome - Monthly net income
- * @param {object} [params.mlFeatures] - Additional ML feature inputs
- * @returns {object} Stage 2 result with employment, bureau, LTI, and ML scores
- */
-async function runStage2({
-  curp, rfc, nombre, apellidoPaterno, apellidoMaterno, fechaNacimiento,
-  employerRfc, loanAmount, monthlyNetIncome, mlFeatures = {},
-}) {
-  // ── 1. Call Belvo IMSS + SoftCrédito in parallel ──────────────────────
-  const [imssResult, aforeResult, scResponse] = await Promise.all([
-    getIMSSEmployment(curp).catch(e => {
-      console.error("[stage2] Belvo IMSS error:", e.message);
-      return null;
+async function fetchBureauScore(applicant) {
+  const fetch = require("node-fetch");
+  const res = await fetch(`${SOFTCREDITO_URL()}/bureau/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      curp: applicant.curp,
+      fullName: applicant.fullName,
+      rfc: applicant.rfc,
     }),
-    getAFORE(curp).catch(e => {
-      console.error("[stage2] Belvo AFORE error:", e.message);
-      return null;
-    }),
-    callUnderwrite({ curp, rfc, nombre, apellidoPaterno, apellidoMaterno, fechaNacimiento }),
-  ]);
+    timeout: 30000,
+  });
+  if (!res.ok) throw new Error(`Bureau query ${res.status}`);
+  return res.json();
+}
 
-  // ── 2. Parse IMSS employment ──────────────────────────────────────────
-  const employment = parseIMSSEmployment(imssResult, employerRfc);
-  if (!employment.found) {
-    return {
-      stage: 2,
-      decision: "rejected",
-      reason: "no_imss_record",
-      employment,
-      bureau: null,
-      pld: null,
-      lti: null,
-      ml: null,
+async function fetchMLScore(features) {
+  const fetch = require("node-fetch");
+  const res = await fetch(`${ML_SERVICE_URL()}/score`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(features),
+    timeout: 15000,
+  });
+  if (!res.ok) throw new Error(`ML score ${res.status}`);
+  return res.json();
+}
+
+function computeLTI(principalAmount, monthlySalary, existingDeductions = 0) {
+  const netIncome = monthlySalary - existingDeductions;
+  if (netIncome <= 0) return 100; // 100% = over-leveraged
+  return Math.round((principalAmount / netIncome) * 100 * 100) / 100; // percentage with 2 decimals
+}
+
+async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) {
+  const log = logger || console;
+  const costItems = [];
+
+  log.info({ stage: "stage2", rfc: applicant.rfc }, "Starting bureau & employment");
+
+  const data = {};
+
+  // 1. IMSS Employment verification
+  let imssResult;
+  try {
+    imssResult = await getIMSSEmployment(applicant.curp);
+    costItems.push({ api: "belvo-imss-employment", mxn: 3.0 });
+    const latest = Array.isArray(imssResult) ? imssResult[0] : imssResult;
+    data.imss = {
+      active: !!latest,
+      sbc: latest?.base_salary || latest?.sbc || null,
+      tenureMonths: latest?.tenure_months || latest?.tenureMonths || null,
+      employerRfc: latest?.employer_rfc || latest?.employerRfc || null,
+      raw: latest,
+    };
+  } catch (err) {
+    log.warn({ stage: "stage2", err: err.message }, "IMSS check failed");
+    data.imss = { active: false, skipped: true, error: err.message };
+  }
+
+  // 2. AFORE regularity
+  let aforeResult;
+  try {
+    aforeResult = await getAFORE(applicant.curp);
+    costItems.push({ api: "belvo-afore", mxn: 2.0 });
+    const records = Array.isArray(aforeResult) ? aforeResult : [aforeResult];
+    const totalBalance = records.reduce((sum, r) => sum + (r.balance || r.total || 0), 0);
+    data.afore = {
+      balance: totalBalance,
+      regular: totalBalance > 0,
+      raw: records[0],
+    };
+  } catch (err) {
+    log.warn({ stage: "stage2", err: err.message }, "AFORE check failed");
+    data.afore = { balance: 0, regular: false, skipped: true, error: err.message };
+  }
+
+  // 3. Bureau score (SoftCrédito CDC + BDC)
+  let bureauResult;
+  try {
+    bureauResult = await fetchBureauScore(applicant);
+    costItems.push({ api: "softcredito", mxn: 8.0 });
+    data.bureau = {
+      score: bureauResult.bureau_score || bureauResult.score || 500,
+      hasBureauRecord: bureauResult.has_bureau_record ?? true,
+      activeDefaults: bureauResult.active_defaults || 0,
+      competitorLoans: bureauResult.competitor_loans || 0,
+      raw: bureauResult,
+    };
+  } catch (err) {
+    log.warn({ stage: "stage2", err: err.message }, "Bureau check failed — using defaults");
+    data.bureau = {
+      score: 500,
+      hasBureauRecord: false,
+      activeDefaults: 0,
+      competitorLoans: 0,
+      skipped: true,
+      error: err.message,
     };
   }
 
-  // ── 3. Parse AFORE contributions ──────────────────────────────────────
-  const afore = parseAFOREContributions(aforeResult);
+  // 4. LTI calculation
+  const infonavitDeduction = priorResults?.stage0?.data?.infonavitDeduction || 0;
+  const monthlySalary = data.imss.sbc || applicant.monthlySalary || 0;
+  const lti = computeLTI(applicant.principalAmount || 0, monthlySalary, infonavitDeduction);
+  data.lti = { value: lti, monthlySalary, infonavitDeduction, principalAmount: applicant.principalAmount };
 
-  // ── 4. Parse bureau decision ──────────────────────────────────────────
-  const bureau = parseBureauDecision(scResponse);
-  const pld = parsePLD(scResponse);
-
-  if (pld.hardReject) {
-    return {
-      stage: 2,
-      decision: "rejected",
-      reason: pld.reason,
-      employment,
-      afore,
-      bureau,
-      pld,
-      lti: null,
-      ml: null,
-    };
+  // 5. ML model score (Champions LR + Challenger XGBoost)
+  let mlScore;
+  try {
+    mlScore = await fetchMLScore({
+      employment_tenure_months: data.imss.tenureMonths || applicant.employmentTenureMonths || 0,
+      monthly_salary: monthlySalary,
+      pay_frequency_encoded: applicant.payFrequency === "weekly" ? 4 : applicant.payFrequency === "biweekly" ? 2 : 1,
+      loan_to_salary_ratio: monthlySalary > 0 ? (applicant.principalAmount || 0) / monthlySalary : 0,
+      employer_industry_encoded: applicant.industryCode || 0,
+      principal_amount: applicant.principalAmount || 0,
+      bureau_score: data.bureau.score,
+      has_bureau_record: data.bureau.hasBureauRecord ? 1 : 0,
+    });
+    data.mlScore = mlScore;
+  } catch (err) {
+    log.warn({ stage: "stage2", err: err.message }, "ML scoring failed");
+    data.mlScore = { skipped: true, error: err.message };
   }
 
-  // ── 5. Calculate LTI ──────────────────────────────────────────────────
-  const lti = calculateLTI(loanAmount, monthlyNetIncome);
-
-  // ── 6. Call ML models (champion + challenger in parallel) ─────────────
-  const features = {
-    curp,
-    bureauScore: bureau.score,
-    diasAtraso: bureau.diasAtraso,
-    tenureMonths: employment.tenureMonths,
-    monthlyNetIncome,
-    loanAmount,
-    lti,
-    ...mlFeatures,
-  };
-
-  const [champion, challenger] = await Promise.all([
-    callChampionModel(features),
-    callChallengerModel(features),
-  ]);
-
-  console.log("[stage2] Challenger shadow result:", JSON.stringify(challenger));
-
-  const ml = {
-    champion: {
-      pDefault: champion.pDefault ?? null,
-      model: "woe_scorecard",
-      error: champion.error || null,
-    },
-    challenger: {
-      pDefault: challenger.pDefault ?? null,
-      model: "xgboost",
-      error: challenger.error || null,
-      shadow: true,
-    },
-  };
-
-  // ── 7. Determine stage escalation ─────────────────────────────────────
-  const escalateToStage = bureau.escalateToStage;
-
+  // Stage 2 always passes — decision is in Stage 3
   return {
-    stage: 2,
-    decision: escalateToStage === 3 ? "continue" : "escalate",
-    escalateToStage,
-    reason: bureau.reason,
-    employment,
-    afore,
-    bureau,
-    pld,
-    lti,
-    ml,
+    pass: true,
+    escalateToStage: null,
+    reason: null,
+    data,
+    cost: costItems,
   };
 }
 
-module.exports = {
-  runStage2,
-  parseIMSSEmployment,
-  parseAFOREContributions,
-  calculateLTI,
-  callChampionModel,
-  callChallengerModel,
-};
+module.exports = { runBureauAndEmployment, computeLTI };
