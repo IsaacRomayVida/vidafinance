@@ -89,10 +89,18 @@ service cloud.firestore {
     }
 
     // =============================================
-    // AUDIT & OPERATIONAL LOGS — ADMIN READ, IMMUTABLE
+    // REVIEW QUEUE — OPS/ADMIN READ, WRITES VIA CLOUD FUNCTIONS
+    // =============================================
+    match /review_queue/{docId} {
+      allow read: if isOps();
+      allow write: if false;  // Only Cloud Functions via Admin SDK
+    }
+
+    // =============================================
+    // AUDIT & OPERATIONAL LOGS — OPS/ADMIN READ, IMMUTABLE
     // All writes go through Cloud Functions (Admin SDK).
     // =============================================
-    match /audit_log/{docId}         { allow read: if isAdmin();  allow write: if false; }
+    match /audit_log/{docId}         { allow read: if isOps();   allow write: if false; }
     match /overdue_log/{d}           { allow read: if isAdmin();  allow write: if false; }
     match /spei_log/{d}              { allow read: if isAdmin();  allow write: if false; }
     match /payment_failures/{d}      { allow read: if isAdmin();  allow write: if false; }

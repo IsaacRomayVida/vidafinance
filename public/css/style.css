@@ -859,133 +859,75 @@ table tr:last-child td{border-bottom:none}
 .admin-signout:hover{color:#fff}
 @media(max-width:768px){.admin-layout{grid-template-columns:1fr}.admin-sidebar{display:none}}
 
-/* ─── Loan Wizard ──────────────────────────────────────── */
-.wiz-container{min-height:100vh;display:flex;flex-direction:column;background:var(--bg);max-width:640px;margin:0 auto;padding:0 24px}
-.wiz-header{padding:24px 0 16px;position:relative}
-.wiz-close{position:absolute;top:24px;right:0;width:36px;height:36px;border-radius:50%;background:var(--bg2);border:none;cursor:pointer;font-size:16px;color:var(--t3);display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:1}
-.wiz-close:hover{color:var(--t1);background:rgba(25,68,69,.08)}
-.wiz-progress{height:3px;background:rgba(25,68,69,.06);border-radius:3px;margin-bottom:12px}
-.wiz-progress-bar{height:100%;background:var(--brand);border-radius:3px;transition:width .4s cubic-bezier(.4,0,.2,1)}
-.wiz-step-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--t3)}
-.wiz-body{flex:1;padding:20px 0 40px}
-.wiz-footer{display:flex;justify-content:space-between;align-items:center;padding:20px 0 40px;gap:16px}
-.wiz-step-header{margin-bottom:32px}
-.wiz-title{font-family:var(--df);font-size:32px;color:var(--t1);letter-spacing:-.02em;line-height:1.15;margin-bottom:8px}
-.wiz-title em{font-style:normal;color:var(--brand-light)}
-.wiz-sub{font-size:14px;color:var(--t2);line-height:1.5}
-.wiz-form{display:flex;flex-direction:column;gap:20px}
-.wiz-field{display:flex;flex-direction:column;gap:6px}
-.wiz-field label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3)}
-.wiz-field-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.wiz-input{padding:14px 16px;border:1.5px solid rgba(25,68,69,.1);border-radius:10px;font-size:15px;color:var(--t1);outline:none;transition:border-color .2s;font-family:var(--db)}
-.wiz-input:focus{border-color:var(--brand)}
-.wiz-input.disabled{background:var(--bg2);color:var(--t2);cursor:not-allowed}
-.btn-secondary{padding:14px 28px;border-radius:10px;font-size:14px;font-weight:700;background:transparent;color:var(--t2);border:1.5px solid rgba(25,68,69,.1);cursor:pointer;transition:all .2s}
-.btn-secondary:hover{border-color:rgba(25,68,69,.2);color:var(--t1)}
-.wiz-next,.wiz-back{width:auto;margin-top:0;padding:14px 32px}
+/* ─── OPS DASHBOARD ──────────────────────────────────────── */
+/* SLA Timer */
+.sla-timer{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
+.sla-green{background:#edf7f0;color:#1a5e3a}
+.sla-amber{background:#fdf7e8;color:#7a5a10}
+.sla-red{background:#fdf0f0;color:#8b2020;animation:sla-pulse 1.5s infinite}
+@keyframes sla-pulse{0%,100%{opacity:1}50%{opacity:.6}}
 
-/* Wizard Step 2 - Verification */
-.wiz-verification-card{background:var(--bg2);border-radius:16px;padding:28px;position:relative}
-.wiz-verify-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid rgba(25,68,69,.04)}
-.wiz-verify-row:last-of-type{border-bottom:none}
-.wiz-verify-label{font-size:13px;color:var(--t3);font-weight:500}
-.wiz-verify-value{font-size:14px;font-weight:700;color:var(--t1)}
-.wiz-verified-badge{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 16px;background:rgba(36,122,110,.06);border-radius:10px;font-size:13px;font-weight:700;color:var(--success)}
+/* Risk pills */
+.risk-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.risk-high{background:#fdf0f0;color:#8b2020}
+.risk-medium{background:#fdf7e8;color:#7a5a10}
+.risk-low{background:#edf7f0;color:#1a5e3a}
 
-/* Wizard Step 3 - Slider */
-.wiz-slider-section{text-align:center}
-.wiz-amount-display{font-family:var(--df);font-size:56px;color:var(--t1);letter-spacing:-.03em;margin-bottom:24px}
-.wiz-slider-wrap{display:flex;align-items:center;gap:16px;margin-bottom:32px}
-.wiz-slider-min,.wiz-slider-max{font-size:12px;font-weight:700;color:var(--t3);white-space:nowrap}
-.wiz-slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;background:rgba(25,68,69,.08);border-radius:6px;outline:none;cursor:pointer}
-.wiz-slider::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:var(--brand);border:3px solid #fff;box-shadow:0 2px 10px rgba(25,68,69,.2);cursor:pointer;transition:transform .15s}
-.wiz-slider::-webkit-slider-thumb:hover{transform:scale(1.15)}
-.wiz-slider::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:var(--brand);border:3px solid #fff;box-shadow:0 2px 10px rgba(25,68,69,.2);cursor:pointer}
-.wiz-calc-grid{text-align:left;background:var(--bg2);border-radius:16px;padding:24px;margin-bottom:20px}
-.wiz-calc-row{display:flex;justify-content:space-between;padding:10px 0;font-size:14px;color:var(--t2)}
-.wiz-calc-row span:last-child{font-weight:700;color:var(--t1)}
-.wiz-calc-divider{height:1px;background:rgba(25,68,69,.06);margin:4px 0}
-.wiz-calc-total{font-family:var(--df);font-size:18px}
-.wiz-calc-total span{color:var(--t1)!important}
-.wiz-term-badge{display:inline-block;padding:8px 20px;border-radius:20px;font-size:12px;font-weight:700;color:var(--brand);background:rgba(25,68,69,.04);letter-spacing:.5px}
-.lti-indicator{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:6px}
-.lti-ok{background:#edf7f0;color:#1a5e3a}
-.lti-warn{background:#fdf7e8;color:#7a5a10}
+/* Sort buttons */
+.ops-sort-btn{background:rgba(25,68,69,.06);color:var(--t2);border:1px solid transparent;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
+.ops-sort-btn.active{background:var(--brand);color:#fff}
+.ops-sort-btn:hover:not(.active){border-color:var(--brand)}
 
-/* Wizard Step 4 - KYC */
-.wiz-kyc-status{text-align:center;padding:48px 24px;background:var(--bg2);border-radius:16px}
-.wiz-kyc-status p{font-size:16px;font-weight:600;color:var(--t1);margin-top:16px}
-.wiz-kyc-status.completed{background:rgba(36,122,110,.04)}
-.wiz-kyc-status.failed{background:rgba(220,80,60,.04)}
-.wiz-kyc-spinner{display:flex;flex-direction:column;align-items:center;gap:12px}
-.wiz-kyc-spinner .spinner{width:40px;height:40px}
-.wiz-kyc-wait{font-size:13px!important;color:var(--t3)!important;font-weight:400!important}
+/* Review row expand */
+.ops-review-row.expanded{background:rgba(25,68,69,.02)}
+.ops-detail-row td{padding:0!important}
+.ops-review-detail{padding:16px 20px;background:rgba(25,68,69,.02);border-top:1px solid rgba(25,68,69,.06)}
+.ops-detail-section{margin-bottom:16px}
+.ops-detail-section h4{margin:0 0 6px;font-size:13px;font-weight:700;color:var(--brand)}
+.ops-detail-section p{margin:0;font-size:13px;color:var(--t2);line-height:1.5}
 
-/* Wizard Step 5 - Review */
-.wiz-review{margin-bottom:24px}
-.wiz-review-section{margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid rgba(25,68,69,.04)}
-.wiz-review-section:last-child{border-bottom:none}
-.wiz-review-section h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--t3);margin-bottom:16px}
-.wiz-review-row{display:flex;justify-content:space-between;padding:10px 0;font-size:14px;border-bottom:1px solid rgba(25,68,69,.03)}
-.wiz-review-row span:first-child{color:var(--t3)}
-.wiz-review-row span:last-child{font-weight:700;color:var(--t1)}
-.wiz-review-total{font-family:var(--df);font-size:18px;border-top:1px solid rgba(25,68,69,.06);margin-top:4px;padding-top:14px}
-.wiz-sign-section{margin-top:24px}
-.wiz-terms-check{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--t2);cursor:pointer}
-.wiz-terms-check a{color:var(--brand);font-weight:600}
-.wiz-terms-check input[type="checkbox"]{width:18px;height:18px;accent-color:var(--brand)}
+/* Signals */
+.ops-signals{display:flex;flex-wrap:wrap;gap:8px}
+.ops-signal{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid rgba(25,68,69,.08);border-radius:8px;padding:6px 10px;font-size:12px}
+.ops-signal-stage{background:var(--brand);color:#fff;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700}
 
-/* Wizard Success - Loan Tracker */
-.wiz-success-icon{margin-bottom:8px}
-.wiz-loan-tracker{display:flex;align-items:center;justify-content:center;gap:0;margin-top:32px}
-.tracker-step{display:flex;flex-direction:column;align-items:center;gap:8px;opacity:.35;transition:all .4s}
-.tracker-step.active{opacity:1}
-.tracker-step.current .tracker-dot{background:var(--brand);box-shadow:0 0 0 6px rgba(25,68,69,.1)}
-.tracker-dot{width:14px;height:14px;border-radius:50%;background:rgba(25,68,69,.2);transition:all .3s}
-.tracker-step.active .tracker-dot{background:var(--brand)}
-.tracker-step span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--t3)}
-.tracker-line{width:48px;height:2px;background:rgba(25,68,69,.1);margin:0 4px;margin-bottom:24px;transition:background .3s}
-.tracker-line.active{background:var(--brand)}
-.tracker-rejected{text-align:center;padding:20px}
-.tracker-rejected p{font-size:16px;font-weight:700;color:var(--danger);margin-top:12px}
+/* SHAP bars */
+.ops-shap{display:flex;flex-direction:column;gap:6px}
+.ops-shap-bar{display:flex;align-items:center;gap:8px}
+.ops-shap-label{font-size:12px;color:var(--t2);min-width:120px;text-align:right}
+.ops-shap-track{flex:1;height:12px;background:rgba(25,68,69,.06);border-radius:6px;overflow:hidden}
+.ops-shap-fill{height:100%;border-radius:6px;transition:width .3s}
+.ops-shap-fill.positive{background:#c0392b}
+.ops-shap-fill.negative{background:#1a5e3a}
+.ops-shap-val{font-size:11px;font-weight:700;min-width:50px;color:var(--t2)}
 
-/* ─── Active Loan Dashboard ───────────────────────────── */
-.ald-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px}
-.utilization-bar{height:4px;background:rgba(25,68,69,.06);border-radius:4px;margin-top:10px}
-.utilization-fill{height:100%;background:var(--brand);border-radius:4px;transition:width .6s}
-.next-payment-amount{font-family:var(--df);font-size:36px;color:var(--t1);letter-spacing:-.02em}
-.next-payment-date{font-size:13px;color:var(--t3);font-weight:600;margin-top:4px}
-.active-loan-item{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid rgba(25,68,69,.04)}
-.active-loan-item:last-child{border-bottom:none}
-.active-loan-amount{font-family:var(--df);font-size:20px;color:var(--t1)}
-.active-loan-total{font-size:14px;color:var(--t3);font-weight:400}
-.active-loan-meta{display:flex;align-items:center;gap:10px;margin-top:6px}
-.active-loan-days{font-size:12px;font-weight:700}
-.days-ok{color:var(--success)}
-.days-overdue{color:var(--danger)}
-.empty-state{text-align:center;padding:40px;color:var(--t3)}
-.empty-state svg{opacity:.3;margin-bottom:12px}
-.empty-state p{font-size:14px}
+/* Notes form */
+.ops-notes-row td{padding:0 16px!important}
+.ops-notes-input{font-family:var(--df)}
 
-/* ─── Document Upload ─────────────────────────────────── */
-.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-.upload-card{background:var(--bg2);border:2px dashed rgba(25,68,69,.1);border-radius:16px;padding:32px 24px;text-align:center;transition:all .2s}
-.upload-card:hover{border-color:rgba(25,68,69,.2)}
-.upload-icon{margin-bottom:16px}
-.upload-label{font-size:14px;font-weight:700;color:var(--t1);margin-bottom:4px}
-.upload-hint{font-size:12px;color:var(--t3);margin-bottom:16px}
-.upload-input{display:none}
-.upload-trigger{margin:0 auto}
-.upload-status{margin-top:12px;font-size:13px}
+/* Cards */
+.ops-card{background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06);margin-bottom:20px}
+.ops-card-title{font-size:14px;font-weight:700;color:var(--t1);margin-bottom:14px}
 
-/* ─── Responsive ──────────────────────────────────────── */
-@media(max-width:768px){
-  .wiz-container{padding:0 16px}
-  .wiz-title{font-size:26px}
-  .wiz-amount-display{font-size:40px}
-  .wiz-field-row{grid-template-columns:1fr}
-  .ald-grid{grid-template-columns:1fr}
-  .upload-grid{grid-template-columns:1fr}
-  .wiz-footer{flex-direction:column-reverse}
-  .wiz-footer .btn-secondary,.wiz-footer .btn-primary{width:100%}
-}
+/* Bar chart */
+.ops-bar-chart{display:flex;flex-direction:column;gap:10px}
+.ops-bar-row{display:flex;align-items:center;gap:10px}
+.ops-bar-label{font-size:12px;font-weight:600;color:var(--t2);min-width:80px;text-align:right}
+.ops-bar-track{flex:1;height:24px;background:rgba(25,68,69,.04);border-radius:6px;overflow:hidden}
+.ops-bar-fill{height:100%;border-radius:6px;transition:width .4s}
+.ops-bar-pending{background:var(--aqua)}
+.ops-bar-active{background:var(--brand)}
+.ops-bar-overdue{background:#e67e22}
+.ops-bar-paid{background:#27ae60}
+.ops-bar-defaulted{background:#c0392b}
+.ops-bar-count{font-size:12px;font-weight:700;color:var(--t1);min-width:30px}
+
+/* Status pills */
+.ops-status-pill{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.ops-status-ok{background:#edf7f0;color:#1a5e3a}
+.ops-status-warn{background:#fdf7e8;color:#7a5a10}
+.ops-status-down{background:#fdf0f0;color:#8b2020}
+
+/* Responsive */
+@media(max-width:1024px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.kpi-grid{grid-template-columns:1fr}.ops-bar-label{min-width:60px;font-size:11px}}
