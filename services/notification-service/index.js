@@ -5,7 +5,10 @@ const IORedis = require('ioredis');
 const { Worker } = require('bullmq');
 const twilio  = require('twilio');
 const sg      = require('@sendgrid/mail');
+const createLogger = require('../shared/logger');
 require('dotenv').config();
+
+const log = createLogger('vida-notification-service');
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -91,4 +94,4 @@ app.get('/health', async (req,res) => {
   const redisOk = await redis.ping().then(()=>true).catch(()=>false);
   res.json({status:redisOk?'ok':'degraded',service:'vida-notification-service',redis:redisOk,worker:worker.isRunning()});
 });
-app.listen(process.env.PORT||3003, ()=>console.log('vida-notification-service on', process.env.PORT||3003));
+app.listen(process.env.PORT||3003, ()=>log.info({ port: process.env.PORT||3003 }, 'vida-notification-service started'));

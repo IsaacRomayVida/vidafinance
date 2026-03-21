@@ -6,8 +6,11 @@ import './lib/firebase';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import pino from 'pino';
 import { redis } from './lib/redis';
 import { notificationWorker } from './workers/notificationWorker';
+
+const log = pino({ name: 'vida-notification-service', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
 const app = express();
 app.use(helmet());
@@ -32,5 +35,5 @@ app.get('/health', async (_req, res) => {
 
 const PORT = Number(process.env.PORT ?? 3003);
 app.listen(PORT, () =>
-  console.log(`[notification-service] Listening on port ${PORT}`),
+  log.info({ port: PORT }, 'vida-notification-service started'),
 );

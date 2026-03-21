@@ -1,4 +1,7 @@
 import IORedis from 'ioredis';
+import pino from 'pino';
+
+const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
 const redis = new IORedis(process.env.REDIS_URL!, {
   maxRetriesPerRequest: null,
@@ -9,7 +12,7 @@ const redis = new IORedis(process.env.REDIS_URL!, {
 });
 
 redis.on('error', (err: Error) => {
-  console.error('[redis] connection error:', err.message);
+  log.error({ error: err.message, service: 'softcredito-adapter' }, 'Redis connection error');
 });
 
 export default redis;

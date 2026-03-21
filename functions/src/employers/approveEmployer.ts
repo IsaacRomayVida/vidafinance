@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
@@ -287,7 +288,7 @@ export async function approveEmployerHandler(
     });
   } catch (e: unknown) {
     // Non-critical — notification failure must not block approval
-    console.warn('Notification queue unavailable:', (e as Error).message);
+    logger.warn('Notification queue unavailable', { error: (e as Error).message, service: 'functions' });
   }
 
   // ── 7. If approved: generate and store employer API key ────────────────────
@@ -304,7 +305,7 @@ export async function approveEmployerHandler(
       await redis.setex(`employer:apikey:${employerId}`, 3600, rawApiKey);
     } catch (e: unknown) {
       // Non-critical — API key generation failure does not block approval
-      console.warn('API key generation failed:', (e as Error).message);
+      logger.warn('API key generation failed', { error: (e as Error).message, service: 'functions' });
     }
   }
 
