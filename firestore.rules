@@ -100,6 +100,7 @@ service cloud.firestore {
     match /notification_log/{d}      { allow read: if isAdmin();  allow write: if false; }
     match /softcredito_employers/{d} { allow read: if isAdmin();  allow write: if false; }
     match /ml_decisions/{d}          { allow read: if isAdmin();  allow write: if false; }
+    match /metamap_shadow_log/{d}    { allow read, write: if false; }
 
     // =============================================
     // OPS-READABLE OPERATIONAL COLLECTIONS

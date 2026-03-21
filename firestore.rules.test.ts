@@ -370,3 +370,35 @@ describe('internal queue collections', () => {
     await assertFails(getDoc(doc(opsCtx.firestore(), 'notification_queue/job1')));
   });
 });
+
+// ── metamap_shadow_log — deny all client access ─────────────────────────────
+
+describe('metamap_shadow_log collection', () => {
+  it('admin cannot read metamap_shadow_log', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'metamap_shadow_log/ver1'), {
+        verificationId: 'ver1',
+        loanId: 'loan1',
+        status: 'verified',
+      });
+    });
+
+    const adminCtx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(getDoc(doc(adminCtx.firestore(), 'metamap_shadow_log/ver1')));
+  });
+
+  it('admin cannot write to metamap_shadow_log', async () => {
+    const adminCtx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(
+      setDoc(doc(adminCtx.firestore(), 'metamap_shadow_log/ver1'), {
+        verificationId: 'ver1',
+        status: 'verified',
+      })
+    );
+  });
+
+  it('unauthenticated user cannot access metamap_shadow_log', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), 'metamap_shadow_log/ver1')));
+  });
+});
