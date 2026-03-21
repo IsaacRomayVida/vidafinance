@@ -3,6 +3,10 @@
     "verify": "node scripts/verify-production.js",
     "test": "jest",
     "test:rules": "jest firestore.rules.test",
+    "load-test": "k6 run tests/load/pipeline-load-test.js",
+    "load-test:smoke": "k6 run --env PROFILE=smoke tests/load/pipeline-load-test.js",
+    "load-test:full": "k6 run --out json=tests/load/results/results.json tests/load/pipeline-load-test.js",
+    "load-test:report": "node tests/load/generate-report.js",
     "prepare": "husky"
   },
   "jest": {
