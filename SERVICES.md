@@ -25,6 +25,7 @@ Functions      │  softcredito-adapter :3002              │
 | notification-service | 3003 | vida-notifications | Node.js | BullMQ consumer — WhatsApp (Twilio) + email (SendGrid) |
 | pdf-generator | 3004 | vida-pdf-generator | Node.js | BullMQ consumer — Puppeteer loan contracts + receipts |
 | ml-service | 3005 | vida-ml-service | Python | XGBoost/LightGBM underwriting + Claude LLM judge |
+| underwriting-service | 3003 | vida-underwriting | Node.js | KYC/AML/biometrics via MetaMap, document OCR, gov API checks |
 | Redis | 6379 | vida-redis | Redis 7 | BullMQ queues + rate limiting + ML cache |
 
 ## Private Networking (Railway Internal Domains)
@@ -35,6 +36,7 @@ vida-softcredito.railway.internal:3002      → vida-softcredito
 vida-notifications.railway.internal:3003    → vida-notifications
 vida-pdf-generator.railway.internal:3004    → vida-pdf-generator
 vida-ml-service.railway.internal:3005       → vida-ml-service
+vida-underwriting.railway.internal:3003     → vida-underwriting
 vida-redis.railway.internal:6379            → vida-redis
 ```
 
@@ -52,6 +54,7 @@ curl https://vida-softcredito.railway.app/health
 curl https://vida-notifications.railway.app/health
 curl https://vida-pdf-generator.railway.app/health
 curl https://vida-ml-service.railway.app/health
+curl https://vida-underwriting.railway.app/health
 ```
 
 ## Deployment Order
