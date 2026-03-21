@@ -74,21 +74,16 @@ function RichText({ html }: { html: string }) {
 
 function PasswordStrengthBar({ password, t }: { password: string; t: (k: string) => string }) {
   const strength = getPasswordStrength(password);
-  const widthMap = { weak: '33%', medium: '66%', strong: '100%' };
-  const colorMap = { weak: 'bg-red-400', medium: 'bg-yellow-400', strong: 'bg-emerald-500' };
   const labelMap = { weak: t('onb_strength_weak'), medium: t('onb_strength_medium'), strong: t('onb_strength_strong') };
 
   if (!password) return null;
   return (
-    <div className="mt-2">
-      <div className="h-1.5 w-full rounded-full bg-gray-200">
-        <div
-          className={`h-1.5 rounded-full transition-all duration-300 ${colorMap[strength]}`}
-          style={{ width: widthMap[strength] }}
-        />
+    <>
+      <div className="onb-strength">
+        <div className={`onb-strength-fill ${strength}`} />
       </div>
-      <p className="mt-1 text-xs text-gray-500">{labelMap[strength]}</p>
-    </div>
+      <p className="onb-input-hint">{labelMap[strength]}</p>
+    </>
   );
 }
 
@@ -304,42 +299,72 @@ export function Onboarding() {
   // -- Progress bar --
   const progressPct = totalSteps > 0 ? ((step) / totalSteps) * 100 : 0;
 
+  // Is this a final success step?
+  const isFinalStep = (role === 'employer' && step === 6) || (role === 'employee' && step === 5);
+
+  // Action button config
+  const getActionLabel = () => {
+    if (role === 'employer' && step === 5) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
+    if (role === 'employee' && step === 4) return creating ? t('onb_m_step4_creating') : t('onb_m_step4_btn');
+    return t('onb_next');
+  };
+
+  // -- Render action button + error for middle steps --
+  const renderActionBar = () => {
+    if (!role || isFinalStep || step < 1) return null;
+    return (
+      <>
+        {error && <div className="onb-error show">{error}</div>}
+        <button
+          onClick={handleNext}
+          disabled={!canProceed() || creating}
+          className="onb-btn"
+        >
+          {creating && (
+            <svg className="mr-2 inline h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+          {getActionLabel()}
+        </button>
+      </>
+    );
+  };
+
   // -- Render step content --
   const renderContent = () => {
     // Role selection (step 0)
     if (!role) {
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center px-6">
-          <h1 className="font-serif text-4xl leading-tight text-[#194445] sm:text-5xl">
+        <div className="onb-content">
+          <h1 className="onb-h">
             <RichText html={t('onb_welcome')} />
           </h1>
-          <p className="mt-3 text-lg text-gray-500">{t('onb_welcome_sub')}</p>
+          <p className="onb-sub">{t('onb_welcome_sub')}</p>
 
-          <div className="mt-10 grid w-full max-w-lg gap-4 sm:grid-cols-2">
+          <div className="onb-roles">
             <button
               onClick={() => selectRole('employer')}
-              className="group rounded-2xl border-2 border-gray-200 bg-white p-8 text-left transition-all hover:border-[#a28657] hover:shadow-lg"
+              className="onb-role"
             >
-              <div className="mb-2 text-3xl">🏢</div>
-              <div className="text-lg font-semibold text-[#194445]">{t('onb_role_employer_title')}</div>
-              <div className="mt-1 text-sm text-gray-500">{t('onb_role_employer_desc')}</div>
+              <div className="onb-role-icon">
+                <span style={{ fontSize: 26 }}>&#127970;</span>
+              </div>
+              <div className="onb-role-title">{t('onb_role_employer_title')}</div>
+              <div className="onb-role-desc">{t('onb_role_employer_desc')}</div>
             </button>
             <button
               onClick={() => selectRole('employee')}
-              className="group rounded-2xl border-2 border-gray-200 bg-white p-8 text-left transition-all hover:border-[#a28657] hover:shadow-lg"
+              className="onb-role"
             >
-              <div className="mb-2 text-3xl">👤</div>
-              <div className="text-lg font-semibold text-[#194445]">{t('onb_role_employee_title')}</div>
-              <div className="mt-1 text-sm text-gray-500">{t('onb_role_employee_desc')}</div>
+              <div className="onb-role-icon">
+                <span style={{ fontSize: 26 }}>&#128100;</span>
+              </div>
+              <div className="onb-role-title">{t('onb_role_employee_title')}</div>
+              <div className="onb-role-desc">{t('onb_role_employee_desc')}</div>
             </button>
           </div>
-
-          <p className="mt-8 text-sm text-gray-400">
-            {t('onb_already_account')}{' '}
-            <Link to="/login" className="font-semibold text-[#a28657] hover:underline">
-              {t('onb_login')}
-            </Link>
-          </p>
         </div>
       );
     }
@@ -348,91 +373,89 @@ export function Onboarding() {
     if (role === 'employer') {
       if (step === 1) return (
         <StepShell>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+          <h1 className="onb-h">
             <RichText html={t('onb_e_step1_h')} />
           </h1>
-          <p className="mt-2 text-gray-500">{t('onb_e_step1_sub')}</p>
-          <input
-            autoFocus
-            className="mt-8 w-full rounded-xl border border-gray-300 px-4 py-3 text-lg outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-            placeholder={t('onb_e_step1_placeholder')}
-            value={empData.company}
-            onChange={(e) => setEmpData({ ...empData, company: e.target.value })}
-          />
+          <p className="onb-sub">{t('onb_e_step1_sub')}</p>
+          <div className="onb-field">
+            <input
+              autoFocus
+              className="onb-input"
+              placeholder={t('onb_e_step1_placeholder')}
+              value={empData.company}
+              onChange={(e) => setEmpData({ ...empData, company: e.target.value })}
+            />
+          </div>
+          {renderActionBar()}
         </StepShell>
       );
 
       if (step === 2) return (
         <StepShell>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+          <h1 className="onb-h">
             <RichText html={t('onb_e_step2_h')} />
           </h1>
-          <p className="mt-2 text-gray-500">{t('onb_e_step2_sub')}</p>
-          <div className="mt-8 space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t('onb_e_step2_name')}</label>
-              <input
-                autoFocus
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-                placeholder={t('onb_e_step2_name_ph')}
-                value={empData.name}
-                onChange={(e) => setEmpData({ ...empData, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t('onb_e_step2_email')}</label>
-              <input
-                type="email"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-                placeholder={t('onb_e_step2_email_ph')}
-                value={empData.email}
-                onChange={(e) => setEmpData({ ...empData, email: e.target.value })}
-              />
-            </div>
+          <p className="onb-sub">{t('onb_e_step2_sub')}</p>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_e_step2_name')}</label>
+            <input
+              autoFocus
+              className="onb-input"
+              placeholder={t('onb_e_step2_name_ph')}
+              value={empData.name}
+              onChange={(e) => setEmpData({ ...empData, name: e.target.value })}
+            />
           </div>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_e_step2_email')}</label>
+            <input
+              type="email"
+              className="onb-input"
+              placeholder={t('onb_e_step2_email_ph')}
+              value={empData.email}
+              onChange={(e) => setEmpData({ ...empData, email: e.target.value })}
+            />
+          </div>
+          {renderActionBar()}
         </StepShell>
       );
 
       if (step === 3) return (
         <StepShell>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+          <h1 className="onb-h">
             <RichText html={t('onb_e_step3_h')} />
           </h1>
-          <p className="mt-2 text-gray-500">{t('onb_e_step3_sub')}</p>
-          <div className="mt-8 space-y-6">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">{t('onb_e_step3_size')}</label>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {COMPANY_SIZES.map((size) => (
-                  <button
-                    key={size}
-                    onClick={() => setEmpData({ ...empData, companySize: size })}
-                    className={`rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${
-                      empData.companySize === size
-                        ? 'border-[#a28657] bg-[#a28657]/10 text-[#194445]'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    {size} <span className="text-xs text-gray-400">{t('onb_e_step3_employees')}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t('onb_e_step3_payroll')}</label>
-              <select
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-                value={empData.payrollSystem}
-                onChange={(e) => setEmpData({ ...empData, payrollSystem: e.target.value })}
-              >
-                <option value="">{t('onb_e_step3_payroll_ph')}</option>
-                {PAYROLL_SYSTEMS.map((ps) => (
-                  <option key={ps} value={ps}>{ps}</option>
-                ))}
-                <option value="Other">{t('onb_e_step3_payroll_other')}</option>
-              </select>
+          <p className="onb-sub">{t('onb_e_step3_sub')}</p>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_e_step3_size')}</label>
+            <div className="onb-tiles">
+              {COMPANY_SIZES.map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setEmpData({ ...empData, companySize: size })}
+                  className={`onb-tile${empData.companySize === size ? ' active' : ''}`}
+                >
+                  <div className="onb-tile-val">{size}</div>
+                  <div className="onb-tile-lbl">{t('onb_e_step3_employees')}</div>
+                </button>
+              ))}
             </div>
           </div>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_e_step3_payroll')}</label>
+            <select
+              className="onb-select"
+              value={empData.payrollSystem}
+              onChange={(e) => setEmpData({ ...empData, payrollSystem: e.target.value })}
+            >
+              <option value="">{t('onb_e_step3_payroll_ph')}</option>
+              {PAYROLL_SYSTEMS.map((ps) => (
+                <option key={ps} value={ps}>{ps}</option>
+              ))}
+              <option value="Other">{t('onb_e_step3_payroll_other')}</option>
+            </select>
+          </div>
+          {renderActionBar()}
         </StepShell>
       );
 
@@ -444,34 +467,31 @@ export function Onboarding() {
         ];
         return (
           <StepShell>
-            <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+            <h1 className="onb-h">
               <RichText html={t('onb_e_step4_h')} />
             </h1>
-            <p className="mt-2 text-gray-500">{t('onb_e_step4_sub')}</p>
-            <div className="mt-8 space-y-4">
+            <p className="onb-sub">{t('onb_e_step4_sub')}</p>
+            <div className="onb-uploads">
               {docs.map((d) => (
-                <div
-                  key={d.key}
-                  className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4"
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-[#194445]">{d.label}</div>
-                    <div className="text-xs text-gray-400">{t('onb_e_step4_formats')}</div>
+                <div key={d.key} className="onb-upload-row">
+                  <div className="onb-upload-info">
+                    <div className="onb-upload-label">{d.label}</div>
+                    <div className="onb-upload-hint">{t('onb_e_step4_formats')}</div>
                   </div>
                   <label
-                    className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                    className={`onb-upload-btn${
                       uploadStatus[d.key] === 'done'
-                        ? 'bg-emerald-100 text-emerald-700'
+                        ? ' done'
                         : uploadStatus[d.key] === 'uploading'
-                        ? 'bg-gray-100 text-gray-500'
+                        ? ' uploading'
                         : uploadStatus[d.key] === 'error'
-                        ? 'bg-red-100 text-red-600'
-                        : 'bg-[#194445]/10 text-[#194445] hover:bg-[#194445]/20'
+                        ? ' error'
+                        : ''
                     }`}
                   >
                     <input
                       type="file"
-                      className="hidden"
+                      style={{ display: 'none' }}
                       accept="image/*,application/pdf"
                       onChange={(e) => {
                         if (e.target.files?.[0]) handleFileUpload(d.key, e.target.files[0]);
@@ -489,65 +509,69 @@ export function Onboarding() {
                 </div>
               ))}
             </div>
+            {renderActionBar()}
           </StepShell>
         );
       }
 
       if (step === 5) return (
         <StepShell>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+          <h1 className="onb-h">
             <RichText html={t('onb_e_step5_h')} />
           </h1>
-          <p className="mt-2 text-gray-500">{t('onb_e_step5_sub')}</p>
-          <div className="mt-8 space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t('onb_e_step5_pass')}</label>
-              <input
-                autoFocus
-                type="password"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-                placeholder={t('onb_e_step5_pass_ph')}
-                value={empData.password}
-                onChange={(e) => setEmpData({ ...empData, password: e.target.value })}
-              />
-              <PasswordStrengthBar password={empData.password} t={t} />
-            </div>
-            <label className="flex items-start gap-3 pt-2">
-              <input
-                type="checkbox"
-                checked={empData.terms}
-                onChange={(e) => setEmpData({ ...empData, terms: e.target.checked })}
-                className="mt-0.5 h-5 w-5 rounded border-gray-300 accent-[#194445]"
-              />
-              <span className="text-sm text-gray-600">
-                {t('onb_e_step5_terms')}{' '}
-                <Link to="/terms" className="font-semibold text-[#a28657] hover:underline" target="_blank">
-                  {t('onb_e_step5_terms_link')}
-                </Link>
-              </span>
+          <p className="onb-sub">{t('onb_e_step5_sub')}</p>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_e_step5_pass')}</label>
+            <input
+              autoFocus
+              type="password"
+              className="onb-input"
+              placeholder={t('onb_e_step5_pass_ph')}
+              value={empData.password}
+              onChange={(e) => setEmpData({ ...empData, password: e.target.value })}
+            />
+            <PasswordStrengthBar password={empData.password} t={t} />
+          </div>
+          <div className="onb-terms">
+            <input
+              type="checkbox"
+              checked={empData.terms}
+              onChange={(e) => setEmpData({ ...empData, terms: e.target.checked })}
+            />
+            <label>
+              {t('onb_e_step5_terms')}{' '}
+              <Link to="/terms" target="_blank">
+                {t('onb_e_step5_terms_link')}
+              </Link>
             </label>
           </div>
+          {renderActionBar()}
         </StepShell>
       );
 
       if (step === 6) return (
-        <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
-          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-4xl">
-            ✓
+        <div className="onb-content">
+          <div className="onb-celebration">
+            <div className="onb-check-circle">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <h1 className="onb-h">
+              <RichText html={t('onb_e_step6_h')} />
+            </h1>
+            <p className="onb-sub">{t('onb_e_step6_sub')}</p>
+            <div className="onb-approved-tag">
+              <span className="onb-approved-dot" />
+              {t('onb_e_step6_badge')}
+            </div>
+            <button
+              onClick={() => navigate('/')}
+              className="onb-btn"
+            >
+              {t('onb_e_step6_cta')}
+            </button>
           </div>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
-            <RichText html={t('onb_e_step6_h')} />
-          </h1>
-          <p className="mt-2 text-gray-500">{t('onb_e_step6_sub')}</p>
-          <div className="mt-6 inline-block rounded-full bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-700">
-            {t('onb_e_step6_badge')}
-          </div>
-          <button
-            onClick={() => navigate('/')}
-            className="mt-8 rounded-xl bg-[#194445] px-8 py-3 font-semibold text-white transition-all hover:bg-[#194445]/90"
-          >
-            {t('onb_e_step6_cta')}
-          </button>
         </div>
       );
     }
@@ -556,158 +580,165 @@ export function Onboarding() {
     if (role === 'employee') {
       if (step === 1) return (
         <StepShell>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+          <h1 className="onb-h">
             <RichText html={t('onb_m_step1_h')} />
           </h1>
-          <p className="mt-2 text-gray-500">{t('onb_m_step1_sub')}</p>
-          <input
-            autoFocus
-            className="mt-8 w-full rounded-xl border border-gray-300 px-4 py-3 text-center text-2xl font-bold uppercase tracking-[0.3em] outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-            placeholder={t('onb_m_step1_placeholder')}
-            maxLength={8}
-            value={memData.code}
-            onChange={(e) => handleCodeChange(e.target.value)}
-          />
-          <p className={`mt-3 text-sm ${
-            codeStatus === 'found' ? 'font-semibold text-emerald-600'
-            : codeStatus === 'not_found' ? 'text-red-500'
-            : codeStatus === 'searching' ? 'text-gray-400'
-            : 'text-gray-400'
-          }`}>
-            {codeStatus === 'searching' && t('onb_m_step1_searching')}
-            {codeStatus === 'found' && `${t('onb_m_step1_found')}: ${memData.employerName}`}
-            {codeStatus === 'not_found' && t('onb_m_step1_not_found')}
-            {codeStatus === 'idle' && t('onb_m_step1_hint')}
-          </p>
+          <p className="onb-sub">{t('onb_m_step1_sub')}</p>
+          <div className="onb-field">
+            <input
+              autoFocus
+              className={`onb-input big${
+                codeStatus === 'found' ? ' valid' : codeStatus === 'not_found' ? ' invalid' : ''
+              }`}
+              placeholder={t('onb_m_step1_placeholder')}
+              maxLength={8}
+              value={memData.code}
+              onChange={(e) => handleCodeChange(e.target.value)}
+            />
+            <p className={`onb-input-hint${
+              codeStatus === 'found' ? ' success'
+              : codeStatus === 'not_found' ? ' error'
+              : ''
+            }`}>
+              {codeStatus === 'searching' && t('onb_m_step1_searching')}
+              {codeStatus === 'found' && `${t('onb_m_step1_found')}: ${memData.employerName}`}
+              {codeStatus === 'not_found' && t('onb_m_step1_not_found')}
+              {codeStatus === 'idle' && t('onb_m_step1_hint')}
+            </p>
+          </div>
+          {renderActionBar()}
         </StepShell>
       );
 
       if (step === 2) return (
         <StepShell>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+          <h1 className="onb-h">
             <RichText html={t('onb_m_step2_h')} />
           </h1>
-          <p className="mt-2 text-gray-500">{t('onb_m_step2_sub')}</p>
-          <div className="mt-8 space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t('onb_m_step2_name')}</label>
-              <input
-                autoFocus
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-                placeholder={t('onb_m_step2_name_ph')}
-                value={memData.name}
-                onChange={(e) => setMemData({ ...memData, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t('onb_m_step2_email')}</label>
-              <input
-                type="email"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-                placeholder={t('onb_m_step2_email_ph')}
-                value={memData.email}
-                onChange={(e) => setMemData({ ...memData, email: e.target.value })}
-              />
-            </div>
+          <p className="onb-sub">{t('onb_m_step2_sub')}</p>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_m_step2_name')}</label>
+            <input
+              autoFocus
+              className="onb-input"
+              placeholder={t('onb_m_step2_name_ph')}
+              value={memData.name}
+              onChange={(e) => setMemData({ ...memData, name: e.target.value })}
+            />
           </div>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_m_step2_email')}</label>
+            <input
+              type="email"
+              className="onb-input"
+              placeholder={t('onb_m_step2_email_ph')}
+              value={memData.email}
+              onChange={(e) => setMemData({ ...memData, email: e.target.value })}
+            />
+          </div>
+          {renderActionBar()}
         </StepShell>
       );
 
       if (step === 3) return (
         <StepShell>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+          <h1 className="onb-h">
             <RichText html={t('onb_m_step3_h')} />
           </h1>
-          <p className="mt-2 text-gray-500">{t('onb_m_step3_sub')}</p>
-          <div className="mt-8">
-            <label className="mb-1 block text-sm font-medium text-gray-700">{t('onb_m_step3_salary')}</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg text-gray-400">$</span>
-              <input
-                autoFocus
-                type="text"
-                inputMode="numeric"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 pl-8 text-lg outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-                placeholder={t('onb_m_step3_salary_ph')}
-                value={memData.salary}
-                onChange={(e) => setMemData({ ...memData, salary: e.target.value.replace(/[^\d,]/g, '') })}
-              />
-            </div>
+          <p className="onb-sub">{t('onb_m_step3_sub')}</p>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_m_step3_salary')}</label>
+            <input
+              autoFocus
+              type="text"
+              inputMode="numeric"
+              className="onb-input"
+              placeholder={t('onb_m_step3_salary_ph')}
+              value={memData.salary}
+              onChange={(e) => setMemData({ ...memData, salary: e.target.value.replace(/[^\d,]/g, '') })}
+            />
           </div>
           {creditAmount > 0 && (
-            <div className="mt-8 rounded-2xl border-2 border-[#a28657]/30 bg-[#a28657]/5 p-6 text-center">
-              <div className="text-xs font-semibold uppercase tracking-wider text-[#a28657]">
+            <div className="onb-credit-sim">
+              <div className="onb-approved-tag">
+                <span className="onb-approved-dot" />
                 {t('onb_m_step3_preapproved')}
               </div>
-              <div className="mt-1 text-xs text-gray-500">{t('onb_m_step3_credit_label')}</div>
-              <div className="mt-2 font-serif text-4xl font-bold text-[#194445]">
-                ${creditAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+              <div className="onb-input-hint">{t('onb_m_step3_credit_label')}</div>
+              <div className="onb-big-amount">
+                <span className="onb-cur">$</span>
+                {creditAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
               </div>
-              <div className="mt-1 text-xs text-gray-400">MXN</div>
+              <div className="onb-input-hint">MXN</div>
             </div>
           )}
+          {renderActionBar()}
         </StepShell>
       );
 
       if (step === 4) return (
         <StepShell>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
+          <h1 className="onb-h">
             <RichText html={t('onb_m_step4_h')} />
           </h1>
-          <p className="mt-2 text-gray-500">{t('onb_m_step4_sub')}</p>
-          <div className="mt-8 space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t('onb_m_step4_pass')}</label>
-              <input
-                autoFocus
-                type="password"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#a28657] focus:ring-2 focus:ring-[#a28657]/20"
-                placeholder={t('onb_m_step4_pass_ph')}
-                value={memData.password}
-                onChange={(e) => setMemData({ ...memData, password: e.target.value })}
-              />
-              <PasswordStrengthBar password={memData.password} t={t} />
-            </div>
-            <label className="flex items-start gap-3 pt-2">
-              <input
-                type="checkbox"
-                checked={memData.terms}
-                onChange={(e) => setMemData({ ...memData, terms: e.target.checked })}
-                className="mt-0.5 h-5 w-5 rounded border-gray-300 accent-[#194445]"
-              />
-              <span className="text-sm text-gray-600">
-                {t('onb_m_step4_terms')}{' '}
-                <Link to="/terms" className="font-semibold text-[#a28657] hover:underline" target="_blank">
-                  {t('onb_m_step4_terms_link')}
-                </Link>
-              </span>
+          <p className="onb-sub">{t('onb_m_step4_sub')}</p>
+          <div className="onb-field">
+            <label className="onb-label">{t('onb_m_step4_pass')}</label>
+            <input
+              autoFocus
+              type="password"
+              className="onb-input"
+              placeholder={t('onb_m_step4_pass_ph')}
+              value={memData.password}
+              onChange={(e) => setMemData({ ...memData, password: e.target.value })}
+            />
+            <PasswordStrengthBar password={memData.password} t={t} />
+          </div>
+          <div className="onb-terms">
+            <input
+              type="checkbox"
+              checked={memData.terms}
+              onChange={(e) => setMemData({ ...memData, terms: e.target.checked })}
+            />
+            <label>
+              {t('onb_m_step4_terms')}{' '}
+              <Link to="/terms" target="_blank">
+                {t('onb_m_step4_terms_link')}
+              </Link>
             </label>
           </div>
+          {renderActionBar()}
         </StepShell>
       );
 
       if (step === 5) return (
-        <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
-          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-4xl">
-            ✓
+        <div className="onb-content">
+          <div className="onb-celebration">
+            <div className="onb-check-circle">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <h1 className="onb-h">
+              <RichText html={t('onb_m_step5_h')} />
+            </h1>
+            <p className="onb-sub">{t('onb_m_step5_sub')}</p>
+            <div className="onb-approved-tag">
+              <span className="onb-approved-dot" />
+              {t('onb_m_step5_tag')}
+            </div>
+            <div className="onb-big-amount">
+              <span className="onb-cur">$</span>
+              {creditAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+            </div>
+            <div className="onb-input-hint">MXN</div>
+            <button
+              onClick={() => navigate('/employee')}
+              className="onb-btn"
+            >
+              {t('onb_m_step5_cta')}
+            </button>
           </div>
-          <h1 className="font-serif text-3xl leading-tight text-[#194445] sm:text-4xl">
-            <RichText html={t('onb_m_step5_h')} />
-          </h1>
-          <p className="mt-2 text-gray-500">{t('onb_m_step5_sub')}</p>
-          <div className="mt-6 inline-block rounded-full bg-[#a28657]/20 px-4 py-2 text-sm font-semibold text-[#a28657]">
-            {t('onb_m_step5_tag')}
-          </div>
-          <div className="mt-4 font-serif text-5xl font-bold text-[#194445]">
-            ${creditAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
-          </div>
-          <div className="text-sm text-gray-400">MXN</div>
-          <button
-            onClick={() => navigate('/employee')}
-            className="mt-8 rounded-xl bg-[#194445] px-8 py-3 font-semibold text-white transition-all hover:bg-[#194445]/90"
-          >
-            {t('onb_m_step5_cta')}
-          </button>
         </div>
       );
     }
@@ -715,101 +746,62 @@ export function Onboarding() {
     return null;
   };
 
-  // Is this a final success step?
-  const isFinalStep = (role === 'employer' && step === 6) || (role === 'employee' && step === 5);
-
-  // Action button config
-  const getActionLabel = () => {
-    if (role === 'employer' && step === 5) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
-    if (role === 'employee' && step === 4) return creating ? t('onb_m_step4_creating') : t('onb_m_step4_btn');
-    return t('onb_next');
-  };
-
   return (
-    <div className="relative min-h-screen bg-gray-50">
-      {/* Top bar with back button and progress */}
-      {role && !isFinalStep && (
-        <div className="fixed left-0 right-0 top-0 z-50 bg-gray-50/90 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-lg items-center gap-4 px-6 py-4">
-            <button
-              onClick={goBack}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-[#194445] transition-colors hover:bg-gray-200"
-              aria-label="Go back"
-            >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <div className="flex-1">
-              <div className="h-1.5 w-full rounded-full bg-gray-200">
-                <div
-                  className="h-1.5 rounded-full bg-[#a28657] transition-all duration-500"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-            </div>
-            <span className="text-xs font-medium text-gray-400">
-              {step}/{totalSteps}
-            </span>
-          </div>
-        </div>
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative' }}>
+      <div className="onb-blob ob1" />
+      <div className="onb-blob ob2" />
 
-      {/* Content area with animation */}
-      <div
-        key={`${role}-${step}`}
-        className="animate-fadeSlideIn"
-        style={{
-          animationDirection: direction === 'left' ? 'reverse' : 'normal',
-        }}
-      >
-        {renderContent()}
+      {/* Top bar */}
+      <div className="onb-top">
+        <div className="onb-logo" />
+        <div className="onb-top-right">
+          {t('onb_already_account')}{' '}
+          <Link to="/login">
+            <strong>{t('onb_login')}</strong>
+          </Link>
+        </div>
       </div>
 
-      {/* Bottom action button */}
-      {role && !isFinalStep && step >= 1 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-gray-50/90 px-6 pb-8 pt-4 backdrop-blur-sm">
-          <div className="mx-auto max-w-lg">
-            {error && (
-              <p className="mb-3 text-center text-sm text-red-500">{error}</p>
-            )}
-            <button
-              onClick={handleNext}
-              disabled={!canProceed() || creating}
-              className="w-full rounded-xl bg-[#194445] py-4 font-semibold text-white transition-all hover:bg-[#194445]/90 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {creating && (
-                <svg className="mr-2 inline h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              )}
-              {getActionLabel()}
-            </button>
-          </div>
+      {/* Progress bar */}
+      {role && !isFinalStep && (
+        <div className="onb-progress">
+          <div
+            className="onb-progress-fill"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
       )}
 
-      {/* Animation styles */}
-      <style>{`
-        @keyframes fadeSlideIn {
-          from { opacity: 0; transform: translateX(30px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        .animate-fadeSlideIn {
-          animation: fadeSlideIn 0.35s ease-out forwards;
-        }
-      `}</style>
+      {/* Body */}
+      <div className="onb-body">
+        {/* Back button */}
+        {role && !isFinalStep && step >= 1 && (
+          <button onClick={goBack} className="onb-back" aria-label="Go back">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+              <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+
+        {/* Stage content with transition */}
+        <div
+          key={`${role}-${step}`}
+          className={`onb-stage active`}
+          style={{
+            animationDirection: direction === 'left' ? 'reverse' : 'normal',
+          }}
+        >
+          {renderContent()}
+        </div>
+      </div>
     </div>
   );
 }
 
 function StepShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col justify-center px-6 pb-32 pt-24">
-      <div className="mx-auto w-full max-w-lg">
-        {children}
-      </div>
+    <div className="onb-content">
+      {children}
     </div>
   );
 }
