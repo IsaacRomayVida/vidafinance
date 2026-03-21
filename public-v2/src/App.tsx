@@ -53,6 +53,9 @@ export default function App() {
             <Route path="/press" element={<PressPage />} />
           </Route>
 
+          {/* Get-started redirects to contact */}
+          <Route path="/get-started" element={<Navigate to="/contact" replace />} />
+
           {/* Auth */}
           <Route path="/login" element={<Login />} />
 

@@ -8,7 +8,7 @@ interface NavbarProps {
   ctaHref?: string;
 }
 
-export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
+export function Navbar({ ctaLabel, ctaHref = '/contact' }: NavbarProps) {
   const { t, i18n } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
 
