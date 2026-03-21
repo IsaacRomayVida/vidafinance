@@ -859,75 +859,30 @@ table tr:last-child td{border-bottom:none}
 .admin-signout:hover{color:#fff}
 @media(max-width:768px){.admin-layout{grid-template-columns:1fr}.admin-sidebar{display:none}}
 
-/* ─── OPS DASHBOARD ──────────────────────────────────────── */
-/* SLA Timer */
-.sla-timer{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
-.sla-green{background:#edf7f0;color:#1a5e3a}
-.sla-amber{background:#fdf7e8;color:#7a5a10}
-.sla-red{background:#fdf0f0;color:#8b2020;animation:sla-pulse 1.5s infinite}
-@keyframes sla-pulse{0%,100%{opacity:1}50%{opacity:.6}}
-
-/* Risk pills */
-.risk-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
-.risk-high{background:#fdf0f0;color:#8b2020}
-.risk-medium{background:#fdf7e8;color:#7a5a10}
-.risk-low{background:#edf7f0;color:#1a5e3a}
-
-/* Sort buttons */
-.ops-sort-btn{background:rgba(25,68,69,.06);color:var(--t2);border:1px solid transparent;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
-.ops-sort-btn.active{background:var(--brand);color:#fff}
-.ops-sort-btn:hover:not(.active){border-color:var(--brand)}
-
-/* Review row expand */
-.ops-review-row.expanded{background:rgba(25,68,69,.02)}
-.ops-detail-row td{padding:0!important}
-.ops-review-detail{padding:16px 20px;background:rgba(25,68,69,.02);border-top:1px solid rgba(25,68,69,.06)}
-.ops-detail-section{margin-bottom:16px}
-.ops-detail-section h4{margin:0 0 6px;font-size:13px;font-weight:700;color:var(--brand)}
-.ops-detail-section p{margin:0;font-size:13px;color:var(--t2);line-height:1.5}
-
-/* Signals */
-.ops-signals{display:flex;flex-wrap:wrap;gap:8px}
-.ops-signal{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid rgba(25,68,69,.08);border-radius:8px;padding:6px 10px;font-size:12px}
-.ops-signal-stage{background:var(--brand);color:#fff;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700}
-
-/* SHAP bars */
-.ops-shap{display:flex;flex-direction:column;gap:6px}
-.ops-shap-bar{display:flex;align-items:center;gap:8px}
-.ops-shap-label{font-size:12px;color:var(--t2);min-width:120px;text-align:right}
-.ops-shap-track{flex:1;height:12px;background:rgba(25,68,69,.06);border-radius:6px;overflow:hidden}
-.ops-shap-fill{height:100%;border-radius:6px;transition:width .3s}
-.ops-shap-fill.positive{background:#c0392b}
-.ops-shap-fill.negative{background:#1a5e3a}
-.ops-shap-val{font-size:11px;font-weight:700;min-width:50px;color:var(--t2)}
-
-/* Notes form */
-.ops-notes-row td{padding:0 16px!important}
-.ops-notes-input{font-family:var(--df)}
-
-/* Cards */
-.ops-card{background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06);margin-bottom:20px}
-.ops-card-title{font-size:14px;font-weight:700;color:var(--t1);margin-bottom:14px}
-
-/* Bar chart */
-.ops-bar-chart{display:flex;flex-direction:column;gap:10px}
-.ops-bar-row{display:flex;align-items:center;gap:10px}
-.ops-bar-label{font-size:12px;font-weight:600;color:var(--t2);min-width:80px;text-align:right}
-.ops-bar-track{flex:1;height:24px;background:rgba(25,68,69,.04);border-radius:6px;overflow:hidden}
-.ops-bar-fill{height:100%;border-radius:6px;transition:width .4s}
-.ops-bar-pending{background:var(--aqua)}
-.ops-bar-active{background:var(--brand)}
-.ops-bar-overdue{background:#e67e22}
-.ops-bar-paid{background:#27ae60}
-.ops-bar-defaulted{background:#c0392b}
-.ops-bar-count{font-size:12px;font-weight:700;color:var(--t1);min-width:30px}
-
-/* Status pills */
-.ops-status-pill{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
-.ops-status-ok{background:#edf7f0;color:#1a5e3a}
-.ops-status-warn{background:#fdf7e8;color:#7a5a10}
-.ops-status-down{background:#fdf0f0;color:#8b2020}
-
-/* Responsive */
-@media(max-width:1024px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:640px){.kpi-grid{grid-template-columns:1fr}.ops-bar-label{min-width:60px;font-size:11px}}
+/* ─── Employer HR Dashboard ────────────────────────── */
+.ehr-filter-group{display:flex;gap:0;border:1px solid rgba(25,68,69,.1);border-radius:8px;overflow:hidden}
+.ehr-filter-btn{padding:8px 16px;font-size:12px;font-weight:600;color:var(--t3);background:#fff;border:none;cursor:pointer;transition:all .2s;border-right:1px solid rgba(25,68,69,.06)}
+.ehr-filter-btn:last-child{border-right:none}
+.ehr-filter-btn.active,.ehr-filter-btn:hover{color:#fff;background:var(--brand)}
+.ehr-wizard-progress{height:4px;background:rgba(25,68,69,.06);border-radius:4px;overflow:hidden;margin-bottom:16px}
+.ehr-wizard-progress-fill{height:100%;background:var(--brand);border-radius:4px;transition:width .5s cubic-bezier(.16,1,.3,1)}
+.ehr-wizard-steps{display:flex;justify-content:space-between;margin-bottom:32px}
+.ehr-wizard-steps span{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--t3);background:rgba(25,68,69,.04);transition:all .3s}
+.ehr-wizard-steps span.active{color:#fff;background:var(--brand)}
+.ehr-wizard-card{max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:40px;border:1px solid rgba(25,68,69,.06)}
+.ehr-wizard-h{font-family:var(--df);font-size:28px;color:var(--t1);line-height:1.2;margin-bottom:8px}
+.ehr-wizard-h em{color:var(--brand);font-style:normal}
+.ehr-wizard-sub{font-size:14px;color:var(--t3);margin-bottom:24px}
+.ehr-analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.ehr-chart-card{min-height:240px}
+.ehr-chart{display:flex;align-items:flex-end;gap:8px;height:140px;padding:0 4px}
+.ehr-chart-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%}
+.ehr-chart-bar{width:100%;min-width:20px;border-radius:6px 6px 0 0;transition:height .5s cubic-bezier(.16,1,.3,1);margin-top:auto}
+.ehr-chart-label{font-size:10px;color:var(--t3);margin-top:6px;white-space:nowrap}
+.ehr-benchmark{display:flex;flex-direction:column;gap:10px}
+.ehr-bench-row{display:flex;align-items:center;gap:10px}
+.ehr-bench-label{font-size:12px;color:var(--t2);width:100px;flex-shrink:0}
+.ehr-bench-bar-wrap{flex:1;height:20px;background:rgba(25,68,69,.04);border-radius:6px;overflow:hidden}
+.ehr-bench-bar{height:100%;border-radius:6px;transition:width .6s cubic-bezier(.16,1,.3,1)}
+.ehr-bench-val{font-size:13px;font-weight:700;color:var(--t1);width:44px;text-align:right}
+@media(max-width:768px){.ehr-analytics-grid{grid-template-columns:1fr}.ehr-wizard-card{padding:28px 20px}.ehr-bench-label{width:80px}}
