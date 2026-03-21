@@ -4,7 +4,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@google-cloud/documentai": "^9.5.0",
@@ -19,6 +21,7 @@
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "nodemon": "^3.0.0"
   }
 }
