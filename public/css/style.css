@@ -858,3 +858,76 @@ table tr:last-child td{border-bottom:none}
 .admin-signout{display:flex;align-items:center;gap:6px;padding:10px 20px;color:rgba(255,255,255,.5);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;margin-top:auto;border:none;background:none;width:100%}
 .admin-signout:hover{color:#fff}
 @media(max-width:768px){.admin-layout{grid-template-columns:1fr}.admin-sidebar{display:none}}
+
+/* ─── OPS DASHBOARD ──────────────────────────────────────── */
+/* SLA Timer */
+.sla-timer{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
+.sla-green{background:#edf7f0;color:#1a5e3a}
+.sla-amber{background:#fdf7e8;color:#7a5a10}
+.sla-red{background:#fdf0f0;color:#8b2020;animation:sla-pulse 1.5s infinite}
+@keyframes sla-pulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+/* Risk pills */
+.risk-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.risk-high{background:#fdf0f0;color:#8b2020}
+.risk-medium{background:#fdf7e8;color:#7a5a10}
+.risk-low{background:#edf7f0;color:#1a5e3a}
+
+/* Sort buttons */
+.ops-sort-btn{background:rgba(25,68,69,.06);color:var(--t2);border:1px solid transparent;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
+.ops-sort-btn.active{background:var(--brand);color:#fff}
+.ops-sort-btn:hover:not(.active){border-color:var(--brand)}
+
+/* Review row expand */
+.ops-review-row.expanded{background:rgba(25,68,69,.02)}
+.ops-detail-row td{padding:0!important}
+.ops-review-detail{padding:16px 20px;background:rgba(25,68,69,.02);border-top:1px solid rgba(25,68,69,.06)}
+.ops-detail-section{margin-bottom:16px}
+.ops-detail-section h4{margin:0 0 6px;font-size:13px;font-weight:700;color:var(--brand)}
+.ops-detail-section p{margin:0;font-size:13px;color:var(--t2);line-height:1.5}
+
+/* Signals */
+.ops-signals{display:flex;flex-wrap:wrap;gap:8px}
+.ops-signal{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid rgba(25,68,69,.08);border-radius:8px;padding:6px 10px;font-size:12px}
+.ops-signal-stage{background:var(--brand);color:#fff;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700}
+
+/* SHAP bars */
+.ops-shap{display:flex;flex-direction:column;gap:6px}
+.ops-shap-bar{display:flex;align-items:center;gap:8px}
+.ops-shap-label{font-size:12px;color:var(--t2);min-width:120px;text-align:right}
+.ops-shap-track{flex:1;height:12px;background:rgba(25,68,69,.06);border-radius:6px;overflow:hidden}
+.ops-shap-fill{height:100%;border-radius:6px;transition:width .3s}
+.ops-shap-fill.positive{background:#c0392b}
+.ops-shap-fill.negative{background:#1a5e3a}
+.ops-shap-val{font-size:11px;font-weight:700;min-width:50px;color:var(--t2)}
+
+/* Notes form */
+.ops-notes-row td{padding:0 16px!important}
+.ops-notes-input{font-family:var(--df)}
+
+/* Cards */
+.ops-card{background:#fff;border-radius:12px;padding:20px;border:1px solid rgba(25,68,69,.06);margin-bottom:20px}
+.ops-card-title{font-size:14px;font-weight:700;color:var(--t1);margin-bottom:14px}
+
+/* Bar chart */
+.ops-bar-chart{display:flex;flex-direction:column;gap:10px}
+.ops-bar-row{display:flex;align-items:center;gap:10px}
+.ops-bar-label{font-size:12px;font-weight:600;color:var(--t2);min-width:80px;text-align:right}
+.ops-bar-track{flex:1;height:24px;background:rgba(25,68,69,.04);border-radius:6px;overflow:hidden}
+.ops-bar-fill{height:100%;border-radius:6px;transition:width .4s}
+.ops-bar-pending{background:var(--aqua)}
+.ops-bar-active{background:var(--brand)}
+.ops-bar-overdue{background:#e67e22}
+.ops-bar-paid{background:#27ae60}
+.ops-bar-defaulted{background:#c0392b}
+.ops-bar-count{font-size:12px;font-weight:700;color:var(--t1);min-width:30px}
+
+/* Status pills */
+.ops-status-pill{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.ops-status-ok{background:#edf7f0;color:#1a5e3a}
+.ops-status-warn{background:#fdf7e8;color:#7a5a10}
+.ops-status-down{background:#fdf0f0;color:#8b2020}
+
+/* Responsive */
+@media(max-width:1024px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.kpi-grid{grid-template-columns:1fr}.ops-bar-label{min-width:60px;font-size:11px}}

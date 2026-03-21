@@ -451,6 +451,116 @@ export const getEmployerDashboard = onCall(
   }
 );
 
+// ── submitReviewDecision — ops/admin Stage 5 review action ───────────────────
+
+interface SubmitReviewDecisionData {
+  reviewId: string;
+  decision: 'approved' | 'rejected' | 'request_info';
+  notes?: string;
+}
+
+export const submitReviewDecision = onCall(
+  { cors: true, enforceAppCheck: false },
+  withAuth<SubmitReviewDecisionData, { success: boolean; reviewId: string; decision: string }>(
+    ['ops', 'admin', 'super_admin'],
+    async (data, auth) =>
+      withErrorHandling({ functionName: 'submitReviewDecision', uid: auth.uid }, async () => {
+        const { reviewId, decision, notes } = data;
+        if (!reviewId || !decision) throw new HttpsError('invalid-argument', 'reviewId and decision are required');
+        if (!['approved', 'rejected', 'request_info'].includes(decision))
+          throw new HttpsError('invalid-argument', 'Invalid decision. Must be approved, rejected, or request_info');
+
+        const reviewSnap = await db.collection('review_queue').doc(reviewId).get();
+        if (!reviewSnap.exists) throw new HttpsError('not-found', 'Review not found');
+        const review = reviewSnap.data()!;
+
+        if (review['status'] !== 'pending_review')
+          throw new HttpsError('failed-precondition', 'Review is not in pending status');
+
+        const now = FieldValue.serverTimestamp();
+
+        await db.collection('review_queue').doc(reviewId).update({
+          status: decision === 'request_info' ? 'info_requested' : decision,
+          reviewedBy: auth.uid,
+          reviewedAt: now,
+          reviewNotes: notes || null,
+        });
+
+        // If the review is tied to a loan, update the loan status
+        if (review['loanId'] && decision !== 'request_info') {
+          const loanStatus = decision === 'approved' ? 'approved' : 'rejected';
+          await db.collection('loans').doc(review['loanId'] as string).update({
+            status: loanStatus,
+            statusNote: notes || null,
+          });
+        }
+
+        await auditLog(db, {
+          action: `review.${decision}`,
+          actorUid: auth.uid,
+          actorRole: auth.role,
+          targetId: reviewId,
+          before: { status: 'pending_review' },
+          after: { status: decision === 'request_info' ? 'info_requested' : decision },
+          meta: { notes: notes || null, loanId: review['loanId'] || null },
+        });
+
+        return { success: true, reviewId, decision };
+      })
+  )
+);
+
+// ── updateEmployerTier — ops/admin Tier 2 manual gate actions ────────────────
+
+interface UpdateEmployerTierData {
+  employerId: string;
+  action: 'approve_expansion' | 'upgrade_tier';
+  newSlots?: number;
+}
+
+export const updateEmployerTier = onCall(
+  { cors: true, enforceAppCheck: false },
+  withAuth<UpdateEmployerTierData, { success: boolean }>(
+    ['ops', 'admin', 'super_admin'],
+    async (data, auth) =>
+      withErrorHandling({ functionName: 'updateEmployerTier', uid: auth.uid }, async () => {
+        const { employerId, action, newSlots } = data;
+        if (!employerId || !action) throw new HttpsError('invalid-argument', 'employerId and action are required');
+
+        const empDoc = await db.collection('employers').doc(employerId).get();
+        if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
+        const emp = empDoc.data()!;
+
+        const update: Record<string, unknown> = {};
+        if (action === 'approve_expansion') {
+          if (typeof newSlots !== 'number' || newSlots < 1)
+            throw new HttpsError('invalid-argument', 'newSlots must be a positive number');
+          update['maxActiveSlots'] = newSlots;
+        } else if (action === 'upgrade_tier') {
+          if (emp['riskTier'] !== 2)
+            throw new HttpsError('failed-precondition', 'Only Tier 2 employers can be upgraded');
+          update['riskTier'] = 1;
+          update['tierUpgradedAt'] = FieldValue.serverTimestamp();
+        } else {
+          throw new HttpsError('invalid-argument', 'Invalid action');
+        }
+
+        await db.collection('employers').doc(employerId).update(update);
+
+        await auditLog(db, {
+          action: `employer.${action}`,
+          actorUid: auth.uid,
+          actorRole: auth.role,
+          targetId: employerId,
+          before: { riskTier: emp['riskTier'], maxActiveSlots: emp['maxActiveSlots'] },
+          after: update,
+        });
+
+        return { success: true };
+      })
+  )
+);
+
 // ── Firestore document triggers ──────────────────────────────────────────────
 
 export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (event) => {
