@@ -2,9 +2,9 @@
 BullMQ consumer for the 'vida-underwriting' queue.
 
 Processes 'underwrite_loan' jobs dispatched by the requestLoan Firebase
-Function. Each job runs the logistic regression model, applies hard
-business rules, writes the decision to Firestore, then pushes follow-up
-jobs to Redis lists for the disbursement and notification services.
+Function. Each job runs both the champion (WoE scorecard) and challenger
+(XGBoost) models, writes the champion's decision to Firestore, logs the
+challenger's prediction for shadow comparison, and pushes follow-up jobs.
 
 Queue name matches shared/queues.js: QUEUES.UNDERWRITING = 'vida-underwriting'
 """
@@ -19,7 +19,9 @@ from concurrent.futures import ThreadPoolExecutor
 from bullmq import Worker
 from redis.asyncio import Redis as AsyncRedis
 
-from models.underwriting_model import UnderwritingModel
+from typing import Optional
+
+from models.champion_challenger import ModelRouter
 from services.firestore_client import FirestoreClient
 from services.softcredito_client import SoftcreditoClient
 
@@ -27,20 +29,25 @@ logger = logging.getLogger("underwriting_worker")
 
 QUEUE_NAME = "vida-underwriting"
 APPROVAL_THRESHOLD = float(os.environ.get("APPROVAL_THRESHOLD", "0.65"))
-MODEL_PATH = os.environ.get("MODEL_PATH", "models/underwriting_v1.joblib")
+CHAMPION_PATH = os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
+CHALLENGER_PATH = os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
 
 # Initialised lazily so the module can be imported without creds present
-_model: UnderwritingModel | None = None
-_firestore: FirestoreClient | None = None
+_router: Optional[ModelRouter] = None
+_firestore: Optional[FirestoreClient] = None
 _executor = ThreadPoolExecutor(max_workers=10)
 
 
-def get_model() -> UnderwritingModel:
-    global _model
-    if _model is None:
-        _model = UnderwritingModel.load(MODEL_PATH)
-        logger.info("Loaded underwriting model v1 from %s", MODEL_PATH)
-    return _model
+def get_router() -> ModelRouter:
+    global _router
+    if _router is None:
+        _router = ModelRouter.load(CHAMPION_PATH, CHALLENGER_PATH)
+        logger.info(
+            "Loaded champion/challenger router: champion=%s, challenger=%s",
+            _router.champion.version,
+            _router.challenger.version,
+        )
+    return _router
 
 
 def get_firestore() -> FirestoreClient:
@@ -80,6 +87,35 @@ def get_rejection_reason(score: float, features: dict) -> str:
     return "Does not meet current lending criteria"
 
 
+def build_model_features(borrower: dict, principal: float, monthly_salary: float, bureau: Optional[dict] = None) -> dict:
+    """Build the feature dict used by both champion and challenger models."""
+    lti = principal / max(monthly_salary, 1)
+    tenure = float(borrower.get("employmentTenureMonths", 0))
+    industry_code = encode_industry(borrower.get("employerIndustry", ""))
+
+    return {
+        # Champion features (WoE scorecard)
+        "scDiasAtraso": float(bureau.get("diasAtraso", 0)) if bureau else 0.0,
+        "cdcScore": float(bureau.get("riskScore", 500)) if bureau else 500.0,
+        "carteraVencida": float(bureau.get("carteraVencida", 0)) if bureau else 0.0,
+        "imss_tenure_months": tenure,
+        "lti": lti,
+        "riskSeal_score": float(borrower.get("riskSealScore", 50)),
+        "employer_tier": float(borrower.get("employerTier", 3)),
+        "sector_risk": float(borrower.get("sectorRisk", 3)),
+        "afore_regularity": float(borrower.get("aforeRegularity", 0.7)),
+        "monthly_salary": monthly_salary,
+        # Challenger-only features (XGBoost)
+        "scCuentasActivas": float(bureau.get("cuentasActivas", 3)) if bureau else 3.0,
+        "belvo_cash_flow_avg": float(borrower.get("belvoCashFlowAvg", 15000)),
+        "employer_score": float(borrower.get("employerScore", 60)),
+        "payroll_regularity": float(borrower.get("payrollRegularity", 0.7)),
+        # Legacy features (kept for backward compatibility with hard rules)
+        "employment_tenure_months": tenure,
+        "loan_to_salary_ratio": lti,
+    }
+
+
 # ── Core job processor ────────────────────────────────────────────────────────
 
 async def process_underwrite_loan(job, job_token=None):
@@ -99,6 +135,13 @@ async def process_underwrite_loan(job, job_token=None):
           employerIndustry: str,
           curpHash: str,
           fullName: str,
+          riskSealScore: float,
+          employerTier: int,
+          sectorRisk: int,
+          aforeRegularity: float,
+          belvoCashFlowAvg: float,
+          employerScore: float,
+          payrollRegularity: float,
         }
       }
     """
@@ -110,38 +153,33 @@ async def process_underwrite_loan(job, job_token=None):
 
     logger.info("[underwriting] Processing loan %s", loan_id)
 
-    # ── 1. Build feature vector ───────────────────────────────────────────────
-    features = {
-        "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
-        "monthly_salary": monthly_salary,
-        "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
-        "loan_to_salary_ratio": principal / max(monthly_salary, 1),
-        "employer_industry_encoded": float(encode_industry(borrower.get("employerIndustry", ""))),
-        "principal_amount": principal,
-        "bureau_score": 500.0,
-        "has_bureau_record": 0.0,
-    }
-
-    # ── 2. Optional bureau enrichment (graceful degradation) ─────────────────
+    # ── 1. Optional bureau enrichment (graceful degradation) ─────────────────
+    bureau = None
     try:
         bureau = await SoftcreditoClient().query_bureau(
             curp_hash=borrower.get("curpHash", ""),
             full_name=borrower.get("fullName", ""),
         )
-        features["bureau_score"] = float(bureau.get("riskScore", 500))
-        features["has_bureau_record"] = 1.0 if bureau.get("found") else 0.0
-        logger.info("[underwriting] Bureau enrichment ok for loan %s: score=%s", loan_id, features["bureau_score"])
+        logger.info("[underwriting] Bureau enrichment ok for loan %s", loan_id)
     except Exception as e:
         logger.warning(
             "[underwriting] Bureau lookup failed for loan %s (%s) — using defaults",
             loan_id, e,
         )
 
-    # ── 3. Run model ──────────────────────────────────────────────────────────
-    model = get_model()
-    prob_repayment = model.predict_proba(features)
-    decision = "approved" if prob_repayment >= APPROVAL_THRESHOLD else "rejected"
-    rejection_reason = None if decision == "approved" else get_rejection_reason(prob_repayment, features)
+    # ── 2. Build feature vector ───────────────────────────────────────────────
+    features = build_model_features(borrower, principal, monthly_salary, bureau)
+
+    # ── 3. Run champion/challenger models ─────────────────────────────────────
+    router = get_router()
+    result = router.predict(features, threshold=APPROVAL_THRESHOLD)
+
+    decision = result["decision"]
+    champion_score = result["champion_score"]
+    challenger_score = result["challenger_score"]
+    shap_top5 = result["shap_top5"]
+
+    rejection_reason = None if decision == "approved" else get_rejection_reason(champion_score, features)
 
     # ── 4. Hard business rule overrides ──────────────────────────────────────
     if features["employment_tenure_months"] < 3:
@@ -149,8 +187,8 @@ async def process_underwrite_loan(job, job_token=None):
         rejection_reason = "Minimum 3 months employment tenure required"
 
     logger.info(
-        "[underwriting] Loan %s → %s (score=%.3f, threshold=%.2f)",
-        loan_id, decision, prob_repayment, APPROVAL_THRESHOLD,
+        "[underwriting] Loan %s → %s (champion=%.3f, challenger=%.3f, threshold=%.2f)",
+        loan_id, decision, champion_score, challenger_score, APPROVAL_THRESHOLD,
     )
 
     # ── 5. Write decision to Firestore (blocking SDK → run in executor) ───────
@@ -159,9 +197,12 @@ async def process_underwrite_loan(job, job_token=None):
 
     update_payload = {
         "status": decision,
-        "underwritingScore": round(prob_repayment, 4),
+        "underwritingScore": champion_score,
         "underwritingDecision": decision,
-        "underwritingModel": "logistic_v1.0",
+        "underwritingModel": result["champion_model"],
+        "challengerModel": result["challenger_model"],
+        "challengerScore": challenger_score,
+        "shapTop5": shap_top5,
         "rejectionReason": rejection_reason,
         "updatedAt": now_iso,
         "statusHistory": firestore.array_union({
@@ -169,7 +210,7 @@ async def process_underwrite_loan(job, job_token=None):
             "to": decision,
             "at": now_iso,
             "by": "system",
-            "reason": f"Underwriting model v1.0: score={prob_repayment:.3f}",
+            "reason": f"Champion {result['champion_model']}: score={champion_score:.3f}",
         }),
     }
 
@@ -179,7 +220,12 @@ async def process_underwrite_loan(job, job_token=None):
         lambda: firestore.update_loan(loan_id, update_payload),
     )
 
-    # ── 6. Push downstream jobs via Redis ────────────────────────────────────
+    # ── 6. Check challenger alert ─────────────────────────────────────────────
+    alert = router.check_challenger_alert()
+    if alert:
+        logger.warning("[underwriting] Challenger outperformance alert: %s", alert)
+
+    # ── 7. Push downstream jobs via Redis ────────────────────────────────────
     redis = AsyncRedis.from_url(
         os.environ["REDIS_URL"],
         decode_responses=True,
@@ -203,7 +249,8 @@ async def process_underwrite_loan(job, job_token=None):
                 "type": f"loan_{decision}",
                 "userId": data.get("userId"),
                 "loanId": loan_id,
-                "score": round(prob_repayment, 4),
+                "score": champion_score,
+                "challengerScore": challenger_score,
                 "rejectionReason": rejection_reason,
             }),
         )
@@ -211,7 +258,12 @@ async def process_underwrite_loan(job, job_token=None):
         await redis.aclose()
 
     logger.info("[underwriting] Loan %s complete: %s", loan_id, decision)
-    return {"decision": decision, "score": round(prob_repayment, 4)}
+    return {
+        "decision": decision,
+        "score": champion_score,
+        "challengerScore": challenger_score,
+        "shapTop5": shap_top5,
+    }
 
 
 # ── Worker entry point ────────────────────────────────────────────────────────

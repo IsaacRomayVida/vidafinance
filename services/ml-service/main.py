@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
+from services.firestore_client import FirestoreClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ml-service")
@@ -168,11 +169,32 @@ async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
 
 @app.get("/explain/{decision_id}")
 def explain(decision_id: str, x_internal_secret: str = Header(None)):
+    """
+    Retrieve SHAP explanations for a decision.
+
+    Looks up the loan's stored SHAP top-5 from Firestore. If the loan
+    has challenger SHAP values stored, returns them directly.
+    """
     auth(x_internal_secret)
+    try:
+        firestore = FirestoreClient()
+        loan = firestore.get_loan(decision_id)
+        if loan and loan.get("shapTop5"):
+            return {
+                "decisionId": decision_id,
+                "championModel": loan.get("underwritingModel", "unknown"),
+                "challengerModel": loan.get("challengerModel", "unknown"),
+                "championScore": loan.get("underwritingScore"),
+                "challengerScore": loan.get("challengerScore"),
+                "shapTop5": loan.get("shapTop5", []),
+            }
+    except Exception:
+        pass
+
     return {
         "decisionId": decision_id,
-        "shap": [],
-        "message": "Full SHAP after model training (200+ loans)",
+        "shapTop5": [],
+        "message": "No SHAP data found for this decision",
     }
 
 
@@ -202,46 +224,38 @@ async def score_loan_direct(
 ):
     """
     Direct synchronous scoring endpoint.
-    Accepts the same payload as the BullMQ job data so other services
-    can call underwriting synchronously without going through the queue.
+    Runs both champion (WoE scorecard) and challenger (XGBoost) models.
+    Returns champion decision + challenger shadow score + SHAP top-5.
     """
     auth(x_internal_secret)
     from workers.underwriting_worker import (
-        process_underwrite_loan,
-        encode_pay_freq,
-        encode_industry,
-        get_rejection_reason,
+        build_model_features,
         APPROVAL_THRESHOLD,
     )
-    from models.underwriting_model import UnderwritingModel
+    from models.champion_challenger import ModelRouter
     import os as _os
 
     borrower = payload.get("borrowerSnapshot", {})
     principal = float(payload.get("principalAmount", 0))
     monthly_salary = float(borrower.get("monthlySalary", 1))
 
-    features = {
-        "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
-        "monthly_salary": monthly_salary,
-        "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
-        "loan_to_salary_ratio": principal / max(monthly_salary, 1),
-        "employer_industry_encoded": float(encode_industry(borrower.get("employerIndustry", ""))),
-        "principal_amount": principal,
-        "bureau_score": 500.0,
-        "has_bureau_record": 0.0,
-    }
+    features = build_model_features(borrower, principal, monthly_salary)
 
-    model_path = _os.environ.get("MODEL_PATH", "models/underwriting_v1.joblib")
-    model = UnderwritingModel.load(model_path)
-    prob = model.predict_proba(features)
-    decision = "approved" if prob >= APPROVAL_THRESHOLD else "rejected"
+    champion_path = _os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
+    challenger_path = _os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
+    router = ModelRouter.load(champion_path, challenger_path)
+    result = router.predict(features, threshold=APPROVAL_THRESHOLD)
 
+    decision = result["decision"]
     if features["employment_tenure_months"] < 3:
         decision = "rejected"
 
     return {
         "decision": decision,
-        "score": round(prob, 4),
+        "championScore": result["champion_score"],
+        "challengerScore": result["challenger_score"],
         "threshold": APPROVAL_THRESHOLD,
-        "model": "logistic_v1.0",
+        "championModel": result["champion_model"],
+        "challengerModel": result["challenger_model"],
+        "shapTop5": result["shap_top5"],
     }
