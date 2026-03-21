@@ -300,6 +300,16 @@ const i18n = {
     pg_press_brand_2_t:'Color principal',pg_press_brand_2_d:'Teal oscuro #194445 — usado en el logotipo, textos principales y elementos de marca.',
     pg_press_brand_3_t:'Color acento',pg_press_brand_3_d:'Dorado #C9A84C — usado como color de señal, nunca como fondo. Reservado para destacar datos clave.',
     pg_press_brand_4_t:'Tipografía',pg_press_brand_4_d:'DM Serif Display para titulares. DM Sans para cuerpo de texto. Ambas de Google Fonts.',
+    // Loan Wizard
+    wiz_title:'Solicitar Préstamo',wiz_step:'Paso',wiz_of:'de',wiz_back:'Atrás',wiz_next:'Continuar',wiz_submit:'Firmar y Solicitar',wiz_submitting:'Enviando...',
+    wiz_s1_h:'Información<br><em>Personal</em>',wiz_s1_sub:'Confirma tus datos personales y cuenta bancaria.',wiz_s1_name:'Nombre completo',wiz_s1_curp:'CURP',wiz_s1_rfc:'RFC',wiz_s1_clabe:'CLABE interbancaria',wiz_s1_clabe_ph:'18 dígitos',wiz_s1_bank:'Banco',wiz_s1_confirm_clabe:'Confirmar CLABE',
+    wiz_s2_h:'Verificación<br><em>Laboral</em>',wiz_s2_sub:'Información de tu empleo verificada automáticamente.',wiz_s2_employer:'Empleador',wiz_s2_status:'Estado IMSS',wiz_s2_tenure:'Antigüedad',wiz_s2_salary:'Salario mensual',wiz_s2_verified:'Verificado',wiz_s2_active:'Activo',wiz_s2_months:'meses',wiz_s2_fetching:'Consultando IMSS...',
+    wiz_s3_h:'Selecciona tu<br><em>Préstamo</em>',wiz_s3_sub:'Elige el monto que necesitas. Máximo 30% de tu salario.',wiz_s3_amount:'Monto del préstamo',wiz_s3_fee:'Comisión (30%)',wiz_s3_total:'Pago total',wiz_s3_due:'Fecha de vencimiento',wiz_s3_term:'Plazo: 30 días',wiz_s3_lti:'Relación Préstamo/Ingreso',wiz_s3_lti_ok:'Saludable',wiz_s3_lti_warn:'Elevado',wiz_s3_cat:'CAT (Costo Anual Total)',
+    wiz_s4_h:'Verificación<br><em>KYC</em>',wiz_s4_sub:'Necesitamos verificar tu identidad.',wiz_s4_start:'Iniciar Verificación',wiz_s4_in_progress:'Verificación en proceso...',wiz_s4_completed:'Verificación completada',wiz_s4_failed:'Verificación fallida. Intenta de nuevo.',wiz_s4_wait:'Espera mientras verificamos tu identidad. No cierres esta ventana.',
+    wiz_s5_h:'Revisa y<br><em>Firma</em>',wiz_s5_sub:'Revisa los detalles de tu préstamo y firma electrónicamente.',wiz_s5_summary:'Resumen del Préstamo',wiz_s5_personal:'Datos Personales',wiz_s5_loan_details:'Detalles del Préstamo',wiz_s5_terms:'Acepto los',wiz_s5_terms_link:'Términos y Condiciones',wiz_s5_sign:'Firma Electrónica (Mifiel)',wiz_s5_signing:'Firmando...',wiz_s5_sign_btn:'Firmar con Mifiel',wiz_s5_terms_version:'Versión de términos',
+    // Active Loan Dashboard
+    ald_title:'Mis Préstamos',ald_active_loans:'Préstamos Activos',ald_next_payment:'Próximo Pago',ald_next_date:'Fecha',ald_next_amount:'Monto',ald_available_credit:'Crédito Disponible',ald_repayment_history:'Historial de Pagos',ald_th_date:'Fecha',ald_th_amount:'Monto',ald_th_method:'Método',ald_th_status:'Estado',ald_th_ref:'Referencia',ald_no_repayments:'Sin pagos registrados aún.',ald_upload_docs:'Subir Documentos',ald_upload_ine:'INE (Identificación)',ald_upload_payslip:'Recibo de Nómina',ald_upload_btn:'Seleccionar archivo',ald_uploading:'Subiendo...',ald_uploaded:'Archivo subido',ald_upload_error:'Error al subir',ald_file_formats:'PDF o imagen, máx 5 MB',ald_status_pending:'Pendiente',ald_status_approved:'Aprobado',ald_status_active:'Activo',ald_status_overdue:'Vencido',ald_status_paid:'Pagado',ald_no_active:'No tienes préstamos activos.',ald_loan_amount:'Monto',ald_loan_total:'Total',ald_loan_due:'Vencimiento',ald_loan_status:'Estado',ald_pay_now:'Pagar ahora',ald_days_left:'días restantes',ald_overdue_days:'días vencido',
+    dash_pay_now:'Pagar ahora',dash_pay_error:'Error al generar el enlace de pago',
   },
   en: {
     nav_employers:'Employers',nav_employees:'Employees',nav_trust:'Trust',nav_how:'How it works',nav_login:'Log in',nav_get_started:'Get Started',nav_partners:'Partners',nav_investors:'Investors',nav_contact:'Contact',lang_toggle:'ES',
@@ -583,6 +593,16 @@ const i18n = {
     pg_press_brand_2_t:'Primary color',pg_press_brand_2_d:'Dark teal #194445 — used in the logo, main text, and brand elements.',
     pg_press_brand_3_t:'Accent color',pg_press_brand_3_d:'Gold #C9A84C — used as a signal color, never as background. Reserved for highlighting key data.',
     pg_press_brand_4_t:'Typography',pg_press_brand_4_d:'DM Serif Display for headlines. DM Sans for body text. Both from Google Fonts.',
+    // Loan Wizard
+    wiz_title:'Request a Loan',wiz_step:'Step',wiz_of:'of',wiz_back:'Back',wiz_next:'Continue',wiz_submit:'Sign & Submit',wiz_submitting:'Submitting...',
+    wiz_s1_h:'Personal<br><em>Information</em>',wiz_s1_sub:'Confirm your personal details and bank account.',wiz_s1_name:'Full name',wiz_s1_curp:'CURP',wiz_s1_rfc:'RFC',wiz_s1_clabe:'Bank CLABE',wiz_s1_clabe_ph:'18 digits',wiz_s1_bank:'Bank',wiz_s1_confirm_clabe:'Confirm CLABE',
+    wiz_s2_h:'Employment<br><em>Verification</em>',wiz_s2_sub:'Your employment information verified automatically.',wiz_s2_employer:'Employer',wiz_s2_status:'IMSS Status',wiz_s2_tenure:'Tenure',wiz_s2_salary:'Monthly salary',wiz_s2_verified:'Verified',wiz_s2_active:'Active',wiz_s2_months:'months',wiz_s2_fetching:'Checking IMSS...',
+    wiz_s3_h:'Select your<br><em>Loan</em>',wiz_s3_sub:'Choose the amount you need. Max 30% of your salary.',wiz_s3_amount:'Loan amount',wiz_s3_fee:'Fee (30%)',wiz_s3_total:'Total repayment',wiz_s3_due:'Due date',wiz_s3_term:'Term: 30 days',wiz_s3_lti:'Loan-to-Income Ratio',wiz_s3_lti_ok:'Healthy',wiz_s3_lti_warn:'Elevated',wiz_s3_cat:'CAT (Total Annual Cost)',
+    wiz_s4_h:'KYC<br><em>Verification</em>',wiz_s4_sub:'We need to verify your identity.',wiz_s4_start:'Start Verification',wiz_s4_in_progress:'Verification in progress...',wiz_s4_completed:'Verification completed',wiz_s4_failed:'Verification failed. Try again.',wiz_s4_wait:'Please wait while we verify your identity. Do not close this window.',
+    wiz_s5_h:'Review &<br><em>Sign</em>',wiz_s5_sub:'Review your loan details and sign electronically.',wiz_s5_summary:'Loan Summary',wiz_s5_personal:'Personal Details',wiz_s5_loan_details:'Loan Details',wiz_s5_terms:'I accept the',wiz_s5_terms_link:'Terms and Conditions',wiz_s5_sign:'E-Signature (Mifiel)',wiz_s5_signing:'Signing...',wiz_s5_sign_btn:'Sign with Mifiel',wiz_s5_terms_version:'Terms version',
+    // Active Loan Dashboard
+    ald_title:'My Loans',ald_active_loans:'Active Loans',ald_next_payment:'Next Payment',ald_next_date:'Date',ald_next_amount:'Amount',ald_available_credit:'Available Credit',ald_repayment_history:'Repayment History',ald_th_date:'Date',ald_th_amount:'Amount',ald_th_method:'Method',ald_th_status:'Status',ald_th_ref:'Reference',ald_no_repayments:'No repayments recorded yet.',ald_upload_docs:'Upload Documents',ald_upload_ine:'INE (ID Card)',ald_upload_payslip:'Payroll Slip',ald_upload_btn:'Choose file',ald_uploading:'Uploading...',ald_uploaded:'File uploaded',ald_upload_error:'Upload error',ald_file_formats:'PDF or image, max 5 MB',ald_status_pending:'Pending',ald_status_approved:'Approved',ald_status_active:'Active',ald_status_overdue:'Overdue',ald_status_paid:'Paid',ald_no_active:'No active loans.',ald_loan_amount:'Amount',ald_loan_total:'Total',ald_loan_due:'Due date',ald_loan_status:'Status',ald_pay_now:'Pay now',ald_days_left:'days left',ald_overdue_days:'days overdue',
+    dash_pay_now:'Pay now',dash_pay_error:'Error generating payment link',
   }
 };
 
@@ -627,6 +647,7 @@ const routes = {
   '/press': renderPress,
   '/employer/dashboard': renderEmployerDashboard,
   '/employee/dashboard': renderEmployeeDashboard,
+  '/employee/apply': renderLoanWizard,
   '/admin':            (app) => renderAdminPortal(app, 'employers'),
   '/admin/employers':  (app) => renderAdminPortal(app, 'employers'),
   '/admin/loans':      (app) => renderAdminPortal(app, 'loans'),
@@ -639,6 +660,8 @@ let onbPreselect = null;
 function navigate(path, opts) {
   if (window._unsubDash) { window._unsubDash(); window._unsubDash = null; }
   if (window._unsubEmp) { window._unsubEmp(); window._unsubEmp = null; }
+  if (window._unsubWizard) { window._unsubWizard(); window._unsubWizard = null; }
+  if (window._unsubRepayments) { window._unsubRepayments(); window._unsubRepayments = null; }
   if (window._adminUnsubs) { window._adminUnsubs.forEach(u => u()); window._adminUnsubs = null; }
   if (opts?.role) onbPreselect = opts.role;
   history.pushState(null, '', path);
@@ -1822,39 +1845,368 @@ async function renderEmployeeDashboard(app) {
   const emp = empDoc.data();
   const utilized = emp.creditLimit - emp.availableCredit;
   const utilPct = Math.round((utilized / emp.creditLimit) * 100);
-  app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_my_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${t('dash_welcome')}, ${emp.name}</h1><div class="dash-user"><span>${emp.employerName}</span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_available_credit')}</div><div class="stat-value">$${fmt(emp.availableCredit)}</div><div class="stat-change">MXN</div></div><div class="stat-card"><div class="stat-label">${t('dash_credit_limit')}</div><div class="stat-value">$${fmt(emp.creditLimit)}</div></div><div class="stat-card"><div class="stat-label">${t('dash_utilization')}</div><div class="stat-value">${utilPct}%</div></div><div class="stat-card"><div class="stat-label">${t('dash_quick_action')}</div><button class="btn-primary" style="margin-top:8px" onclick="openLoanModal()">${t('dash_request_funds')}</button></div></div><div class="card"><div class="card-title">${t('dash_your_loans')}</div><div class="table-wrap" id="empLoansTable"><div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div></div></div></div></div></div>`;
-  function renderEmployeeLoansTable(loans) {
-    const el = document.getElementById('empLoansTable');
-    if (!el) return;
-    el.innerHTML = loans.length ? `<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_repayment')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_date')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${loans.map(l=>`<tr><td>$${fmt(l.amount)}</td><td>${l.termDays||30} ${t('dash_days')}</td><td>$${fmt(l.repaymentAmount||l.total||0)}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.createdAt?new Date(l.createdAt.seconds*1000).toLocaleDateString():'—'}</td><td>${['active','overdue'].includes(l.status)?`<button class="btn-sm btn-approve pay-now-btn" data-loan-id="${l.id}">${t('dash_pay_now')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_loans_employee')}</p></div>`;
-    el.querySelectorAll('.pay-now-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const loanId = btn.dataset.loanId;
-        btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
-        try { const r = await firebase.functions().httpsCallable('generatePaymentLink')({ loanId }); window.open(r.data.paymentUrl, '_blank'); }
-        catch (_) { showToast(t('dash_pay_error'), 'error'); }
-        finally { btn.disabled = false; btn.textContent = t('dash_pay_now'); }
+
+  app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="/employee/dashboard" class="dash-nav-link active" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#" class="dash-nav-link" data-tab="loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('ald_title')}</a><a href="#" class="dash-nav-link" data-tab="documents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>${t('ald_upload_docs')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${t('dash_welcome')}, ${emp.name}</h1><div class="dash-user"><span>${emp.employerName}</span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content" id="empDashContent"></div></div></div>`;
+
+  let currentTab = 'overview';
+
+  function renderOverviewTab() {
+    const content = document.getElementById('empDashContent');
+    if (!content) return;
+    content.innerHTML = `<div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('ald_available_credit')}</div><div class="stat-value">$${fmt(emp.availableCredit)}</div><div class="stat-change">MXN</div></div><div class="stat-card"><div class="stat-label">${t('dash_credit_limit')}</div><div class="stat-value">$${fmt(emp.creditLimit)}</div></div><div class="stat-card"><div class="stat-label">${t('dash_utilization')}</div><div class="stat-value">${utilPct}%</div><div class="utilization-bar"><div class="utilization-fill" style="width:${utilPct}%"></div></div></div><div class="stat-card"><div class="stat-label">${t('dash_quick_action')}</div><button class="btn-primary" style="margin-top:8px" onclick="navigate('/employee/apply')">${t('dash_request_funds')}</button></div></div><div class="ald-grid"><div class="card" id="nextPaymentCard"><div class="card-title">${t('ald_next_payment')}</div><div class="next-payment-content" id="nextPaymentContent"><div style="padding:20px;text-align:center"><span class="spinner"></span></div></div></div><div class="card"><div class="card-title">${t('ald_active_loans')}</div><div id="activeLoansList"><div style="padding:20px;text-align:center"><span class="spinner"></span></div></div></div></div><div class="card"><div class="card-title">${t('ald_repayment_history')}</div><div class="table-wrap" id="repaymentTable"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div></div>`;
+  }
+
+  function renderLoansTab() {
+    const content = document.getElementById('empDashContent');
+    if (!content) return;
+    content.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h2 style="font-family:var(--df);font-size:22px;color:var(--t1)">${t('ald_title')}</h2><button class="btn-primary" onclick="navigate('/employee/apply')">${t('dash_request_funds')}</button></div><div class="card"><div class="table-wrap" id="empLoansTable"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div></div>`;
+  }
+
+  function renderDocumentsTab() {
+    const content = document.getElementById('empDashContent');
+    if (!content) return;
+    content.innerHTML = `<h2 style="font-family:var(--df);font-size:22px;color:var(--t1);margin-bottom:20px">${t('ald_upload_docs')}</h2><div class="upload-grid"><div class="upload-card" id="uploadIne"><div class="upload-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M22 20l-5-5-3 3-2-2-5 5"/></svg></div><div class="upload-label">${t('ald_upload_ine')}</div><div class="upload-hint">${t('ald_file_formats')}</div><input type="file" accept="image/*,.pdf" class="upload-input" data-doc-type="ine"><button class="btn-sm btn-approve upload-trigger">${t('ald_upload_btn')}</button><div class="upload-status" id="ineStatus"></div></div><div class="upload-card" id="uploadPayslip"><div class="upload-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></div><div class="upload-label">${t('ald_upload_payslip')}</div><div class="upload-hint">${t('ald_file_formats')}</div><input type="file" accept="image/*,.pdf" class="upload-input" data-doc-type="payslip"><button class="btn-sm btn-approve upload-trigger">${t('ald_upload_btn')}</button><div class="upload-status" id="payslipStatus"></div></div></div>`;
+    content.querySelectorAll('.upload-trigger').forEach(btn => {
+      btn.addEventListener('click', () => { btn.parentElement.querySelector('.upload-input').click(); });
+    });
+    content.querySelectorAll('.upload-input').forEach(input => {
+      input.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) { showToast('Max 5 MB', 'error'); return; }
+        const docType = input.dataset.docType;
+        const statusEl = document.getElementById(docType + 'Status');
+        const triggerBtn = input.parentElement.querySelector('.upload-trigger');
+        triggerBtn.disabled = true; triggerBtn.textContent = t('ald_uploading');
+        if (statusEl) statusEl.innerHTML = '<span class="spinner"></span>';
+        try {
+          const ref = storage.ref('employees/' + uid + '/docs/' + docType + '_' + Date.now());
+          await ref.put(file);
+          const url = await ref.getDownloadURL();
+          const updateData = {}; updateData['doc_' + docType] = url;
+          await db.collection('employees').doc(uid).update(updateData);
+          if (statusEl) statusEl.innerHTML = '<span style="color:var(--success);font-weight:600">✓ ' + t('ald_uploaded') + '</span>';
+          triggerBtn.textContent = t('ald_upload_btn'); triggerBtn.disabled = false;
+        } catch (err) {
+          if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">' + t('ald_upload_error') + '</span>';
+          triggerBtn.textContent = t('ald_upload_btn'); triggerBtn.disabled = false;
+        }
       });
     });
   }
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.dash-nav-link').forEach(a => a.classList.remove('active'));
+    document.querySelector(`.dash-nav-link[data-tab="${tab}"]`)?.classList.add('active');
+    if (tab === 'overview') renderOverviewTab();
+    else if (tab === 'loans') renderLoansTab();
+    else if (tab === 'documents') renderDocumentsTab();
+  }
+
+  document.querySelectorAll('.dash-nav-link').forEach(a => {
+    a.addEventListener('click', (e) => { e.preventDefault(); switchTab(a.dataset.tab); });
+  });
+
+  renderOverviewTab();
+
+  function renderEmployeeLoansTable(loans) {
+    const el = document.getElementById('empLoansTable');
+    if (el) {
+      el.innerHTML = loans.length ? `<table><thead><tr><th>${t('dash_th_amount')}</th><th>${t('dash_th_term')}</th><th>${t('dash_th_repayment')}</th><th>${t('dash_th_status')}</th><th>${t('dash_th_docs')}</th><th>${t('dash_th_date')}</th><th>${t('dash_th_action')}</th></tr></thead><tbody>${loans.map(l=>`<tr><td>$${fmt(l.amount)}</td><td>${l.termDays||30} ${t('dash_days')}</td><td>$${fmt(l.repaymentAmount||l.total||0)}</td><td><span class="badge badge-${l.status}">${t('status_'+l.status)}</span></td><td>${renderDocLinks(l)}</td><td>${l.createdAt?new Date(l.createdAt.seconds*1000).toLocaleDateString():'—'}</td><td>${['active','overdue'].includes(l.status)?`<button class="btn-sm btn-approve pay-now-btn" data-loan-id="${l.id}">${t('dash_pay_now')}</button>`:'—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>${t('dash_no_loans_employee')}</p></div>`;
+      el.querySelectorAll('.pay-now-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const loanId = btn.dataset.loanId;
+          btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+          try { const r = await firebase.functions().httpsCallable('generatePaymentLink')({ loanId }); window.open(r.data.paymentUrl, '_blank'); }
+          catch (_) { showToast(t('dash_pay_error'), 'error'); }
+          finally { btn.disabled = false; btn.textContent = t('dash_pay_now'); }
+        });
+      });
+    }
+    // Update active loans list on overview
+    const activeList = document.getElementById('activeLoansList');
+    if (activeList) {
+      const active = loans.filter(l => ['active','approved','pending','overdue','disbursement_queued'].includes(l.status));
+      if (active.length) {
+        activeList.innerHTML = active.map(l => {
+          const daysInfo = getDaysInfo(l);
+          return `<div class="active-loan-item"><div class="active-loan-info"><div class="active-loan-amount">$${fmt(l.amount)} <span class="active-loan-total">→ $${fmt(l.repaymentAmount||l.total||0)}</span></div><div class="active-loan-meta"><span class="badge badge-${l.status}">${t('status_'+l.status)}</span>${daysInfo ? `<span class="active-loan-days ${daysInfo.cls}">${daysInfo.text}</span>` : ''}</div></div>${['active','overdue'].includes(l.status)?`<button class="btn-sm btn-approve pay-now-btn" data-loan-id="${l.id}">${t('ald_pay_now')}</button>`:''}</div>`;
+        }).join('');
+        activeList.querySelectorAll('.pay-now-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const loanId = btn.dataset.loanId;
+            btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+            try { const r = await firebase.functions().httpsCallable('generatePaymentLink')({ loanId }); window.open(r.data.paymentUrl, '_blank'); }
+            catch (_) { showToast(t('dash_pay_error'), 'error'); }
+            finally { btn.disabled = false; btn.textContent = t('ald_pay_now'); }
+          });
+        });
+      } else {
+        activeList.innerHTML = `<div class="empty-state" style="padding:20px"><p>${t('ald_no_active')}</p></div>`;
+      }
+    }
+    // Update next payment card
+    const nextCard = document.getElementById('nextPaymentContent');
+    if (nextCard) {
+      const nextLoan = loans.find(l => ['active','overdue'].includes(l.status) && l.dueDate);
+      if (nextLoan) {
+        const due = new Date(nextLoan.dueDate.seconds * 1000);
+        nextCard.innerHTML = `<div class="next-payment-amount">$${fmt(nextLoan.repaymentAmount||nextLoan.total||0)}</div><div class="next-payment-date">${due.toLocaleDateString()}</div><button class="btn-primary btn-sm pay-now-btn" data-loan-id="${nextLoan.id}" style="margin-top:12px">${t('ald_pay_now')}</button>`;
+        nextCard.querySelector('.pay-now-btn')?.addEventListener('click', async function() {
+          this.disabled = true; this.innerHTML = '<span class="spinner"></span>';
+          try { const r = await firebase.functions().httpsCallable('generatePaymentLink')({ loanId: this.dataset.loanId }); window.open(r.data.paymentUrl, '_blank'); }
+          catch (_) { showToast(t('dash_pay_error'), 'error'); }
+          finally { this.disabled = false; this.textContent = t('ald_pay_now'); }
+        });
+      } else {
+        nextCard.innerHTML = `<div class="empty-state" style="padding:12px"><p style="font-size:13px;color:var(--t3)">—</p></div>`;
+      }
+    }
+  }
+
+  function getDaysInfo(loan) {
+    if (!loan.dueDate || !['active','overdue'].includes(loan.status)) return null;
+    const due = new Date(loan.dueDate.seconds * 1000);
+    const now = new Date();
+    const diff = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+    if (diff > 0) return { text: diff + ' ' + t('ald_days_left'), cls: 'days-ok' };
+    return { text: Math.abs(diff) + ' ' + t('ald_overdue_days'), cls: 'days-overdue' };
+  }
+
+  function renderRepaymentTable(repayments) {
+    const el = document.getElementById('repaymentTable');
+    if (!el) return;
+    if (repayments.length) {
+      el.innerHTML = `<table><thead><tr><th>${t('ald_th_date')}</th><th>${t('ald_th_amount')}</th><th>${t('ald_th_method')}</th><th>${t('ald_th_status')}</th><th>${t('ald_th_ref')}</th></tr></thead><tbody>${repayments.map(r => `<tr><td>${r.paidAt ? new Date(r.paidAt.seconds*1000).toLocaleDateString() : '—'}</td><td>$${fmt(r.amount||0)}</td><td>${r.method||'—'}</td><td><span class="badge badge-${r.status||'paid'}">${t('status_'+(r.status||'paid'))}</span></td><td style="font-size:12px;color:var(--t3)">${r.reference||r.conektaOrderId||'—'}</td></tr>`).join('')}</tbody></table>`;
+    } else {
+      el.innerHTML = `<div class="empty-state"><p>${t('ald_no_repayments')}</p></div>`;
+    }
+  }
+
+  // Real-time loan listener
   if (window._unsubEmp) window._unsubEmp();
   window._unsubEmp = db.collection('loans').where('employeeId','==',uid).orderBy('createdAt','desc')
     .onSnapshot(snap => { renderEmployeeLoansTable(snap.docs.map(d=>({id:d.id,...d.data()}))); });
-<div class="modal-overlay" id="loanModal"><div class="modal" style="position:relative"><div class="modal-close" onclick="closeLoanModal()">✕</div><h3>${t('modal_request')}</h3><p class="modal-sub">${t('modal_available')}: $${fmt(emp.availableCredit)} MXN</p><form id="loanForm"><div class="form-group"><label>${t('modal_amount')}</label><input type="number" id="loanAmount" min="500" max="${emp.availableCredit}" step="100" value="1000" required></div><div class="form-group" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_term')}</span><span style="font-size:14px;font-weight:700;color:var(--t1)">${t('modal_term_30')} · ${t('modal_rate')}</span></div><div style="border-top:1px solid rgba(25,68,69,0.06);border-bottom:1px solid rgba(25,68,69,0.06);padding:20px 0;margin-bottom:16px"><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_loan_amount')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalAmount">$1,000</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_fee')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalFee">$300</span></div><div style="height:1px;background:rgba(25,68,69,0.06);margin:4px 0"></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-family:var(--df);font-size:15px;color:var(--t1)">${t('modal_total')}</span><span style="font-family:var(--df);font-size:18px;color:var(--t1)" id="modalTotal">$1,300</span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">${t('modal_due_date')}</span><span style="font-size:13px;font-weight:700;color:var(--t1)" id="modalDueDate"></span></div><div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:13px;color:var(--t3)">CAT (Costo Anual Total)</span><span class="cat-highlight" id="catDisplay"></span></div><p class="cat-note">El CAT es una medida estandarizada del costo. <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener">CONDUSEF</a></p></div><label style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-size:13px;color:var(--t2)"><input type="checkbox" id="termsCheck"><span>${t('modal_accept_terms')}</span></label><div class="auth-error" id="loanError" style="margin-bottom:12px"></div><button type="submit" class="btn-primary" id="loanSubmitBtn" disabled>${t('modal_confirm')}</button></form></div></div>`;
-  const amountIn=document.getElementById('loanAmount');
-  const termsCheck=document.getElementById('termsCheck');
-  const loanSubmitBtn=document.getElementById('loanSubmitBtn');
-  const loanError=document.getElementById('loanError');
-  const dueDate=new Date(Date.now()+30*24*60*60*1000);
-  document.getElementById('modalDueDate').textContent=dueDate.toLocaleDateString();
-  termsCheck.addEventListener('change',()=>{loanSubmitBtn.disabled=!termsCheck.checked;});
-  function updateModal(){const a=parseInt(amountIn.value)||0,fee=Math.round(a*0.30);document.getElementById('modalAmount').textContent='$'+fmt(a);document.getElementById('modalFee').textContent='$'+fmt(fee);document.getElementById('modalTotal').textContent='$'+fmt(a+fee);const cat=a>0?((Math.pow(1+fee/a,365/30)-1)*100).toFixed(0):'0';document.getElementById('catDisplay').textContent=cat+'% anual';}
-  amountIn.addEventListener('input',updateModal);
-  updateModal();
-  document.getElementById('loanForm').addEventListener('submit',async(e)=>{e.preventDefault();loanError.classList.remove('show');loanSubmitBtn.disabled=true;loanSubmitBtn.innerHTML='<span class="spinner"></span>'+t('modal_submitting');try{const amount=parseInt(amountIn.value);if(amount>emp.availableCredit)throw new Error(t('modal_exceed'));if(amount<500)throw new Error(t('modal_minimum'));await firebase.functions().httpsCallable('requestLoan')({amount,term:30});closeLoanModal();showToast(t('toast_loan_submitted'),'success');}catch(err){const msg=err.message||err.toString();loanError.textContent=msg;loanError.classList.add('show');loanSubmitBtn.disabled=false;loanSubmitBtn.textContent=t('modal_confirm');}});
+
+  // Real-time repayment listener
+  if (window._unsubRepayments) window._unsubRepayments();
+  window._unsubRepayments = db.collection('repayments').where('employeeId','==',uid).orderBy('paidAt','desc')
+    .onSnapshot(snap => { renderRepaymentTable(snap.docs.map(d=>({id:d.id,...d.data()}))); });
 }
-window.openLoanModal = function() { document.getElementById('loanModal')?.classList.add('show'); };
-window.closeLoanModal = function() { document.getElementById('loanModal')?.classList.remove('show'); };
+
+// ─── LOAN WIZARD (5-Step) ────────────────────────────────
+async function renderLoanWizard(app) {
+  app.innerHTML = '<div class="loading-page"><div class="spinner"></div></div>';
+  if (!auth.currentUser) { navigate('/login'); return; }
+  const uid = auth.currentUser.uid;
+  const empDoc = await db.collection('employees').doc(uid).get();
+  if (!empDoc.exists) { navigate('/employee/dashboard'); return; }
+  const emp = empDoc.data();
+
+  const wizState = {
+    step: 0,
+    clabe: emp.bankClabe || '',
+    amount: Math.min(1000, emp.availableCredit),
+    termsAccepted: false,
+    kycStatus: emp.kycStatus || null, // null, 'pending', 'completed', 'failed'
+    loanId: null,
+  };
+
+  const totalSteps = 5;
+  const dueDate = new Date(Date.now() + 30*24*60*60*1000);
+
+  function renderWizard() {
+    const stepNum = wizState.step + 1;
+    const progressPct = ((stepNum) / totalSteps) * 100;
+
+    app.innerHTML = `<div class="wiz-container"><div class="wiz-header"><button class="wiz-close" onclick="navigate('/employee/dashboard')">✕</button><div class="wiz-progress"><div class="wiz-progress-bar" style="width:${progressPct}%"></div></div><div class="wiz-step-label">${t('wiz_step')} ${stepNum} ${t('wiz_of')} ${totalSteps}</div></div><div class="wiz-body" id="wizBody"></div><div class="wiz-footer" id="wizFooter"></div></div>`;
+
+    const body = document.getElementById('wizBody');
+    const footer = document.getElementById('wizFooter');
+
+    if (wizState.step === 0) renderStep1(body, footer);
+    else if (wizState.step === 1) renderStep2(body, footer);
+    else if (wizState.step === 2) renderStep3(body, footer);
+    else if (wizState.step === 3) renderStep4(body, footer);
+    else if (wizState.step === 4) renderStep5(body, footer);
+  }
+
+  // Step 1: Personal Info
+  function renderStep1(body, footer) {
+    body.innerHTML = `<div class="wiz-step-header"><h2 class="wiz-title">${t('wiz_s1_h')}</h2><p class="wiz-sub">${t('wiz_s1_sub')}</p></div><div class="wiz-form"><div class="wiz-field"><label>${t('wiz_s1_name')}</label><input type="text" value="${emp.name||''}" disabled class="wiz-input disabled"></div><div class="wiz-field-row"><div class="wiz-field"><label>${t('wiz_s1_curp')}</label><input type="text" value="${emp.curp||'—'}" disabled class="wiz-input disabled"></div><div class="wiz-field"><label>${t('wiz_s1_rfc')}</label><input type="text" value="${emp.rfc||'—'}" disabled class="wiz-input disabled"></div></div><div class="wiz-field"><label>${t('wiz_s1_clabe')}</label><input type="text" id="wizClabe" value="${wizState.clabe}" maxlength="18" placeholder="${t('wiz_s1_clabe_ph')}" class="wiz-input" required></div>${emp.bankName ? `<div class="wiz-field"><label>${t('wiz_s1_bank')}</label><input type="text" value="${emp.bankName}" disabled class="wiz-input disabled"></div>` : ''}<div class="auth-error" id="wizError"></div></div>`;
+    footer.innerHTML = `<div></div><button class="btn-primary wiz-next" id="wizNext">${t('wiz_next')}</button>`;
+    const clabeInput = document.getElementById('wizClabe');
+    const nextBtn = document.getElementById('wizNext');
+    clabeInput.addEventListener('input', () => { wizState.clabe = clabeInput.value.replace(/\D/g,''); clabeInput.value = wizState.clabe; });
+    nextBtn.addEventListener('click', () => {
+      const err = document.getElementById('wizError');
+      if (wizState.clabe.length !== 18) { err.textContent = t('wiz_s1_clabe_ph') + ' (18)'; err.classList.add('show'); return; }
+      err.classList.remove('show');
+      wizState.step = 1; renderWizard();
+    });
+  }
+
+  // Step 2: Employment Verification
+  function renderStep2(body, footer) {
+    const tenure = emp.tenureMonths || (emp.startDate ? Math.round((Date.now() - emp.startDate.seconds*1000) / (1000*60*60*24*30)) : '—');
+    body.innerHTML = `<div class="wiz-step-header"><h2 class="wiz-title">${t('wiz_s2_h')}</h2><p class="wiz-sub">${t('wiz_s2_sub')}</p></div><div class="wiz-verification-card"><div class="wiz-verify-row"><span class="wiz-verify-label">${t('wiz_s2_employer')}</span><span class="wiz-verify-value">${emp.employerName||'—'}</span></div><div class="wiz-verify-row"><span class="wiz-verify-label">${t('wiz_s2_status')}</span><span class="wiz-verify-value"><span class="badge badge-active">${t('wiz_s2_active')}</span></span></div><div class="wiz-verify-row"><span class="wiz-verify-label">${t('wiz_s2_tenure')}</span><span class="wiz-verify-value">${tenure} ${t('wiz_s2_months')}</span></div><div class="wiz-verify-row"><span class="wiz-verify-label">${t('wiz_s2_salary')}</span><span class="wiz-verify-value">$${fmt(emp.monthlySalary||0)} MXN</span></div><div class="wiz-verified-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>${t('wiz_s2_verified')}</div></div>`;
+    footer.innerHTML = `<button class="btn-secondary wiz-back" id="wizBack">${t('wiz_back')}</button><button class="btn-primary wiz-next" id="wizNext">${t('wiz_next')}</button>`;
+    document.getElementById('wizBack').addEventListener('click', () => { wizState.step = 0; renderWizard(); });
+    document.getElementById('wizNext').addEventListener('click', () => { wizState.step = 2; renderWizard(); });
+  }
+
+  // Step 3: Loan Selection
+  function renderStep3(body, footer) {
+    const maxAmount = Math.min(emp.availableCredit, 5000);
+    const minAmount = 500;
+    body.innerHTML = `<div class="wiz-step-header"><h2 class="wiz-title">${t('wiz_s3_h')}</h2><p class="wiz-sub">${t('wiz_s3_sub')}</p></div><div class="wiz-slider-section"><div class="wiz-amount-display" id="wizAmountDisplay">$${fmt(wizState.amount)}</div><div class="wiz-slider-wrap"><span class="wiz-slider-min">$${fmt(minAmount)}</span><input type="range" id="wizSlider" min="${minAmount}" max="${maxAmount}" step="100" value="${wizState.amount}" class="wiz-slider"><span class="wiz-slider-max">$${fmt(maxAmount)}</span></div><div class="wiz-calc-grid"><div class="wiz-calc-row"><span>${t('wiz_s3_amount')}</span><span id="wizCalcAmount">$${fmt(wizState.amount)}</span></div><div class="wiz-calc-row"><span>${t('wiz_s3_fee')}</span><span id="wizCalcFee">$${fmt(Math.round(wizState.amount*0.3))}</span></div><div class="wiz-calc-divider"></div><div class="wiz-calc-row wiz-calc-total"><span>${t('wiz_s3_total')}</span><span id="wizCalcTotal">$${fmt(Math.round(wizState.amount*1.3))}</span></div><div class="wiz-calc-row"><span>${t('wiz_s3_due')}</span><span>${dueDate.toLocaleDateString()}</span></div><div class="wiz-calc-row"><span>${t('wiz_s3_cat')}</span><span id="wizCalcCat" class="cat-highlight"></span></div><div class="wiz-calc-row"><span>${t('wiz_s3_lti')}</span><span id="wizLti"></span></div></div><div class="wiz-term-badge">${t('wiz_s3_term')}</div></div>`;
+
+    const slider = document.getElementById('wizSlider');
+    function updateCalc() {
+      const a = parseInt(slider.value);
+      wizState.amount = a;
+      const fee = Math.round(a * 0.3);
+      document.getElementById('wizAmountDisplay').textContent = '$' + fmt(a);
+      document.getElementById('wizCalcAmount').textContent = '$' + fmt(a);
+      document.getElementById('wizCalcFee').textContent = '$' + fmt(fee);
+      document.getElementById('wizCalcTotal').textContent = '$' + fmt(a + fee);
+      const cat = a > 0 ? ((Math.pow(1 + fee/a, 365/30) - 1) * 100).toFixed(0) : '0';
+      document.getElementById('wizCalcCat').textContent = cat + '% anual';
+      const lti = emp.monthlySalary ? ((a / emp.monthlySalary) * 100).toFixed(0) : 0;
+      const ltiEl = document.getElementById('wizLti');
+      ltiEl.innerHTML = lti + '% <span class="lti-indicator ' + (lti <= 30 ? 'lti-ok' : 'lti-warn') + '">' + (lti <= 30 ? t('wiz_s3_lti_ok') : t('wiz_s3_lti_warn')) + '</span>';
+    }
+    slider.addEventListener('input', updateCalc);
+    updateCalc();
+
+    footer.innerHTML = `<button class="btn-secondary wiz-back" id="wizBack">${t('wiz_back')}</button><button class="btn-primary wiz-next" id="wizNext">${t('wiz_next')}</button>`;
+    document.getElementById('wizBack').addEventListener('click', () => { wizState.step = 1; renderWizard(); });
+    document.getElementById('wizNext').addEventListener('click', () => { wizState.step = 3; renderWizard(); });
+  }
+
+  // Step 4: MetaMap KYC
+  function renderStep4(body, footer) {
+    const alreadyVerified = wizState.kycStatus === 'completed' || emp.kycVerified;
+    if (alreadyVerified) {
+      body.innerHTML = `<div class="wiz-step-header"><h2 class="wiz-title">${t('wiz_s4_h')}</h2><p class="wiz-sub">${t('wiz_s4_sub')}</p></div><div class="wiz-kyc-status completed"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p>${t('wiz_s4_completed')}</p></div>`;
+      footer.innerHTML = `<button class="btn-secondary wiz-back" id="wizBack">${t('wiz_back')}</button><button class="btn-primary wiz-next" id="wizNext">${t('wiz_next')}</button>`;
+      document.getElementById('wizBack').addEventListener('click', () => { wizState.step = 2; renderWizard(); });
+      document.getElementById('wizNext').addEventListener('click', () => { wizState.step = 4; renderWizard(); });
+      return;
+    }
+
+    body.innerHTML = `<div class="wiz-step-header"><h2 class="wiz-title">${t('wiz_s4_h')}</h2><p class="wiz-sub">${t('wiz_s4_sub')}</p></div><div class="wiz-kyc-status" id="kycContainer"><button class="btn-primary" id="kycStartBtn">${t('wiz_s4_start')}</button></div>`;
+    footer.innerHTML = `<button class="btn-secondary wiz-back" id="wizBack">${t('wiz_back')}</button><button class="btn-primary wiz-next" id="wizNext" disabled>${t('wiz_next')}</button>`;
+    document.getElementById('wizBack').addEventListener('click', () => { wizState.step = 2; renderWizard(); });
+
+    const kycContainer = document.getElementById('kycContainer');
+    const nextBtn = document.getElementById('wizNext');
+
+    document.getElementById('kycStartBtn').addEventListener('click', async () => {
+      kycContainer.innerHTML = `<div class="wiz-kyc-spinner"><span class="spinner"></span><p>${t('wiz_s4_in_progress')}</p><p class="wiz-kyc-wait">${t('wiz_s4_wait')}</p></div>`;
+
+      // Open MetaMap verification URL (would be provided by backend)
+      try {
+        const result = await firebase.functions().httpsCallable('initiateKyc')({ employeeId: uid });
+        if (result.data?.verificationUrl) {
+          window.open(result.data.verificationUrl, '_blank');
+        }
+      } catch (_) {
+        // KYC initiation may not be available yet, listen for status updates anyway
+      }
+
+      // Listen for KYC status updates via Firestore onSnapshot
+      if (window._unsubWizard) window._unsubWizard();
+      window._unsubWizard = db.collection('employees').doc(uid).onSnapshot(doc => {
+        if (!doc.exists) return;
+        const data = doc.data();
+        if (data.kycVerified || data.kycStatus === 'completed') {
+          wizState.kycStatus = 'completed';
+          kycContainer.innerHTML = `<div class="wiz-kyc-status completed"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p>${t('wiz_s4_completed')}</p></div>`;
+          nextBtn.disabled = false;
+          if (window._unsubWizard) { window._unsubWizard(); window._unsubWizard = null; }
+        } else if (data.kycStatus === 'failed') {
+          wizState.kycStatus = 'failed';
+          kycContainer.innerHTML = `<div class="wiz-kyc-status failed"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><p>${t('wiz_s4_failed')}</p><button class="btn-primary" onclick="location.reload()">${t('wiz_s4_start')}</button></div>`;
+          if (window._unsubWizard) { window._unsubWizard(); window._unsubWizard = null; }
+        }
+      });
+    });
+
+    nextBtn.addEventListener('click', () => { wizState.step = 4; renderWizard(); });
+  }
+
+  // Step 5: Review & Sign
+  function renderStep5(body, footer) {
+    const fee = Math.round(wizState.amount * 0.3);
+    const total = wizState.amount + fee;
+    body.innerHTML = `<div class="wiz-step-header"><h2 class="wiz-title">${t('wiz_s5_h')}</h2><p class="wiz-sub">${t('wiz_s5_sub')}</p></div><div class="wiz-review"><div class="wiz-review-section"><h3>${t('wiz_s5_personal')}</h3><div class="wiz-review-row"><span>${t('wiz_s1_name')}</span><span>${emp.name||'—'}</span></div><div class="wiz-review-row"><span>${t('wiz_s1_curp')}</span><span>${emp.curp||'—'}</span></div><div class="wiz-review-row"><span>${t('wiz_s1_clabe')}</span><span>${wizState.clabe}</span></div><div class="wiz-review-row"><span>${t('wiz_s2_employer')}</span><span>${emp.employerName||'—'}</span></div></div><div class="wiz-review-section"><h3>${t('wiz_s5_loan_details')}</h3><div class="wiz-review-row"><span>${t('wiz_s3_amount')}</span><span>$${fmt(wizState.amount)}</span></div><div class="wiz-review-row"><span>${t('wiz_s3_fee')}</span><span>$${fmt(fee)}</span></div><div class="wiz-review-row wiz-review-total"><span>${t('wiz_s3_total')}</span><span>$${fmt(total)}</span></div><div class="wiz-review-row"><span>${t('wiz_s3_due')}</span><span>${dueDate.toLocaleDateString()}</span></div><div class="wiz-review-row"><span>${t('wiz_s3_term')}</span><span>30 ${t('dash_days')}</span></div></div></div><div class="wiz-sign-section"><label class="wiz-terms-check"><input type="checkbox" id="wizTerms"><span>${t('wiz_s5_terms')} <a href="/terms" target="_blank">${t('wiz_s5_terms_link')}</a></span></label><div class="auth-error" id="wizError"></div></div>`;
+
+    footer.innerHTML = `<button class="btn-secondary wiz-back" id="wizBack">${t('wiz_back')}</button><button class="btn-primary wiz-next" id="wizSubmit" disabled>${t('wiz_submit')}</button>`;
+
+    const termsCheck = document.getElementById('wizTerms');
+    const submitBtn = document.getElementById('wizSubmit');
+    const errorEl = document.getElementById('wizError');
+
+    termsCheck.addEventListener('change', () => { submitBtn.disabled = !termsCheck.checked; });
+    document.getElementById('wizBack').addEventListener('click', () => { wizState.step = 3; renderWizard(); });
+
+    submitBtn.addEventListener('click', async () => {
+      errorEl.classList.remove('show');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner"></span> ' + t('wiz_submitting');
+      try {
+        if (wizState.amount > emp.availableCredit) throw new Error(t('modal_exceed'));
+        if (wizState.amount < 500) throw new Error(t('modal_minimum'));
+
+        const result = await firebase.functions().httpsCallable('requestLoan')({
+          amount: wizState.amount,
+          term: 30,
+          bankAccountClabe: wizState.clabe,
+          termsAccepted: true,
+          employerCode: emp.employerCode || ''
+        });
+
+        wizState.loanId = result.data?.loanId;
+
+        // Show success and listen for loan status updates
+        app.innerHTML = `<div class="wiz-container"><div class="wiz-body" style="text-align:center;padding:60px 20px"><div class="wiz-success-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><h2 style="font-family:var(--df);font-size:28px;color:var(--t1);margin:20px 0 8px">${t('toast_loan_submitted')}</h2><p style="color:var(--t2);margin-bottom:24px">${t('toast_loan_submitted')}</p><div class="wiz-loan-tracker" id="loanTracker"><div class="tracker-step active"><div class="tracker-dot"></div><span>${t('status_pending')}</span></div><div class="tracker-line"></div><div class="tracker-step"><div class="tracker-dot"></div><span>${t('status_approved')}</span></div><div class="tracker-line"></div><div class="tracker-step"><div class="tracker-dot"></div><span>${t('status_active')}</span></div></div><button class="btn-primary" style="margin-top:32px" onclick="navigate('/employee/dashboard')">${t('dash_dashboard')}</button></div></div>`;
+
+        // Real-time loan status tracker
+        if (wizState.loanId) {
+          if (window._unsubWizard) window._unsubWizard();
+          window._unsubWizard = db.collection('loans').doc(wizState.loanId).onSnapshot(doc => {
+            if (!doc.exists) return;
+            const loan = doc.data();
+            const tracker = document.getElementById('loanTracker');
+            if (!tracker) { if (window._unsubWizard) { window._unsubWizard(); window._unsubWizard = null; } return; }
+            const statusOrder = ['pending','approved','active'];
+            const currentIdx = statusOrder.indexOf(loan.status);
+            tracker.querySelectorAll('.tracker-step').forEach((step, i) => {
+              step.classList.toggle('active', i <= currentIdx);
+              step.classList.toggle('current', i === currentIdx);
+            });
+            tracker.querySelectorAll('.tracker-line').forEach((line, i) => {
+              line.classList.toggle('active', i < currentIdx);
+            });
+            if (loan.status === 'rejected') {
+              tracker.innerHTML = `<div class="tracker-rejected"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><p>${t('status_rejected')}</p></div>`;
+            }
+          });
+        }
+
+        fireConfetti();
+      } catch (err) {
+        const msg = err.message || err.toString();
+        errorEl.textContent = msg; errorEl.classList.add('show');
+        submitBtn.disabled = false; submitBtn.textContent = t('wiz_submit');
+      }
+    });
+  }
+
+  renderWizard();
+}
 
 // ─── ADMIN PORTAL ────────────────────────────────────────
 function renderAdminPortal(app, activeTab) {
