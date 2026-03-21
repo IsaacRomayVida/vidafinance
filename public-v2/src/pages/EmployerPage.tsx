@@ -1,8 +1,8 @@
-import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { RichText } from '../components/shared/RichText';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 const arrow = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -13,15 +13,10 @@ const arrow = (
 export function EmployerPage() {
   const { t } = useTranslation();
   useRevealOnScroll();
+  useDocumentTitle(`VIDA — ${t('lp_e_badge')}`);
 
   return (
     <>
-      <Helmet>
-        <title>VIDA — {t('lp_e_badge')}</title>
-        <meta name="description" content={t('lp_e_sub')} />
-        <meta property="og:title" content={`VIDA — ${t('lp_e_badge')}`} />
-        <meta property="og:description" content={t('lp_e_sub')} />
-      </Helmet>
 
       <section className="hero" style={{ padding: '100px 0 80px' }}>
         <div className="hero-blob b1" /><div className="hero-blob b2" />

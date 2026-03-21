@@ -1,18 +1,15 @@
 import { useTranslation } from 'react-i18next';
-import { Helmet } from 'react-helmet-async';
 import { RichText } from '../components/shared/RichText';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export function SecurityPage() {
   const { t } = useTranslation();
   useRevealOnScroll();
+  useDocumentTitle(`VIDA — ${t('pg_sec_badge')}`);
 
   return (
     <>
-      <Helmet>
-        <title>VIDA — {t('pg_sec_badge')}</title>
-        <meta name="description" content={t('pg_sec_sub')} />
-      </Helmet>
 
       <section className="hero" style={{ padding: '100px 0 80px' }}>
         <div className="hero-blob b1" /><div className="hero-blob b2" />

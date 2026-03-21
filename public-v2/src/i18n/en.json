@@ -460,5 +460,16 @@
   "pg_press_brand_3_t": "Accent color",
   "pg_press_brand_3_d": "Gold #C9A84C — used as a signal color, never as background. Reserved for highlighting key data.",
   "pg_press_brand_4_t": "Typography",
-  "pg_press_brand_4_d": "DM Serif Display for headlines. DM Sans for body text. Both from Google Fonts."
+  "pg_press_brand_4_d": "DM Serif Display for headlines. DM Sans for body text. Both from Google Fonts.",
+
+  "auth_welcome": "Welcome back",
+  "auth_signin_sub": "Sign in to your VIDA account",
+  "auth_email": "Email",
+  "auth_email_placeholder": "you@company.com",
+  "auth_password": "Password",
+  "auth_password_placeholder": "Enter your password",
+  "auth_signing_in": "Signing in…",
+  "auth_signin_btn": "Sign In",
+  "auth_no_account": "Don't have an account?",
+  "auth_signup_link": "Get started"
 }

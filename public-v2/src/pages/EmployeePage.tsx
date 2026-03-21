@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react';
-import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { RichText } from '../components/shared/RichText';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -12,6 +12,7 @@ function fmt(n: number): string {
 export function EmployeePage() {
   const { t } = useTranslation();
   useRevealOnScroll();
+  useDocumentTitle(`VIDA — ${t('lp_m_badge')}`);
 
   const [salary, setSalary] = useState(15000);
   const credit = Math.min(Math.round(salary * 0.30 / 100) * 100, 5000);
@@ -31,11 +32,6 @@ export function EmployeePage() {
 
   return (
     <>
-      <Helmet>
-        <title>VIDA — {t('lp_m_badge')}</title>
-        <meta name="description" content={t('lp_m_sub')} />
-      </Helmet>
-
       {/* Hero */}
       <section className="hero" style={{ padding: '100px 0 80px' }}>
         <div className="hero-blob b1" /><div className="hero-blob b2" />
