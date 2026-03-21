@@ -110,7 +110,7 @@ export function Login() {
   };
 
   return (
-    <div className="auth-page">
+    <div className="auth-container">
       <div className="auth-card">
         <div className="nav-logo">
           <Link to="/">
@@ -120,7 +120,7 @@ export function Login() {
 
         {mode === 'login' ? (
           <>
-            <h2>{t('auth_welcome')}</h2>
+            <h2 className="auth-header">{t('auth_welcome')}</h2>
             <p className="auth-sub">{t('auth_signin_sub')}</p>
 
             {error && (
@@ -139,6 +139,7 @@ export function Login() {
               <div className="form-group">
                 <label>{t('auth_email')}</label>
                 <input
+                  className="auth-input"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -149,6 +150,7 @@ export function Login() {
               <div className="form-group">
                 <label>{t('auth_password')}</label>
                 <input
+                  className="auth-input"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -160,24 +162,19 @@ export function Login() {
               <p style={{ textAlign: 'right', marginBottom: '16px' }}>
                 <a
                   href="#"
+                  className="auth-link"
                   onClick={(e) => {
                     e.preventDefault();
                     setMode('forgot');
                     setError('');
                     setInfo('');
                   }}
-                  style={{
-                    fontSize: '13px',
-                    color: 'var(--t3)',
-                    borderBottom: '1px solid rgba(25,68,69,0.12)',
-                    paddingBottom: '1px',
-                  }}
                 >
                   {t('auth_forgot_password')}
                 </a>
               </p>
 
-              <button type="submit" className="btn-primary" disabled={loading}>
+              <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? (
                   <>
                     <span className="spinner" /> {t('auth_signing_in')}
@@ -195,7 +192,7 @@ export function Login() {
           </>
         ) : (
           <>
-            <h2>{t('auth_forgot_title')}</h2>
+            <h2 className="auth-header">{t('auth_forgot_title')}</h2>
             <p className="auth-sub">{t('auth_forgot_sub')}</p>
 
             {error && (
@@ -214,6 +211,7 @@ export function Login() {
               <div className="form-group">
                 <label>{t('auth_email')}</label>
                 <input
+                  className="auth-input"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -222,7 +220,7 @@ export function Login() {
                 />
               </div>
 
-              <button type="submit" className="btn-primary" disabled={loading}>
+              <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? t('auth_sending_reset') : t('auth_send_reset')}
               </button>
             </form>
@@ -230,6 +228,7 @@ export function Login() {
             <p className="auth-footer">
               <a
                 href="#"
+                className="auth-link"
                 onClick={(e) => {
                   e.preventDefault();
                   setMode('login');
@@ -246,11 +245,11 @@ export function Login() {
         <p className="auth-footer" style={{ marginTop: '12px' }}>
           <a
             href="#"
+            className="auth-link"
             onClick={(e) => {
               e.preventDefault();
               toggleLang();
             }}
-            style={{ color: 'var(--t3)' }}
           >
             {t('lang_toggle')}
           </a>
