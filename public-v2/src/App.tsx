@@ -29,6 +29,7 @@ import { ReviewQueue } from './pages/ReviewQueue';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { EmployerMgmt } from './pages/EmployerMgmt';
 import { AlertsPage } from './pages/AlertsPage';
+import { Onboarding } from './pages/Onboarding';
 import { NotFound } from './pages/NotFound';
 import './i18n';
 
@@ -53,7 +54,7 @@ export default function App() {
 
           {/* Get-started and onboarding redirect to contact */}
           <Route path="/get-started" element={<Navigate to="/contact" replace />} />
-          <Route path="/onboarding" element={<Navigate to="/contact" replace />} />
+          <Route path="/onboarding" element={<Onboarding />} />
 
           {/* Auth */}
           <Route path="/login" element={<Login />} />
