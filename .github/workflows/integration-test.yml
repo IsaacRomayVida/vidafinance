@@ -1,0 +1,105 @@
+name: Integration Tests — Staging Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test (staging or production)'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  STAGING_BASE: 'https://vida-{service}-staging.railway.app'
+  PROD_BASE: 'https://vida-{service}.railway.app'
+
+jobs:
+  smoke-tests:
+    name: Smoke Tests — ${{ inputs.environment || 'staging' }}
+    runs-on: ubuntu-latest
+    env:
+      TARGET_ENV: ${{ inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set base URLs
+        id: urls
+        run: |
+          if [ "$TARGET_ENV" = "production" ]; then
+            echo "payment=https://vida-payment-server.railway.app" >> "$GITHUB_OUTPUT"
+            echo "softcredito=https://vida-softcredito.railway.app" >> "$GITHUB_OUTPUT"
+            echo "notifications=https://vida-notifications.railway.app" >> "$GITHUB_OUTPUT"
+            echo "pdf=https://vida-pdf-generator.railway.app" >> "$GITHUB_OUTPUT"
+            echo "ml=https://vida-ml-service.railway.app" >> "$GITHUB_OUTPUT"
+          else
+            echo "payment=https://vida-payment-server-staging.railway.app" >> "$GITHUB_OUTPUT"
+            echo "softcredito=https://vida-softcredito-staging.railway.app" >> "$GITHUB_OUTPUT"
+            echo "notifications=https://vida-notifications-staging.railway.app" >> "$GITHUB_OUTPUT"
+            echo "pdf=https://vida-pdf-generator-staging.railway.app" >> "$GITHUB_OUTPUT"
+            echo "ml=https://vida-ml-service-staging.railway.app" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Health checks
+        run: |
+          check_health() {
+            local url="$1"
+            local service="$2"
+            local max_attempts=3
+            local attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              local status
+              status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+              if [ "$status" = "200" ]; then
+                echo "✅ $service — healthy"
+                return 0
+              fi
+              echo "  attempt $attempt/$max_attempts: $service returned $status"
+              sleep 10
+              attempt=$((attempt + 1))
+            done
+            echo "❌ $service — unhealthy (last: $status)"
+            return 1
+          }
+
+          FAILED=0
+          check_health "${{ steps.urls.outputs.payment }}/health"       "payment-server"   || FAILED=1
+          check_health "${{ steps.urls.outputs.softcredito }}/health"   "softcredito"       || FAILED=1
+          check_health "${{ steps.urls.outputs.notifications }}/health" "notifications"     || FAILED=1
+          check_health "${{ steps.urls.outputs.pdf }}/health"           "pdf-generator"     || FAILED=1
+          check_health "${{ steps.urls.outputs.ml }}/health"            "ml-service"        || FAILED=1
+
+          if [ $FAILED -ne 0 ]; then
+            echo "🚨 One or more services failed health checks"
+            exit 1
+          fi
+
+      - name: Basic loan flow smoke test (staging only)
+        if: env.TARGET_ENV == 'staging'
+        continue-on-error: true
+        run: |
+          echo "🔍 Testing basic API endpoints on staging..."
+
+          # Test payment server responds to unknown routes with 404 (not 500)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            "${{ steps.urls.outputs.payment }}/api/nonexistent" 2>/dev/null || echo "000")
+          if [ "$STATUS" = "404" ] || [ "$STATUS" = "401" ]; then
+            echo "✅ payment-server — proper error handling (HTTP $STATUS)"
+          else
+            echo "⚠️  payment-server — unexpected response: HTTP $STATUS"
+          fi
+
+          # Test ML service scoring endpoint exists
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -X POST "${{ steps.urls.outputs.ml }}/score" \
+            -H "Content-Type: application/json" \
+            -d '{}' 2>/dev/null || echo "000")
+          if [ "$STATUS" != "500" ] && [ "$STATUS" != "000" ]; then
+            echo "✅ ml-service /score — responds (HTTP $STATUS)"
+          else
+            echo "⚠️  ml-service /score — unexpected response: HTTP $STATUS"
+          fi
+
+          echo "✅ Smoke tests complete"

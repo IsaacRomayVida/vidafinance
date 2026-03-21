@@ -25,9 +25,8 @@ export const getEmployerDashboard = onCall(
           .limit(100)
           .get(),
         db
-          .collection('employers')
-          .doc(employerId)
           .collection('employees')
+          .where('employerId', '==', employerId)
           .where('active', '==', true)
           .get(),
       ]);
