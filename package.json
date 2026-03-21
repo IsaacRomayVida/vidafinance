@@ -3,6 +3,9 @@
     "verify": "node scripts/verify-production.js",
     "test": "jest",
     "test:rules": "jest firestore.rules.test",
+    "test:integration": "jest --config tests/integration/jest.config.js && cd services/ml-service && python3 -m pytest ../../tests/integration/test_decision_paths.py -v",
+    "test:integration:js": "jest --config tests/integration/jest.config.js",
+    "test:integration:py": "cd services/ml-service && python3 -m pytest ../../tests/integration/test_decision_paths.py -v",
     "prepare": "husky"
   },
   "jest": {
