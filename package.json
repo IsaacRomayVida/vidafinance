@@ -3,8 +3,9 @@
     "verify": "node scripts/verify-production.js",
     "test": "jest",
     "test:rules": "jest firestore.rules.test",
-    "lint": "eslint 'functions/src/**/*.ts' 'services/**/*.ts'",
-    "lint:fix": "eslint --fix 'functions/src/**/*.ts' 'services/**/*.ts'",
+    "test:integration": "jest --config tests/integration/jest.config.js && cd services/ml-service && python3 -m pytest ../../tests/integration/test_decision_paths.py -v",
+    "test:integration:js": "jest --config tests/integration/jest.config.js",
+    "test:integration:py": "cd services/ml-service && python3 -m pytest ../../tests/integration/test_decision_paths.py -v",
     "prepare": "husky"
   },
   "jest": {
@@ -31,9 +32,6 @@
     "@firebase/rules-unit-testing": "^5.0.0",
     "@types/jest": "^30.0.0",
     "firebase": "^12.10.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "eslint": "^8.57.0",
     "husky": "^9.1.7",
     "jest": "^30.3.0",
     "lint-staged": "^16.4.0",

@@ -8,7 +8,6 @@ on:
   pull_request:
     branches:
       - main
-      - develop
 
 env:
   NODE_VERSION: '20'
@@ -16,67 +15,10 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────
-  # JOB 1a: Lint & Typecheck (parallel with test)
-  # ─────────────────────────────────────────────
-  lint-and-typecheck:
-    name: Lint & Typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
-
-      - name: Install root deps
-        run: npm ci
-
-      - name: Install functions deps
-        run: cd functions && npm ci
-
-      - name: Install notification-service deps
-        run: cd services/notification-service && npm ci
-
-      - name: Install softcredito-adapter deps
-        run: cd services/softcredito-adapter && npm ci
-
-      - name: ESLint — functions
-        run: cd functions && npm run lint
-
-      - name: ESLint — notification-service
-        run: cd services/notification-service && npm run lint
-
-      - name: ESLint — softcredito-adapter
-        run: cd services/softcredito-adapter && npm run lint
-
-      - name: TypeScript typecheck — functions
-        run: cd functions && npm run typecheck
-
-      - name: TypeScript typecheck — notification-service
-        run: cd services/notification-service && npm run typecheck
-
-      - name: TypeScript typecheck — softcredito-adapter
-        run: cd services/softcredito-adapter && npm run typecheck
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Lint — ml-service (best-effort)
-        continue-on-error: true
-        run: |
-          pip install flake8
-          cd services/ml-service && flake8 --max-line-length 120 --exclude __pycache__,models/*.joblib .
-
-  # ─────────────────────────────────────────────
-  # JOB 1b: Unit Tests (parallel with lint)
+  # JOB 1: Lint & Test
   # ─────────────────────────────────────────────
   test:
-    name: Unit Tests
+    name: Lint, Type-check & Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,29 +36,69 @@ jobs:
       - name: Install functions deps
         run: cd functions && npm ci
 
-      - name: Cloud Functions unit tests
-        run: cd functions && npm run test:ci
+      - name: TypeScript check (Cloud Functions)
+        run: cd functions && npm run build
+
+      - name: Run functions unit tests
+        run: cd functions && npm test
+
+  # ─────────────────────────────────────────────
+  # JOB 1b: Integration Tests
+  # ─────────────────────────────────────────────
+  integration-test:
+    name: Integration Tests (Decision Engine)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install ml-service deps
-        run: pip install -r services/ml-service/requirements.txt
+      - name: Install root deps
+        run: npm ci
 
-      - name: ml-service unit tests
-        continue-on-error: true
-        run: cd services/ml-service && python -m pytest tests/ -v
+      - name: Install Python deps (ml-service)
+        run: |
+          cd services/ml-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Run JS integration tests
+        run: npx jest --config tests/integration/jest.config.js
+        env:
+          METAMAP_MOCK: 'true'
+          RISKSEAL_MOCK: 'true'
+          INCODE_MOCK: 'true'
+          TRUORA_MOCK: 'true'
+          SARDINE_MOCK: 'true'
+
+      - name: Run Python integration tests
+        run: cd services/ml-service && python3 -m pytest ../../tests/integration/test_decision_paths.py -v
+        env:
+          METAMAP_MOCK: 'true'
+          RISKSEAL_MOCK: 'true'
+          INCODE_MOCK: 'true'
+          TRUORA_MOCK: 'true'
+          SARDINE_MOCK: 'true'
 
   # ─────────────────────────────────────────────
-  # JOB 2: Deploy to Staging
+  # JOB 2: Deploy Firebase
   # ─────────────────────────────────────────────
-  deploy-staging:
-    name: Deploy to Staging
+  deploy-firebase:
+    name: Deploy Firebase (Hosting + Functions + Rules)
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: [test, integration-test]
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
@@ -148,157 +130,82 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Deploy Firebase to Staging
+      - name: Deploy to Firebase (Staging)
+        if: github.ref == 'refs/heads/develop'
         run: |
           firebase deploy \
-            --only functions,firestore:rules,firestore:indexes \
+            --only functions,firestore:rules,firestore:indexes,storage \
             --project vida-finance \
             --non-interactive
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
+      - name: Deploy to Firebase (Production)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          firebase deploy \
+            --only functions,firestore:rules,firestore:indexes,storage \
+            --project vida-finance \
+            --non-interactive
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+  # ─────────────────────────────────────────────
+  # JOB 3: Deploy Railway Microservices
+  # ─────────────────────────────────────────────
+  deploy-railway:
+    name: Deploy Railway Microservices
+    runs-on: ubuntu-latest
+    needs: [test, integration-test]
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: vida-payment-server
+            dir: services/payment-server
+          - name: vida-softcredito
+            dir: services/softcredito-adapter
+          - name: vida-notifications
+            dir: services/notification-service
+          - name: vida-pdf-generator
+            dir: services/pdf-generator
+          - name: vida-ml-service
+            dir: services/ml-service
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Deploy Railway services to Staging
+      - name: Deploy ${{ matrix.service.name }} to Staging
+        if: github.ref == 'refs/heads/develop'
         continue-on-error: true
         run: |
-          for service in vida-payment-server vida-softcredito vida-notifications vida-pdf-generator vida-ml-service; do
-            echo "🚀 Deploying $service to staging..."
-            railway redeploy --service "$service" --yes || \
-              echo "⚠️  railway redeploy skipped for $service"
-          done
+          railway redeploy --service ${{ matrix.service.name }} --yes || \
+            echo "⚠️  railway redeploy skipped for ${{ matrix.service.name }} — Railway deploys via GitHub integration"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
 
-  # ─────────────────────────────────────────────
-  # JOB 3: Integration / Smoke Tests
-  # ─────────────────────────────────────────────
-  integration-test:
-    name: Staging Smoke Tests
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    steps:
-      - name: Wait for services to stabilize
-        run: sleep 30
-
-      - name: Smoke test — staging health checks
-        run: |
-          check_health() {
-            local url="$1"
-            local service="$2"
-            local max_attempts=5
-            local attempt=1
-            while [ $attempt -le $max_attempts ]; do
-              local status
-              status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$url" 2>/dev/null || echo "000")
-              if [ "$status" = "200" ]; then
-                echo "✅ $service — healthy (HTTP $status)"
-                return 0
-              fi
-              echo "  attempt $attempt/$max_attempts: $service returned $status, retrying in 15s..."
-              sleep 15
-              attempt=$((attempt + 1))
-            done
-            echo "❌ $service — not healthy after $max_attempts attempts (last: $status)"
-            return 1
-          }
-
-          FAILED=0
-          check_health "https://vida-payment-server-staging.railway.app/health"  "payment-server"   || FAILED=1
-          check_health "https://vida-softcredito-staging.railway.app/health"     "softcredito"       || FAILED=1
-          check_health "https://vida-notifications-staging.railway.app/health"   "notifications"     || FAILED=1
-          check_health "https://vida-pdf-generator-staging.railway.app/health"   "pdf-generator"     || FAILED=1
-          check_health "https://vida-ml-service-staging.railway.app/health"      "ml-service"        || FAILED=1
-
-          if [ $FAILED -ne 0 ]; then
-            echo "🚨 One or more staging services failed health checks"
-            exit 1
-          fi
-          echo "✅ All staging services healthy"
-
-      - name: Notify Slack — staging deployed
-        if: success()
+      - name: Deploy ${{ matrix.service.name }} to Production
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         run: |
-          [ -n "$SLACK_URL" ] && curl -X POST "$SLACK_URL" \
-            -H 'Content-type: application/json' \
-            --data '{"text":"✅ VIDA Staging deploy succeeded — all services healthy"}' || true
-        env:
-          SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-  # ─────────────────────────────────────────────
-  # JOB 4: Deploy to Production (manual gate)
-  # ─────────────────────────────────────────────
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: functions/package-lock.json
-
-      - name: Install functions deps
-        run: cd functions && npm ci
-
-      - name: Write functions .env
-        run: |
-          cat > functions/.env << ENVEOF
-          REDIS_URL=${{ secrets.REDIS_URL }}
-          CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
-          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
-          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
-          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
-          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
-          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
-          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
-          ENVEOF
-
-      - name: Build Cloud Functions
-        run: cd functions && npm run build
-
-      - name: Install Firebase CLI
-        run: npm install -g firebase-tools
-
-      - name: Deploy Firebase to Production
-        run: |
-          firebase deploy \
-            --only functions,firestore:rules,firestore:indexes \
-            --project vida-finance \
-            --non-interactive
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy Railway services to Production
-        continue-on-error: true
-        run: |
-          for service in vida-payment-server vida-softcredito vida-notifications vida-pdf-generator vida-ml-service; do
-            echo "🚀 Deploying $service to production..."
-            railway redeploy --service "$service" --yes || \
-              echo "⚠️  railway redeploy skipped for $service"
-          done
+          railway redeploy --service ${{ matrix.service.name }} --yes || \
+            echo "⚠️  railway redeploy skipped for ${{ matrix.service.name }} — Railway deploys via GitHub integration"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
   # ─────────────────────────────────────────────
-  # JOB 5: Post-Deploy Health Check (Production)
+  # JOB 4: Health Check Post-Deploy
   # ─────────────────────────────────────────────
   health-check:
-    name: Production Health Checks
+    name: Post-Deploy Health Checks
     runs-on: ubuntu-latest
-    needs: deploy-production
+    needs: [deploy-firebase, deploy-railway]
+    if: github.event_name == 'push'
     steps:
-      - name: Wait for services to stabilize
+      - name: Wait 30s for services to stabilize
         run: sleep 30
 
       - name: Health check all Railway services
@@ -334,7 +241,7 @@ jobs:
         run: |
           [ -n "$SLACK_URL" ] && curl -X POST "$SLACK_URL" \
             -H 'Content-type: application/json' \
-            --data '{"text":"✅ VIDA Deploy to *production* succeeded — all services healthy"}' || true
+            --data "{\"text\":\"✅ VIDA Deploy to *${{ env.ENVIRONMENT }}* succeeded — all services healthy\"}" || true
         env:
           SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
@@ -344,6 +251,6 @@ jobs:
         run: |
           [ -n "$SLACK_URL" ] && curl -X POST "$SLACK_URL" \
             -H 'Content-type: application/json' \
-            --data '{"text":"🚨 VIDA Deploy to *production* FAILED — check GitHub Actions"}' || true
+            --data "{\"text\":\"🚨 VIDA Deploy to *${{ env.ENVIRONMENT }}* FAILED — check GitHub Actions\"}" || true
         env:
           SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
