@@ -30,6 +30,7 @@ import { PortfolioPage } from './pages/PortfolioPage';
 import { EmployerMgmt } from './pages/EmployerMgmt';
 import { AlertsPage } from './pages/AlertsPage';
 import { NotFound } from './pages/NotFound';
+import { Onboarding } from './pages/Onboarding';
 import './i18n';
 
 export default function App() {
@@ -51,9 +52,10 @@ export default function App() {
             <Route path="/press" element={<PressPage />} />
           </Route>
 
-          {/* Get-started and onboarding redirect to contact */}
-          <Route path="/get-started" element={<Navigate to="/contact" replace />} />
-          <Route path="/onboarding" element={<Navigate to="/contact" replace />} />
+          {/* Onboarding wizard (standalone, no marketing layout) */}
+          <Route path="/get-started" element={<Navigate to="/onboarding" replace />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/signup" element={<Navigate to="/onboarding" replace />} />
 
           {/* Auth */}
           <Route path="/login" element={<Login />} />
