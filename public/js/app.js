@@ -42,6 +42,18 @@ const i18n = {
     tab_all:'Todos',tab_pending:'Pendientes',tab_approved:'Aprobados',tab_active:'Activos',tab_paid:'Completados',tab_rejected:'Rechazados',
     dash_emp_name:'Nombre',dash_emp_email:'Email',dash_emp_limit:'Límite',dash_emp_available:'Disponible',dash_emp_registered:'Registro',dash_emp_search_placeholder:'Buscar por nombre o email...',dash_no_employees:'Aún no hay empleados registrados.',
 
+    // Employer HR Dashboard
+    ehr_overview:'Resumen',ehr_employees:'Empleados',ehr_deductions:'Deducciones',ehr_onboarding:'Onboarding',ehr_analytics:'Analítica',
+    ehr_total_employees:'Total Empleados',ehr_active_loans:'Préstamos Activos',ehr_total_disbursed:'Total Desembolsado',ehr_overdue_count:'Vencidos',ehr_adoption_rate:'Tasa de Adopción',ehr_outstanding:'Saldo Pendiente',
+    ehr_upcoming_deductions:'Deducciones Próximas',ehr_th_employee_id:'ID Empleado',ehr_th_amount:'Monto',ehr_th_due_date:'Fecha de Vencimiento',ehr_th_loan_id:'ID Préstamo',ehr_no_deductions:'No hay deducciones próximas.',
+    ehr_emp_status:'Estado',ehr_emp_active:'Activo',ehr_emp_inactive:'Inactivo',ehr_emp_credit:'Crédito Disponible',ehr_emp_loans:'Préstamos Activos',ehr_emp_search:'Buscar empleado...',ehr_emp_filter_all:'Todos',ehr_emp_filter_active:'Activos',ehr_emp_filter_inactive:'Inactivos',ehr_no_employees:'No hay empleados registrados.',
+    ehr_ded_current:'Ciclo Actual',ehr_ded_history:'Historial',ehr_ded_employee:'Empleado',ehr_ded_amount:'Monto',ehr_ded_due:'Vencimiento',ehr_ded_status:'Estado',ehr_ded_loan:'Préstamo',ehr_ded_deducted:'Deducido',ehr_ded_pending:'Pendiente',ehr_ded_missed:'Faltante',ehr_ded_export:'Exportar CSV',ehr_no_deductions_hist:'No hay deducciones registradas.',ehr_ded_month:'Mes',
+    ehr_onb_step1_h:'Ingresa el RFC<br>de tu <em>empresa</em>.',ehr_onb_step1_sub:'Verificaremos la información fiscal automáticamente.',ehr_onb_step1_placeholder:'RFC de la empresa (13 caracteres)',ehr_onb_step1_btn:'Verificar RFC',ehr_onb_step1_checking:'Verificando...',
+    ehr_onb_step2_h:'Sube los documentos<br><em>requeridos</em>.',ehr_onb_step2_sub:'Documentos para completar la verificación de tu empresa.',ehr_onb_step2_rfc:'Constancia de Situación Fiscal',ehr_onb_step2_acta:'Acta Constitutiva',ehr_onb_step2_id:'Identificación del representante legal',ehr_onb_step2_address:'Comprobante de domicilio (< 3 meses)',
+    ehr_onb_step3_h:'Resultados del<br><em>screening</em>.',ehr_onb_step3_sub:'Revisión de resultados del análisis. Pendiente de aprobación Parte B.',ehr_onb_step3_status:'Estado del screening',ehr_onb_step3_passed:'Aprobado',ehr_onb_step3_review:'En revisión',ehr_onb_step3_waiting:'Esperando aprobación Parte B...',
+    ehr_onb_step4_h:'Integración de<br><em>nómina</em>.',ehr_onb_step4_sub:'Configura la conexión con tu sistema de nómina.',ehr_onb_step4_method:'Método de integración',ehr_onb_step4_api:'API directa',ehr_onb_step4_sftp:'SFTP',ehr_onb_step4_manual:'Manual (CSV)',ehr_onb_step4_payroll:'Sistema de nómina',ehr_onb_step4_frequency:'Frecuencia de nómina',ehr_onb_step4_weekly:'Semanal',ehr_onb_step4_biweekly:'Quincenal',ehr_onb_step4_monthly:'Mensual',ehr_onb_step4_save:'Guardar Configuración',ehr_onb_step4_saving:'Guardando...',ehr_onb_complete:'¡Configuración completada!',
+    ehr_an_adoption:'Tasa de Adopción',ehr_an_loan_volume:'Volumen de Préstamos',ehr_an_default_rate:'Tasa de Morosidad',ehr_an_benchmark:'Benchmarking Sectorial',ehr_an_over_time:'Últimos 6 meses',ehr_an_by_month:'Por mes',ehr_an_by_cohort:'Por cohorte',ehr_an_sector_avg:'Promedio del sector',ehr_an_your_rate:'Tu empresa',ehr_an_no_data:'No hay datos suficientes para mostrar.',
+
     // Onboarding
     onb_welcome:'Bienvenido a <em>VIDA</em>',onb_welcome_sub:'Elige cómo quieres comenzar',onb_role_employer_title:'Soy Empleador',onb_role_employer_desc:'Quiero ofrecer VIDA como beneficio a mi equipo',onb_role_employee_title:'Soy Empleado',onb_role_employee_desc:'Mi empresa ya tiene VIDA y quiero acceder a mi crédito',onb_already_account:'¿Ya tienes cuenta?',onb_login:'Inicia sesión',
     onb_e_step1_h:'¿Cómo se llama<br>tu <em>empresa</em>?',onb_e_step1_sub:'Este será el nombre visible para tus empleados.',onb_e_step1_placeholder:'Nombre de tu empresa',onb_next:'Continuar',
@@ -324,6 +336,18 @@ const i18n = {
     status_pending:'pending',status_approved:'approved',status_disbursement_queued:'disbursement queued',status_active:'active',status_rejected:'rejected',status_paid:'paid',status_overdue:'overdue',
     tab_all:'All',tab_pending:'Pending',tab_approved:'Approved',tab_active:'Active',tab_paid:'Completed',tab_rejected:'Rejected',
     dash_emp_name:'Name',dash_emp_email:'Email',dash_emp_limit:'Limit',dash_emp_available:'Available',dash_emp_registered:'Registered',dash_emp_search_placeholder:'Search by name or email...',dash_no_employees:'No employees registered yet.',
+
+    // Employer HR Dashboard
+    ehr_overview:'Overview',ehr_employees:'Employees',ehr_deductions:'Deductions',ehr_onboarding:'Onboarding',ehr_analytics:'Analytics',
+    ehr_total_employees:'Total Employees',ehr_active_loans:'Active Loans',ehr_total_disbursed:'Total Disbursed',ehr_overdue_count:'Overdue',ehr_adoption_rate:'Adoption Rate',ehr_outstanding:'Outstanding Balance',
+    ehr_upcoming_deductions:'Upcoming Deductions',ehr_th_employee_id:'Employee ID',ehr_th_amount:'Amount',ehr_th_due_date:'Due Date',ehr_th_loan_id:'Loan ID',ehr_no_deductions:'No upcoming deductions.',
+    ehr_emp_status:'Status',ehr_emp_active:'Active',ehr_emp_inactive:'Inactive',ehr_emp_credit:'Available Credit',ehr_emp_loans:'Active Loans',ehr_emp_search:'Search employee...',ehr_emp_filter_all:'All',ehr_emp_filter_active:'Active',ehr_emp_filter_inactive:'Inactive',ehr_no_employees:'No employees registered.',
+    ehr_ded_current:'Current Cycle',ehr_ded_history:'History',ehr_ded_employee:'Employee',ehr_ded_amount:'Amount',ehr_ded_due:'Due Date',ehr_ded_status:'Status',ehr_ded_loan:'Loan',ehr_ded_deducted:'Deducted',ehr_ded_pending:'Pending',ehr_ded_missed:'Missed',ehr_ded_export:'Export CSV',ehr_no_deductions_hist:'No deductions recorded.',ehr_ded_month:'Month',
+    ehr_onb_step1_h:'Enter your company<br><em>RFC</em>.',ehr_onb_step1_sub:'We will automatically verify your tax information.',ehr_onb_step1_placeholder:'Company RFC (13 characters)',ehr_onb_step1_btn:'Verify RFC',ehr_onb_step1_checking:'Verifying...',
+    ehr_onb_step2_h:'Upload required<br><em>documents</em>.',ehr_onb_step2_sub:'Documents to complete your company verification.',ehr_onb_step2_rfc:'Tax Registration Certificate',ehr_onb_step2_acta:'Articles of Incorporation',ehr_onb_step2_id:'Legal representative ID',ehr_onb_step2_address:'Proof of address (< 3 months)',
+    ehr_onb_step3_h:'Screening<br><em>results</em>.',ehr_onb_step3_sub:'Review of screening analysis results. Pending Part B approval.',ehr_onb_step3_status:'Screening status',ehr_onb_step3_passed:'Passed',ehr_onb_step3_review:'Under review',ehr_onb_step3_waiting:'Awaiting Part B approval...',
+    ehr_onb_step4_h:'Payroll<br><em>integration</em>.',ehr_onb_step4_sub:'Configure the connection with your payroll system.',ehr_onb_step4_method:'Integration method',ehr_onb_step4_api:'Direct API',ehr_onb_step4_sftp:'SFTP',ehr_onb_step4_manual:'Manual (CSV)',ehr_onb_step4_payroll:'Payroll system',ehr_onb_step4_frequency:'Pay frequency',ehr_onb_step4_weekly:'Weekly',ehr_onb_step4_biweekly:'Biweekly',ehr_onb_step4_monthly:'Monthly',ehr_onb_step4_save:'Save Configuration',ehr_onb_step4_saving:'Saving...',ehr_onb_complete:'Configuration complete!',
+    ehr_an_adoption:'Adoption Rate',ehr_an_loan_volume:'Loan Volume',ehr_an_default_rate:'Default Rate',ehr_an_benchmark:'Sector Benchmarking',ehr_an_over_time:'Last 6 months',ehr_an_by_month:'By month',ehr_an_by_cohort:'By cohort',ehr_an_sector_avg:'Sector average',ehr_an_your_rate:'Your company',ehr_an_no_data:'Not enough data to display.',
 
     // Onboarding
     onb_welcome:'Welcome to <em>VIDA</em>',onb_welcome_sub:'Choose how you want to get started',onb_role_employer_title:'I\'m an Employer',onb_role_employer_desc:'I want to offer VIDA as a benefit for my team',onb_role_employee_title:'I\'m an Employee',onb_role_employee_desc:'My company already has VIDA and I want to access my credit',onb_already_account:'Already have an account?',onb_login:'Sign in',
@@ -626,6 +650,10 @@ const routes = {
   '/contact': renderContact,
   '/press': renderPress,
   '/employer/dashboard': renderEmployerDashboard,
+  '/employer/employees': (app) => renderEmployerHR(app, 'employees'),
+  '/employer/deductions': (app) => renderEmployerHR(app, 'deductions'),
+  '/employer/onboarding': (app) => renderEmployerHR(app, 'onboarding'),
+  '/employer/analytics': (app) => renderEmployerHR(app, 'analytics'),
   '/employee/dashboard': renderEmployeeDashboard,
   '/admin':            (app) => renderAdminPortal(app, 'employers'),
   '/admin/employers':  (app) => renderAdminPortal(app, 'employers'),
@@ -1700,16 +1728,26 @@ async function renderEmployerDashboard(app) {
     return;
   }
   if (emp.status && emp.status !== 'active' && emp.status !== 'pending_verification') { navigate('/'); return; }
+
+  // Fetch dashboard data from Cloud Function
+  let dashData = null;
+  try {
+    const fn = firebase.functions().httpsCallable('getEmployerDashboard');
+    const result = await fn({});
+    dashData = result.data;
+  } catch (_) { /* fallback to local data */ }
+
+  const stats = dashData?.stats || {};
   let allLoans = [], currentTab = 'all';
   if (window._unsubDash) window._unsubDash();
 
   function renderDashShell() {
     const pending = allLoans.filter(l => l.status === 'pending').length;
     const active = allLoans.filter(l => l.status === 'approved' || l.status === 'active').length;
-    const totalDisbursed = allLoans.filter(l => l.status !== 'rejected' && l.status !== 'pending').reduce((s, l) => s + l.amount, 0);
-    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav"><a href="#" class="dash-nav-link active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>${t('dash_dashboard')}</a><a href="#" class="dash-nav-link" data-tab="employees"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${t('dash_employees')}</a><a href="#" class="dash-nav-link" data-tab="loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>${t('dash_loans')}</a></nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('dash_total_employees')}</div><div class="stat-value">${emp.totalEmployees||0}</div></div><div class="stat-card"><div class="stat-label">${t('dash_active_loans')}</div><div class="stat-value">${active}</div></div><div class="stat-card"><div class="stat-label">${t('dash_pending_requests')}</div><div class="stat-value">${pending}</div></div><div class="stat-card"><div class="stat-label">${t('dash_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div></div><div id="dashTabContent"></div></div></div></div>`;
+    const totalDisbursed = stats.totalDisbursed || allLoans.filter(l => l.status !== 'rejected' && l.status !== 'pending').reduce((s, l) => s + l.amount, 0);
+    app.innerHTML = `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav">${ehrNavItems('dashboard')}</nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content"><div class="stat-grid"><div class="stat-card"><div class="stat-label">${t('ehr_total_employees')}</div><div class="stat-value">${stats.totalEmployees || emp.totalEmployees || 0}</div></div><div class="stat-card"><div class="stat-label">${t('ehr_active_loans')}</div><div class="stat-value">${stats.activeLoans || active}</div></div><div class="stat-card"><div class="stat-label">${t('ehr_overdue_count')}</div><div class="stat-value">${stats.overdueCount || 0}</div></div><div class="stat-card"><div class="stat-label">${t('ehr_total_disbursed')}</div><div class="stat-value">$${fmt(totalDisbursed)}</div><div class="stat-change">MXN</div></div><div class="stat-card"><div class="stat-label">${t('ehr_adoption_rate')}</div><div class="stat-value">${stats.adoptionRate || '0%'}</div></div><div class="stat-card"><div class="stat-label">${t('ehr_outstanding')}</div><div class="stat-value">$${fmt(stats.outstandingBalance || 0)}</div><div class="stat-change">MXN</div></div></div>${renderUpcomingDeductions(dashData?.upcomingDeductions)}<div id="dashTabContent"></div></div></div></div>`;
     renderLoanTable(allLoans, currentTab);
-    bindSideNav(uid, emp);
+    ehrBindNav();
   }
 
   window._unsubDash = db.collection('loans')
@@ -1719,17 +1757,9 @@ async function renderEmployerDashboard(app) {
       renderDashShell();
     });
 
-  function bindSideNav(uid, emp) {
-    document.querySelectorAll('.dash-nav-link').forEach(a => {
-      a.addEventListener('click', e => {
-        e.preventDefault();
-        document.querySelectorAll('.dash-nav-link').forEach(x => x.classList.remove('active'));
-        a.classList.add('active');
-        const tab = a.dataset.tab;
-        if (tab === 'dashboard' || tab === 'loans') renderLoanTable(allLoans, currentTab);
-        else if (tab === 'employees') renderEmployeesTab(uid);
-      });
-    });
+  function renderUpcomingDeductions(deductions) {
+    if (!deductions || !deductions.length) return '';
+    return `<div class="card" style="margin-bottom:24px"><div class="card-title">${t('ehr_upcoming_deductions')}</div><div class="table-wrap"><table><thead><tr><th>${t('ehr_th_employee_id')}</th><th>${t('ehr_th_amount')}</th><th>${t('ehr_th_due_date')}</th><th>${t('ehr_th_loan_id')}</th></tr></thead><tbody>${deductions.map(d => `<tr><td style="font-size:12px">${d.employeeId||'—'}</td><td>$${fmt(d.amount||0)}</td><td>${d.dueDate ? (d.dueDate.seconds ? new Date(d.dueDate.seconds*1000).toLocaleDateString() : new Date(d.dueDate).toLocaleDateString()) : '—'}</td><td style="font-size:12px;color:var(--t3)">${d.loanId||'—'}</td></tr>`).join('')}</tbody></table></div></div>`;
   }
 
   function renderLoanTable(loans, tab) {
@@ -1759,30 +1789,381 @@ async function renderEmployerDashboard(app) {
       });
     }
   }
+}
 
-  async function renderEmployeesTab(uid) {
-    const container = document.getElementById('dashTabContent');
-    if (!container) return;
-    container.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>';
-    const snap = await db.collection('employees').where('employerId','==',uid).get();
-    const employees = snap.docs.map(d => ({id:d.id,...d.data()}));
-    renderEmployeesContent(employees, container);
+// ─── Employer HR Nav Helper ─────────────────────────────
+function ehrNavItems(activeTab) {
+  const items = [
+    { key: 'dashboard', path: '/employer/dashboard', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>', label: 'ehr_overview' },
+    { key: 'employees', path: '/employer/employees', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>', label: 'ehr_employees' },
+    { key: 'deductions', path: '/employer/deductions', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>', label: 'ehr_deductions' },
+    { key: 'onboarding', path: '/employer/onboarding', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>', label: 'ehr_onboarding' },
+    { key: 'analytics', path: '/employer/analytics', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>', label: 'ehr_analytics' },
+  ];
+  return items.map(i => `<a href="${i.path}" class="dash-nav-link${i.key === activeTab ? ' active' : ''}">${i.icon}${t(i.label)}</a>`).join('');
+}
+
+function ehrBindNav() {
+  document.querySelectorAll('.dash-nav-link').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const href = a.getAttribute('href');
+      if (href) navigate(href);
+    });
+  });
+}
+
+// ─── EMPLOYER HR PAGES ──────────────────────────────────
+async function renderEmployerHR(app, tab) {
+  app.innerHTML = '<div class="loading-page"><div class="spinner"></div></div>';
+  if (!auth.currentUser) { navigate('/login'); return; }
+  const uid = auth.currentUser.uid;
+  const empDoc = await db.collection('employers').doc(uid).get();
+  if (!empDoc.exists) { navigate('/employee/dashboard'); return; }
+  const emp = empDoc.data();
+
+  function shell(content) {
+    return `<div class="dash"><aside class="dash-side"><div class="nav-logo">${vidaLogo()}</div><nav class="dash-nav">${ehrNavItems(tab)}</nav><button class="dash-logout" onclick="auth.signOut().then(()=>navigate('/'))"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>${t('dash_signout')}</button></aside><div class="dash-main"><div class="dash-header"><h1>${emp.companyName}</h1><div class="dash-user"><span>${t('dash_employer_code')}: <strong>${emp.employerCode}</strong></span><a href="#" onclick="event.preventDefault();toggleLang()" style="font-size:12px;font-weight:600;color:var(--brand);margin-left:12px">${t('lang_toggle')}</a><div class="dash-avatar">${emp.name?.charAt(0)||'E'}</div></div></div><div class="dash-content">${content}</div></div></div>`;
   }
 
-  function renderEmployeesContent(employees, container, query) {
-    const q = (query || '').toLowerCase();
-    const filtered = q ? employees.filter(e => (e.name||'').toLowerCase().includes(q) || (e.email||'').toLowerCase().includes(q)) : employees;
-    const searchLabel = currentLang === 'es' ? 'Buscar empleado...' : 'Search employee...';
-    const thName = currentLang === 'es' ? 'Nombre' : 'Name';
-    const thEmail = 'Email';
-    const thLimit = currentLang === 'es' ? 'Límite' : 'Limit';
-    const thAvail = currentLang === 'es' ? 'Disponible' : 'Available';
-    const thDate = currentLang === 'es' ? 'Registro' : 'Registered';
+  if (tab === 'employees') await renderEhrEmployees(app, uid, emp, shell);
+  else if (tab === 'deductions') await renderEhrDeductions(app, uid, emp, shell);
+  else if (tab === 'onboarding') await renderEhrOnboarding(app, uid, emp, shell);
+  else if (tab === 'analytics') await renderEhrAnalytics(app, uid, emp, shell);
 
-    container.innerHTML = `<div class="card"><div class="card-title">${t('dash_employees')}</div><div style="margin-bottom:16px"><input type="text" id="empSearchInput" placeholder="${searchLabel}" value="${query||''}" style="width:100%;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none;transition:border .2s"></div><div class="table-wrap">${filtered.length?`<table><thead><tr><th>${thName}</th><th>${thEmail}</th><th>${thLimit}</th><th>${thAvail}</th><th>${thDate}</th></tr></thead><tbody>${filtered.map(e=>`<tr><td>${e.name||'—'}</td><td>${e.email||'—'}</td><td>$${fmt(e.creditLimit||0)}</td><td>$${fmt(e.availableCredit||0)}</td><td>${e.createdAt?new Date(e.createdAt.seconds*1000).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:`<div class="empty-state"><p>${currentLang==='es'?'No se encontraron empleados':'No employees found'}</p></div>`}</div></div>`;
-    const searchIn = document.getElementById('empSearchInput');
-    if (searchIn) searchIn.addEventListener('input', () => renderEmployeesContent(employees, container, searchIn.value));
+  ehrBindNav();
+}
+
+// ─── Employee Roster ────────────────────────────────────
+async function renderEhrEmployees(app, uid, emp, shell) {
+  app.innerHTML = shell('<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>');
+  ehrBindNav();
+
+  const [empSnap, loanSnap] = await Promise.all([
+    db.collection('employers').doc(uid).collection('employees').get(),
+    db.collection('loans').where('employerId', '==', uid).where('status', 'in', ['active', 'disbursed']).get()
+  ]);
+
+  const loansByEmployee = {};
+  loanSnap.docs.forEach(d => {
+    const l = d.data();
+    const eid = l.userId || l.employeeId;
+    if (eid) loansByEmployee[eid] = (loansByEmployee[eid] || 0) + 1;
+  });
+
+  const employees = empSnap.docs.map(d => {
+    const data = d.data();
+    return { id: d.id, ...data, activeLoans: loansByEmployee[d.id] || 0 };
+  });
+
+  function renderTable(filter, query) {
+    let filtered = employees;
+    if (filter === 'active') filtered = filtered.filter(e => e.active !== false);
+    else if (filter === 'inactive') filtered = filtered.filter(e => e.active === false);
+    if (query) {
+      const q = query.toLowerCase();
+      filtered = filtered.filter(e => (e.name||'').toLowerCase().includes(q) || (e.email||'').toLowerCase().includes(q));
+    }
+
+    const filterBtns = ['all','active','inactive'].map(f => `<button class="ehr-filter-btn${f===filter?' active':''}" data-filter="${f}">${t('ehr_emp_filter_'+f)}</button>`).join('');
+    const tableHtml = filtered.length ? `<table><thead><tr><th>${t('dash_emp_name')}</th><th>${t('dash_emp_email')}</th><th>${t('ehr_emp_status')}</th><th>${t('ehr_emp_credit')}</th><th>${t('ehr_emp_loans')}</th><th>${t('dash_emp_registered')}</th></tr></thead><tbody>${filtered.map(e => `<tr><td>${e.name||'—'}</td><td>${e.email||'—'}</td><td><span class="badge ${e.active !== false ? 'badge-active' : 'badge-rejected'}">${e.active !== false ? t('ehr_emp_active') : t('ehr_emp_inactive')}</span></td><td>$${fmt(e.availableCredit||e.creditLimit||0)}</td><td>${e.activeLoans}</td><td>${e.createdAt ? new Date((e.createdAt.seconds||0)*1000).toLocaleDateString() : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><p>${t('ehr_no_employees')}</p></div>`;
+
+    const content = `<div class="card"><div class="card-title">${t('ehr_employees')} <span style="font-size:13px;font-weight:400;color:var(--t3);margin-left:8px">(${employees.length})</span></div><div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap"><input type="text" id="ehrEmpSearch" placeholder="${t('ehr_emp_search')}" value="${query||''}" style="flex:1;min-width:200px;max-width:320px;padding:10px 14px;border:1px solid rgba(25,68,69,0.1);border-radius:8px;font-size:13px;outline:none"><div class="ehr-filter-group">${filterBtns}</div></div><div class="table-wrap">${tableHtml}</div></div>`;
+
+    const container = document.querySelector('.dash-content');
+    if (container) {
+      container.innerHTML = content;
+      document.getElementById('ehrEmpSearch')?.addEventListener('input', (e) => renderTable(filter, e.target.value));
+      container.querySelectorAll('.ehr-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => renderTable(btn.dataset.filter, document.getElementById('ehrEmpSearch')?.value));
+      });
+    }
   }
+
+  app.innerHTML = shell('');
+  ehrBindNav();
+  renderTable('all', '');
+}
+
+// ─── Deductions Report ──────────────────────────────────
+async function renderEhrDeductions(app, uid, emp, shell) {
+  app.innerHTML = shell('<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>');
+  ehrBindNav();
+
+  const loansSnap = await db.collection('loans')
+    .where('employerId', '==', uid)
+    .where('status', 'in', ['active', 'disbursed', 'paid', 'overdue'])
+    .orderBy('dueDate', 'desc')
+    .get();
+
+  const allDeductions = loansSnap.docs.map(d => {
+    const l = d.data();
+    const due = l.dueDate ? new Date((l.dueDate.seconds||0)*1000) : null;
+    let dedStatus = 'pending';
+    if (l.status === 'paid') dedStatus = 'deducted';
+    else if (l.status === 'overdue') dedStatus = 'missed';
+    return {
+      id: d.id, employeeName: l.employeeName || l.userId || '—',
+      amount: l.totalRepaymentAmount || l.repaymentAmount || l.amount || 0,
+      dueDate: due, status: dedStatus, loanId: l.loanId || d.id,
+      month: due ? due.toISOString().slice(0,7) : 'unknown'
+    };
+  });
+
+  const now = new Date();
+  const currentMonth = now.toISOString().slice(0,7);
+  const currentDeductions = allDeductions.filter(d => d.month === currentMonth);
+  let activeView = 'current';
+
+  function render() {
+    const deductions = activeView === 'current' ? currentDeductions : allDeductions;
+    const statusBadge = (s) => {
+      if (s === 'deducted') return `<span class="badge badge-active">${t('ehr_ded_deducted')}</span>`;
+      if (s === 'missed') return `<span class="badge badge-overdue">${t('ehr_ded_missed')}</span>`;
+      return `<span class="badge badge-pending">${t('ehr_ded_pending')}</span>`;
+    };
+
+    const tableHtml = deductions.length ? `<table><thead><tr><th>${t('ehr_ded_employee')}</th><th>${t('ehr_ded_amount')}</th><th>${t('ehr_ded_due')}</th><th>${t('ehr_ded_status')}</th><th>${t('ehr_ded_loan')}</th></tr></thead><tbody>${deductions.map(d => `<tr><td>${d.employeeName}</td><td>$${fmt(d.amount)}</td><td>${d.dueDate ? d.dueDate.toLocaleDateString() : '—'}</td><td>${statusBadge(d.status)}</td><td style="font-size:12px;color:var(--t3)">${d.loanId}</td></tr>`).join('')}</tbody></table>` : `<div class="empty-state"><p>${activeView === 'current' ? t('ehr_no_deductions') : t('ehr_no_deductions_hist')}</p></div>`;
+
+    const content = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px"><div class="card-title" style="margin-bottom:0">${t('ehr_deductions')}</div><button class="btn-sm btn-approve" id="ehrDedExport" style="font-size:12px">${t('ehr_ded_export')}</button></div><div class="ehr-filter-group" style="margin-bottom:16px"><button class="ehr-filter-btn${activeView==='current'?' active':''}" data-view="current">${t('ehr_ded_current')}</button><button class="ehr-filter-btn${activeView==='history'?' active':''}" data-view="history">${t('ehr_ded_history')}</button></div><div class="table-wrap">${tableHtml}</div></div>`;
+
+    const container = document.querySelector('.dash-content');
+    if (container) {
+      container.innerHTML = content;
+      container.querySelectorAll('.ehr-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => { activeView = btn.dataset.view; render(); });
+      });
+      document.getElementById('ehrDedExport')?.addEventListener('click', () => {
+        const data = activeView === 'current' ? currentDeductions : allDeductions;
+        const header = [t('ehr_ded_employee'), t('ehr_ded_amount'), t('ehr_ded_due'), t('ehr_ded_status'), t('ehr_ded_loan')].join(',');
+        const rows = data.map(d => [
+          '"' + (d.employeeName||'').replace(/"/g,'""') + '"',
+          d.amount,
+          d.dueDate ? d.dueDate.toISOString().split('T')[0] : '',
+          d.status,
+          d.loanId
+        ].join(','));
+        const csv = header + '\n' + rows.join('\n');
+        const a = document.createElement('a');
+        a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+        a.download = 'deductions_' + new Date().toISOString().split('T')[0] + '.csv';
+        a.click();
+      });
+    }
+  }
+
+  app.innerHTML = shell('');
+  ehrBindNav();
+  render();
+}
+
+// ─── Employer Onboarding Wizard ─────────────────────────
+async function renderEhrOnboarding(app, uid, emp, shell) {
+  let step = emp.onboardingStep || 0;
+  if (emp.status === 'active' && step >= 4) step = 4; // completed
+
+  function render() {
+    let stepContent = '';
+    const progressPct = Math.min(((step + 1) / 4) * 100, 100);
+    const progressBar = `<div class="ehr-wizard-progress"><div class="ehr-wizard-progress-fill" style="width:${progressPct}%"></div></div><div class="ehr-wizard-steps"><span class="${step>=0?'active':''}">1</span><span class="${step>=1?'active':''}">2</span><span class="${step>=2?'active':''}">3</span><span class="${step>=3?'active':''}">4</span></div>`;
+
+    if (step === 0) {
+      stepContent = `<div class="ehr-wizard-card"><h2 class="ehr-wizard-h">${t('ehr_onb_step1_h')}</h2><p class="ehr-wizard-sub">${t('ehr_onb_step1_sub')}</p><div class="form-group" style="margin:24px 0"><input type="text" id="ehrRfcInput" placeholder="${t('ehr_onb_step1_placeholder')}" maxlength="13" style="width:100%;padding:14px;border:1px solid rgba(25,68,69,0.12);border-radius:10px;font-size:15px;text-transform:uppercase;letter-spacing:1px;outline:none"></div><div id="ehrRfcResult" style="min-height:24px;margin-bottom:16px"></div><button class="btn-primary" id="ehrRfcBtn" disabled>${t('ehr_onb_step1_btn')}</button></div>`;
+    } else if (step === 1) {
+      const docRows = ['rfc','acta','id','address'].map(key => `<div class="onb-upload-row"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0"><span style="font-size:13px;font-weight:600;color:var(--t1)">${t('ehr_onb_step2_'+key)}</span><label class="onb-upload-btn" id="ehrUpload_${key}"><input type="file" accept=".pdf,image/*" style="display:none" data-doc="${key}">${t('onb_e_step4_upload')}</label></div></div>`).join('');
+      stepContent = `<div class="ehr-wizard-card"><h2 class="ehr-wizard-h">${t('ehr_onb_step2_h')}</h2><p class="ehr-wizard-sub">${t('ehr_onb_step2_sub')}</p><div style="margin:24px 0">${docRows}</div><button class="btn-primary" id="ehrDocNext" disabled>${t('onb_next')}</button></div>`;
+    } else if (step === 2) {
+      const screeningStatus = emp.screeningPassed ? t('ehr_onb_step3_passed') : t('ehr_onb_step3_review');
+      const statusClass = emp.screeningPassed ? 'badge-active' : 'badge-pending';
+      stepContent = `<div class="ehr-wizard-card"><h2 class="ehr-wizard-h">${t('ehr_onb_step3_h')}</h2><p class="ehr-wizard-sub">${t('ehr_onb_step3_sub')}</p><div style="margin:24px 0;text-align:center"><div style="margin-bottom:16px"><span class="badge ${statusClass}" style="font-size:14px;padding:8px 20px">${screeningStatus}</span></div>${!emp.screeningPassed ? `<p style="color:var(--t3);font-size:13px">${t('ehr_onb_step3_waiting')}</p>` : `<button class="btn-primary" id="ehrScreenNext">${t('onb_next')}</button>`}</div></div>`;
+    } else if (step === 3) {
+      const payrollSystems = ['Nomipaq','Aspel NOI','CONTPAQi','Workday','ADP',t('onb_e_step3_payroll_other')];
+      stepContent = `<div class="ehr-wizard-card"><h2 class="ehr-wizard-h">${t('ehr_onb_step4_h')}</h2><p class="ehr-wizard-sub">${t('ehr_onb_step4_sub')}</p><form id="ehrIntegrationForm" style="margin:24px 0"><div class="form-group" style="margin-bottom:16px"><label style="font-size:13px;font-weight:600;color:var(--t1);display:block;margin-bottom:6px">${t('ehr_onb_step4_method')}</label><div class="ehr-filter-group"><button type="button" class="ehr-filter-btn active" data-method="api">${t('ehr_onb_step4_api')}</button><button type="button" class="ehr-filter-btn" data-method="sftp">${t('ehr_onb_step4_sftp')}</button><button type="button" class="ehr-filter-btn" data-method="manual">${t('ehr_onb_step4_manual')}</button></div></div><div class="form-group" style="margin-bottom:16px"><label style="font-size:13px;font-weight:600;color:var(--t1);display:block;margin-bottom:6px">${t('ehr_onb_step4_payroll')}</label><select id="ehrPayrollSystem" style="width:100%;padding:12px;border:1px solid rgba(25,68,69,0.12);border-radius:8px;font-size:13px;outline:none">${payrollSystems.map(s => `<option value="${s}">${s}</option>`).join('')}</select></div><div class="form-group" style="margin-bottom:24px"><label style="font-size:13px;font-weight:600;color:var(--t1);display:block;margin-bottom:6px">${t('ehr_onb_step4_frequency')}</label><div class="ehr-filter-group"><button type="button" class="ehr-filter-btn" data-freq="weekly">${t('ehr_onb_step4_weekly')}</button><button type="button" class="ehr-filter-btn active" data-freq="biweekly">${t('ehr_onb_step4_biweekly')}</button><button type="button" class="ehr-filter-btn" data-freq="monthly">${t('ehr_onb_step4_monthly')}</button></div></div><button type="submit" class="btn-primary" id="ehrSaveIntegration">${t('ehr_onb_step4_save')}</button></form></div>`;
+    } else {
+      stepContent = `<div class="ehr-wizard-card" style="text-align:center"><div class="onb-check-circle" style="background:rgba(36,122,110,0.1);margin:0 auto 20px"><svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><h2 class="ehr-wizard-h" style="text-align:center">${t('ehr_onb_complete')}</h2><button class="btn-primary" style="margin-top:20px" onclick="navigate('/employer/dashboard')">${t('ehr_overview')}</button></div>`;
+    }
+
+    const container = document.querySelector('.dash-content');
+    if (container) {
+      container.innerHTML = (step < 4 ? progressBar : '') + stepContent;
+      bindWizardStep();
+    }
+  }
+
+  let selectedMethod = 'api', selectedFreq = 'biweekly';
+  const uploadedDocs = {};
+
+  function bindWizardStep() {
+    // Step 0: RFC verification
+    const rfcInput = document.getElementById('ehrRfcInput');
+    const rfcBtn = document.getElementById('ehrRfcBtn');
+    if (rfcInput && rfcBtn) {
+      rfcInput.addEventListener('input', () => {
+        rfcInput.value = rfcInput.value.toUpperCase();
+        rfcBtn.disabled = rfcInput.value.length < 12;
+      });
+      rfcBtn.addEventListener('click', async () => {
+        rfcBtn.disabled = true; rfcBtn.textContent = t('ehr_onb_step1_checking');
+        const resultEl = document.getElementById('ehrRfcResult');
+        try {
+          await db.collection('employers').doc(uid).update({ rfc: rfcInput.value, onboardingStep: 1, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          if (resultEl) resultEl.innerHTML = `<span style="color:var(--success);font-size:13px;font-weight:600">RFC ${rfcInput.value} — ${t('ehr_onb_step3_passed')}</span>`;
+          step = 1;
+          setTimeout(render, 800);
+        } catch (e) {
+          if (resultEl) resultEl.innerHTML = `<span style="color:var(--danger);font-size:13px">${e.message}</span>`;
+          rfcBtn.disabled = false; rfcBtn.textContent = t('ehr_onb_step1_btn');
+        }
+      });
+    }
+
+    // Step 1: Document uploads
+    document.querySelectorAll('[data-doc]').forEach(input => {
+      input.addEventListener('change', async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const key = input.dataset.doc;
+        const label = input.closest('.onb-upload-btn');
+        label.classList.add('uploading');
+        label.textContent = t('onb_e_step4_uploading');
+        try {
+          const ref = storage.ref(`employers/${uid}/onboarding/${key}_${Date.now()}`);
+          await ref.put(file);
+          const url = await ref.getDownloadURL();
+          uploadedDocs[key] = url;
+          label.classList.remove('uploading');
+          label.classList.add('done');
+          label.textContent = t('onb_e_step4_done');
+        } catch (e) {
+          label.classList.remove('uploading');
+          label.classList.add('error');
+          label.textContent = t('onb_e_step4_error');
+        }
+        const docNext = document.getElementById('ehrDocNext');
+        if (docNext) docNext.disabled = Object.keys(uploadedDocs).length < 2;
+      });
+    });
+    document.getElementById('ehrDocNext')?.addEventListener('click', async () => {
+      await db.collection('employers').doc(uid).update({ onboardingDocs: uploadedDocs, onboardingStep: 2, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      step = 2; render();
+    });
+
+    // Step 2: Screening next
+    document.getElementById('ehrScreenNext')?.addEventListener('click', async () => {
+      await db.collection('employers').doc(uid).update({ onboardingStep: 3, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      step = 3; render();
+    });
+
+    // Step 3: Integration setup
+    document.querySelectorAll('[data-method]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.closest('.ehr-filter-group').querySelectorAll('.ehr-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedMethod = btn.dataset.method;
+      });
+    });
+    document.querySelectorAll('[data-freq]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.closest('.ehr-filter-group').querySelectorAll('.ehr-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedFreq = btn.dataset.freq;
+      });
+    });
+    document.getElementById('ehrIntegrationForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const saveBtn = document.getElementById('ehrSaveIntegration');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = t('ehr_onb_step4_saving'); }
+      const payrollSystem = document.getElementById('ehrPayrollSystem')?.value;
+      try {
+        await db.collection('employers').doc(uid).update({
+          integrationMethod: selectedMethod, payrollSystem, payFrequency: selectedFreq,
+          onboardingStep: 4, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        step = 4; render();
+        showToast(t('ehr_onb_complete'), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = t('ehr_onb_step4_save'); }
+      }
+    });
+  }
+
+  app.innerHTML = shell('');
+  ehrBindNav();
+  render();
+}
+
+// ─── Credit Usage Analytics ─────────────────────────────
+async function renderEhrAnalytics(app, uid, emp, shell) {
+  app.innerHTML = shell('<div style="padding:40px;text-align:center"><span class="spinner" style="border-color:rgba(25,68,69,0.1);border-top-color:var(--brand)"></span></div>');
+  ehrBindNav();
+
+  const [loansSnap, empSnap] = await Promise.all([
+    db.collection('loans').where('employerId', '==', uid).get(),
+    db.collection('employers').doc(uid).collection('employees').get()
+  ]);
+
+  const loans = loansSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const totalEmployees = empSnap.size || 1;
+
+  // Build monthly data for last 6 months
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ key: d.toISOString().slice(0,7), label: d.toLocaleDateString(currentLang === 'es' ? 'es-MX' : 'en-US', { month: 'short', year: '2-digit' }) });
+  }
+
+  const monthlyData = months.map(m => {
+    const monthLoans = loans.filter(l => l.createdAt && new Date((l.createdAt.seconds||0)*1000).toISOString().slice(0,7) === m.key);
+    const activeInMonth = monthLoans.filter(l => ['active','disbursed','paid','overdue'].includes(l.status));
+    const uniqueBorrowers = new Set(activeInMonth.map(l => l.userId || l.employeeId)).size;
+    const overdueInMonth = monthLoans.filter(l => l.status === 'overdue').length;
+    const maturedInMonth = monthLoans.filter(l => ['paid','overdue'].includes(l.status)).length;
+    return {
+      ...m,
+      volume: monthLoans.length,
+      totalAmount: monthLoans.reduce((s,l) => s + (l.amount||0), 0),
+      adoptionRate: Math.round((uniqueBorrowers / totalEmployees) * 100),
+      defaultRate: maturedInMonth > 0 ? Math.round((overdueInMonth / maturedInMonth) * 100) : 0
+    };
+  });
+
+  const maxVolume = Math.max(...monthlyData.map(m => m.volume), 1);
+  const maxAdoption = Math.max(...monthlyData.map(m => m.adoptionRate), 1);
+
+  // Sector benchmark (anonymized/static for now)
+  const sectorAvg = { adoption: 12, defaultRate: 4 };
+  const yourAdoption = monthlyData[monthlyData.length-1]?.adoptionRate || 0;
+  const yourDefault = monthlyData[monthlyData.length-1]?.defaultRate || 0;
+
+  const chartBar = (values, maxVal, color) => values.map((v, i) => {
+    const pct = maxVal > 0 ? Math.round((v / maxVal) * 100) : 0;
+    return `<div class="ehr-chart-col"><div class="ehr-chart-bar" style="height:${Math.max(pct, 4)}%;background:${color}"></div><div class="ehr-chart-label">${months[i].label}</div></div>`;
+  }).join('');
+
+  const content = `
+    <div class="ehr-analytics-grid">
+      <div class="card ehr-chart-card"><div class="card-title">${t('ehr_an_adoption')}</div><p style="font-size:12px;color:var(--t3);margin-bottom:16px">${t('ehr_an_over_time')}</p><div class="ehr-chart">${chartBar(monthlyData.map(m=>m.adoptionRate), maxAdoption, 'var(--brand)')}</div></div>
+      <div class="card ehr-chart-card"><div class="card-title">${t('ehr_an_loan_volume')}</div><p style="font-size:12px;color:var(--t3);margin-bottom:16px">${t('ehr_an_by_month')}</p><div class="ehr-chart">${chartBar(monthlyData.map(m=>m.volume), maxVolume, 'var(--aqua)')}</div></div>
+      <div class="card ehr-chart-card"><div class="card-title">${t('ehr_an_default_rate')}</div><p style="font-size:12px;color:var(--t3);margin-bottom:16px">${t('ehr_an_by_cohort')}</p><div class="ehr-chart">${chartBar(monthlyData.map(m=>m.defaultRate), 100, 'var(--danger)')}</div></div>
+      <div class="card ehr-chart-card"><div class="card-title">${t('ehr_an_benchmark')}</div><p style="font-size:12px;color:var(--t3);margin-bottom:16px">${t('ehr_an_adoption')}</p>
+        <div class="ehr-benchmark">
+          <div class="ehr-bench-row"><span class="ehr-bench-label">${t('ehr_an_your_rate')}</span><div class="ehr-bench-bar-wrap"><div class="ehr-bench-bar" style="width:${Math.min(yourAdoption,100)}%;background:var(--brand)"></div></div><span class="ehr-bench-val">${yourAdoption}%</span></div>
+          <div class="ehr-bench-row"><span class="ehr-bench-label">${t('ehr_an_sector_avg')}</span><div class="ehr-bench-bar-wrap"><div class="ehr-bench-bar" style="width:${Math.min(sectorAvg.adoption,100)}%;background:var(--t3)"></div></div><span class="ehr-bench-val">${sectorAvg.adoption}%</span></div>
+        </div>
+        <div style="margin-top:20px"><p style="font-size:12px;color:var(--t3);margin-bottom:8px">${t('ehr_an_default_rate')}</p>
+          <div class="ehr-benchmark">
+            <div class="ehr-bench-row"><span class="ehr-bench-label">${t('ehr_an_your_rate')}</span><div class="ehr-bench-bar-wrap"><div class="ehr-bench-bar" style="width:${Math.min(yourDefault*5,100)}%;background:${yourDefault > sectorAvg.defaultRate ? 'var(--danger)' : 'var(--success)'}"></div></div><span class="ehr-bench-val">${yourDefault}%</span></div>
+            <div class="ehr-bench-row"><span class="ehr-bench-label">${t('ehr_an_sector_avg')}</span><div class="ehr-bench-bar-wrap"><div class="ehr-bench-bar" style="width:${Math.min(sectorAvg.defaultRate*5,100)}%;background:var(--t3)"></div></div><span class="ehr-bench-val">${sectorAvg.defaultRate}%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:24px"><div class="card-title">${t('ehr_an_loan_volume')} — ${t('ehr_ded_month')}</div><div class="table-wrap"><table><thead><tr><th>${t('ehr_ded_month')}</th><th>${t('ehr_an_loan_volume')}</th><th>${t('ehr_th_amount')}</th><th>${t('ehr_an_adoption')}</th><th>${t('ehr_an_default_rate')}</th></tr></thead><tbody>${monthlyData.map(m => `<tr><td>${m.label}</td><td>${m.volume}</td><td>$${fmt(m.totalAmount)}</td><td>${m.adoptionRate}%</td><td>${m.defaultRate}%</td></tr>`).join('')}</tbody></table></div></div>`;
+
+  app.innerHTML = shell(content);
+  ehrBindNav();
 }
 window.approveLoan = async function(id, btn) {
   if (btn && btn.dataset.loading === 'true') return;
