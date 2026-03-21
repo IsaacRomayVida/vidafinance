@@ -2,8 +2,10 @@
 Integration test for the underwriting worker.
 
 Tests run entirely with mocked Redis + Firestore so no live credentials
-are required. The full job-processing pipeline is exercised:
-  job data → feature vector → model → decision → Firestore update → Redis push
+are required. The full job-processing pipeline is exercised in two modes:
+
+  1. Decision-engine path: worker calls POST /pipeline and acts on the result
+  2. Fallback path: decision engine is unreachable → local logistic regression
 
 To run against live services, set:
   REDIS_URL, FIREBASE_SERVICE_ACCOUNT, INTEGRATION_TEST=1
@@ -16,6 +18,7 @@ import sys
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 import numpy as np
 
@@ -59,12 +62,46 @@ HIGH_RATIO_JOB_DATA = {
     },
 }
 
+# Simulated decision-engine responses
+ENGINE_APPROVED_RESPONSE = {
+    "decision": "approved",
+    "stage": "disbursement_check",
+    "reason": None,
+    "score": 0.82,
+    "signals": {"bureau": "pass", "identity": "pass", "employment": "pass"},
+    "cost": 1.25,
+    "model": "decision_engine_v1.0",
+}
+
+ENGINE_REJECTED_RESPONSE = {
+    "decision": "rejected",
+    "stage": "employment_verification",
+    "reason": "Minimum 3 months employment tenure required",
+    "score": 0.30,
+    "signals": {"employment": "fail"},
+    "cost": 0.50,
+    "model": "decision_engine_v1.0",
+}
+
 
 def make_job(data: dict):
     job = MagicMock()
     job.data = data
     job.id = data["loanId"]
     return job
+
+
+def _make_mocks():
+    """Create standard firestore + redis mocks."""
+    firestore_mock = MagicMock()
+    firestore_mock.update_loan = MagicMock(return_value=None)
+    firestore_mock.array_union = MagicMock(return_value={"_type": "arrayUnion", "values": [{}]})
+
+    redis_mock = AsyncMock()
+    redis_mock.lpush = AsyncMock(return_value=1)
+    redis_mock.aclose = AsyncMock()
+
+    return firestore_mock, redis_mock
 
 
 # ── Unit tests for helper functions ──────────────────────────────────────────
@@ -152,22 +189,160 @@ def test_model_predict_risky_borrower():
     assert prob <= 0.50, f"Expected low probability for risky borrower, got {prob:.3f}"
 
 
-# ── Worker integration tests (fully mocked) ───────────────────────────────────
+# ── Decision engine integration tests ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_decision_engine_approved():
+    """When decision engine returns approved, worker should propagate decision and stage data."""
+    from workers.underwriting_worker import process_underwrite_loan
+
+    firestore_mock, redis_mock = _make_mocks()
+
+    with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, return_value=ENGINE_APPROVED_RESPONSE),
+        patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
+        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
+    ):
+        result = await process_underwrite_loan(make_job(GOOD_JOB_DATA))
+
+    assert result["decision"] == "approved"
+    assert result["score"] == 0.82
+
+    # Firestore should contain decision-engine fields
+    firestore_mock.update_loan.assert_called_once()
+    update_args = firestore_mock.update_loan.call_args[0]
+    payload = update_args[1]
+    assert update_args[0] == "test-loan-001"
+    assert payload["status"] == "approved"
+    assert payload["underwritingModel"] == "decision_engine_v1.0"
+    assert payload["underwritingStage"] == "disbursement_check"
+    assert payload["underwritingScore"] == 0.82
+    assert payload["underwritingCost"] == 1.25
+    assert payload["underwritingSignals"] == {"bureau": "pass", "identity": "pass", "employment": "pass"}
+
+    # Disbursement + notification pushed
+    calls = [call[0][0] for call in redis_mock.lpush.call_args_list]
+    assert "jobs:disbursements" in calls
+    assert "jobs:notifications" in calls
+
+
+@pytest.mark.asyncio
+async def test_decision_engine_rejected():
+    """When decision engine returns rejected, worker should propagate rejection with stage info."""
+    from workers.underwriting_worker import process_underwrite_loan
+
+    firestore_mock, redis_mock = _make_mocks()
+
+    with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, return_value=ENGINE_REJECTED_RESPONSE),
+        patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
+        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
+    ):
+        result = await process_underwrite_loan(make_job(LOW_TENURE_JOB_DATA))
+
+    assert result["decision"] == "rejected"
+
+    payload = firestore_mock.update_loan.call_args[0][1]
+    assert payload["status"] == "rejected"
+    assert payload["underwritingStage"] == "employment_verification"
+    assert payload["underwritingReason"] == "Minimum 3 months employment tenure required"
+    assert payload["underwritingCost"] == 0.50
+
+    # No disbursement pushed, only notification
+    calls = [call[0][0] for call in redis_mock.lpush.call_args_list]
+    assert "jobs:notifications" in calls
+    assert "jobs:disbursements" not in calls
+
+
+# ── Fallback tests ───────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_fallback_on_decision_engine_failure():
+    """If decision engine HTTP call fails, worker should fall back to local model."""
+    from workers.underwriting_worker import process_underwrite_loan
+
+    firestore_mock, redis_mock = _make_mocks()
+
+    with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, side_effect=httpx.ConnectError("Connection refused")),
+        patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
+        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
+    ):
+        result = await process_underwrite_loan(make_job(GOOD_JOB_DATA))
+
+    assert result["decision"] == "approved"
+    assert 0.0 <= result["score"] <= 1.0
+    assert result["score"] >= 0.65
+
+    # Firestore should show fallback model
+    payload = firestore_mock.update_loan.call_args[0][1]
+    assert payload["underwritingModel"] == "logistic_v1.0"
+    assert payload["underwritingStage"] == "fallback"
+
+    # stageHistory should record fallback was used
+    stage_history_call = [
+        call for call in firestore_mock.array_union.call_args_list
+        if call[0][0].get("usedFallback") is not None
+    ]
+    assert len(stage_history_call) == 1
+    assert stage_history_call[0][0][0]["usedFallback"] is True
+
+
+@pytest.mark.asyncio
+async def test_fallback_on_decision_engine_timeout():
+    """Timeout from decision engine should trigger fallback to local model."""
+    from workers.underwriting_worker import process_underwrite_loan
+
+    firestore_mock, redis_mock = _make_mocks()
+
+    with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, side_effect=httpx.ReadTimeout("Request timed out")),
+        patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
+        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
+    ):
+        result = await process_underwrite_loan(make_job(GOOD_JOB_DATA))
+
+    assert result["decision"] in ("approved", "rejected")
+    payload = firestore_mock.update_loan.call_args[0][1]
+    assert payload["underwritingStage"] == "fallback"
+    assert payload["underwritingModel"] == "logistic_v1.0"
+
+
+@pytest.mark.asyncio
+async def test_fallback_on_decision_engine_http_error():
+    """Non-2xx from decision engine should trigger fallback."""
+    from workers.underwriting_worker import process_underwrite_loan
+
+    firestore_mock, redis_mock = _make_mocks()
+
+    with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, side_effect=httpx.HTTPStatusError("Server error", request=MagicMock(), response=MagicMock(status_code=500))),
+        patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
+        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
+    ):
+        result = await process_underwrite_loan(make_job(GOOD_JOB_DATA))
+
+    assert result["decision"] in ("approved", "rejected")
+    payload = firestore_mock.update_loan.call_args[0][1]
+    assert payload["underwritingStage"] == "fallback"
+
+
+# ── Existing worker integration tests (using fallback path) ──────────────────
 
 @pytest.mark.asyncio
 async def test_good_loan_approved():
-    """A borrower with 18 months tenure, 15k salary, 2k loan should be approved."""
+    """A borrower with 36 months tenure, 22k salary, 1.5k loan should be approved via fallback."""
     from workers.underwriting_worker import process_underwrite_loan
 
-    firestore_mock = MagicMock()
-    firestore_mock.update_loan = MagicMock(return_value=None)
-    firestore_mock.array_union = MagicMock(return_value={"_type": "arrayUnion", "values": [{}]})
-
-    redis_mock = AsyncMock()
-    redis_mock.lpush = AsyncMock(return_value=1)
-    redis_mock.aclose = AsyncMock()
+    firestore_mock, redis_mock = _make_mocks()
 
     with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, side_effect=httpx.ConnectError("unavailable")),
         patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
         patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
         patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
@@ -197,15 +372,10 @@ async def test_low_tenure_hard_reject():
     """Borrower with only 1 month tenure must be rejected regardless of model score."""
     from workers.underwriting_worker import process_underwrite_loan
 
-    firestore_mock = MagicMock()
-    firestore_mock.update_loan = MagicMock(return_value=None)
-    firestore_mock.array_union = MagicMock(return_value={})
-
-    redis_mock = AsyncMock()
-    redis_mock.lpush = AsyncMock(return_value=1)
-    redis_mock.aclose = AsyncMock()
+    firestore_mock, redis_mock = _make_mocks()
 
     with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, side_effect=httpx.ConnectError("unavailable")),
         patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
         patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
         patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
@@ -225,21 +395,16 @@ async def test_low_tenure_hard_reject():
 
 @pytest.mark.asyncio
 async def test_bureau_enrichment_failure_gracefully_degrades():
-    """If softcredito bureau call fails, job should still complete with defaults."""
+    """If softcredito bureau call fails during fallback, job should still complete with defaults."""
     from workers.underwriting_worker import process_underwrite_loan
 
-    firestore_mock = MagicMock()
-    firestore_mock.update_loan = MagicMock(return_value=None)
-    firestore_mock.array_union = MagicMock(return_value={})
-
-    redis_mock = AsyncMock()
-    redis_mock.lpush = AsyncMock(return_value=1)
-    redis_mock.aclose = AsyncMock()
+    firestore_mock, redis_mock = _make_mocks()
 
     softcredito_mock = AsyncMock()
     softcredito_mock.query_bureau = AsyncMock(side_effect=Exception("Connection refused"))
 
     with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, side_effect=httpx.ConnectError("unavailable")),
         patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
         patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
         patch("workers.underwriting_worker.SoftcreditoClient", return_value=softcredito_mock),
@@ -258,15 +423,10 @@ async def test_notification_always_pushed():
     from workers.underwriting_worker import process_underwrite_loan
 
     for job_data in [GOOD_JOB_DATA, LOW_TENURE_JOB_DATA]:
-        firestore_mock = MagicMock()
-        firestore_mock.update_loan = MagicMock(return_value=None)
-        firestore_mock.array_union = MagicMock(return_value={})
-
-        redis_mock = AsyncMock()
-        redis_mock.lpush = AsyncMock(return_value=1)
-        redis_mock.aclose = AsyncMock()
+        firestore_mock, redis_mock = _make_mocks()
 
         with (
+            patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, side_effect=httpx.ConnectError("unavailable")),
             patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
             patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
             patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
@@ -283,6 +443,73 @@ async def test_notification_always_pushed():
         notification_payload = json.loads(notification_calls[0][0][1])
         assert notification_payload["loanId"] == job_data["loanId"]
         assert notification_payload["type"] in ("loan_approved", "loan_rejected")
+
+
+# ── Stage data persistence tests ─────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_stage_data_persisted_in_firestore():
+    """Firestore update should contain all required stage progression fields."""
+    from workers.underwriting_worker import process_underwrite_loan
+
+    firestore_mock, redis_mock = _make_mocks()
+
+    with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, return_value=ENGINE_APPROVED_RESPONSE),
+        patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
+        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
+    ):
+        await process_underwrite_loan(make_job(GOOD_JOB_DATA))
+
+    payload = firestore_mock.update_loan.call_args[0][1]
+
+    # All required fields must be present
+    assert "underwritingStage" in payload
+    assert "underwritingReason" in payload
+    assert "underwritingScore" in payload
+    assert "underwritingCost" in payload
+    assert "underwritingSignals" in payload
+    assert "stageHistory" in payload
+    assert "statusHistory" in payload
+
+    # stageHistory array_union should record stage details
+    stage_calls = [
+        call for call in firestore_mock.array_union.call_args_list
+        if "stage" in call[0][0]
+    ]
+    assert len(stage_calls) == 1
+    stage_entry = stage_calls[0][0][0]
+    assert stage_entry["stage"] == "disbursement_check"
+    assert stage_entry["decision"] == "approved"
+    assert stage_entry["score"] == 0.82
+    assert stage_entry["cost"] == 1.25
+    assert stage_entry["usedFallback"] is False
+    assert "at" in stage_entry
+
+
+@pytest.mark.asyncio
+async def test_notification_includes_score_from_engine():
+    """Notification payload should use the score from the decision engine."""
+    from workers.underwriting_worker import process_underwrite_loan
+
+    firestore_mock, redis_mock = _make_mocks()
+
+    with (
+        patch("workers.underwriting_worker.call_decision_engine", new_callable=AsyncMock, return_value=ENGINE_APPROVED_RESPONSE),
+        patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
+        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
+    ):
+        await process_underwrite_loan(make_job(GOOD_JOB_DATA))
+
+    notification_calls = [
+        call for call in redis_mock.lpush.call_args_list
+        if call[0][0] == "jobs:notifications"
+    ]
+    assert len(notification_calls) == 1
+    notification_payload = json.loads(notification_calls[0][0][1])
+    assert notification_payload["score"] == 0.82
 
 
 # ── Live integration test (skipped unless INTEGRATION_TEST=1) ─────────────────
@@ -335,7 +562,7 @@ async def test_live_job_processing():
         loan = firestore.get_loan(loan_id)
         if loan and loan.get("status") in ("approved", "rejected"):
             print(f"Loan {loan_id} → {loan['status']} (score={loan.get('underwritingScore')})")
-            assert loan.get("underwritingModel") == "logistic_v1.0"
+            assert loan.get("underwritingStage") is not None
             await conn.aclose()
             return
 
