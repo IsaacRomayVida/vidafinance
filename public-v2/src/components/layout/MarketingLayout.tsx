@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
+import { useHashScroll } from '../../hooks/useHashScroll';
 
 interface MarketingLayoutProps {
   ctaLabel?: string;
@@ -8,6 +9,8 @@ interface MarketingLayoutProps {
 }
 
 export function MarketingLayout({ ctaLabel, ctaHref }: MarketingLayoutProps) {
+  useHashScroll();
+
   return (
     <>
       <Navbar ctaLabel={ctaLabel} ctaHref={ctaHref} />
