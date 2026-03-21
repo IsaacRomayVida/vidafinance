@@ -16,6 +16,7 @@ import os
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
+import structlog
 from bullmq import Worker
 from redis.asyncio import Redis as AsyncRedis
 
@@ -23,7 +24,18 @@ from models.underwriting_model import UnderwritingModel
 from services.firestore_client import FirestoreClient
 from services.softcredito_client import SoftcreditoClient
 
-logger = logging.getLogger("underwriting_worker")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.stdlib.BoundLogger,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+)
+logger = structlog.get_logger("underwriting_worker")
 
 QUEUE_NAME = "vida-underwriting"
 APPROVAL_THRESHOLD = float(os.environ.get("APPROVAL_THRESHOLD", "0.65"))
@@ -39,7 +51,7 @@ def get_model() -> UnderwritingModel:
     global _model
     if _model is None:
         _model = UnderwritingModel.load(MODEL_PATH)
-        logger.info("Loaded underwriting model v1 from %s", MODEL_PATH)
+        logger.info("Loaded underwriting model v1", model_path=MODEL_PATH, service="ml-service")
     return _model
 
 
@@ -104,11 +116,13 @@ async def process_underwrite_loan(job, job_token=None):
     """
     data = job.data
     loan_id = data["loanId"]
+    correlation_id = data.get("correlationId")
     borrower = data["borrowerSnapshot"]
     principal = float(data["principalAmount"])
     monthly_salary = float(borrower.get("monthlySalary", 1))
 
-    logger.info("[underwriting] Processing loan %s", loan_id)
+    log = logger.bind(correlation_id=correlation_id, loan_id=loan_id, service="ml-service")
+    log.info("Processing underwriting job")
 
     # ── 1. Build feature vector ───────────────────────────────────────────────
     features = {
@@ -130,12 +144,9 @@ async def process_underwrite_loan(job, job_token=None):
         )
         features["bureau_score"] = float(bureau.get("riskScore", 500))
         features["has_bureau_record"] = 1.0 if bureau.get("found") else 0.0
-        logger.info("[underwriting] Bureau enrichment ok for loan %s: score=%s", loan_id, features["bureau_score"])
+        log.info("Bureau enrichment ok", bureau_score=features["bureau_score"])
     except Exception as e:
-        logger.warning(
-            "[underwriting] Bureau lookup failed for loan %s (%s) — using defaults",
-            loan_id, e,
-        )
+        log.warning("Bureau lookup failed — using defaults", error=str(e))
 
     # ── 3. Run model ──────────────────────────────────────────────────────────
     model = get_model()
@@ -148,9 +159,11 @@ async def process_underwrite_loan(job, job_token=None):
         decision = "rejected"
         rejection_reason = "Minimum 3 months employment tenure required"
 
-    logger.info(
-        "[underwriting] Loan %s → %s (score=%.3f, threshold=%.2f)",
-        loan_id, decision, prob_repayment, APPROVAL_THRESHOLD,
+    log.info(
+        "Underwriting decision",
+        decision=decision,
+        score=round(prob_repayment, 4),
+        threshold=APPROVAL_THRESHOLD,
     )
 
     # ── 5. Write decision to Firestore (blocking SDK → run in executor) ───────
@@ -210,7 +223,7 @@ async def process_underwrite_loan(job, job_token=None):
     finally:
         await redis.aclose()
 
-    logger.info("[underwriting] Loan %s complete: %s", loan_id, decision)
+    log.info("Underwriting job complete", decision=decision)
     return {"decision": decision, "score": round(prob_repayment, 4)}
 
 
@@ -218,7 +231,7 @@ async def process_underwrite_loan(job, job_token=None):
 
 async def start_worker():
     redis_url = os.environ["REDIS_URL"]
-    logger.info("[ml-service] Starting underwriting worker on queue '%s'", QUEUE_NAME)
+    logger.info("Starting underwriting worker", queue=QUEUE_NAME, service="ml-service")
 
     worker = Worker(
         QUEUE_NAME,
@@ -230,7 +243,7 @@ async def start_worker():
             "maxStalledCount": 1,
         },
     )
-    logger.info("[ml-service] Underwriting worker running (concurrency=5)")
+    logger.info("Underwriting worker running", concurrency=5, service="ml-service")
     await worker.run()
 
 

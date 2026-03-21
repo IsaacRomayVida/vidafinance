@@ -13,6 +13,9 @@ jest.mock('firebase-functions/v2/https', () => ({
   },
 }));
 
+const mockLogger = { warn: jest.fn(), info: jest.fn(), error: jest.fn() };
+jest.mock('firebase-functions', () => ({ logger: mockLogger }));
+
 jest.mock('firebase-admin/firestore', () => ({
   getFirestore: jest.fn(),
   Timestamp: {
@@ -481,17 +484,13 @@ describe('handleRequestLoan', () => {
       add: jest.fn().mockRejectedValue(new Error('Redis connection refused')),
     }));
 
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-
     const result = await handleRequestLoan(authRequest);
 
     expect(result.status).toBe('pending');
-    expect(warnSpy).toHaveBeenCalledWith(
-      'Underwriting queue unavailable:',
-      expect.any(String)
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Underwriting queue unavailable',
+      expect.objectContaining({ error: expect.any(String) })
     );
-
-    warnSpy.mockRestore();
   });
 
   it('works without optional loanPurpose field', async () => {

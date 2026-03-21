@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "lint": "eslint '*.js' 'src/**/*.js' 'routes/**/*.js'"
   },
   "dependencies": {
     "bullmq": "^5.71.0",
@@ -17,6 +18,7 @@
     "ioredis": "^5.10.0",
     "mifiel": "^0.0.1",
     "node-fetch": "^2.7.0",
+    "pino": "^10.3.1",
     "puppeteer": "^24.6.0"
   },
   "devDependencies": {

@@ -61,16 +61,38 @@ require_var "MIFIEL_APP_SECRET"               "Mifiel app secret"
 FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-vida-finance-staging}"
 FIREBASE_STORAGE_BUCKET="${FIREBASE_STORAGE_BUCKET:-vida-finance-staging.appspot.com}"
 
+# ── Shared Environment Group: vida-shared ────────────────────────────────────
+# These variables are common to all services and managed as a Railway shared
+# variable group. Each service references this group + its own service-specific vars.
+echo "⚙️  Configuring shared environment group (vida-shared)..."
+echo "   REDIS_URL, INTERNAL_SECRET, FIREBASE_SERVICE_ACCOUNT_B64, FIREBASE_PROJECT_ID"
+
+SHARED_VARS=(
+  "REDIS_URL=$REDIS_URL"
+  "INTERNAL_SECRET=$INTERNAL_SECRET"
+  "FIREBASE_SERVICE_ACCOUNT_B64=$FIREBASE_SERVICE_ACCOUNT_B64"
+  "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+)
+
+# Apply shared vars to each service (Railway shared variable groups are set per-service;
+# when Railway supports first-class shared groups, migrate to `railway variables set --group`)
+apply_shared_vars() {
+  local service="$1"
+  local fallback="$2"
+  railway variables set "${SHARED_VARS[@]}" --service "$service" 2>/dev/null || \
+    railway variables set "${SHARED_VARS[@]}" --service "$fallback"
+}
+
+echo "✅ Shared variables defined"
+echo ""
+
 # ── service: vida-payment-server ─────────────────────────────────────────────
 echo "⚙️  Configuring vida-payment-server (port 3001)..."
+apply_shared_vars "vida-payment-server" "payment-server"
 railway variables set \
   NODE_ENV=staging \
   PORT=3001 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
   CONEKTA_WEBHOOK_SECRET="$CONEKTA_WEBHOOK_SECRET" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   ALLOWED_ORIGINS="https://vida-staging.web.app,https://admin-staging.vida.com" \
   SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
   NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
@@ -79,11 +101,7 @@ railway variables set \
 railway variables set \
   NODE_ENV=staging \
   PORT=3001 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
   CONEKTA_WEBHOOK_SECRET="$CONEKTA_WEBHOOK_SECRET" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   ALLOWED_ORIGINS="https://vida-staging.web.app,https://admin-staging.vida.com" \
   SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
   NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
@@ -93,14 +111,11 @@ echo "✅ vida-payment-server configured"
 
 # ── service: vida-softcredito ─────────────────────────────────────────────────
 echo "⚙️  Configuring vida-softcredito (port 3002)..."
+apply_shared_vars "vida-softcredito" "softcredito-adapter"
 railway variables set \
   NODE_ENV=staging \
   PORT=3002 \
-  REDIS_URL="$REDIS_URL" \
   REDIS_CACHE_TTL=86400 \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   SOFTCREDITO_API_URL="https://api.softcredito.com.mx/v1" \
   SOFTCREDITO_CLIENT_ID="$SOFTCREDITO_CLIENT_ID" \
   SOFTCREDITO_CLIENT_SECRET="$SOFTCREDITO_CLIENT_SECRET" \
@@ -109,11 +124,7 @@ railway variables set \
 railway variables set \
   NODE_ENV=staging \
   PORT=3002 \
-  REDIS_URL="$REDIS_URL" \
   REDIS_CACHE_TTL=86400 \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   SOFTCREDITO_API_URL="https://api.softcredito.com.mx/v1" \
   SOFTCREDITO_CLIENT_ID="$SOFTCREDITO_CLIENT_ID" \
   SOFTCREDITO_CLIENT_SECRET="$SOFTCREDITO_CLIENT_SECRET" \
@@ -123,13 +134,10 @@ echo "✅ vida-softcredito configured"
 
 # ── service: vida-notifications ───────────────────────────────────────────────
 echo "⚙️  Configuring vida-notifications (port 3003)..."
+apply_shared_vars "vida-notifications" "notification-service"
 railway variables set \
   NODE_ENV=staging \
   PORT=3003 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   TWILIO_ACCOUNT_SID="$TWILIO_ACCOUNT_SID" \
   TWILIO_AUTH_TOKEN="$TWILIO_AUTH_TOKEN" \
   TWILIO_WHATSAPP_FROM="+14155238886" \
@@ -141,10 +149,6 @@ railway variables set \
 railway variables set \
   NODE_ENV=staging \
   PORT=3003 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   TWILIO_ACCOUNT_SID="$TWILIO_ACCOUNT_SID" \
   TWILIO_AUTH_TOKEN="$TWILIO_AUTH_TOKEN" \
   TWILIO_WHATSAPP_FROM="+14155238886" \
@@ -157,14 +161,11 @@ echo "✅ vida-notifications configured"
 
 # ── service: vida-pdf-generator ───────────────────────────────────────────────
 echo "⚙️  Configuring vida-pdf-generator (port 3004)..."
+apply_shared_vars "vida-pdf-generator" "pdf-generator"
 railway variables set \
   NODE_ENV=staging \
   PORT=3004 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
   FIREBASE_STORAGE_BUCKET="$FIREBASE_STORAGE_BUCKET" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   PDF_STORAGE_PATH="documents/" \
   MAX_CONCURRENT_PDF_JOBS=3 \
   SOFOM_RFC="VIDA240101XXX" \
@@ -176,11 +177,7 @@ railway variables set \
 railway variables set \
   NODE_ENV=staging \
   PORT=3004 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
   FIREBASE_STORAGE_BUCKET="$FIREBASE_STORAGE_BUCKET" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   PDF_STORAGE_PATH="documents/" \
   MAX_CONCURRENT_PDF_JOBS=3 \
   SOFOM_RFC="VIDA240101XXX" \
@@ -193,12 +190,9 @@ echo "✅ vida-pdf-generator configured"
 
 # ── service: vida-ml-service ──────────────────────────────────────────────────
 echo "⚙️  Configuring vida-ml-service (port 3005)..."
+apply_shared_vars "vida-ml-service" "ml-service"
 railway variables set \
   PORT=3005 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   MODEL_PATH="models/underwriting_v1.joblib" \
   USE_ML_MODELS="false" \
@@ -206,10 +200,6 @@ railway variables set \
   --service vida-ml-service 2>/dev/null || \
 railway variables set \
   PORT=3005 \
-  REDIS_URL="$REDIS_URL" \
-  FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
-  FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
-  INTERNAL_SECRET="$INTERNAL_SECRET" \
   ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   MODEL_PATH="models/underwriting_v1.joblib" \
   USE_ML_MODELS="false" \
@@ -219,6 +209,12 @@ echo "✅ vida-ml-service configured"
 
 echo ""
 echo "🎉 All Railway environment variables configured!"
+echo ""
+echo "Shared variables (vida-shared group) applied to all services:"
+echo "  - REDIS_URL"
+echo "  - INTERNAL_SECRET"
+echo "  - FIREBASE_SERVICE_ACCOUNT_B64"
+echo "  - FIREBASE_PROJECT_ID"
 echo ""
 echo "Next steps:"
 echo "  1. Trigger a deployment: push to main/develop or use 'railway up' per service"

@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "employees",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "active",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "loans",
       "queryScope": "COLLECTION",
       "fields": [
@@ -238,6 +252,20 @@
         },
         {
           "fieldPath": "overdueDetectedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+    ,{
+      "collectionGroup": "metamap_shadow_log",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "loanId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "receivedAt",
           "order": "DESCENDING"
         }
       ]
