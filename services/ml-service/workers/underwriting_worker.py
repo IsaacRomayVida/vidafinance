@@ -1,9 +1,10 @@
 """
 BullMQ consumer for the 'vida-underwriting' queue.
 
-Coordinates underwriting decisions by calling the decision-engine HTTP
-service for the full 6-stage pipeline.  Falls back to the local logistic
-regression model when the decision engine is unreachable.
+Processes 'underwrite_loan' jobs dispatched by the requestLoan Firebase
+Function. Each job runs both the champion (WoE scorecard) and challenger
+(XGBoost) models, writes the champion's decision to Firestore, logs the
+challenger's prediction for shadow comparison, and pushes follow-up jobs.
 
 Queue name matches shared/queues.js: QUEUES.UNDERWRITING = 'vida-underwriting'
 """
@@ -15,11 +16,12 @@ import os
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
-import httpx
 from bullmq import Worker
 from redis.asyncio import Redis as AsyncRedis
 
-from models.underwriting_model import UnderwritingModel
+from typing import Optional
+
+from models.champion_challenger import ModelRouter
 from services.firestore_client import FirestoreClient
 from services.softcredito_client import SoftcreditoClient
 
@@ -27,25 +29,25 @@ logger = logging.getLogger("underwriting_worker")
 
 QUEUE_NAME = "vida-underwriting"
 APPROVAL_THRESHOLD = float(os.environ.get("APPROVAL_THRESHOLD", "0.65"))
-MODEL_PATH = os.environ.get("MODEL_PATH", "models/underwriting_v1.joblib")
-DECISION_ENGINE_URL = os.environ.get(
-    "DECISION_ENGINE_URL",
-    "http://vida-underwriting.railway.internal:3003",
-)
-DECISION_ENGINE_TIMEOUT = float(os.environ.get("DECISION_ENGINE_TIMEOUT", "30"))
+CHAMPION_PATH = os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
+CHALLENGER_PATH = os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
 
 # Initialised lazily so the module can be imported without creds present
-_model = None  # type: UnderwritingModel | None
-_firestore = None  # type: FirestoreClient | None
+_router: Optional[ModelRouter] = None
+_firestore: Optional[FirestoreClient] = None
 _executor = ThreadPoolExecutor(max_workers=10)
 
 
-def get_model() -> UnderwritingModel:
-    global _model
-    if _model is None:
-        _model = UnderwritingModel.load(MODEL_PATH)
-        logger.info("Loaded underwriting model v1 from %s", MODEL_PATH)
-    return _model
+def get_router() -> ModelRouter:
+    global _router
+    if _router is None:
+        _router = ModelRouter.load(CHAMPION_PATH, CHALLENGER_PATH)
+        logger.info(
+            "Loaded champion/challenger router: champion=%s, challenger=%s",
+            _router.champion.version,
+            _router.challenger.version,
+        )
+    return _router
 
 
 def get_firestore() -> FirestoreClient:
@@ -85,72 +87,32 @@ def get_rejection_reason(score: float, features: dict) -> str:
     return "Does not meet current lending criteria"
 
 
-# ── Decision engine caller ────────────────────────────────────────────────────
-
-async def call_decision_engine(data: dict) -> dict:
-    """Call the decision-engine HTTP service for the full 6-stage pipeline.
-
-    Returns the engine response dict on success, or raises on failure.
-    """
-    url = f"{DECISION_ENGINE_URL}/pipeline"
-    async with httpx.AsyncClient(timeout=DECISION_ENGINE_TIMEOUT) as client:
-        resp = await client.post(url, json=data)
-        resp.raise_for_status()
-        return resp.json()
-
-
-# ── Local model fallback ─────────────────────────────────────────────────────
-
-async def run_local_model_fallback(data: dict) -> dict:
-    """Run the original logistic regression model as a fallback.
-
-    Returns a dict shaped like the decision-engine response so downstream
-    code can treat both paths uniformly.
-    """
-    borrower = data["borrowerSnapshot"]
-    principal = float(data["principalAmount"])
-    monthly_salary = float(borrower.get("monthlySalary", 1))
-
-    features = {
-        "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
-        "monthly_salary": monthly_salary,
-        "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
-        "loan_to_salary_ratio": principal / max(monthly_salary, 1),
-        "employer_industry_encoded": float(encode_industry(borrower.get("employerIndustry", ""))),
-        "principal_amount": principal,
-        "bureau_score": 500.0,
-        "has_bureau_record": 0.0,
-    }
-
-    # Optional bureau enrichment (graceful degradation)
-    try:
-        bureau = await SoftcreditoClient().query_bureau(
-            curp_hash=borrower.get("curpHash", ""),
-            full_name=borrower.get("fullName", ""),
-        )
-        features["bureau_score"] = float(bureau.get("riskScore", 500))
-        features["has_bureau_record"] = 1.0 if bureau.get("found") else 0.0
-    except Exception as e:
-        logger.warning("[underwriting] Bureau lookup failed (%s) — using defaults", e)
-
-    model = get_model()
-    prob_repayment = model.predict_proba(features)
-    decision = "approved" if prob_repayment >= APPROVAL_THRESHOLD else "rejected"
-    reason = None if decision == "approved" else get_rejection_reason(prob_repayment, features)
-
-    # Hard business rule override
-    if features["employment_tenure_months"] < 3:
-        decision = "rejected"
-        reason = "Minimum 3 months employment tenure required"
+def build_model_features(borrower: dict, principal: float, monthly_salary: float, bureau: Optional[dict] = None) -> dict:
+    """Build the feature dict used by both champion and challenger models."""
+    lti = principal / max(monthly_salary, 1)
+    tenure = float(borrower.get("employmentTenureMonths", 0))
+    industry_code = encode_industry(borrower.get("employerIndustry", ""))
 
     return {
-        "decision": decision,
-        "stage": "fallback",
-        "reason": reason,
-        "score": round(prob_repayment, 4),
-        "signals": {},
-        "cost": 0.0,
-        "model": "logistic_v1.0",
+        # Champion features (WoE scorecard)
+        "scDiasAtraso": float(bureau.get("diasAtraso", 0)) if bureau else 0.0,
+        "cdcScore": float(bureau.get("riskScore", 500)) if bureau else 500.0,
+        "carteraVencida": float(bureau.get("carteraVencida", 0)) if bureau else 0.0,
+        "imss_tenure_months": tenure,
+        "lti": lti,
+        "riskSeal_score": float(borrower.get("riskSealScore", 50)),
+        "employer_tier": float(borrower.get("employerTier", 3)),
+        "sector_risk": float(borrower.get("sectorRisk", 3)),
+        "afore_regularity": float(borrower.get("aforeRegularity", 0.7)),
+        "monthly_salary": monthly_salary,
+        # Challenger-only features (XGBoost)
+        "scCuentasActivas": float(bureau.get("cuentasActivas", 3)) if bureau else 3.0,
+        "belvo_cash_flow_avg": float(borrower.get("belvoCashFlowAvg", 15000)),
+        "employer_score": float(borrower.get("employerScore", 60)),
+        "payroll_regularity": float(borrower.get("payrollRegularity", 0.7)),
+        # Legacy features (kept for backward compatibility with hard rules)
+        "employment_tenure_months": tenure,
+        "loan_to_salary_ratio": lti,
     }
 
 
@@ -159,10 +121,6 @@ async def run_local_model_fallback(data: dict) -> dict:
 async def process_underwrite_loan(job, job_token=None):
     """
     Main BullMQ processor called for every job on the vida-underwriting queue.
-
-    Acts as a COORDINATOR: calls the decision-engine HTTP service for the
-    full 6-stage pipeline, falling back to the local logistic regression
-    model if the engine is unreachable.
 
     job.data schema:
       {
@@ -177,74 +135,82 @@ async def process_underwrite_loan(job, job_token=None):
           employerIndustry: str,
           curpHash: str,
           fullName: str,
+          riskSealScore: float,
+          employerTier: int,
+          sectorRisk: int,
+          aforeRegularity: float,
+          belvoCashFlowAvg: float,
+          employerScore: float,
+          payrollRegularity: float,
         }
       }
     """
     data = job.data
     loan_id = data["loanId"]
+    borrower = data["borrowerSnapshot"]
     principal = float(data["principalAmount"])
-    used_fallback = False
+    monthly_salary = float(borrower.get("monthlySalary", 1))
 
     logger.info("[underwriting] Processing loan %s", loan_id)
 
-    # ── 1. Call decision engine (with fallback) ──────────────────────────────
+    # ── 1. Optional bureau enrichment (graceful degradation) ─────────────────
+    bureau = None
     try:
-        engine_result = await call_decision_engine(data)
-        logger.info(
-            "[underwriting] Decision engine responded for loan %s: decision=%s, stage=%s",
-            loan_id, engine_result.get("decision"), engine_result.get("stage"),
+        bureau = await SoftcreditoClient().query_bureau(
+            curp_hash=borrower.get("curpHash", ""),
+            full_name=borrower.get("fullName", ""),
         )
+        logger.info("[underwriting] Bureau enrichment ok for loan %s", loan_id)
     except Exception as e:
         logger.warning(
-            "[underwriting] Decision engine unavailable for loan %s (%s) — falling back to local model",
+            "[underwriting] Bureau lookup failed for loan %s (%s) — using defaults",
             loan_id, e,
         )
-        engine_result = await run_local_model_fallback(data)
-        used_fallback = True
 
-    decision = engine_result["decision"]
-    score = engine_result.get("score", 0.0)
-    stage = engine_result.get("stage", "unknown")
-    reason = engine_result.get("reason")
-    signals = engine_result.get("signals", {})
-    cost = engine_result.get("cost", 0.0)
-    model_name = engine_result.get("model", "decision_engine_v1.0")
+    # ── 2. Build feature vector ───────────────────────────────────────────────
+    features = build_model_features(borrower, principal, monthly_salary, bureau)
+
+    # ── 3. Run champion/challenger models ─────────────────────────────────────
+    router = get_router()
+    result = router.predict(features, threshold=APPROVAL_THRESHOLD)
+
+    decision = result["decision"]
+    champion_score = result["champion_score"]
+    challenger_score = result["challenger_score"]
+    shap_top5 = result["shap_top5"]
+
+    rejection_reason = None if decision == "approved" else get_rejection_reason(champion_score, features)
+
+    # ── 4. Hard business rule overrides ──────────────────────────────────────
+    if features["employment_tenure_months"] < 3:
+        decision = "rejected"
+        rejection_reason = "Minimum 3 months employment tenure required"
 
     logger.info(
-        "[underwriting] Loan %s → %s (score=%.3f, stage=%s, fallback=%s)",
-        loan_id, decision, score, stage, used_fallback,
+        "[underwriting] Loan %s → %s (champion=%.3f, challenger=%.3f, threshold=%.2f)",
+        loan_id, decision, champion_score, challenger_score, APPROVAL_THRESHOLD,
     )
 
-    # ── 2. Write decision to Firestore (blocking SDK → run in executor) ───────
+    # ── 5. Write decision to Firestore (blocking SDK → run in executor) ───────
     now_iso = datetime.now(timezone.utc).isoformat()
     firestore = get_firestore()
 
     update_payload = {
         "status": decision,
-        "underwritingScore": round(score, 4),
+        "underwritingScore": champion_score,
         "underwritingDecision": decision,
-        "underwritingModel": model_name,
-        "underwritingStage": stage,
-        "underwritingReason": reason,
-        "underwritingCost": round(cost, 4),
-        "underwritingSignals": signals,
-        "rejectionReason": reason,
+        "underwritingModel": result["champion_model"],
+        "challengerModel": result["challenger_model"],
+        "challengerScore": challenger_score,
+        "shapTop5": shap_top5,
+        "rejectionReason": rejection_reason,
         "updatedAt": now_iso,
         "statusHistory": firestore.array_union({
             "from": "pending",
             "to": decision,
             "at": now_iso,
             "by": "system",
-            "reason": f"{model_name}: score={score:.3f}, stage={stage}",
-        }),
-        "stageHistory": firestore.array_union({
-            "stage": stage,
-            "decision": decision,
-            "score": round(score, 4),
-            "reason": reason,
-            "cost": round(cost, 4),
-            "usedFallback": used_fallback,
-            "at": now_iso,
+            "reason": f"Champion {result['champion_model']}: score={champion_score:.3f}",
         }),
     }
 
@@ -254,7 +220,12 @@ async def process_underwrite_loan(job, job_token=None):
         lambda: firestore.update_loan(loan_id, update_payload),
     )
 
-    # ── 3. Push downstream jobs via Redis ────────────────────────────────────
+    # ── 6. Check challenger alert ─────────────────────────────────────────────
+    alert = router.check_challenger_alert()
+    if alert:
+        logger.warning("[underwriting] Challenger outperformance alert: %s", alert)
+
+    # ── 7. Push downstream jobs via Redis ────────────────────────────────────
     redis = AsyncRedis.from_url(
         os.environ["REDIS_URL"],
         decode_responses=True,
@@ -278,15 +249,21 @@ async def process_underwrite_loan(job, job_token=None):
                 "type": f"loan_{decision}",
                 "userId": data.get("userId"),
                 "loanId": loan_id,
-                "score": round(score, 4),
-                "rejectionReason": reason,
+                "score": champion_score,
+                "challengerScore": challenger_score,
+                "rejectionReason": rejection_reason,
             }),
         )
     finally:
         await redis.aclose()
 
     logger.info("[underwriting] Loan %s complete: %s", loan_id, decision)
-    return {"decision": decision, "score": round(score, 4)}
+    return {
+        "decision": decision,
+        "score": champion_score,
+        "challengerScore": challenger_score,
+        "shapTop5": shap_top5,
+    }
 
 
 # ── Worker entry point ────────────────────────────────────────────────────────

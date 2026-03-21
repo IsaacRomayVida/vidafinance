@@ -10,12 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
-from prompts.loader import (
-    get_system_prompt,
-    get_model_config,
-    preload_all,
-    render_user_prompt,
-)
+from services.firestore_client import FirestoreClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ml-service")
@@ -28,15 +23,12 @@ AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
 
 _worker_task: asyncio.Task | None = None
-_drift_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _worker_task, _drift_task
+    global _worker_task
     has_firebase = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
-    loaded = preload_all()
-    logger.info("Preloaded %d prompt templates: %s", len(loaded), loaded)
     if os.environ.get("REDIS_URL") and has_firebase:
         try:
             from workers.underwriting_worker import start_worker
@@ -48,26 +40,14 @@ async def lifespan(app: FastAPI):
         logger.warning(
             "Underwriting worker not started: REDIS_URL or Firebase credentials missing"
         )
-
-    # Start weekly drift monitoring scheduler
-    if has_firebase:
-        try:
-            from workers.drift_scheduler import start_drift_scheduler
-            _drift_task = asyncio.create_task(start_drift_scheduler())
-            logger.info("Drift monitoring scheduler started")
-        except Exception as e:
-            logger.warning("Could not start drift scheduler: %s", e)
-
     yield
-
-    for task, name in [(_worker_task, "worker"), (_drift_task, "drift scheduler")]:
-        if task and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            logger.info("%s stopped", name.capitalize())
+    if _worker_task and not _worker_task.done():
+        _worker_task.cancel()
+        try:
+            await _worker_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Underwriting worker stopped")
 
 
 app = FastAPI(title="vida-ml-service", lifespan=lifespan)
@@ -189,38 +169,42 @@ async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
 
 @app.get("/explain/{decision_id}")
 def explain(decision_id: str, x_internal_secret: str = Header(None)):
+    """
+    Retrieve SHAP explanations for a decision.
+
+    Looks up the loan's stored SHAP top-5 from Firestore. If the loan
+    has challenger SHAP values stored, returns them directly.
+    """
     auth(x_internal_secret)
+    try:
+        firestore = FirestoreClient()
+        loan = firestore.get_loan(decision_id)
+        if loan and loan.get("shapTop5"):
+            return {
+                "decisionId": decision_id,
+                "championModel": loan.get("underwritingModel", "unknown"),
+                "challengerModel": loan.get("challengerModel", "unknown"),
+                "championScore": loan.get("underwritingScore"),
+                "challengerScore": loan.get("challengerScore"),
+                "shapTop5": loan.get("shapTop5", []),
+            }
+    except Exception:
+        pass
+
     return {
         "decisionId": decision_id,
-        "shap": [],
-        "message": "Full SHAP after model training (200+ loans)",
+        "shapTop5": [],
+        "message": "No SHAP data found for this decision",
     }
 
 
 @app.post("/monitor/drift")
-async def drift(payload: dict, x_internal_secret: str = Header(None)):
+def drift(payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
-    from workers.drift_scheduler import run_drift_check_async
-
-    report = await run_drift_check_async()
-    if report is None:
-        return {
-            "drift_detected": False,
-            "psi_scores": {},
-            "message": "Insufficient data for drift check (need 30+ scored loans)",
-        }
-
     return {
-        "drift_detected": report["alert_level"] != "stable",
-        "alert_level": report["alert_level"],
-        "score_psi": report["score_psi"],
-        "psi_scores": {
-            name: csi["csi"] for name, csi in report["feature_csi"].items()
-        },
-        "feature_details": report["feature_csi"],
-        "thresholds": report["thresholds"],
-        "current_samples": report["current_samples"],
-        "timestamp": report["timestamp"],
+        "drift_detected": False,
+        "psi_scores": {},
+        "message": "Active after first model training",
     }
 
 
@@ -240,120 +224,38 @@ async def score_loan_direct(
 ):
     """
     Direct synchronous scoring endpoint.
-    Accepts the same payload as the BullMQ job data so other services
-    can call underwriting synchronously without going through the queue.
+    Runs both champion (WoE scorecard) and challenger (XGBoost) models.
+    Returns champion decision + challenger shadow score + SHAP top-5.
     """
     auth(x_internal_secret)
     from workers.underwriting_worker import (
-        process_underwrite_loan,
-        encode_pay_freq,
-        encode_industry,
-        get_rejection_reason,
+        build_model_features,
         APPROVAL_THRESHOLD,
     )
-    from models.underwriting_model import UnderwritingModel
+    from models.champion_challenger import ModelRouter
     import os as _os
 
     borrower = payload.get("borrowerSnapshot", {})
     principal = float(payload.get("principalAmount", 0))
     monthly_salary = float(borrower.get("monthlySalary", 1))
 
-    features = {
-        "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
-        "monthly_salary": monthly_salary,
-        "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
-        "loan_to_salary_ratio": principal / max(monthly_salary, 1),
-        "employer_industry_encoded": float(encode_industry(borrower.get("employerIndustry", ""))),
-        "principal_amount": principal,
-        "bureau_score": 500.0,
-        "has_bureau_record": 0.0,
-    }
+    features = build_model_features(borrower, principal, monthly_salary)
 
-    model_path = _os.environ.get("MODEL_PATH", "models/underwriting_v1.joblib")
-    model = UnderwritingModel.load(model_path)
-    prob = model.predict_proba(features)
-    decision = "approved" if prob >= APPROVAL_THRESHOLD else "rejected"
+    champion_path = _os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
+    challenger_path = _os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
+    router = ModelRouter.load(champion_path, challenger_path)
+    result = router.predict(features, threshold=APPROVAL_THRESHOLD)
 
+    decision = result["decision"]
     if features["employment_tenure_months"] < 3:
         decision = "rejected"
 
     return {
         "decision": decision,
-        "score": round(prob, 4),
+        "championScore": result["champion_score"],
+        "challengerScore": result["challenger_score"],
         "threshold": APPROVAL_THRESHOLD,
-        "model": "logistic_v1.0",
-    }
-
-
-STAGE5_PROMPT = "stage5_risk_narrative_v1.7.0"
-
-
-@app.post("/stage5/risk-narrative")
-async def stage5_risk_narrative(payload: dict, x_internal_secret: str = Header(None)):
-    """
-    Generate a Stage 5 risk narrative by synthesizing MetaMap, bureau,
-    ML model, and anomaly signals via Claude.
-
-    Expects payload with: loanId, applicantName, curpHash, employerName,
-    employerTier, monthlySalary, employmentTenureMonths, principalAmount,
-    loanToSalaryRatio, metamapIdentity, metamapCriminal, metamapDevice,
-    bureauData, riskseal, repaymentProbability, modelVersion,
-    approvalThreshold, shapExplanations, anomalyFlags, escalationReason.
-    """
-    auth(x_internal_secret)
-
-    if not AKEY:
-        raise HTTPException(503, "ANTHROPIC_API_KEY not configured")
-
-    # Render user prompt from template
-    user_prompt = render_user_prompt(
-        STAGE5_PROMPT,
-        loan_id=payload.get("loanId", "unknown"),
-        applicant_name=payload.get("applicantName", "N/A"),
-        curp_hash=payload.get("curpHash", "N/A"),
-        employer_name=payload.get("employerName", "N/A"),
-        employer_tier=payload.get("employerTier", "N/A"),
-        monthly_salary=f"{float(payload.get('monthlySalary', 0)):,.2f}",
-        employment_tenure_months=payload.get("employmentTenureMonths", "N/A"),
-        principal_amount=f"{float(payload.get('principalAmount', 0)):,.2f}",
-        loan_to_salary_ratio=f"{float(payload.get('loanToSalaryRatio', 0)):.1%}",
-        metamap_identity_json=json.dumps(payload.get("metamapIdentity", {}), indent=2),
-        metamap_criminal_json=json.dumps(payload.get("metamapCriminal", {}), indent=2),
-        metamap_device_json=json.dumps(payload.get("metamapDevice", {}), indent=2),
-        bureau_data_json=json.dumps(payload.get("bureauData", {}), indent=2),
-        riskseal_json=json.dumps(payload.get("riskseal", {}), indent=2),
-        repayment_probability=f"{float(payload.get('repaymentProbability', 0)):.4f}",
-        model_version=payload.get("modelVersion", "logistic_v1.0"),
-        approval_threshold=payload.get("approvalThreshold", APPROVAL_THRESHOLD),
-        shap_explanations_json=json.dumps(payload.get("shapExplanations", []), indent=2),
-        anomaly_flags_json=json.dumps(payload.get("anomalyFlags", {}), indent=2),
-        escalation_reason=payload.get("escalationReason", "Not specified"),
-    )
-
-    system_prompt = get_system_prompt(STAGE5_PROMPT)
-    config = get_model_config(STAGE5_PROMPT)
-
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=AKEY)
-        msg = client.messages.create(
-            model=config["model"],
-            max_tokens=config["max_tokens"],
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        narrative = json.loads(msg.content[0].text)
-    except json.JSONDecodeError as e:
-        logger.error("Claude returned invalid JSON for loan %s: %s", payload.get("loanId"), e)
-        raise HTTPException(502, "LLM returned invalid JSON")
-    except Exception as e:
-        logger.error("LLM error for Stage 5 narrative (loan %s): %s", payload.get("loanId"), e)
-        raise HTTPException(502, f"LLM error: {e}")
-
-    return {
-        "loanId": payload.get("loanId"),
-        "promptVersion": "v1.7.0",
-        "narrative": narrative,
-        "ts": int(time.time()),
+        "championModel": result["champion_model"],
+        "challengerModel": result["challenger_model"],
+        "shapTop5": result["shap_top5"],
     }
