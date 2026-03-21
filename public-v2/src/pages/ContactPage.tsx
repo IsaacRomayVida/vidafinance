@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { Helmet } from 'react-helmet-async';
 import { RichText } from '../components/shared/RichText';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ContactForm } from '../components/marketing/ContactForm';
 
 const CHANNELS = ['general', 'employers', 'press', 'investors', 'privacy'] as const;
@@ -9,13 +9,10 @@ const CHANNELS = ['general', 'employers', 'press', 'investors', 'privacy'] as co
 export function ContactPage() {
   const { t } = useTranslation();
   useRevealOnScroll();
+  useDocumentTitle(`VIDA — ${t('pg_contact_badge')}`);
 
   return (
     <>
-      <Helmet>
-        <title>{t('pg_contact_h1')} | Vida</title>
-        <meta name="description" content={t('pg_contact_sub')} />
-      </Helmet>
 
       {/* Hero */}
       <section className="hero" style={{ padding: '100px 0 80px' }}>

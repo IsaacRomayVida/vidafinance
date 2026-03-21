@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { HelmetProvider } from 'react-helmet-async';
 import { MarketingLayout } from './components/layout/MarketingLayout';
 import { RouteGuard } from './components/RouteGuard';
 import { EmployeeLayout } from './components/layouts/EmployeeLayout';
@@ -35,8 +34,7 @@ import './i18n';
 
 export default function App() {
   return (
-    <HelmetProvider>
-      <BrowserRouter>
+    <BrowserRouter>
         <Routes>
           {/* Marketing pages */}
           <Route element={<MarketingLayout />}>
@@ -95,7 +93,6 @@ export default function App() {
           {/* 404 catch-all */}
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </BrowserRouter>
-    </HelmetProvider>
+    </BrowserRouter>
   );
 }

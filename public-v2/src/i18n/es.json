@@ -460,5 +460,16 @@
   "pg_press_brand_3_t": "Color acento",
   "pg_press_brand_3_d": "Dorado #C9A84C — usado como color de señal, nunca como fondo. Reservado para destacar datos clave.",
   "pg_press_brand_4_t": "Tipografía",
-  "pg_press_brand_4_d": "DM Serif Display para titulares. DM Sans para cuerpo de texto. Ambas de Google Fonts."
+  "pg_press_brand_4_d": "DM Serif Display para titulares. DM Sans para cuerpo de texto. Ambas de Google Fonts.",
+
+  "auth_welcome": "Bienvenido de nuevo",
+  "auth_signin_sub": "Inicia sesión en tu cuenta VIDA",
+  "auth_email": "Correo electrónico",
+  "auth_email_placeholder": "tu@empresa.com",
+  "auth_password": "Contraseña",
+  "auth_password_placeholder": "Ingresa tu contraseña",
+  "auth_signing_in": "Iniciando sesión…",
+  "auth_signin_btn": "Iniciar Sesión",
+  "auth_no_account": "¿No tienes cuenta?",
+  "auth_signup_link": "Regístrate"
 }
