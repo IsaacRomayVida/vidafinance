@@ -5,9 +5,12 @@
  */
 import { Router } from 'express';
 import axios from 'axios';
+import pino from 'pino';
 import { requireInternalSecret } from '../lib/internalAuth';
 import { db } from '../lib/firestore';
 import admin from '../lib/firestore';
+
+const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
 const router = Router();
 
@@ -100,7 +103,7 @@ router.post('/internal/disburse', requireInternalSecret, async (req, res) => {
     res.json({ success: true, ref: r.trackingCode, transferId: r.transferId });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal error';
-    console.error('[internal/disburse] error:', message);
+    log.error({ error: message, loanId, service: 'softcredito-adapter' }, 'SPEI disbursement error');
     res.status(500).json({ error: message });
   }
 });

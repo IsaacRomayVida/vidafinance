@@ -7,7 +7,10 @@ const { Worker } = require("bullmq");
 const Handlebars = require("handlebars");
 const fs         = require("fs");
 const path       = require("path");
+const createLogger = require("../shared/logger");
 require("dotenv").config();
+
+const log = createLogger("vida-pdf-generator");
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -185,5 +188,5 @@ app.get("/health", async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3004, () =>
-  console.log("vida-pdf-generator on", process.env.PORT || 3004)
+  log.info({ port: process.env.PORT || 3004 }, "vida-pdf-generator started")
 );

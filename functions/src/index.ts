@@ -1,6 +1,7 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
@@ -108,7 +109,7 @@ export const requestLoan = onCall(
           if (cnt > 3) throw new HttpsError('resource-exhausted', 'Máximo 3 solicitudes por hora');
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
-          console.warn('Redis rate limit unavailable:', (e as Error).message);
+          logger.warn('Redis rate limit unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
         if (typeof amount !== 'number' || amount < 500 || amount > 5000)
@@ -166,7 +167,7 @@ export const requestLoan = onCall(
           });
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
-          console.warn('ML unavailable:', (e as Error).message);
+          logger.warn('ML unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
         await db.runTransaction(async (tx) => {
@@ -331,7 +332,7 @@ export const approveEmployer = onCall(
           }
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
-          console.warn('ML scoring unavailable:', (e as Error).message);
+          logger.warn('ML scoring unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
         try {
@@ -350,7 +351,7 @@ export const approveEmployer = onCall(
             }),
           });
         } catch (e: unknown) {
-          console.warn('SoftCrédito registration warning:', (e as Error).message);
+          logger.warn('SoftCrédito registration warning', { error: (e as Error).message, service: 'functions' });
         }
 
         try {
@@ -363,7 +364,7 @@ export const approveEmployer = onCall(
             employerCode: emp['employerCode'],
           });
         } catch (e: unknown) {
-          console.warn('Notification queue unavailable:', (e as Error).message);
+          logger.warn('Notification queue unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
         try {
@@ -564,7 +565,7 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
     });
   } catch (e: unknown) {
-    console.warn('Queue unavailable:', (e as Error).message);
+    logger.warn('Queue unavailable', { error: (e as Error).message, service: 'functions' });
   }
 
   return null;
@@ -757,7 +758,7 @@ export const queueHealthCheck = onSchedule(
         }
       }
     } catch (e: unknown) {
-      console.warn('Queue health check failed:', (e as Error).message);
+      logger.warn('Queue health check failed', { error: (e as Error).message, service: 'functions' });
     }
   }
 );

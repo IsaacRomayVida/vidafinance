@@ -1,6 +1,9 @@
 import { Router } from 'express';
+import pino from 'pino';
 import { requireInternalSecret } from '../lib/internalAuth';
 import { validateCurp } from '../services/renapoCurpService';
+
+const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
 const router = Router();
 
@@ -26,7 +29,7 @@ router.post('/curp/validate', requireInternalSecret, async (req, res) => {
     res.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal error';
-    console.error('[curp/validate] error:', message);
+    log.error({ error: message, service: 'softcredito-adapter' }, 'CURP validation error');
     res.status(502).json({ error: `RENAPO API error: ${message}` });
   }
 });

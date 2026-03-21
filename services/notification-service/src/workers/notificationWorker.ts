@@ -1,7 +1,10 @@
 import { Worker, Job } from 'bullmq';
+import pino from 'pino';
 import { TwilioService } from '../services/twilioService';
 import { SendGridService } from '../services/sendgridService';
 import { FirestoreService } from '../services/firestoreService';
+
+const log = pino({ name: 'vida-notification-service', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
 const twilio = new TwilioService();
 const sendgrid = new SendGridService();
@@ -84,7 +87,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
   QUEUE_NAME,
   async (job: Job<NotificationJobData>) => {
     const data = job.data;
-    console.log(`[notification] Processing ${data.type} job ${job.id}`);
+    log.info({ jobId: job.id, type: data.type, loanId: data.loanId, correlationId: (data as unknown as Record<string, unknown>).correlationId, service: 'notification-service' }, 'Processing notification job');
 
     switch (data.type) {
 
@@ -166,7 +169,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
         // New-format jobs have adminContactEmail; legacy have email + employerUid
         const to = data.adminContactEmail ?? data.email;
         if (!to) {
-          console.warn(`[notification] ${data.type} job ${job.id} missing recipient email — skipping`);
+          log.warn({ jobId: job.id, type: data.type, service: 'notification-service' }, 'Missing recipient email — skipping');
           break;
         }
         await sendgrid.sendEmail({
@@ -187,7 +190,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
       case 'employer_rejected': {
         const to = data.adminContactEmail ?? data.email;
         if (!to) {
-          console.warn(`[notification] employer_rejected job ${job.id} missing recipient email — skipping`);
+          log.warn({ jobId: job.id, type: data.type, service: 'notification-service' }, 'employer_rejected missing recipient email — skipping');
           break;
         }
         await sendgrid.sendEmail({
@@ -225,7 +228,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
       }
 
       default:
-        console.warn(`[notification] Unknown job type: ${data.type} (job ${job.id})`);
+        log.warn({ jobId: job.id, type: data.type, service: 'notification-service' }, 'Unknown job type');
     }
   },
   {
@@ -235,9 +238,9 @@ export const notificationWorker = new Worker<NotificationJobData>(
 );
 
 notificationWorker.on('completed', (job) => {
-  console.log(`[notification] ✅ ${job.data.type} job ${job.id} completed`);
+  log.info({ jobId: job.id, type: job.data.type, loanId: job.data.loanId, service: 'notification-service' }, 'Notification job completed');
 });
 
 notificationWorker.on('failed', (job, err) => {
-  console.error(`[notification] ❌ ${job?.data.type} job ${job?.id} failed:`, err.message);
+  log.error({ jobId: job?.id, type: job?.data.type, loanId: job?.data.loanId, error: err.message, service: 'notification-service' }, 'Notification job failed');
 });

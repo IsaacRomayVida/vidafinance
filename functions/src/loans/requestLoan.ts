@@ -1,4 +1,6 @@
+import { randomUUID } from 'crypto';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
@@ -159,7 +161,7 @@ export async function handleRequestLoan(request: {
     }
   } catch (e: unknown) {
     if (e instanceof HttpsError) throw e;
-    console.warn('Redis rate limit unavailable:', (e as Error).message);
+    logger.warn('Redis rate limit unavailable', { error: (e as Error).message, service: 'functions' });
   }
 
   // 4. Reject if borrower already has an active loan
@@ -242,6 +244,7 @@ export async function handleRequestLoan(request: {
   // 9. Write loan document to Firestore
   const loanRef = db.collection('loans').doc();
   const loanId = loanRef.id;
+  const correlationId = randomUUID();
   const now = Timestamp.now();
   const feeAmount = Math.round(input.amount * 0.3);
 
@@ -257,6 +260,7 @@ export async function handleRequestLoan(request: {
 
   await loanRef.set({
     loanId,
+    correlationId,
     userId: uid,
     employerId: employer['employerId'] as string,
     employerCode: input.employerCode,
@@ -289,6 +293,7 @@ export async function handleRequestLoan(request: {
     const queue = getUnderwritingQueue();
     await queue.add('underwrite_loan', {
       loanId,
+      correlationId,
       userId: uid,
       principalAmount: input.amount,
       employerId: employer['employerId'] as string,
@@ -299,7 +304,7 @@ export async function handleRequestLoan(request: {
       requestedAt: now.toDate().toISOString(),
     });
   } catch (e: unknown) {
-    console.warn('Underwriting queue unavailable:', (e as Error).message);
+    logger.warn('Underwriting queue unavailable', { error: (e as Error).message, correlationId, loanId, service: 'functions' });
   }
 
   return {

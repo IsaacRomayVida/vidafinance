@@ -3,7 +3,10 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Worker } = require('bullmq');
+const createLogger = require('../shared/logger');
 require('dotenv').config();
+
+const log = createLogger('vida-softcredito-adapter');
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -192,4 +195,4 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3002, () => console.log('vida-softcredito-adapter on', process.env.PORT || 3002));
+app.listen(process.env.PORT || 3002, () => log.info({ port: process.env.PORT || 3002 }, 'vida-softcredito-adapter started'));

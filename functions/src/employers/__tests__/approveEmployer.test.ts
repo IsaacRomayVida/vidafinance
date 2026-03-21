@@ -68,6 +68,10 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }));
 
+jest.mock('firebase-functions', () => ({
+  logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn() },
+}));
+
 jest.mock('firebase-functions/v2/https', () => {
   class MockHttpsError extends Error {
     code: string;
