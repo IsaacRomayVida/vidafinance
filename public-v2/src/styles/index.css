@@ -345,6 +345,16 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 .auth-error{background:transparent;border:none;border-left:3px solid var(--danger);color:var(--danger);padding:12px 16px;border-radius:0;font-size:13px;margin-bottom:24px;display:none}
 .auth-error.show{display:block}
 
+.auth-container{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:40px 20px}
+.auth-header{font-family:var(--df);font-size:40px;color:var(--t1);text-align:center;margin-bottom:8px;letter-spacing:-.025em}
+.auth-input{width:100%;padding:16px 0;border:none;border-bottom:1.5px solid rgba(25,68,69,0.08);border-radius:0;font-size:16px;color:var(--t1);outline:none;transition:all .3s;background:transparent}
+.auth-input:focus{border-bottom-color:var(--brand);box-shadow:none}
+.auth-input::placeholder{color:var(--t3);font-weight:400}
+.auth-btn{width:100%;padding:18px;border-radius:12px;font-size:15px;font-weight:700;background:var(--brand);color:#fff;border:none;cursor:pointer;transition:all .3s;margin-top:16px}
+.auth-btn:hover{background:var(--brand-mid);transform:translateY(-2px);box-shadow:0 8px 28px rgba(25,68,69,0.15)}
+.auth-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.auth-link{font-size:13px;color:var(--t3);border-bottom:1px solid rgba(25,68,69,0.12);padding-bottom:1px;background:none;cursor:pointer}
+
 /* ============================================= */
 /* DASHBOARD — Editorial, No-Card, Divider-based  */
 /* ============================================= */
