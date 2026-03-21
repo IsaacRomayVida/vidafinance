@@ -3,11 +3,14 @@ const helmet     = require("helmet");
 const puppeteer  = require("puppeteer");
 const admin      = require("firebase-admin");
 const IORedis    = require("ioredis");
-const { Worker } = require("bullmq");
+const { Queue, Worker } = require("bullmq");
 const Handlebars = require("handlebars");
 const fs         = require("fs");
 const path       = require("path");
 require("dotenv").config();
+
+const pkg = require("./package.json");
+const START_TIME = Date.now();
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -176,10 +179,28 @@ app.get("/health", async (req, res) => {
     .ping()
     .then(() => true)
     .catch(() => false);
-  res.json({
-    status: redisOk ? "ok" : "degraded",
+
+  let firestoreOk = false;
+  try { await db.collection("_health").limit(1).get(); firestoreOk = true; } catch (_) {}
+
+  // Queue depth
+  const queueDepth = {};
+  try {
+    const q = new Queue("vida-pdfs", { connection: redis });
+    queueDepth.pdfs = await q.getWaitingCount();
+    await q.close();
+  } catch (_) { queueDepth.pdfs = -1; }
+
+  const down = !redisOk && !firestoreOk;
+  const degraded = !redisOk || !firestoreOk;
+  res.status(down ? 503 : 200).json({
+    status: down ? "down" : degraded ? "degraded" : "ok",
     service: "vida-pdf-generator",
+    version: pkg.version,
+    uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
     redis: redisOk,
+    firestore: firestoreOk,
+    queue_depth: queueDepth,
     ts: new Date().toISOString(),
   });
 });
