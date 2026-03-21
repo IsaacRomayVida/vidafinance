@@ -4,10 +4,10 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Queue, Worker } = require('bullmq');
-const createLogger = require('../shared/logger');
 require('dotenv').config();
 
-const log = createLogger('vida-payment-server');
+const pkg = require('./package.json');
+const START_TIME = Date.now();
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -49,8 +49,33 @@ const getQueue = name => new Queue(name, {
 
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/health', async (req, res) => {
-  const r = await redis.ping().then(() => true).catch(() => false);
-  res.json({ status: r ? 'ok' : 'degraded', service: 'vida-payment-server', redis: r, ts: new Date().toISOString() });
+  const redisOk = await redis.ping().then(() => true).catch(() => false);
+  let firestoreOk = false;
+  try { await db.collection('_health').limit(1).get(); firestoreOk = true; } catch (_) {}
+
+  // Queue depths
+  const queueDepth = {};
+  const qNames = ['vida-disbursements', 'vida-notifications', 'vida-pdfs', 'vida-underwriting'];
+  for (const n of qNames) {
+    try {
+      const q = new Queue(n, { connection: redis });
+      queueDepth[n.replace('vida-', '')] = await q.getWaitingCount();
+      await q.close();
+    } catch (_) { queueDepth[n.replace('vida-', '')] = -1; }
+  }
+
+  const down = !redisOk && !firestoreOk;
+  const degraded = !redisOk || !firestoreOk;
+  res.status(down ? 503 : 200).json({
+    status: down ? 'down' : degraded ? 'degraded' : 'ok',
+    service: 'vida-payment-server',
+    version: pkg.version,
+    uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
+    redis: redisOk,
+    firestore: firestoreOk,
+    queue_depth: queueDepth,
+    ts: new Date().toISOString(),
+  });
 });
 
 // ── Conekta webhook ─────────────────────────────────────────────────
@@ -165,4 +190,4 @@ disburseWorker.on('failed', async (job, err) => {
   }
 });
 
-app.listen(process.env.PORT || 3001, () => log.info({ port: process.env.PORT || 3001 }, 'vida-payment-server started'));
+app.listen(process.env.PORT || 3001, () => console.log('vida-payment-server on', process.env.PORT || 3001));
