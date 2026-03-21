@@ -204,13 +204,16 @@ async def score_loan_direct(
     Direct synchronous scoring endpoint.
     Accepts the same payload as the BullMQ job data so other services
     can call underwriting synchronously without going through the queue.
+
+    Runs champion/challenger models when available, falls back to v1.
     """
     auth(x_internal_secret)
     from workers.underwriting_worker import (
-        process_underwrite_loan,
         encode_pay_freq,
         encode_industry,
         get_rejection_reason,
+        get_router,
+        build_v2_features,
         APPROVAL_THRESHOLD,
     )
     from models.underwriting_model import UnderwritingModel
@@ -220,7 +223,7 @@ async def score_loan_direct(
     principal = float(payload.get("principalAmount", 0))
     monthly_salary = float(borrower.get("monthlySalary", 1))
 
-    features = {
+    v1_features = {
         "employment_tenure_months": float(borrower.get("employmentTenureMonths", 0)),
         "monthly_salary": monthly_salary,
         "pay_frequency_encoded": float(encode_pay_freq(borrower.get("payFrequency", "monthly"))),
@@ -231,12 +234,34 @@ async def score_loan_direct(
         "has_bureau_record": 0.0,
     }
 
+    router = get_router()
+    if router is not None:
+        v2_features = build_v2_features(borrower, principal, monthly_salary, None)
+        result = router.predict(v2_features)
+        prob = result["champion_prob"]
+        model_name = result["champion_model"]
+        decision = "approved" if prob >= APPROVAL_THRESHOLD else "rejected"
+
+        if v1_features["employment_tenure_months"] < 3:
+            decision = "rejected"
+
+        return {
+            "decision": decision,
+            "score": round(prob, 4),
+            "threshold": APPROVAL_THRESHOLD,
+            "model": model_name,
+            "challenger_score": round(result["challenger_prob"], 4),
+            "challenger_model": result["challenger_model"],
+            "champion_scorecard_points": result["champion_score"],
+            "shap_top5": result["shap_top5"],
+        }
+
     model_path = _os.environ.get("MODEL_PATH", "models/underwriting_v1.joblib")
     model = UnderwritingModel.load(model_path)
-    prob = model.predict_proba(features)
+    prob = model.predict_proba(v1_features)
     decision = "approved" if prob >= APPROVAL_THRESHOLD else "rejected"
 
-    if features["employment_tenure_months"] < 3:
+    if v1_features["employment_tenure_months"] < 3:
         decision = "rejected"
 
     return {
@@ -244,4 +269,26 @@ async def score_loan_direct(
         "score": round(prob, 4),
         "threshold": APPROVAL_THRESHOLD,
         "model": "logistic_v1.0",
+    }
+
+
+@app.get("/models/status")
+def model_status(x_internal_secret: str = Header(None)):
+    """Return the current champion/challenger model status and promotion check."""
+    auth(x_internal_secret)
+    from workers.underwriting_worker import get_router
+
+    router = get_router()
+    if router is None:
+        return {
+            "champion": "logistic_v1.0",
+            "challenger": None,
+            "promotion": None,
+        }
+
+    promotion = router.check_promotion()
+    return {
+        "champion": router.champion.version,
+        "challenger": router.challenger.version,
+        "promotion": promotion,
     }

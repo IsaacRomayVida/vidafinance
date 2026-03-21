@@ -183,7 +183,7 @@ async def test_good_loan_approved():
     update_args = firestore_mock.update_loan.call_args[0]
     assert update_args[0] == "test-loan-001"
     assert update_args[1]["status"] == "approved"
-    assert update_args[1]["underwritingModel"] == "logistic_v1.0"
+    assert update_args[1]["underwritingModel"] in ("logistic_v1.0", "scorecard_champion_v2.0")
 
     # Disbursement job should be pushed
     assert redis_mock.lpush.call_count >= 2  # disbursements + notifications
