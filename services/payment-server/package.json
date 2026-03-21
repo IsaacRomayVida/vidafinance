@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "lint": "eslint '*.js' 'src/**/*.js' 'routes/**/*.js'"
   },
   "dependencies": {
     "bullmq": "^5.0.0",
