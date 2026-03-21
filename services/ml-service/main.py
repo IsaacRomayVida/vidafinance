@@ -10,6 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
+from prompts.loader import (
+    get_system_prompt,
+    get_model_config,
+    preload_all,
+    render_user_prompt,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ml-service")
@@ -28,6 +34,8 @@ _worker_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     global _worker_task
     has_firebase = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
+    loaded = preload_all()
+    logger.info("Preloaded %d prompt templates: %s", len(loaded), loaded)
     if os.environ.get("REDIS_URL") and has_firebase:
         try:
             from workers.underwriting_worker import start_worker
@@ -244,4 +252,78 @@ async def score_loan_direct(
         "score": round(prob, 4),
         "threshold": APPROVAL_THRESHOLD,
         "model": "logistic_v1.0",
+    }
+
+
+STAGE5_PROMPT = "stage5_risk_narrative_v1.7.0"
+
+
+@app.post("/stage5/risk-narrative")
+async def stage5_risk_narrative(payload: dict, x_internal_secret: str = Header(None)):
+    """
+    Generate a Stage 5 risk narrative by synthesizing MetaMap, bureau,
+    ML model, and anomaly signals via Claude.
+
+    Expects payload with: loanId, applicantName, curpHash, employerName,
+    employerTier, monthlySalary, employmentTenureMonths, principalAmount,
+    loanToSalaryRatio, metamapIdentity, metamapCriminal, metamapDevice,
+    bureauData, riskseal, repaymentProbability, modelVersion,
+    approvalThreshold, shapExplanations, anomalyFlags, escalationReason.
+    """
+    auth(x_internal_secret)
+
+    if not AKEY:
+        raise HTTPException(503, "ANTHROPIC_API_KEY not configured")
+
+    # Render user prompt from template
+    user_prompt = render_user_prompt(
+        STAGE5_PROMPT,
+        loan_id=payload.get("loanId", "unknown"),
+        applicant_name=payload.get("applicantName", "N/A"),
+        curp_hash=payload.get("curpHash", "N/A"),
+        employer_name=payload.get("employerName", "N/A"),
+        employer_tier=payload.get("employerTier", "N/A"),
+        monthly_salary=f"{float(payload.get('monthlySalary', 0)):,.2f}",
+        employment_tenure_months=payload.get("employmentTenureMonths", "N/A"),
+        principal_amount=f"{float(payload.get('principalAmount', 0)):,.2f}",
+        loan_to_salary_ratio=f"{float(payload.get('loanToSalaryRatio', 0)):.1%}",
+        metamap_identity_json=json.dumps(payload.get("metamapIdentity", {}), indent=2),
+        metamap_criminal_json=json.dumps(payload.get("metamapCriminal", {}), indent=2),
+        metamap_device_json=json.dumps(payload.get("metamapDevice", {}), indent=2),
+        bureau_data_json=json.dumps(payload.get("bureauData", {}), indent=2),
+        riskseal_json=json.dumps(payload.get("riskseal", {}), indent=2),
+        repayment_probability=f"{float(payload.get('repaymentProbability', 0)):.4f}",
+        model_version=payload.get("modelVersion", "logistic_v1.0"),
+        approval_threshold=payload.get("approvalThreshold", APPROVAL_THRESHOLD),
+        shap_explanations_json=json.dumps(payload.get("shapExplanations", []), indent=2),
+        anomaly_flags_json=json.dumps(payload.get("anomalyFlags", {}), indent=2),
+        escalation_reason=payload.get("escalationReason", "Not specified"),
+    )
+
+    system_prompt = get_system_prompt(STAGE5_PROMPT)
+    config = get_model_config(STAGE5_PROMPT)
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=AKEY)
+        msg = client.messages.create(
+            model=config["model"],
+            max_tokens=config["max_tokens"],
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        narrative = json.loads(msg.content[0].text)
+    except json.JSONDecodeError as e:
+        logger.error("Claude returned invalid JSON for loan %s: %s", payload.get("loanId"), e)
+        raise HTTPException(502, "LLM returned invalid JSON")
+    except Exception as e:
+        logger.error("LLM error for Stage 5 narrative (loan %s): %s", payload.get("loanId"), e)
+        raise HTTPException(502, f"LLM error: {e}")
+
+    return {
+        "loanId": payload.get("loanId"),
+        "promptVersion": "v1.7.0",
+        "narrative": narrative,
+        "ts": int(time.time()),
     }
