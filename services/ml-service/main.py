@@ -28,11 +28,12 @@ AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
 
 _worker_task: asyncio.Task | None = None
+_drift_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _worker_task
+    global _worker_task, _drift_task
     has_firebase = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
     loaded = preload_all()
     logger.info("Preloaded %d prompt templates: %s", len(loaded), loaded)
@@ -47,14 +48,26 @@ async def lifespan(app: FastAPI):
         logger.warning(
             "Underwriting worker not started: REDIS_URL or Firebase credentials missing"
         )
-    yield
-    if _worker_task and not _worker_task.done():
-        _worker_task.cancel()
+
+    # Start weekly drift monitoring scheduler
+    if has_firebase:
         try:
-            await _worker_task
-        except asyncio.CancelledError:
-            pass
-        logger.info("Underwriting worker stopped")
+            from workers.drift_scheduler import start_drift_scheduler
+            _drift_task = asyncio.create_task(start_drift_scheduler())
+            logger.info("Drift monitoring scheduler started")
+        except Exception as e:
+            logger.warning("Could not start drift scheduler: %s", e)
+
+    yield
+
+    for task, name in [(_worker_task, "worker"), (_drift_task, "drift scheduler")]:
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            logger.info("%s stopped", name.capitalize())
 
 
 app = FastAPI(title="vida-ml-service", lifespan=lifespan)
@@ -185,12 +198,29 @@ def explain(decision_id: str, x_internal_secret: str = Header(None)):
 
 
 @app.post("/monitor/drift")
-def drift(payload: dict, x_internal_secret: str = Header(None)):
+async def drift(payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
+    from workers.drift_scheduler import run_drift_check_async
+
+    report = await run_drift_check_async()
+    if report is None:
+        return {
+            "drift_detected": False,
+            "psi_scores": {},
+            "message": "Insufficient data for drift check (need 30+ scored loans)",
+        }
+
     return {
-        "drift_detected": False,
-        "psi_scores": {},
-        "message": "Active after first model training",
+        "drift_detected": report["alert_level"] != "stable",
+        "alert_level": report["alert_level"],
+        "score_psi": report["score_psi"],
+        "psi_scores": {
+            name: csi["csi"] for name, csi in report["feature_csi"].items()
+        },
+        "feature_details": report["feature_csi"],
+        "thresholds": report["thresholds"],
+        "current_samples": report["current_samples"],
+        "timestamp": report["timestamp"],
     }
 
 
