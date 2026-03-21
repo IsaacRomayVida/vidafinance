@@ -109,6 +109,16 @@ service cloud.firestore {
     match /system_health/{d}         { allow read: if isOps();    allow write: if false; }
 
     // =============================================
+    // REVIEW QUEUE — OPS/ADMIN READ, ADMIN SDK WRITE
+    // Stage 5 human review queue. Ops can read to process reviews.
+    // All writes go through Cloud Functions (Admin SDK).
+    // =============================================
+    match /review_queue/{d} {
+      allow read: if isOps();
+      allow write: if false;  // Only Cloud Functions via Admin SDK
+    }
+
+    // =============================================
     // INTERNAL QUEUES — DENY ALL CLIENT ACCESS
     // Only accessed by Cloud Functions via Admin SDK.
     // =============================================

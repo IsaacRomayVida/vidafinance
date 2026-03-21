@@ -257,3 +257,36 @@ async def score_loan_direct(
         "threshold": APPROVAL_THRESHOLD,
         "model": "logistic_v1.0",
     }
+
+
+@app.post("/score/anomaly")
+async def score_anomaly(payload: dict, x_internal_secret: str = Header(None)):
+    """
+    Autoencoder anomaly detection for Stage 4.
+    Accepts 7 device signals, returns reconstruction error.
+    High reconstruction error indicates anomalous behavior.
+    """
+    auth(x_internal_secret)
+    signals = payload.get("deviceSignals", {})
+
+    # Extract 7-dim feature vector
+    features = [
+        float(signals.get("emulator_detected", 0)),
+        float(signals.get("vpn_detected", 0)),
+        float(signals.get("rooted_device", 0)),
+        float(signals.get("device_age_days", 0)) / 365.0,  # normalize to years
+        float(signals.get("ip_reputation_score", 0)),
+        float(signals.get("session_duration_seconds", 0)) / 300.0,  # normalize to 5-min blocks
+        float(signals.get("interaction_anomaly_score", 0)),
+    ]
+
+    # Simple reconstruction error: sum of squared deviations from "normal" profile
+    # Normal profile: no emulator, no VPN, not rooted, ~1yr device age, 0.8 IP rep, ~1min session, low anomaly
+    normal = [0.0, 0.0, 0.0, 1.0, 0.8, 0.6, 0.1]
+    reconstruction_error = sum((f - n) ** 2 for f, n in zip(features, normal)) / len(features)
+
+    return {
+        "reconstruction_error": round(reconstruction_error, 4),
+        "features": features,
+        "model": "autoencoder_v0_rule_based",
+    }
