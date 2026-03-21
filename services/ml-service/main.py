@@ -9,7 +9,7 @@ import redis as Redis
 from dotenv import load_dotenv
 
 load_dotenv()
-from scoring import employer_score, employee_score, fraud_score
+from scoring import employer_score, employee_score, fraud_score, device_fraud_score
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ml-service")
@@ -145,12 +145,16 @@ async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
             return json.loads(c)
     except Exception:
         pass
-    fd = fraud_score(
-        {
-            "requestsLastHour": payload.get("requestsLastHour", 0),
-            "amountToSalaryRatio": amt / max(payload.get("monthlySalary", 1), 1),
-        }
-    )
+    fraud_input = {
+        "requestsLastHour": payload.get("requestsLastHour", 0),
+        "amountToSalaryRatio": amt / max(payload.get("monthlySalary", 1), 1),
+    }
+    # Stage 4: include MetaMap device signals when present
+    if payload.get("deviceSignals"):
+        fraud_input["deviceSignals"] = payload["deviceSignals"]
+        fd = device_fraud_score(fraud_input)
+    else:
+        fd = fraud_score(fraud_input)
     result = employee_score(payload)
     final = {
         **result,
