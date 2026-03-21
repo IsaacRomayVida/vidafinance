@@ -6,6 +6,7 @@ import { ROICalculator } from '../components/marketing/ROICalculator';
 import { EmployerSection } from '../components/marketing/EmployerSection';
 import { FeatureCards } from '../components/marketing/FeatureCards';
 import { TrustSection } from '../components/marketing/TrustSection';
+import { FAQSection } from '../components/marketing/FAQSection';
 import { ClosingSection } from '../components/marketing/ClosingSection';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -24,6 +25,7 @@ export function HomePage() {
       <EmployerSection />
       <FeatureCards />
       <TrustSection />
+      <FAQSection />
       <ClosingSection />
     </>
   );
