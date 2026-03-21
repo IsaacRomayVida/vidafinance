@@ -1,86 +1,259 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import {
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  type AuthError,
+} from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
+import { VidaLogo } from '../components/shared/VidaLogo';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+
+function mapAuthError(code: string): string {
+  switch (code) {
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'auth_error_wrong_password';
+    case 'auth/user-not-found':
+      return 'auth_error_user_not_found';
+    case 'auth/too-many-requests':
+      return 'auth_error_too_many_requests';
+    case 'auth/invalid-email':
+      return 'auth_error_invalid_email';
+    default:
+      return 'auth_error_generic';
+  }
+}
 
 export function Login() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  useDocumentTitle(`VIDA — ${t('nav_login')}`);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [mode, setMode] = useState<'login' | 'forgot'>('login');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const toggleLang = () => {
+    const next = i18n.language === 'es' ? 'en' : 'es';
+    i18n.changeLanguage(next);
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setInfo('');
+
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
+
+      // Check email verification
+      if (!cred.user.emailVerified) {
+        await sendEmailVerification(cred.user);
+        setInfo(t('auth_verify_email'));
+        await auth.signOut();
+        setLoading(false);
+        return;
+      }
+
+      // Role-based redirect: check custom claims first, then Firestore
       const token = await cred.user.getIdTokenResult();
       const role = token.claims.role as string | undefined;
-      if (role === 'employee') navigate('/employee');
-      else if (role === 'employer_admin') navigate('/employer');
-      else if (role === 'ops' || role === 'admin' || role === 'super_admin') navigate('/ops');
-      else navigate('/');
-    } catch {
-      setError('Invalid email or password');
+
+      if (role === 'admin' || role === 'super_admin') {
+        navigate('/ops', { replace: true });
+      } else if (role === 'ops') {
+        navigate('/ops', { replace: true });
+      } else if (role === 'employer_admin') {
+        navigate('/employer', { replace: true });
+      } else if (role === 'employee') {
+        navigate('/employee', { replace: true });
+      } else {
+        // Fallback: check Firestore collections by uid
+        const employerDoc = await getDoc(doc(db, 'employers', cred.user.uid));
+        if (employerDoc.exists()) {
+          navigate('/employer', { replace: true });
+        } else {
+          navigate('/employee', { replace: true });
+        }
+      }
+    } catch (err) {
+      const code = (err as AuthError).code ?? '';
+      setError(t(mapAuthError(code)));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setInfo('');
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setInfo(t('auth_reset_sent'));
+    } catch (err) {
+      const code = (err as AuthError).code ?? '';
+      setError(t(mapAuthError(code)));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-teal-950 px-6">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        <h1 className="text-2xl font-bold text-teal-900">{t('auth_welcome')}</h1>
-        <p className="mt-1 text-sm text-teal-600">{t('auth_signin_sub')}</p>
-
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-teal-800">
-              {t('auth_email')}
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t('auth_email_placeholder')}
-              className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-teal-800">
-              {t('auth_password')}
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={t('auth_password_placeholder')}
-              className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-              required
-            />
-          </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-teal-900 py-2.5 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-60"
-          >
-            {loading ? t('auth_signing_in') : t('auth_signin_btn')}
-          </button>
-        </form>
-
-        <p className="mt-4 text-center text-sm text-gray-600">
-          {t('auth_no_account')}{' '}
-          <Link to="/get-started" className="font-medium text-teal-700 hover:text-teal-900">
-            {t('auth_signup_link')}
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="nav-logo">
+          <Link to="/">
+            <VidaLogo />
           </Link>
+        </div>
+
+        {mode === 'login' ? (
+          <>
+            <h2>{t('auth_welcome')}</h2>
+            <p className="auth-sub">{t('auth_signin_sub')}</p>
+
+            {error && (
+              <div className="auth-error show">{error}</div>
+            )}
+            {info && (
+              <div
+                className="auth-error show"
+                style={{ borderLeftColor: 'var(--gold)', color: '#8d6e00' }}
+              >
+                {info}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin}>
+              <div className="form-group">
+                <label>{t('auth_email')}</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={t('auth_email_placeholder')}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('auth_password')}</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t('auth_password_placeholder')}
+                  required
+                />
+              </div>
+
+              <p style={{ textAlign: 'right', marginBottom: '16px' }}>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setMode('forgot');
+                    setError('');
+                    setInfo('');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--t3)',
+                    borderBottom: '1px solid rgba(25,68,69,0.12)',
+                    paddingBottom: '1px',
+                  }}
+                >
+                  {t('auth_forgot_password')}
+                </a>
+              </p>
+
+              <button type="submit" className="btn-primary" disabled={loading}>
+                {loading ? (
+                  <>
+                    <span className="spinner" /> {t('auth_signing_in')}
+                  </>
+                ) : (
+                  t('auth_signin_btn')
+                )}
+              </button>
+            </form>
+
+            <p className="auth-footer">
+              {t('auth_no_account')}{' '}
+              <Link to="/onboarding">{t('auth_signup_link')}</Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <h2>{t('auth_forgot_title')}</h2>
+            <p className="auth-sub">{t('auth_forgot_sub')}</p>
+
+            {error && (
+              <div className="auth-error show">{error}</div>
+            )}
+            {info && (
+              <div
+                className="auth-error show"
+                style={{ borderLeftColor: 'var(--success)', color: 'var(--success)' }}
+              >
+                {info}
+              </div>
+            )}
+
+            <form onSubmit={handleForgotPassword}>
+              <div className="form-group">
+                <label>{t('auth_email')}</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={t('auth_email_placeholder')}
+                  required
+                />
+              </div>
+
+              <button type="submit" className="btn-primary" disabled={loading}>
+                {loading ? t('auth_sending_reset') : t('auth_send_reset')}
+              </button>
+            </form>
+
+            <p className="auth-footer">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMode('login');
+                  setError('');
+                  setInfo('');
+                }}
+              >
+                {t('auth_back_to_login')}
+              </a>
+            </p>
+          </>
+        )}
+
+        <p className="auth-footer" style={{ marginTop: '12px' }}>
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              toggleLang();
+            }}
+            style={{ color: 'var(--t3)' }}
+          >
+            {t('lang_toggle')}
+          </a>
         </p>
       </div>
     </div>
