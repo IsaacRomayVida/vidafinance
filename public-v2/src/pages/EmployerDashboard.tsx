@@ -38,16 +38,6 @@ interface DashStats {
 
 type TabKey = 'all' | 'pending' | 'approved' | 'active' | 'paid' | 'rejected';
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-blue-100 text-blue-800',
-  disbursement_queued: 'bg-blue-100 text-blue-800',
-  active: 'bg-green-100 text-green-800',
-  overdue: 'bg-red-100 text-red-800',
-  paid: 'bg-gray-100 text-gray-600',
-  rejected: 'bg-red-100 text-red-800',
-};
-
 function fmt(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
@@ -201,106 +191,117 @@ export function EmployerDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-teal-900">{employer?.companyName}</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {t('dash_employer_code')}: <span className="font-semibold text-teal-800">{employer?.employerCode}</span>
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-100 text-sm font-bold text-teal-800">
+      <div className="dash-header">
+        <h1>{employer?.companyName}</h1>
+        <div className="dash-user">
+          <span>
+            {t('dash_employer_code')}: <strong>{employer?.employerCode}</strong>
+          </span>
+          <div className="dash-avatar">
             {employer?.name?.charAt(0) || 'E'}
           </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label={t('dash_total_employees')} value={String(totalEmployees)} />
-        <StatCard label={t('dash_active_loans')} value={String(activeCount)} />
-        <StatCard label={t('dash_pending_requests')} value={String(pendingCount)} />
-        <StatCard label={t('dash_total_disbursed')} value={`$${fmt(totalDisbursed)}`} sub="MXN" />
-      </div>
-
-      {/* Loans Table */}
-      <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-4 text-lg font-semibold text-teal-900">{t('dash_recent_loans')}</h2>
-
-        {/* Tabs */}
-        <div className="mb-4 flex gap-0 overflow-x-auto border-b border-gray-100">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === tab.key
-                  ? 'border-teal-700 text-teal-900'
-                  : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              {tab.label} ({tabCount(tab.key)})
-            </button>
-          ))}
+      {/* Content */}
+      <div className="dash-content">
+        {/* Stats Grid */}
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_total_employees')}</div>
+            <div className="stat-value">{totalEmployees}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_active_loans')}</div>
+            <div className="stat-value">{activeCount}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_pending_requests')}</div>
+            <div className="stat-value">{pendingCount}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_total_disbursed')}</div>
+            <div className="stat-value">${fmt(totalDisbursed)}</div>
+            <div className="stat-change">MXN</div>
+          </div>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-10">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
-          </div>
-        ) : filteredLoans.length === 0 ? (
-          <div className="py-10 text-center text-sm text-gray-400">
-            <svg className="mx-auto mb-3 h-12 w-12 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-              <path d="M14 2v6h6" />
-            </svg>
-            <p>
-              {t('dash_no_loans_employer')} <strong>{employer?.employerCode}</strong> {t('dash_no_loans_employer_2')}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs font-medium uppercase text-gray-400">
-                  <th className="py-3 pr-4">{t('dash_th_employee')}</th>
-                  <th className="py-3 pr-4">{t('dash_th_amount')}</th>
-                  <th className="py-3 pr-4">{t('dash_th_term')}</th>
-                  <th className="py-3 pr-4">{t('dash_th_status')}</th>
-                  <th className="py-3 pr-4">{t('dash_th_date')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLoans.map((loan) => (
-                  <tr key={loan.id} className="border-b border-gray-50">
-                    <td className="py-3 pr-4 font-medium text-teal-900">{loan.employeeName || '—'}</td>
-                    <td className="py-3 pr-4">${fmt(loan.amount)}</td>
-                    <td className="py-3 pr-4">{loan.termDays ?? 30} {t('dash_days')}</td>
-                    <td className="py-3 pr-4">
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[loan.status] || 'bg-gray-100 text-gray-600'}`}>
-                        {t(`status_${loan.status}`)}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4 text-gray-500">
-                      {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString() : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+        {/* Loans Table */}
+        <div className="card">
+          <div className="card-title">{t('dash_recent_loans')}</div>
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-teal-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+          {/* Tabs */}
+          <div className="dash-tabs" style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(25,68,69,0.08)', marginBottom: 20 }}>
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`dash-tab-btn${activeTab === tab.key ? ' dash-tab-active' : ''}`}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: 13,
+                  fontWeight: activeTab === tab.key ? 700 : 500,
+                  color: activeTab === tab.key ? 'var(--brand)' : 'var(--t3)',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: activeTab === tab.key ? '2px solid var(--brand)' : '2px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all .2s',
+                }}
+              >
+                {tab.label} ({tabCount(tab.key)})
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center' }}>
+              <span className="spinner" style={{ borderColor: 'rgba(25,68,69,0.1)', borderTopColor: 'var(--brand)' }} />
+            </div>
+          ) : filteredLoans.length === 0 ? (
+            <div className="empty-state">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <path d="M14 2v6h6" />
+              </svg>
+              <p>
+                {t('dash_no_loans_employer')} <strong>{employer?.employerCode}</strong> {t('dash_no_loans_employer_2')}
+              </p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('dash_th_employee')}</th>
+                    <th>{t('dash_th_amount')}</th>
+                    <th>{t('dash_th_term')}</th>
+                    <th>{t('dash_th_status')}</th>
+                    <th>{t('dash_th_date')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLoans.map((loan) => (
+                    <tr key={loan.id}>
+                      <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
+                      <td>${fmt(loan.amount)}</td>
+                      <td>{loan.termDays ?? 30} {t('dash_days')}</td>
+                      <td>
+                        <span className={`badge badge-${loan.status}`}>
+                          {t(`status_${loan.status}`)}
+                        </span>
+                      </td>
+                      <td>
+                        {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString() : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
