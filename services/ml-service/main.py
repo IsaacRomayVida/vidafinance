@@ -3,27 +3,22 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-import structlog
 from fastapi import FastAPI, HTTPException, Header
 import os, json, time
 import redis as Redis
 from dotenv import load_dotenv
 
 load_dotenv()
-from scoring import employer_score, employee_score, fraud_score, device_fraud_score
-
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-structlog.configure(
-    processors=[
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),
-    ],
-    wrapper_class=structlog.stdlib.BoundLogger,
-    logger_factory=structlog.stdlib.LoggerFactory(),
+from scoring import employer_score, employee_score, fraud_score
+from prompts.loader import (
+    get_system_prompt,
+    get_model_config,
+    preload_all,
+    render_user_prompt,
 )
-logger = structlog.get_logger("ml-service")
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ml-service")
 
 rdb = Redis.from_url(
     os.environ.get("REDIS_URL", "redis://localhost:6379"), decode_responses=True
@@ -39,17 +34,18 @@ _worker_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     global _worker_task
     has_firebase = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
+    loaded = preload_all()
+    logger.info("Preloaded %d prompt templates: %s", len(loaded), loaded)
     if os.environ.get("REDIS_URL") and has_firebase:
         try:
             from workers.underwriting_worker import start_worker
             _worker_task = asyncio.create_task(start_worker())
-            logger.info("Underwriting worker task started", service="ml-service")
+            logger.info("Underwriting worker task started")
         except Exception as e:
-            logger.warning("Could not start underwriting worker", error=str(e), service="ml-service")
+            logger.warning("Could not start underwriting worker: %s", e)
     else:
         logger.warning(
-            "Underwriting worker not started: REDIS_URL or Firebase credentials missing",
-            service="ml-service",
+            "Underwriting worker not started: REDIS_URL or Firebase credentials missing"
         )
     yield
     if _worker_task and not _worker_task.done():
@@ -58,7 +54,7 @@ async def lifespan(app: FastAPI):
             await _worker_task
         except asyncio.CancelledError:
             pass
-        logger.info("Underwriting worker stopped", service="ml-service")
+        logger.info("Underwriting worker stopped")
 
 
 app = FastAPI(title="vida-ml-service", lifespan=lifespan)
@@ -129,7 +125,7 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
             )
             llm = json.loads(msg.content[0].text)
         except Exception as e:
-            logger.warning("LLM analysis failed", error=str(e), service="ml-service")
+            print("LLM error:", e)
     final = {
         **result,
         "llm_analysis": llm,
@@ -157,16 +153,12 @@ async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
             return json.loads(c)
     except Exception:
         pass
-    fraud_input = {
-        "requestsLastHour": payload.get("requestsLastHour", 0),
-        "amountToSalaryRatio": amt / max(payload.get("monthlySalary", 1), 1),
-    }
-    # Stage 4: include MetaMap device signals when present
-    if payload.get("deviceSignals"):
-        fraud_input["deviceSignals"] = payload["deviceSignals"]
-        fd = device_fraud_score(fraud_input)
-    else:
-        fd = fraud_score(fraud_input)
+    fd = fraud_score(
+        {
+            "requestsLastHour": payload.get("requestsLastHour", 0),
+            "amountToSalaryRatio": amt / max(payload.get("monthlySalary", 1), 1),
+        }
+    )
     result = employee_score(payload)
     final = {
         **result,
@@ -263,34 +255,75 @@ async def score_loan_direct(
     }
 
 
-@app.post("/score/anomaly")
-async def score_anomaly(payload: dict, x_internal_secret: str = Header(None)):
+STAGE5_PROMPT = "stage5_risk_narrative_v1.7.0"
+
+
+@app.post("/stage5/risk-narrative")
+async def stage5_risk_narrative(payload: dict, x_internal_secret: str = Header(None)):
     """
-    Autoencoder anomaly detection for Stage 4.
-    Accepts 7 device signals, returns reconstruction error.
-    High reconstruction error indicates anomalous behavior.
+    Generate a Stage 5 risk narrative by synthesizing MetaMap, bureau,
+    ML model, and anomaly signals via Claude.
+
+    Expects payload with: loanId, applicantName, curpHash, employerName,
+    employerTier, monthlySalary, employmentTenureMonths, principalAmount,
+    loanToSalaryRatio, metamapIdentity, metamapCriminal, metamapDevice,
+    bureauData, riskseal, repaymentProbability, modelVersion,
+    approvalThreshold, shapExplanations, anomalyFlags, escalationReason.
     """
     auth(x_internal_secret)
-    signals = payload.get("deviceSignals", {})
 
-    # Extract 7-dim feature vector
-    features = [
-        float(signals.get("emulator_detected", 0)),
-        float(signals.get("vpn_detected", 0)),
-        float(signals.get("rooted_device", 0)),
-        float(signals.get("device_age_days", 0)) / 365.0,  # normalize to years
-        float(signals.get("ip_reputation_score", 0)),
-        float(signals.get("session_duration_seconds", 0)) / 300.0,  # normalize to 5-min blocks
-        float(signals.get("interaction_anomaly_score", 0)),
-    ]
+    if not AKEY:
+        raise HTTPException(503, "ANTHROPIC_API_KEY not configured")
 
-    # Simple reconstruction error: sum of squared deviations from "normal" profile
-    # Normal profile: no emulator, no VPN, not rooted, ~1yr device age, 0.8 IP rep, ~1min session, low anomaly
-    normal = [0.0, 0.0, 0.0, 1.0, 0.8, 0.6, 0.1]
-    reconstruction_error = sum((f - n) ** 2 for f, n in zip(features, normal)) / len(features)
+    # Render user prompt from template
+    user_prompt = render_user_prompt(
+        STAGE5_PROMPT,
+        loan_id=payload.get("loanId", "unknown"),
+        applicant_name=payload.get("applicantName", "N/A"),
+        curp_hash=payload.get("curpHash", "N/A"),
+        employer_name=payload.get("employerName", "N/A"),
+        employer_tier=payload.get("employerTier", "N/A"),
+        monthly_salary=f"{float(payload.get('monthlySalary', 0)):,.2f}",
+        employment_tenure_months=payload.get("employmentTenureMonths", "N/A"),
+        principal_amount=f"{float(payload.get('principalAmount', 0)):,.2f}",
+        loan_to_salary_ratio=f"{float(payload.get('loanToSalaryRatio', 0)):.1%}",
+        metamap_identity_json=json.dumps(payload.get("metamapIdentity", {}), indent=2),
+        metamap_criminal_json=json.dumps(payload.get("metamapCriminal", {}), indent=2),
+        metamap_device_json=json.dumps(payload.get("metamapDevice", {}), indent=2),
+        bureau_data_json=json.dumps(payload.get("bureauData", {}), indent=2),
+        riskseal_json=json.dumps(payload.get("riskseal", {}), indent=2),
+        repayment_probability=f"{float(payload.get('repaymentProbability', 0)):.4f}",
+        model_version=payload.get("modelVersion", "logistic_v1.0"),
+        approval_threshold=payload.get("approvalThreshold", APPROVAL_THRESHOLD),
+        shap_explanations_json=json.dumps(payload.get("shapExplanations", []), indent=2),
+        anomaly_flags_json=json.dumps(payload.get("anomalyFlags", {}), indent=2),
+        escalation_reason=payload.get("escalationReason", "Not specified"),
+    )
+
+    system_prompt = get_system_prompt(STAGE5_PROMPT)
+    config = get_model_config(STAGE5_PROMPT)
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=AKEY)
+        msg = client.messages.create(
+            model=config["model"],
+            max_tokens=config["max_tokens"],
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        narrative = json.loads(msg.content[0].text)
+    except json.JSONDecodeError as e:
+        logger.error("Claude returned invalid JSON for loan %s: %s", payload.get("loanId"), e)
+        raise HTTPException(502, "LLM returned invalid JSON")
+    except Exception as e:
+        logger.error("LLM error for Stage 5 narrative (loan %s): %s", payload.get("loanId"), e)
+        raise HTTPException(502, f"LLM error: {e}")
 
     return {
-        "reconstruction_error": round(reconstruction_error, 4),
-        "features": features,
-        "model": "autoencoder_v0_rule_based",
+        "loanId": payload.get("loanId"),
+        "promptVersion": "v1.7.0",
+        "narrative": narrative,
+        "ts": int(time.time()),
     }
