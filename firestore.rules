@@ -114,6 +114,7 @@ service cloud.firestore {
     // =============================================
     match /disbursement_queue/{d}    { allow read, write: if false; }
     match /notification_queue/{d}    { allow read, write: if false; }
+    match /metamap_shadow_log/{d}    { allow read, write: if false; }
 
     // =============================================
     // DENY ALL OTHER PATHS
