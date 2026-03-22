@@ -55,9 +55,10 @@ jobs:
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_PRODUCTION }}
           ENVEOF
 
-      - name: Authenticate with Firebase (service account)
-        run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}' > "$RUNNER_TEMP/firebase-sa.json"
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
 
       - name: Deploy Firebase (Staging)
         if: github.ref == 'refs/heads/develop'
@@ -66,8 +67,6 @@ jobs:
             --only functions,firestore:rules,firestore:indexes,storage \
             --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
             --non-interactive
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
 
       - name: Deploy Firebase (Production)
         if: github.ref == 'refs/heads/main'
@@ -76,5 +75,3 @@ jobs:
             --only functions,firestore:rules,firestore:indexes,storage \
             --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
             --non-interactive
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
