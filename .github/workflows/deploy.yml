@@ -141,22 +141,13 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
 
-      - name: Deploy to Firebase (Staging)
-        if: github.ref == 'refs/heads/develop'
+      - name: Deploy to Firebase
         run: |
           firebase deploy \
             --only hosting,functions,firestore:rules,firestore:indexes,storage \
-            --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
-            --non-interactive
-
-      - name: Deploy to Firebase (Production)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          firebase deploy \
-            --only hosting,functions,firestore:rules,firestore:indexes,storage \
-            --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
+            --project vida-finance \
             --non-interactive
 
   # ─────────────────────────────────────────────
