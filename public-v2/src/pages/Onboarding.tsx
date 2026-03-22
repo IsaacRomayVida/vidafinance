@@ -360,155 +360,165 @@ export function Onboarding() {
     <>
       {/* Step 1: Company name */}
       <div className={stageClass(1)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_e_step1_h')} /></h1>
-          <p className="onb-sub">{t('onb_e_step1_sub')}</p>
-          <div className="onb-field">
-            <input
-              autoFocus
-              className="onb-input"
-              placeholder={t('onb_e_step1_placeholder')}
-              value={empData.company}
-              onChange={(e) => setEmpData({ ...empData, company: e.target.value })}
-            />
+        {step === 1 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_e_step1_h')} /></h1>
+            <p className="onb-sub">{t('onb_e_step1_sub')}</p>
+            <div className="onb-field">
+              <input
+                autoFocus
+                className="onb-input"
+                placeholder={t('onb_e_step1_placeholder')}
+                value={empData.company}
+                onChange={(e) => setEmpData({ ...empData, company: e.target.value })}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Step 2: Name + email */}
       <div className={stageClass(2)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_e_step2_h')} /></h1>
-          <p className="onb-sub">{t('onb_e_step2_sub')}</p>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_e_step2_name')}</label>
-            <input
-              autoFocus
-              className="onb-input"
-              placeholder={t('onb_e_step2_name_ph')}
-              value={empData.name}
-              onChange={(e) => setEmpData({ ...empData, name: e.target.value })}
-            />
+        {step === 2 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_e_step2_h')} /></h1>
+            <p className="onb-sub">{t('onb_e_step2_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step2_name')}</label>
+              <input
+                autoFocus
+                className="onb-input"
+                placeholder={t('onb_e_step2_name_ph')}
+                value={empData.name}
+                onChange={(e) => setEmpData({ ...empData, name: e.target.value })}
+              />
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step2_email')}</label>
+              <input
+                type="email"
+                className="onb-input"
+                placeholder={t('onb_e_step2_email_ph')}
+                value={empData.email}
+                onChange={(e) => setEmpData({ ...empData, email: e.target.value })}
+              />
+            </div>
           </div>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_e_step2_email')}</label>
-            <input
-              type="email"
-              className="onb-input"
-              placeholder={t('onb_e_step2_email_ph')}
-              value={empData.email}
-              onChange={(e) => setEmpData({ ...empData, email: e.target.value })}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Step 3: Company size + payroll */}
       <div className={stageClass(3)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_e_step3_h')} /></h1>
-          <p className="onb-sub">{t('onb_e_step3_sub')}</p>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_e_step3_size')}</label>
-            <div className="onb-tiles">
-              {COMPANY_SIZES.map((size) => (
-                <button
-                  key={size}
-                  className={`onb-tile${empData.companySize === size ? ' active' : ''}`}
-                  onClick={() => setEmpData({ ...empData, companySize: size })}
-                >
-                  <div className="onb-tile-val">{size}</div>
-                  <div className="onb-tile-lbl">{t('onb_e_step3_employees')}</div>
-                </button>
-              ))}
+        {step === 3 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_e_step3_h')} /></h1>
+            <p className="onb-sub">{t('onb_e_step3_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step3_size')}</label>
+              <div className="onb-tiles">
+                {COMPANY_SIZES.map((size) => (
+                  <button
+                    key={size}
+                    className={`onb-tile${empData.companySize === size ? ' active' : ''}`}
+                    onClick={() => setEmpData({ ...empData, companySize: size })}
+                  >
+                    <div className="onb-tile-val">{size}</div>
+                    <div className="onb-tile-lbl">{t('onb_e_step3_employees')}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step3_payroll')}</label>
+              <select
+                className="onb-select"
+                value={empData.payrollSystem}
+                onChange={(e) => setEmpData({ ...empData, payrollSystem: e.target.value })}
+              >
+                <option value="">{t('onb_e_step3_payroll_ph')}</option>
+                {PAYROLL_SYSTEMS.map((ps) => (
+                  <option key={ps} value={ps}>{ps}</option>
+                ))}
+                <option value="Other">{t('onb_e_step3_payroll_other')}</option>
+              </select>
             </div>
           </div>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_e_step3_payroll')}</label>
-            <select
-              className="onb-select"
-              value={empData.payrollSystem}
-              onChange={(e) => setEmpData({ ...empData, payrollSystem: e.target.value })}
-            >
-              <option value="">{t('onb_e_step3_payroll_ph')}</option>
-              {PAYROLL_SYSTEMS.map((ps) => (
-                <option key={ps} value={ps}>{ps}</option>
-              ))}
-              <option value="Other">{t('onb_e_step3_payroll_other')}</option>
-            </select>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Step 4: Document uploads */}
       <div className={stageClass(4)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_e_step4_h')} /></h1>
-          <p className="onb-sub">{t('onb_e_step4_sub')}</p>
-          <div className="onb-uploads">
-            {[
-              { key: 'rfc', label: t('onb_e_step4_rfc') },
-              { key: 'id', label: t('onb_e_step4_id') },
-              { key: 'address', label: t('onb_e_step4_address') },
-            ].map((d) => (
-              <div key={d.key} className="onb-upload-row">
-                <div className="onb-upload-info">
-                  <div className="onb-upload-label">{d.label}</div>
-                  <div className="onb-upload-hint">{t('onb_e_step4_formats')}</div>
+        {step === 4 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_e_step4_h')} /></h1>
+            <p className="onb-sub">{t('onb_e_step4_sub')}</p>
+            <div className="onb-uploads">
+              {[
+                { key: 'rfc', label: t('onb_e_step4_rfc') },
+                { key: 'id', label: t('onb_e_step4_id') },
+                { key: 'address', label: t('onb_e_step4_address') },
+              ].map((d) => (
+                <div key={d.key} className="onb-upload-row">
+                  <div className="onb-upload-info">
+                    <div className="onb-upload-label">{d.label}</div>
+                    <div className="onb-upload-hint">{t('onb_e_step4_formats')}</div>
+                  </div>
+                  <label className={`onb-upload-btn${uploadStatus[d.key] !== 'idle' ? ` ${uploadStatus[d.key]}` : ''}`}>
+                    <input
+                      type="file"
+                      style={{ display: 'none' }}
+                      accept="image/*,application/pdf"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) handleFileUpload(d.key, e.target.files[0]);
+                      }}
+                      disabled={uploadStatus[d.key] === 'uploading'}
+                    />
+                    {uploadStatus[d.key] === 'uploading'
+                      ? t('onb_e_step4_uploading')
+                      : uploadStatus[d.key] === 'done'
+                      ? t('onb_e_step4_done')
+                      : uploadStatus[d.key] === 'error'
+                      ? t('onb_e_step4_error')
+                      : t('onb_e_step4_upload')}
+                  </label>
                 </div>
-                <label className={`onb-upload-btn${uploadStatus[d.key] !== 'idle' ? ` ${uploadStatus[d.key]}` : ''}`}>
-                  <input
-                    type="file"
-                    style={{ display: 'none' }}
-                    accept="image/*,application/pdf"
-                    onChange={(e) => {
-                      if (e.target.files?.[0]) handleFileUpload(d.key, e.target.files[0]);
-                    }}
-                    disabled={uploadStatus[d.key] === 'uploading'}
-                  />
-                  {uploadStatus[d.key] === 'uploading'
-                    ? t('onb_e_step4_uploading')
-                    : uploadStatus[d.key] === 'done'
-                    ? t('onb_e_step4_done')
-                    : uploadStatus[d.key] === 'error'
-                    ? t('onb_e_step4_error')
-                    : t('onb_e_step4_upload')}
-                </label>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Step 5: Password + terms */}
       <div className={stageClass(5)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
-          <p className="onb-sub">{t('onb_e_step5_sub')}</p>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_e_step5_pass')}</label>
-            <input
-              autoFocus
-              type="password"
-              className="onb-input"
-              placeholder={t('onb_e_step5_pass_ph')}
-              value={empData.password}
-              onChange={(e) => setEmpData({ ...empData, password: e.target.value })}
-            />
-            <PasswordStrengthBar password={empData.password} t={t} />
+        {step === 5 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
+            <p className="onb-sub">{t('onb_e_step5_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step5_pass')}</label>
+              <input
+                autoFocus
+                type="password"
+                className="onb-input"
+                placeholder={t('onb_e_step5_pass_ph')}
+                value={empData.password}
+                onChange={(e) => setEmpData({ ...empData, password: e.target.value })}
+              />
+              <PasswordStrengthBar password={empData.password} t={t} />
+            </div>
+            <div className="onb-terms">
+              <input
+                type="checkbox"
+                checked={empData.terms}
+                onChange={(e) => setEmpData({ ...empData, terms: e.target.checked })}
+              />
+              <label>
+                {t('onb_e_step5_terms')}{' '}
+                <Link to="/terms" target="_blank">{t('onb_e_step5_terms_link')}</Link>
+              </label>
+            </div>
           </div>
-          <div className="onb-terms">
-            <input
-              type="checkbox"
-              checked={empData.terms}
-              onChange={(e) => setEmpData({ ...empData, terms: e.target.checked })}
-            />
-            <label>
-              {t('onb_e_step5_terms')}{' '}
-              <Link to="/terms" target="_blank">{t('onb_e_step5_terms_link')}</Link>
-            </label>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Step 6: Employer success */}
@@ -540,129 +550,137 @@ export function Onboarding() {
     <>
       {/* Step 1: Employer code */}
       <div className={stageClass(1)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_m_step1_h')} /></h1>
-          <p className="onb-sub">{t('onb_m_step1_sub')}</p>
-          <div className="onb-field">
-            <input
-              autoFocus
-              className={`onb-input big${codeStatus === 'found' ? ' valid' : codeStatus === 'not_found' ? ' invalid' : ''}`}
-              placeholder={t('onb_m_step1_placeholder')}
-              maxLength={8}
-              value={memData.code}
-              onChange={(e) => handleCodeChange(e.target.value)}
-            />
-            <div className={`onb-input-hint${codeStatus === 'found' ? ' success' : codeStatus === 'not_found' ? ' error' : ''}`}>
-              {codeStatus === 'searching' && t('onb_m_step1_searching')}
-              {codeStatus === 'found' && `${t('onb_m_step1_found')}: ${memData.employerName}`}
-              {codeStatus === 'not_found' && t('onb_m_step1_not_found')}
-              {codeStatus === 'idle' && t('onb_m_step1_hint')}
+        {step === 1 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_m_step1_h')} /></h1>
+            <p className="onb-sub">{t('onb_m_step1_sub')}</p>
+            <div className="onb-field">
+              <input
+                autoFocus
+                className={`onb-input big${codeStatus === 'found' ? ' valid' : codeStatus === 'not_found' ? ' invalid' : ''}`}
+                placeholder={t('onb_m_step1_placeholder')}
+                maxLength={8}
+                value={memData.code}
+                onChange={(e) => handleCodeChange(e.target.value)}
+              />
+              <div className={`onb-input-hint${codeStatus === 'found' ? ' success' : codeStatus === 'not_found' ? ' error' : ''}`}>
+                {codeStatus === 'searching' && t('onb_m_step1_searching')}
+                {codeStatus === 'found' && `${t('onb_m_step1_found')}: ${memData.employerName}`}
+                {codeStatus === 'not_found' && t('onb_m_step1_not_found')}
+                {codeStatus === 'idle' && t('onb_m_step1_hint')}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Step 2: Name + email */}
       <div className={stageClass(2)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_m_step2_h')} /></h1>
-          <p className="onb-sub">{t('onb_m_step2_sub')}</p>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_m_step2_name')}</label>
-            <input
-              autoFocus
-              className="onb-input"
-              placeholder={t('onb_m_step2_name_ph')}
-              value={memData.name}
-              onChange={(e) => setMemData({ ...memData, name: e.target.value })}
-            />
+        {step === 2 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_m_step2_h')} /></h1>
+            <p className="onb-sub">{t('onb_m_step2_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step2_name')}</label>
+              <input
+                autoFocus
+                className="onb-input"
+                placeholder={t('onb_m_step2_name_ph')}
+                value={memData.name}
+                onChange={(e) => setMemData({ ...memData, name: e.target.value })}
+              />
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step2_email')}</label>
+              <input
+                type="email"
+                className="onb-input"
+                placeholder={t('onb_m_step2_email_ph')}
+                value={memData.email}
+                onChange={(e) => setMemData({ ...memData, email: e.target.value })}
+              />
+            </div>
           </div>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_m_step2_email')}</label>
-            <input
-              type="email"
-              className="onb-input"
-              placeholder={t('onb_m_step2_email_ph')}
-              value={memData.email}
-              onChange={(e) => setMemData({ ...memData, email: e.target.value })}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Step 3: Salary + credit preview */}
       <div className={stageClass(3)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_m_step3_h')} /></h1>
-          <p className="onb-sub">{t('onb_m_step3_sub')}</p>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_m_step3_salary')}</label>
-            <input
-              autoFocus
-              type="text"
-              inputMode="numeric"
-              className="onb-input"
-              placeholder={t('onb_m_step3_salary_ph')}
-              value={memData.salary}
-              onChange={(e) => setMemData({ ...memData, salary: e.target.value.replace(/[^\d,]/g, '') })}
-            />
-          </div>
-          {creditAmount > 0 && (
-            <div className="onb-credit-sim">
-              <div className="onb-ring-wrap">
-                <svg viewBox="0 0 200 200">
-                  <circle className="onb-ring-bg" cx="100" cy="100" r="90" />
-                  <circle
-                    className="onb-ring-fill"
-                    cx="100" cy="100" r="90"
-                    style={{ strokeDashoffset: 565 - (565 * Math.min(creditAmount / 5000, 1)) }}
-                  />
-                </svg>
-                <div className="onb-ring-text">
-                  <div className="onb-ring-amount">
-                    ${creditAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+        {step === 3 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_m_step3_h')} /></h1>
+            <p className="onb-sub">{t('onb_m_step3_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step3_salary')}</label>
+              <input
+                autoFocus
+                type="text"
+                inputMode="numeric"
+                className="onb-input"
+                placeholder={t('onb_m_step3_salary_ph')}
+                value={memData.salary}
+                onChange={(e) => setMemData({ ...memData, salary: e.target.value.replace(/[^\d,]/g, '') })}
+              />
+            </div>
+            {creditAmount > 0 && (
+              <div className="onb-credit-sim">
+                <div className="onb-ring-wrap">
+                  <svg viewBox="0 0 200 200">
+                    <circle className="onb-ring-bg" cx="100" cy="100" r="90" />
+                    <circle
+                      className="onb-ring-fill"
+                      cx="100" cy="100" r="90"
+                      style={{ strokeDashoffset: 565 - (565 * Math.min(creditAmount / 5000, 1)) }}
+                    />
+                  </svg>
+                  <div className="onb-ring-text">
+                    <div className="onb-ring-amount">
+                      ${creditAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                    </div>
+                    <div className="onb-ring-label">{t('onb_m_step3_credit_label')}</div>
                   </div>
-                  <div className="onb-ring-label">{t('onb_m_step3_credit_label')}</div>
+                </div>
+                <div className="onb-approved-tag">
+                  <span className="onb-approved-dot" />
+                  {t('onb_m_step3_preapproved')}
                 </div>
               </div>
-              <div className="onb-approved-tag">
-                <span className="onb-approved-dot" />
-                {t('onb_m_step3_preapproved')}
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Step 4: Password + terms */}
       <div className={stageClass(4)}>
-        <div className="onb-content">
-          <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
-          <p className="onb-sub">{t('onb_m_step4_sub')}</p>
-          <div className="onb-field">
-            <label className="onb-label">{t('onb_m_step4_pass')}</label>
-            <input
-              autoFocus
-              type="password"
-              className="onb-input"
-              placeholder={t('onb_m_step4_pass_ph')}
-              value={memData.password}
-              onChange={(e) => setMemData({ ...memData, password: e.target.value })}
-            />
-            <PasswordStrengthBar password={memData.password} t={t} />
+        {step === 4 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
+            <p className="onb-sub">{t('onb_m_step4_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step4_pass')}</label>
+              <input
+                autoFocus
+                type="password"
+                className="onb-input"
+                placeholder={t('onb_m_step4_pass_ph')}
+                value={memData.password}
+                onChange={(e) => setMemData({ ...memData, password: e.target.value })}
+              />
+              <PasswordStrengthBar password={memData.password} t={t} />
+            </div>
+            <div className="onb-terms">
+              <input
+                type="checkbox"
+                checked={memData.terms}
+                onChange={(e) => setMemData({ ...memData, terms: e.target.checked })}
+              />
+              <label>
+                {t('onb_m_step4_terms')}{' '}
+                <Link to="/terms" target="_blank">{t('onb_m_step4_terms_link')}</Link>
+              </label>
+            </div>
           </div>
-          <div className="onb-terms">
-            <input
-              type="checkbox"
-              checked={memData.terms}
-              onChange={(e) => setMemData({ ...memData, terms: e.target.checked })}
-            />
-            <label>
-              {t('onb_m_step4_terms')}{' '}
-              <Link to="/terms" target="_blank">{t('onb_m_step4_terms_link')}</Link>
-            </label>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Step 5: Employee success */}
