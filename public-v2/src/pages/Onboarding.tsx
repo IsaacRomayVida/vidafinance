@@ -316,6 +316,10 @@ export function Onboarding() {
     return 'onb-stage right';
   };
 
+  // Inline style for non-active stages to prevent click interception
+  const stageStyle = (stageStep: number): React.CSSProperties =>
+    stageStep === step ? {} : { pointerEvents: 'none' };
+
   // -- Render role selection (step 0) --
   const renderRoleSelection = () => (
     <div className="onb-content wide">
@@ -359,12 +363,14 @@ export function Onboarding() {
   const renderEmployerSteps = () => (
     <>
       {/* Step 1: Company name */}
-      <div className={stageClass(1)}>
+      <div className={stageClass(1)} style={stageStyle(1)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_e_step1_h')} /></h1>
           <p className="onb-sub">{t('onb_e_step1_sub')}</p>
           <div className="onb-field">
             <input
+              id="emp-company"
+              name="emp-company"
               autoFocus
               className="onb-input"
               placeholder={t('onb_e_step1_placeholder')}
@@ -376,13 +382,15 @@ export function Onboarding() {
       </div>
 
       {/* Step 2: Name + email */}
-      <div className={stageClass(2)}>
+      <div className={stageClass(2)} style={stageStyle(2)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_e_step2_h')} /></h1>
           <p className="onb-sub">{t('onb_e_step2_sub')}</p>
           <div className="onb-field">
-            <label className="onb-label">{t('onb_e_step2_name')}</label>
+            <label className="onb-label" htmlFor="emp-name">{t('onb_e_step2_name')}</label>
             <input
+              id="emp-name"
+              name="emp-name"
               autoFocus
               className="onb-input"
               placeholder={t('onb_e_step2_name_ph')}
@@ -391,8 +399,10 @@ export function Onboarding() {
             />
           </div>
           <div className="onb-field">
-            <label className="onb-label">{t('onb_e_step2_email')}</label>
+            <label className="onb-label" htmlFor="emp-email">{t('onb_e_step2_email')}</label>
             <input
+              id="emp-email"
+              name="emp-email"
               type="email"
               className="onb-input"
               placeholder={t('onb_e_step2_email_ph')}
@@ -404,7 +414,7 @@ export function Onboarding() {
       </div>
 
       {/* Step 3: Company size + payroll */}
-      <div className={stageClass(3)}>
+      <div className={stageClass(3)} style={stageStyle(3)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_e_step3_h')} /></h1>
           <p className="onb-sub">{t('onb_e_step3_sub')}</p>
@@ -426,6 +436,8 @@ export function Onboarding() {
           <div className="onb-field">
             <label className="onb-label">{t('onb_e_step3_payroll')}</label>
             <select
+              id="emp-payroll"
+              name="emp-payroll"
               className="onb-select"
               value={empData.payrollSystem}
               onChange={(e) => setEmpData({ ...empData, payrollSystem: e.target.value })}
@@ -441,7 +453,8 @@ export function Onboarding() {
       </div>
 
       {/* Step 4: Document uploads */}
-      <div className={stageClass(4)}>
+      {step >= 4 && (
+      <div className={stageClass(4)} style={stageStyle(4)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_e_step4_h')} /></h1>
           <p className="onb-sub">{t('onb_e_step4_sub')}</p>
@@ -458,6 +471,7 @@ export function Onboarding() {
                 </div>
                 <label className={`onb-upload-btn${uploadStatus[d.key] !== 'idle' ? ` ${uploadStatus[d.key]}` : ''}`}>
                   <input
+                    name={`emp-doc-${d.key}`}
                     type="file"
                     style={{ display: 'none' }}
                     accept="image/*,application/pdf"
@@ -479,15 +493,19 @@ export function Onboarding() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Step 5: Password + terms */}
-      <div className={stageClass(5)}>
+      {step >= 5 && (
+      <div className={stageClass(5)} style={stageStyle(5)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
           <p className="onb-sub">{t('onb_e_step5_sub')}</p>
           <div className="onb-field">
-            <label className="onb-label">{t('onb_e_step5_pass')}</label>
+            <label className="onb-label" htmlFor="emp-password">{t('onb_e_step5_pass')}</label>
             <input
+              id="emp-password"
+              name="emp-password"
               autoFocus
               type="password"
               className="onb-input"
@@ -499,20 +517,23 @@ export function Onboarding() {
           </div>
           <div className="onb-terms">
             <input
+              id="emp-terms"
+              name="emp-terms"
               type="checkbox"
               checked={empData.terms}
               onChange={(e) => setEmpData({ ...empData, terms: e.target.checked })}
             />
-            <label>
+            <label htmlFor="emp-terms">
               {t('onb_e_step5_terms')}{' '}
               <Link to="/terms" target="_blank">{t('onb_e_step5_terms_link')}</Link>
             </label>
           </div>
         </div>
       </div>
+      )}
 
       {/* Step 6: Employer success */}
-      <div className={stageClass(6)}>
+      <div className={stageClass(6)} style={stageStyle(6)}>
         <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">
@@ -539,12 +560,14 @@ export function Onboarding() {
   const renderEmployeeSteps = () => (
     <>
       {/* Step 1: Employer code */}
-      <div className={stageClass(1)}>
+      <div className={stageClass(1)} style={stageStyle(1)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_m_step1_h')} /></h1>
           <p className="onb-sub">{t('onb_m_step1_sub')}</p>
           <div className="onb-field">
             <input
+              id="mem-code"
+              name="mem-code"
               autoFocus
               className={`onb-input big${codeStatus === 'found' ? ' valid' : codeStatus === 'not_found' ? ' invalid' : ''}`}
               placeholder={t('onb_m_step1_placeholder')}
@@ -563,13 +586,15 @@ export function Onboarding() {
       </div>
 
       {/* Step 2: Name + email */}
-      <div className={stageClass(2)}>
+      <div className={stageClass(2)} style={stageStyle(2)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_m_step2_h')} /></h1>
           <p className="onb-sub">{t('onb_m_step2_sub')}</p>
           <div className="onb-field">
-            <label className="onb-label">{t('onb_m_step2_name')}</label>
+            <label className="onb-label" htmlFor="mem-name">{t('onb_m_step2_name')}</label>
             <input
+              id="mem-name"
+              name="mem-name"
               autoFocus
               className="onb-input"
               placeholder={t('onb_m_step2_name_ph')}
@@ -578,8 +603,10 @@ export function Onboarding() {
             />
           </div>
           <div className="onb-field">
-            <label className="onb-label">{t('onb_m_step2_email')}</label>
+            <label className="onb-label" htmlFor="mem-email">{t('onb_m_step2_email')}</label>
             <input
+              id="mem-email"
+              name="mem-email"
               type="email"
               className="onb-input"
               placeholder={t('onb_m_step2_email_ph')}
@@ -591,13 +618,15 @@ export function Onboarding() {
       </div>
 
       {/* Step 3: Salary + credit preview */}
-      <div className={stageClass(3)}>
+      <div className={stageClass(3)} style={stageStyle(3)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_m_step3_h')} /></h1>
           <p className="onb-sub">{t('onb_m_step3_sub')}</p>
           <div className="onb-field">
-            <label className="onb-label">{t('onb_m_step3_salary')}</label>
+            <label className="onb-label" htmlFor="mem-salary">{t('onb_m_step3_salary')}</label>
             <input
+              id="mem-salary"
+              name="mem-salary"
               autoFocus
               type="text"
               inputMode="numeric"
@@ -635,13 +664,16 @@ export function Onboarding() {
       </div>
 
       {/* Step 4: Password + terms */}
-      <div className={stageClass(4)}>
+      {step >= 4 && (
+      <div className={stageClass(4)} style={stageStyle(4)}>
         <div className="onb-content">
           <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
           <p className="onb-sub">{t('onb_m_step4_sub')}</p>
           <div className="onb-field">
-            <label className="onb-label">{t('onb_m_step4_pass')}</label>
+            <label className="onb-label" htmlFor="mem-password">{t('onb_m_step4_pass')}</label>
             <input
+              id="mem-password"
+              name="mem-password"
               autoFocus
               type="password"
               className="onb-input"
@@ -653,20 +685,23 @@ export function Onboarding() {
           </div>
           <div className="onb-terms">
             <input
+              id="mem-terms"
+              name="mem-terms"
               type="checkbox"
               checked={memData.terms}
               onChange={(e) => setMemData({ ...memData, terms: e.target.checked })}
             />
-            <label>
+            <label htmlFor="mem-terms">
               {t('onb_m_step4_terms')}{' '}
               <Link to="/terms" target="_blank">{t('onb_m_step4_terms_link')}</Link>
             </label>
           </div>
         </div>
       </div>
+      )}
 
       {/* Step 5: Employee success */}
-      <div className={stageClass(5)}>
+      <div className={stageClass(5)} style={stageStyle(5)}>
         <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">
