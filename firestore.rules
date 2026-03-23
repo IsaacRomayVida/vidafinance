@@ -23,13 +23,24 @@ service cloud.firestore {
     }
 
     // =============================================
+    // USERS COLLECTION
+    // Users can read their own profile (role, email, etc.).
+    // All writes go through Cloud Functions (Admin SDK).
+    // =============================================
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // =============================================
     // EMPLOYERS COLLECTION
     // Employers can read/update their own record (limited fields).
-    // Only admins can create or promote employer status.
+    // Users can create their own employer record during onboarding.
+    // Only admins can create records for other users.
     // =============================================
     match /employers/{employerId} {
       allow read: if isOwner(employerId) || isOps();
-      allow create: if isAdmin();
+      allow create: if isAdmin() || isOwner(employerId);
       allow update: if isAdmin()
         || (isOwner(employerId)
           && request.resource.data.diff(resource.data).affectedKeys()
