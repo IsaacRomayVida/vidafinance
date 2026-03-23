@@ -198,10 +198,24 @@ describe('employers collection', () => {
     await assertFails(getDoc(doc(ctx.firestore(), 'employers/employer1')));
   });
 
-  it('employer create is denied for non-admins', async () => {
+  it('authenticated user can self-register as employer (doc ID == UID)', async () => {
+    const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'employers/employer1'), { name: 'My Company', status: 'pending' })
+    );
+  });
+
+  it('authenticated user cannot create employer doc for another user', async () => {
     const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'employers/employer1'), { name: 'My Company', status: 'pending' })
+      setDoc(doc(ctx.firestore(), 'employers/employer2'), { name: 'Other Company', status: 'pending' })
+    );
+  });
+
+  it('unauthenticated user cannot self-register as employer', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employers/anon'), { name: 'Anon Corp', status: 'pending' })
     );
   });
 
@@ -288,6 +302,26 @@ describe('employees collection', () => {
       updateDoc(doc(ctx.firestore(), 'employees/employee1'), {
         phone: '+521234567890',
         bankClabe: '123456789012345678',
+      })
+    );
+  });
+
+  it('authenticated user can self-register as employee (doc ID == UID)', async () => {
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        employerId: 'employer1',
+        name: 'Self Registered',
+      })
+    );
+  });
+
+  it('authenticated user cannot create employee doc for another user', async () => {
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employees/employee2'), {
+        employerId: 'employer1',
+        name: 'Other Employee',
       })
     );
   });
