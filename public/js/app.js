@@ -62,6 +62,7 @@ const i18n = {
     onb_e_step4_h:'Documentos<br><em>requeridos</em>.',onb_e_step4_sub:'Sube los documentos de tu empresa para verificación.',onb_e_step4_rfc:'Constancia de Situación Fiscal (RFC)',onb_e_step4_id:'Identificación oficial / Acta Constitutiva',onb_e_step4_address:'Comprobante de domicilio (< 3 meses)',onb_e_step4_upload:'Seleccionar archivo',onb_e_step4_uploading:'Subiendo...',onb_e_step4_done:'Archivo subido',onb_e_step4_error:'Error al subir',onb_e_step4_formats:'PDF o imagen, máx 5 MB',
     onb_e_step5_h:'Crea tu<br><em>cuenta</em>.',onb_e_step5_sub:'Un último paso para activar VIDA en tu empresa.',onb_e_step5_pass:'Contraseña',onb_e_step5_pass_ph:'Mínimo 6 caracteres',onb_e_step5_terms:'Acepto los',onb_e_step5_terms_link:'Términos y Condiciones',onb_e_step5_btn:'Crear Mi Cuenta',onb_e_step5_creating:'Creando cuenta...',
     onb_e_step6_h:'¡Cuenta<br><em>creada</em>!',onb_e_step6_sub:'Nuestro equipo revisará tus documentos en 24–48 horas hábiles.',onb_e_step6_badge:'Verificación en proceso',onb_e_step6_cta:'Ir al inicio',
+    dash_doc_banner_h:'Completa tu verificación',dash_doc_banner_sub:'Sube los documentos requeridos para que podamos activar tu cuenta en 24–48 horas.',dash_doc_banner_success:'¡Documentos enviados! Los revisaremos en 24–48 horas.',
     onb_m_step1_h:'Ingresa tu<br><em>código</em>.',onb_m_step1_sub:'Tu empleador te proporcionó un código de acceso.',onb_m_step1_placeholder:'CÓDIGO',onb_m_step1_hint:'¿No tienes código? Pregunta a tu departamento de RH.',onb_m_step1_found:'Empresa encontrada',onb_m_step1_not_found:'Código no encontrado',onb_m_step1_searching:'Buscando...',
     onb_m_step2_h:'Cuéntanos<br>sobre <em>ti</em>.',onb_m_step2_sub:'Tu información personal para activar tu crédito.',onb_m_step2_name:'Nombre completo',onb_m_step2_name_ph:'Tu nombre completo',onb_m_step2_email:'Correo electrónico',onb_m_step2_email_ph:'tu@correo.com',
     onb_m_step3_h:'Tu crédito<br><em>pre-aprobado</em>.',onb_m_step3_sub:'Ingresa tu salario mensual para ver tu línea de crédito.',onb_m_step3_salary:'Salario mensual',onb_m_step3_salary_ph:'15,000',onb_m_step3_preapproved:'Pre-aprobado',onb_m_step3_credit_label:'CRÉDITO DISPONIBLE',
@@ -391,6 +392,7 @@ const i18n = {
     onb_e_step4_h:'Required<br><em>documents</em>.',onb_e_step4_sub:'Upload your company documents for verification.',onb_e_step4_rfc:'Tax Registration Certificate (RFC)',onb_e_step4_id:'Official ID / Articles of Incorporation',onb_e_step4_address:'Proof of address (< 3 months)',onb_e_step4_upload:'Choose file',onb_e_step4_uploading:'Uploading...',onb_e_step4_done:'File uploaded',onb_e_step4_error:'Upload error',onb_e_step4_formats:'PDF or image, max 5 MB',
     onb_e_step5_h:'Create your<br><em>account</em>.',onb_e_step5_sub:'One last step to activate VIDA for your company.',onb_e_step5_pass:'Password',onb_e_step5_pass_ph:'Min 6 characters',onb_e_step5_terms:'I accept the',onb_e_step5_terms_link:'Terms and Conditions',onb_e_step5_btn:'Create My Account',onb_e_step5_creating:'Creating account...',
     onb_e_step6_h:'Account<br><em>created</em>!',onb_e_step6_sub:'Our team will review your documents within 24–48 business hours.',onb_e_step6_badge:'Verification in progress',onb_e_step6_cta:'Go to home',
+    dash_doc_banner_h:'Complete Your Verification',dash_doc_banner_sub:'Upload the required documents so we can activate your account within 24–48 hours.',dash_doc_banner_success:'Documents submitted! We\'ll review them within 24–48 hours.',
     onb_m_step1_h:'Enter your<br><em>code</em>.',onb_m_step1_sub:'Your employer provided you with an access code.',onb_m_step1_placeholder:'CODE',onb_m_step1_hint:'Don\'t have a code? Ask your HR department.',onb_m_step1_found:'Company found',onb_m_step1_not_found:'Code not found',onb_m_step1_searching:'Searching...',
     onb_m_step2_h:'Tell us<br>about <em>you</em>.',onb_m_step2_sub:'Your personal information to activate your credit.',onb_m_step2_name:'Full name',onb_m_step2_name_ph:'Your full name',onb_m_step2_email:'Email address',onb_m_step2_email_ph:'you@email.com',
     onb_m_step3_h:'Your<br><em>pre-approved</em> credit.',onb_m_step3_sub:'Enter your monthly salary to see your credit line.',onb_m_step3_salary:'Monthly salary',onb_m_step3_salary_ph:'15,000',onb_m_step3_preapproved:'Pre-approved',onb_m_step3_credit_label:'AVAILABLE CREDIT',
@@ -1795,6 +1797,93 @@ function renderLogin(app) {
   });
 }
 
+// ─── DOC UPLOAD BANNER (pending_verification + no docs) ─
+function renderDocUploadBanner(app, uid) {
+  const docSlots = [
+    { key: 'rfc', field: 'docRFC', i18n: 'onb_e_step4_rfc' },
+    { key: 'id_oficial', field: 'docId', i18n: 'onb_e_step4_id' },
+    { key: 'comprobante', field: 'docAddress', i18n: 'onb_e_step4_address' },
+  ];
+  const uploaded = {};
+
+  function renderBanner() {
+    const rows = docSlots.map(s => {
+      const done = !!uploaded[s.key];
+      const iconBg = done ? 'rgba(36,122,110,0.12)' : 'rgba(201,168,76,0.12)';
+      const iconStroke = done ? '#247a6e' : '#c9a84c';
+      const icon = done
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="${iconStroke}" stroke-width="2.5" style="width:16px;height:16px"><path d="M20 6L9 17l-5-5"/></svg>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="${iconStroke}" stroke-width="2" style="width:16px;height:16px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>`;
+      const btnStyle = done
+        ? 'background:rgba(36,122,110,0.12);color:#247a6e;cursor:default'
+        : 'background:var(--brand);color:#fff;cursor:pointer';
+      const btnLabel = done ? t('onb_e_step4_done') : t('onb_e_step4_upload');
+      return `<div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border-radius:12px;padding:16px;border:1px solid rgba(25,68,69,0.08)">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0">
+          <div style="width:32px;height:32px;border-radius:50%;background:${iconBg};display:flex;align-items:center;justify-content:center;flex-shrink:0">${icon}</div>
+          <div style="min-width:0"><div style="font-size:13px;font-weight:600;color:var(--t1)">${t(s.i18n)}</div><div style="font-size:11px;color:var(--t3)">${t('onb_e_step4_formats')}</div></div>
+        </div>
+        <label style="display:inline-block;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;${btnStyle};transition:all .2s" class="doc-upload-label" data-key="${s.key}">
+          <input type="file" accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf" style="display:none" data-key="${s.key}" class="doc-file-input" ${done ? 'disabled' : ''}>${btnLabel}
+        </label>
+      </div>`;
+    }).join('');
+
+    app.innerHTML = `<div style="max-width:640px;margin:48px auto;padding:0 16px">
+      <div style="background:rgba(201,168,76,0.12);border-radius:16px;padding:32px">
+        <h2 style="font-size:20px;font-weight:700;color:var(--brand);margin:0 0 8px">${t('dash_doc_banner_h')}</h2>
+        <p style="font-size:14px;color:var(--t2);margin:0 0 24px">${t('dash_doc_banner_sub')}</p>
+        <div style="display:flex;flex-direction:column;gap:16px">${rows}</div>
+      </div>
+    </div>`;
+
+    // Bind file inputs
+    app.querySelectorAll('.doc-file-input').forEach(input => {
+      if (uploaded[input.dataset.key]) return;
+      input.addEventListener('change', async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const key = input.dataset.key;
+        if (file.size > 5 * 1024 * 1024) return;
+        const label = app.querySelector(`.doc-upload-label[data-key="${key}"]`);
+        label.textContent = t('onb_e_step4_uploading');
+        label.style.opacity = '0.6';
+        try {
+          const ref = storage.ref(`onboarding/employer_docs/${uid}/${key}`);
+          const task = ref.put(file);
+          await new Promise((resolve, reject) => {
+            task.on('state_changed', null, reject, resolve);
+          });
+          uploaded[key] = await task.snapshot.ref.getDownloadURL();
+          renderBanner();
+          // If all 3 uploaded, save to Firestore
+          if (Object.keys(uploaded).length === 3) {
+            await db.collection('employers').doc(uid).update({
+              docRFC: uploaded.rfc,
+              docId: uploaded.id_oficial,
+              docAddress: uploaded.comprobante,
+            });
+            app.innerHTML = `<div style="max-width:480px;margin:80px auto;text-align:center;padding:40px">
+              <div style="width:64px;height:64px;border-radius:50%;background:rgba(36,122,110,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" stroke-width="2.5" style="width:32px;height:32px"><path d="M20 6L9 17l-5-5"/></svg>
+              </div>
+              <h2 style="font-size:20px;font-weight:700;color:var(--brand);margin:0">${t('dash_doc_banner_success')}</h2>
+            </div>`;
+            setTimeout(() => renderEmployerDashboard(app), 3000);
+          }
+        } catch (err) {
+          label.textContent = t('onb_e_step4_error');
+          label.style.opacity = '1';
+          label.style.background = 'rgba(220,80,60,0.12)';
+          label.style.color = '#dc503c';
+        }
+      });
+    });
+  }
+
+  renderBanner();
+}
+
 // ─── EMPLOYER DASHBOARD ──────────────────────────────────
 async function renderEmployerDashboard(app) {
   app.innerHTML = '<div class="loading-page"><div class="spinner"></div></div>';
@@ -1807,6 +1896,10 @@ async function renderEmployerDashboard(app) {
   if (!empDoc.exists) { navigate('/employee/dashboard'); return; }
   const emp = empDoc.data();
   if (emp.status === 'pending_verification') {
+    if (!emp.docRFC) {
+      renderDocUploadBanner(app, uid);
+      return;
+    }
     app.innerHTML = `<div class="onb"><div class="onb-blob ob1"></div><div class="onb-blob ob2"></div><div class="onb-top"><span class="onb-logo">${vidaLogo()}</span></div><div class="onb-body"><div class="onb-stage active"><div class="onb-content"><div class="onb-celebration"><div class="onb-check-circle" style="background:rgba(162,134,87,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><div class="onb-approved-tag"><span class="onb-approved-dot" style="background:var(--gold)"></span>${currentLang==='es'?'Verificación en proceso':'Verification in progress'}</div><h1 class="onb-h">${currentLang==='es'?'¡Cuenta<br><em>creada</em>!':'Account<br><em>created</em>!'}</h1><p class="onb-sub">${currentLang==='es'?'Nuestro equipo revisará tus documentos en 24–48 horas hábiles.':'Our team will review your documents within 24–48 business hours.'}</p><button class="onb-btn" onclick="auth.signOut().then(()=>navigate('/'))">${currentLang==='es'?'Ir al inicio':'Go to home'}</button></div></div></div></div></div>`;
     return;
   }

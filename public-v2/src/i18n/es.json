@@ -637,6 +637,10 @@
   "onb_e_step6_badge": "Verificación en proceso",
   "onb_e_step6_cta": "Ir al inicio",
 
+  "dash_doc_banner_h": "Completa tu verificación",
+  "dash_doc_banner_sub": "Sube los documentos requeridos para que podamos activar tu cuenta en 24–48 horas.",
+  "dash_doc_banner_success": "¡Documentos enviados! Los revisaremos en 24–48 horas.",
+
   "onb_m_step1_h": "Ingresa tu <em>código</em>.",
   "onb_m_step1_sub": "Tu empleador te proporcionó un código de acceso.",
   "onb_m_step1_placeholder": "CÓDIGO",

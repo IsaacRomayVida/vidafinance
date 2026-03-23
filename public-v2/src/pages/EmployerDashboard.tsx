@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { auth, db } from '../lib/firebase';
+import { auth, db, storage } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { signOut } from 'firebase/auth';
 
@@ -25,6 +26,9 @@ interface EmployerData {
   employerCode?: string;
   status?: string;
   totalEmployees?: number;
+  docRFC?: string | null;
+  docId?: string | null;
+  docAddress?: string | null;
 }
 
 interface DashStats {
@@ -40,6 +44,157 @@ type TabKey = 'all' | 'pending' | 'approved' | 'active' | 'paid' | 'rejected';
 
 function fmt(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const ACCEPTED_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
+
+interface DocSlot {
+  key: string;
+  firestoreField: 'docRFC' | 'docId' | 'docAddress';
+  i18nKey: string;
+}
+
+const DOC_SLOTS: DocSlot[] = [
+  { key: 'rfc', firestoreField: 'docRFC', i18nKey: 'onb_e_step4_rfc' },
+  { key: 'id_oficial', firestoreField: 'docId', i18nKey: 'onb_e_step4_id' },
+  { key: 'comprobante', firestoreField: 'docAddress', i18nKey: 'onb_e_step4_address' },
+];
+
+function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => void }) {
+  const { t } = useTranslation();
+  const [uploads, setUploads] = useState<Record<string, string>>({});
+  const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [allDone, setAllDone] = useState(false);
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const uploadCount = Object.keys(uploads).length;
+
+  async function handleFile(slot: DocSlot, file: File) {
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setErrors(prev => ({ ...prev, [slot.key]: t('onb_e_step4_error') }));
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setErrors(prev => ({ ...prev, [slot.key]: t('onb_e_step4_error') }));
+      return;
+    }
+
+    setUploading(prev => ({ ...prev, [slot.key]: true }));
+    setErrors(prev => { const n = { ...prev }; delete n[slot.key]; return n; });
+
+    try {
+      const storageRef = ref(storage, `onboarding/employer_docs/${uid}/${slot.key}`);
+      const task = uploadBytesResumable(storageRef, file);
+      await task;
+      const url = await getDownloadURL(task.snapshot.ref);
+      setUploads(prev => {
+        const next = { ...prev, [slot.key]: url };
+        return next;
+      });
+    } catch {
+      setErrors(prev => ({ ...prev, [slot.key]: t('onb_e_step4_error') }));
+    } finally {
+      setUploading(prev => ({ ...prev, [slot.key]: false }));
+    }
+  }
+
+  useEffect(() => {
+    if (uploadCount < 3) return;
+    // All 3 docs uploaded — save to Firestore
+    (async () => {
+      try {
+        await updateDoc(doc(db, 'employers', uid), {
+          docRFC: uploads['rfc'],
+          docId: uploads['id_oficial'],
+          docAddress: uploads['comprobante'],
+        });
+        setAllDone(true);
+        setTimeout(onComplete, 3000);
+      } catch {
+        // Firestore update failed — URLs are still in storage
+      }
+    })();
+  }, [uploadCount, uploads, uid, onComplete]);
+
+  if (allDone) {
+    return (
+      <div className="mx-auto max-w-lg py-20 text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-8 w-8">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-bold text-teal-900">{t('dash_doc_banner_success')}</h2>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl py-12 px-4">
+      <div className="rounded-2xl p-8" style={{ background: 'rgba(201,168,76,0.12)' }}>
+        <h2 className="text-xl font-bold text-teal-900 mb-2">{t('dash_doc_banner_h')}</h2>
+        <p className="text-sm mb-6" style={{ color: 'var(--t2)' }}>{t('dash_doc_banner_sub')}</p>
+
+        <div className="flex flex-col gap-4">
+          {DOC_SLOTS.map((slot) => {
+            const done = !!uploads[slot.key];
+            const busy = !!uploading[slot.key];
+            const error = errors[slot.key];
+
+            return (
+              <div key={slot.key} className="flex items-center justify-between rounded-xl bg-white p-4" style={{ border: '1px solid rgba(25,68,69,0.08)' }}>
+                <div className="flex items-center gap-3 min-w-0">
+                  {done ? (
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-4 w-4"><path d="M20 6L9 17l-5-5" /></svg>
+                    </div>
+                  ) : (
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(201,168,76,0.12)' }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" className="h-4 w-4">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>{t(slot.i18nKey)}</div>
+                    <div className="text-xs" style={{ color: 'var(--t3)' }}>{t('onb_e_step4_formats')}</div>
+                    {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
+                  </div>
+                </div>
+                <div>
+                  <input
+                    ref={(el) => { fileRefs.current[slot.key] = el; }}
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFile(slot, file);
+                    }}
+                  />
+                  <button
+                    disabled={done || busy}
+                    onClick={() => fileRefs.current[slot.key]?.click()}
+                    className="rounded-lg px-4 py-2 text-xs font-semibold transition-all"
+                    style={{
+                      background: done ? 'rgba(36,122,110,0.12)' : 'var(--brand)',
+                      color: done ? '#247a6e' : '#fff',
+                      opacity: busy ? 0.6 : 1,
+                      cursor: done ? 'default' : 'pointer',
+                    }}
+                  >
+                    {busy ? t('onb_e_step4_uploading') : done ? t('onb_e_step4_done') : t('onb_e_step4_upload')}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function EmployerDashboard() {
@@ -141,6 +296,12 @@ export function EmployerDashboard() {
   }
 
   if (pageState === 'pending_verification') {
+    const needsDocs = !employer?.docRFC;
+    if (needsDocs) {
+      return <DocUploadBanner uid={user!.uid} onComplete={() => {
+        setEmployer(prev => prev ? { ...prev, docRFC: 'pending', docId: 'pending', docAddress: 'pending' } : prev);
+      }} />;
+    }
     return (
       <div className="mx-auto max-w-lg py-20 text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-50">
