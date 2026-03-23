@@ -28,8 +28,20 @@ export function useAuth(): AuthState {
         // signup before the Cloud Function propagates custom claims),
         // check Firestore to determine the role.
         if (!role) {
-          const employerSnap = await getDoc(doc(db, 'employers', user.uid));
-          role = employerSnap.exists() ? 'employer_admin' : 'employee';
+          try {
+            const employerSnap = await getDoc(doc(db, 'employers', user.uid));
+            role = employerSnap.exists() ? 'employer_admin' : 'employee';
+          } catch (err) {
+            console.warn('[useAuth] Firestore fallback failed, retrying...', err);
+            try {
+              await new Promise(r => setTimeout(r, 500));
+              const retrySnap = await getDoc(doc(db, 'employers', user.uid));
+              role = retrySnap.exists() ? 'employer_admin' : 'employee';
+            } catch (retryErr) {
+              console.error('[useAuth] Firestore fallback retry failed', retryErr);
+              role = 'employee';
+            }
+          }
         }
 
         setState({ user, role, loading: false });
