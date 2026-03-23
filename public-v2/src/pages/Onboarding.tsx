@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { auth, db, storage } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import {
   doc,
@@ -14,7 +14,7 @@ import {
   increment,
   serverTimestamp,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
 
 type Role = 'employer' | 'employee' | null;
 
@@ -41,8 +41,6 @@ interface EmployeeData {
   password: string;
   terms: boolean;
 }
-
-type UploadStatus = 'idle' | 'uploading' | 'done' | 'error';
 
 const COMPANY_SIZES = ['1-50', '51-200', '201-500', '500+'];
 const PAYROLL_SYSTEMS = ['Nomipaq', 'Aspel NOI', 'CONTPAQi', 'Workday', 'ADP'];
@@ -102,10 +100,6 @@ export function Onboarding() {
     company: '', name: '', email: '', companySize: '', payrollSystem: '',
     docRFC: '', docId: '', docAddress: '', password: '', terms: false,
   });
-  const [uploadStatus, setUploadStatus] = useState<Record<string, UploadStatus>>({
-    rfc: 'idle', id: 'idle', address: 'idle',
-  });
-
   // Employee state
   const [memData, setMemData] = useState<EmployeeData>({
     code: '', employerId: '', employerName: '', name: '', email: '',
@@ -114,7 +108,7 @@ export function Onboarding() {
   const [codeStatus, setCodeStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const totalSteps = role === 'employer' ? 6 : role === 'employee' ? 5 : 0;
+  const totalSteps = role === 'employer' ? 5 : role === 'employee' ? 5 : 0;
 
   const goForward = useCallback((toStep: number) => {
     setDirection('right');
@@ -181,27 +175,6 @@ export function Onboarding() {
     debounceRef.current = setTimeout(() => lookupCode(upper), 500);
   };
 
-  // -- File upload --
-  const handleFileUpload = async (key: string, file: File) => {
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadStatus((s) => ({ ...s, [key]: 'error' }));
-      return;
-    }
-    setUploadStatus((s) => ({ ...s, [key]: 'uploading' }));
-    try {
-      const storageRef = ref(storage, `onboarding/employer_docs/${Date.now()}_${key}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      const fieldMap: Record<string, keyof EmployerData> = {
-        rfc: 'docRFC', id: 'docId', address: 'docAddress',
-      };
-      setEmpData((d) => ({ ...d, [fieldMap[key]]: url }));
-      setUploadStatus((s) => ({ ...s, [key]: 'done' }));
-    } catch {
-      setUploadStatus((s) => ({ ...s, [key]: 'error' }));
-    }
-  };
-
   // -- Employer account creation --
   const createEmployerAccount = async () => {
     setCreating(true);
@@ -217,16 +190,16 @@ export function Onboarding() {
         companySize: empData.companySize,
         payrollSystem: empData.payrollSystem,
         status: 'pending_verification',
-        docRFC: empData.docRFC,
-        docId: empData.docId,
-        docAddress: empData.docAddress,
+        docRFC: null,
+        docId: null,
+        docAddress: null,
         submittedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
         totalEmployees: 0,
         activeLoans: 0,
         totalDisbursed: 0,
       });
-      goForward(6);
+      goForward(5);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
     } finally {
@@ -274,8 +247,7 @@ export function Onboarding() {
       if (step === 1) return empData.company.trim().length > 0;
       if (step === 2) return empData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(empData.email);
       if (step === 3) return empData.companySize !== '' && empData.payrollSystem !== '';
-      if (step === 4) return uploadStatus.rfc === 'done' && uploadStatus.id === 'done' && uploadStatus.address === 'done';
-      if (step === 5) return empData.password.length >= 6 && empData.terms;
+      if (step === 4) return empData.password.length >= 6 && empData.terms;
     }
     if (role === 'employee') {
       if (step === 1) return codeStatus === 'found';
@@ -287,7 +259,7 @@ export function Onboarding() {
   };
 
   const handleNext = () => {
-    if (role === 'employer' && step === 5) {
+    if (role === 'employer' && step === 4) {
       createEmployerAccount();
     } else if (role === 'employee' && step === 4) {
       createEmployeeAccount();
@@ -300,11 +272,11 @@ export function Onboarding() {
   const progressPct = totalSteps > 0 ? ((step) / totalSteps) * 100 : 0;
 
   // Is this a final success step?
-  const isFinalStep = (role === 'employer' && step === 6) || (role === 'employee' && step === 5);
+  const isFinalStep = (role === 'employer' && step === 5) || (role === 'employee' && step === 5);
 
   // Action button config
   const getActionLabel = () => {
-    if (role === 'employer' && step === 5) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
+    if (role === 'employer' && step === 4) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
     if (role === 'employee' && step === 4) return creating ? t('onb_m_step4_creating') : t('onb_m_step4_btn');
     return t('onb_next');
   };
@@ -446,51 +418,9 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 4: Document uploads */}
+      {/* Step 4: Password + terms */}
       <div className={stageClass(4)}>
         {step === 4 && (
-          <div className="onb-content">
-            <h1 className="onb-h"><RichText html={t('onb_e_step4_h')} /></h1>
-            <p className="onb-sub">{t('onb_e_step4_sub')}</p>
-            <div className="onb-uploads">
-              {[
-                { key: 'rfc', label: t('onb_e_step4_rfc') },
-                { key: 'id', label: t('onb_e_step4_id') },
-                { key: 'address', label: t('onb_e_step4_address') },
-              ].map((d) => (
-                <div key={d.key} className="onb-upload-row">
-                  <div className="onb-upload-info">
-                    <div className="onb-upload-label">{d.label}</div>
-                    <div className="onb-upload-hint">{t('onb_e_step4_formats')}</div>
-                  </div>
-                  <label className={`onb-upload-btn${uploadStatus[d.key] !== 'idle' ? ` ${uploadStatus[d.key]}` : ''}`}>
-                    <input
-                      type="file"
-                      style={{ display: 'none' }}
-                      accept="image/*,application/pdf"
-                      onChange={(e) => {
-                        if (e.target.files?.[0]) handleFileUpload(d.key, e.target.files[0]);
-                      }}
-                      disabled={uploadStatus[d.key] === 'uploading'}
-                    />
-                    {uploadStatus[d.key] === 'uploading'
-                      ? t('onb_e_step4_uploading')
-                      : uploadStatus[d.key] === 'done'
-                      ? t('onb_e_step4_done')
-                      : uploadStatus[d.key] === 'error'
-                      ? t('onb_e_step4_error')
-                      : t('onb_e_step4_upload')}
-                  </label>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Step 5: Password + terms */}
-      <div className={stageClass(5)}>
-        {step === 5 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step5_sub')}</p>
@@ -521,8 +451,8 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 6: Employer success */}
-      <div className={stageClass(6)}>
+      {/* Step 5: Employer success */}
+      <div className={stageClass(5)}>
         <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">

@@ -851,7 +851,7 @@ function renderOnboarding(app) {
   const state = { step: 0, role: onbPreselect || null, data: {}, employerDoc: null };
   onbPreselect = null;
 
-  const totalSteps = { employer: 6, employee: 5 };
+  const totalSteps = { employer: 5, employee: 5 };
   const backArrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
 
   function progress() {
@@ -969,24 +969,8 @@ function renderOnboarding(app) {
     if (n === 1) return `${back}<h1 class="onb-h">${t('onb_e_step1_h')}</h1><p class="onb-sub">${t('onb_e_step1_sub')}</p><div class="onb-field"><input class="onb-input" id="onbCompany" type="text" placeholder="${t('onb_e_step1_placeholder')}" value="${state.data.company||''}" autofocus></div><button class="onb-btn" id="onbNext" disabled>${t('onb_next')}</button>`;
     if (n === 2) return `${back}<h1 class="onb-h">${t('onb_e_step2_h')}</h1><p class="onb-sub">${t('onb_e_step2_sub')}</p><div class="onb-field"><div class="onb-label">${t('onb_e_step2_name')}</div><input class="onb-input" id="onbName" type="text" placeholder="${t('onb_e_step2_name_ph')}" value="${state.data.name||''}"></div><div class="onb-field"><div class="onb-label">${t('onb_e_step2_email')}</div><input class="onb-input" id="onbEmail" type="email" placeholder="${t('onb_e_step2_email_ph')}" value="${state.data.email||''}"></div><button class="onb-btn" id="onbNext" disabled>${t('onb_next')}</button>`;
     if (n === 3) return `${back}<h1 class="onb-h">${t('onb_e_step3_h')}</h1><p class="onb-sub">${t('onb_e_step3_sub')}</p><div class="onb-field"><div class="onb-label">${t('onb_e_step3_size')}</div><div class="onb-tiles" id="onbTiles"><div class="onb-tile${state.data.size==='1-50'?' active':''}" data-val="1-50"><div class="onb-tile-val">1-50</div><div class="onb-tile-lbl">${t('onb_e_step3_employees')}</div></div><div class="onb-tile${state.data.size==='50-200'?' active':''}" data-val="50-200"><div class="onb-tile-val">50-200</div><div class="onb-tile-lbl">${t('onb_e_step3_employees')}</div></div><div class="onb-tile${state.data.size==='200-500'?' active':''}" data-val="200-500"><div class="onb-tile-val">200-500</div><div class="onb-tile-lbl">${t('onb_e_step3_employees')}</div></div><div class="onb-tile${state.data.size==='500+'?' active':''}" data-val="500+"><div class="onb-tile-val">500+</div><div class="onb-tile-lbl">${t('onb_e_step3_employees')}</div></div></div></div><div class="onb-field"><div class="onb-label">${t('onb_e_step3_payroll')}</div><select class="onb-select" id="onbPayroll"><option value="" disabled ${!state.data.payroll?'selected':''}>${t('onb_e_step3_payroll_ph')}</option><option value="Nomipaq" ${state.data.payroll==='Nomipaq'?'selected':''}>Nomipaq</option><option value="Aspel NOI" ${state.data.payroll==='Aspel NOI'?'selected':''}>Aspel NOI</option><option value="CONTPAQi" ${state.data.payroll==='CONTPAQi'?'selected':''}>CONTPAQi</option><option value="Workday" ${state.data.payroll==='Workday'?'selected':''}>Workday</option><option value="ADP" ${state.data.payroll==='ADP'?'selected':''}>ADP</option><option value="Otro" ${state.data.payroll==='Otro'?'selected':''}>${t('onb_e_step3_payroll_other')}</option></select></div><button class="onb-btn" id="onbNext" disabled>${t('onb_next')}</button>`;
-    if (n === 4) {
-      const docFields = [
-        { key: 'rfc', label: t('onb_e_step4_rfc') },
-        { key: 'id_oficial', label: t('onb_e_step4_id') },
-        { key: 'comprobante', label: t('onb_e_step4_address') }
-      ];
-      const uploads = docFields.map(f => {
-        const done = state.docs && state.docs[f.key];
-        return `<div class="onb-upload-row" data-key="${f.key}">
-          <div class="onb-upload-info"><div class="onb-upload-label">${f.label}</div><div class="onb-upload-hint">${t('onb_e_step4_formats')}</div></div>
-          <label class="onb-upload-btn ${done ? 'done' : ''}"><input type="file" accept="image/*,application/pdf" class="onb-file-input" data-key="${f.key}" style="display:none">${done ? t('onb_e_step4_done') : t('onb_e_step4_upload')}</label>
-          <div class="onb-upload-progress" id="prog_${f.key}" style="display:none"><div class="onb-upload-progress-fill"></div></div>
-        </div>`;
-      }).join('');
-      return `${back}<h1 class="onb-h">${t('onb_e_step4_h')}</h1><p class="onb-sub">${t('onb_e_step4_sub')}</p><div class="onb-uploads">${uploads}</div><button class="onb-btn" id="onbNext" disabled>${t('onb_next')}</button>`;
-    }
-    if (n === 5) return `${back}<h1 class="onb-h">${t('onb_e_step5_h')}</h1><p class="onb-sub">${t('onb_e_step5_sub')}</p><div class="onb-error" id="onbError"></div><div class="onb-field"><div class="onb-label">${t('onb_e_step5_pass')}</div><input class="onb-input" id="onbPass" type="password" placeholder="${t('onb_e_step5_pass_ph')}" minlength="6"><div class="onb-strength"><div class="onb-strength-fill" id="onbStrength"></div></div></div><div class="onb-terms"><input type="checkbox" id="onbTerms"><label for="onbTerms">${t('onb_e_step5_terms')} <a href="/terms" onclick="event.stopPropagation();event.preventDefault();window.open('/terms','_blank')">${t('onb_e_step5_terms_link')}</a></label></div><button class="onb-btn" id="onbCreate" disabled>${t('onb_e_step5_btn')}</button>`;
-    if (n === 6) return `<div class="onb-celebration"><div class="onb-check-circle" style="background:rgba(162,134,87,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><div class="onb-approved-tag"><span class="onb-approved-dot" style="background:var(--gold)"></span>${t('onb_e_step6_badge')}</div><h1 class="onb-h">${t('onb_e_step6_h')}</h1><p class="onb-sub">${t('onb_e_step6_sub')}</p><button class="onb-btn" id="onbToHome">${t('onb_e_step6_cta')}</button></div>`;
+    if (n === 4) return `${back}<h1 class="onb-h">${t('onb_e_step5_h')}</h1><p class="onb-sub">${t('onb_e_step5_sub')}</p><div class="onb-error" id="onbError"></div><div class="onb-field"><div class="onb-label">${t('onb_e_step5_pass')}</div><input class="onb-input" id="onbPass" type="password" placeholder="${t('onb_e_step5_pass_ph')}" minlength="6"><div class="onb-strength"><div class="onb-strength-fill" id="onbStrength"></div></div></div><div class="onb-terms"><input type="checkbox" id="onbTerms"><label for="onbTerms">${t('onb_e_step5_terms')} <a href="/terms" onclick="event.stopPropagation();event.preventDefault();window.open('/terms','_blank')">${t('onb_e_step5_terms_link')}</a></label></div><button class="onb-btn" id="onbCreate" disabled>${t('onb_e_step5_btn')}</button>`;
+    if (n === 5) return `<div class="onb-celebration"><div class="onb-check-circle" style="background:rgba(162,134,87,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><div class="onb-approved-tag"><span class="onb-approved-dot" style="background:var(--gold)"></span>${t('onb_e_step6_badge')}</div><h1 class="onb-h">${t('onb_e_step6_h')}</h1><p class="onb-sub">${t('onb_e_step6_sub')}</p><button class="onb-btn" id="onbToHome">${t('onb_e_step6_cta')}</button></div>`;
     return '';
   }
 
@@ -1075,56 +1059,7 @@ function renderOnboarding(app) {
       btn.addEventListener('click', () => { state.step = 4; renderStep(); });
     }
 
-    // EMPLOYER Step 4 - document uploads
-    const fileInputs = stg.querySelectorAll('.onb-file-input');
-    if (fileInputs.length > 0 && state.role === 'employer') {
-      if (!state.docs) state.docs = {};
-      const nextBtn = $('[id="onbNext"]');
-      function checkUploads() { nextBtn.disabled = Object.keys(state.docs).length < 3; }
-      checkUploads();
-      fileInputs.forEach(input => {
-        input.addEventListener('change', async () => {
-          const file = input.files[0];
-          if (!file) return;
-          const key = input.dataset.key;
-          const row = stg.querySelector(`.onb-upload-row[data-key="${key}"]`);
-          const label = row.querySelector('.onb-upload-btn');
-          const prog = row.querySelector('.onb-upload-progress');
-          const progFill = prog.querySelector('.onb-upload-progress-fill');
-          label.textContent = t('onb_e_step4_uploading');
-          label.classList.add('uploading');
-          prog.style.display = 'block';
-          try {
-            const tempId = 'temp_' + Date.now();
-            const ref = storage.ref('employers/' + tempId + '/docs/' + key + '_' + Date.now());
-            const task = ref.put(file);
-            task.on('state_changed',
-              s => { progFill.style.width = (s.bytesTransferred / s.totalBytes * 100) + '%'; },
-              err => {
-                label.textContent = t('onb_e_step4_error');
-                label.classList.remove('uploading');
-                label.classList.add('error');
-                prog.style.display = 'none';
-              },
-              async () => {
-                state.docs[key] = await task.snapshot.ref.getDownloadURL();
-                label.textContent = t('onb_e_step4_done');
-                label.classList.remove('uploading');
-                label.classList.add('done');
-                prog.style.display = 'none';
-                checkUploads();
-              }
-            );
-          } catch (err) {
-            label.textContent = t('onb_e_step4_error');
-            label.classList.remove('uploading');
-          }
-        });
-      });
-      nextBtn.addEventListener('click', () => { state.step = 5; renderStep(); });
-    }
-
-    // Step 5 - password (employer & employee share this binding)
+    // Step 4/5 - password (employer & employee share this binding)
     const passIn = $('[id="onbPass"]');
     const termsBox = $('[id="onbTerms"]');
     const createBtn = $('[id="onbCreate"]');
@@ -1152,9 +1087,9 @@ function renderOnboarding(app) {
               name: state.data.name, companyName: state.data.company, email: state.data.email,
               employerCode, companySize: state.data.size, payrollSystem: state.data.payroll,
               status: 'pending_verification',
-              docRFC: state.docs?.rfc || null,
-              docId: state.docs?.id_oficial || null,
-              docAddress: state.docs?.comprobante || null,
+              docRFC: null,
+              docId: null,
+              docAddress: null,
               submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
               createdAt: firebase.firestore.FieldValue.serverTimestamp(),
               totalEmployees: 0, activeLoans: 0, totalDisbursed: 0
@@ -1169,7 +1104,7 @@ function renderOnboarding(app) {
             });
             await db.collection('employers').doc(state.employerDoc.id).update({ totalEmployees: firebase.firestore.FieldValue.increment(1) });
           }
-          state.step = state.role === 'employer' ? 6 : 5;
+          state.step = 5;
           renderStep();
           setTimeout(fireConfetti, 300);
         } catch (err) {
