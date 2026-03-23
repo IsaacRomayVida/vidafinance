@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './hooks/useAuth';
 import { MarketingLayout } from './components/layout/MarketingLayout';
 import { RouteGuard } from './components/RouteGuard';
 import { EmployeeLayout } from './components/layouts/EmployeeLayout';
@@ -35,6 +36,7 @@ import './i18n';
 
 export default function App() {
   return (
+    <AuthProvider>
     <BrowserRouter>
         <Routes>
           {/* Marketing pages */}
@@ -96,5 +98,6 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
     </BrowserRouter>
+    </AuthProvider>
   );
 }
