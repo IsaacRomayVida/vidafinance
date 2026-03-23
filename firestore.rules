@@ -25,11 +25,12 @@ service cloud.firestore {
     // =============================================
     // EMPLOYERS COLLECTION
     // Employers can read/update their own record (limited fields).
-    // Only admins can create or promote employer status.
+    // Admins can create any employer; users can self-register (doc ID == UID).
     // =============================================
     match /employers/{employerId} {
       allow read: if isOwner(employerId) || isOps();
-      allow create: if isAdmin();
+      allow create: if isAdmin()
+        || (isAuthenticated() && request.auth.uid == employerId);
       allow update: if isAdmin()
         || (isOwner(employerId)
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -41,13 +42,14 @@ service cloud.firestore {
     // EMPLOYEES COLLECTION
     // Employees can read/update their own record (limited fields).
     // Employers can read their own employees (via employerId match).
-    // Only ops/admin can create employees.
+    // Ops/admin can create employees; users can self-register (doc ID == UID).
     // =============================================
     match /employees/{employeeId} {
       allow read: if isOwner(employeeId)
                   || (isAuthenticated() && resource.data.employerId == request.auth.uid)
                   || isOps();
-      allow create: if isOps();
+      allow create: if isOps()
+        || (isAuthenticated() && request.auth.uid == employeeId);
       allow update: if isOps()
         || (isOwner(employeeId)
           && request.resource.data.diff(resource.data).affectedKeys()
