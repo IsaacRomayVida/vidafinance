@@ -31,10 +31,12 @@ import { EmployerMgmt } from './pages/EmployerMgmt';
 import { AlertsPage } from './pages/AlertsPage';
 import { Onboarding } from './pages/Onboarding';
 import { NotFound } from './pages/NotFound';
+import { AuthProvider } from './contexts/AuthContext';
 import './i18n';
 
 export default function App() {
   return (
+    <AuthProvider>
     <BrowserRouter>
         <Routes>
           {/* Marketing pages */}
@@ -96,5 +98,6 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
     </BrowserRouter>
+    </AuthProvider>
   );
 }
