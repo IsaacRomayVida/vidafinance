@@ -12,7 +12,8 @@ i18n
       es: { translation: es },
       en: { translation: en },
     },
-    fallbackLng: 'es',
+    lng: 'es',
+    fallbackLng: 'en',
     interpolation: { escapeValue: false },
     detection: {
       order: ['localStorage', 'navigator'],
