@@ -390,6 +390,23 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 .card{background:transparent;border-radius:0;padding:0;box-shadow:none;margin-bottom:32px;border-top:1px solid rgba(25,68,69,0.04);padding-top:32px}
 .card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--t3);margin-bottom:24px}
 
+/* Payroll Deduction Setup (Part B) card */
+.partb-card{max-width:560px}
+.partb-sub{font-size:13px;color:var(--t2);margin-bottom:24px;line-height:1.6}
+.partb-fields{display:flex;flex-direction:column;gap:16px;margin-bottom:24px}
+.partb-label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--t3);margin-bottom:6px}
+.partb-input{width:100%;padding:10px 12px;font-size:14px;font-family:var(--df);letter-spacing:1.5px;color:var(--t1);border:1px solid rgba(25,68,69,0.12);border-radius:8px;background:#fff;transition:border-color .2s}
+.partb-input:focus{outline:none;border-color:var(--brand)}
+.partb-input-error{border-color:#d32f2f}
+.partb-error{font-size:11px;color:#d32f2f;margin-top:4px}
+.partb-submit-error{margin-bottom:16px}
+.partb-btn{padding:10px 24px;font-size:13px;font-weight:700;color:#fff;background:var(--brand);border:none;border-radius:8px;cursor:pointer;transition:opacity .2s}
+.partb-btn:hover{opacity:.9}
+.partb-btn:disabled{opacity:.5;cursor:default}
+.partb-pending{display:flex;align-items:center;gap:12px;padding:16px 0}
+.partb-pending-icon{flex-shrink:0}
+.partb-pending p{font-size:13px;color:var(--t2);margin:0;line-height:1.5}
+
 /* Table — editorial, open */
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse}

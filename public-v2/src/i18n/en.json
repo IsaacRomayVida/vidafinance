@@ -640,6 +640,18 @@
   "dash_doc_banner_sub": "Upload the required documents so we can activate your account within 24–48 hours.",
   "dash_doc_banner_success": "Documents submitted! We'll review them within 24–48 hours.",
 
+  "dash_partb_title": "Payroll Deduction Setup",
+  "dash_partb_sub": "Enter 3 sample employee CURPs so we can verify your IMSS registration and activate payroll deductions.",
+  "dash_partb_curp_label": "Employee CURP {{n}}",
+  "dash_partb_curp_placeholder": "18-character CURP",
+  "dash_partb_curp_invalid": "Invalid CURP format",
+  "dash_partb_curp_duplicate": "Duplicate CURP",
+  "dash_partb_submit": "Submit CURPs",
+  "dash_partb_submitting": "Submitting…",
+  "dash_partb_success": "CURPs submitted! We'll verify them shortly.",
+  "dash_partb_error": "Something went wrong. Please try again.",
+  "dash_partb_pending": "Your sample CURPs are being verified. We'll notify you once complete.",
+
   "onb_m_step1_h": "Enter your <em>code</em>.",
   "onb_m_step1_sub": "Your employer provided you with an access code.",
   "onb_m_step1_placeholder": "CODE",
