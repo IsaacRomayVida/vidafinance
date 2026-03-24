@@ -1,5 +1,5 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
@@ -568,6 +568,46 @@ export const updateEmployerTier = onCall(
         });
 
         return { success: true };
+      })
+  )
+);
+
+// ── onEmployerDocCreated — set employer_admin custom claim on employer create ─
+
+export const onEmployerDocCreated = onDocumentCreated('employers/{uid}', async (event) => {
+  const uid = event.params['uid'];
+  await admin.auth().setCustomUserClaims(uid, { role: 'employer_admin' });
+  console.log(`Set employer_admin claim for uid=${uid}`);
+  return null;
+});
+
+// ── setEmployerClaims — retroactively set employer_admin claims ──────────────
+
+export const setEmployerClaims = onCall(
+  { cors: true, enforceAppCheck: false },
+  withAuth<{ uid: string }, { success: boolean; uid: string }>(
+    ['admin', 'super_admin'],
+    async (data, auth) =>
+      withErrorHandling({ functionName: 'setEmployerClaims', uid: auth.uid }, async () => {
+        const { uid } = data;
+        if (!uid) throw new HttpsError('invalid-argument', 'uid is required');
+
+        const empDoc = await db.collection('employers').doc(uid).get();
+        if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
+
+        await admin.auth().setCustomUserClaims(uid, { role: 'employer_admin' });
+
+        try {
+          await auditLog(db, {
+            action: 'employer.setCustomClaims',
+            actorUid: auth.uid,
+            actorRole: auth.role,
+            targetId: uid,
+            after: { role: 'employer_admin' },
+          });
+        } catch (_) { /* non-critical */ }
+
+        return { success: true, uid };
       })
   )
 );
