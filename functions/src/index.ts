@@ -2,7 +2,6 @@ import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as functions from 'firebase-functions/v1';
-import * as admin from 'firebase-admin';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
@@ -79,6 +78,7 @@ async function callML(path: string, body: Record<string, unknown>): Promise<Reco
 
 export const autoVerifyTestAccounts = functions.auth.user().onCreate(async (user) => {
   if (user.email && user.email.endsWith('@vida-test.com')) {
+    const admin = await import('firebase-admin');
     await admin.auth().updateUser(user.uid, { emailVerified: true });
   }
   return null;
