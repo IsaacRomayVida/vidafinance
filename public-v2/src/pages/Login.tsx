@@ -63,8 +63,9 @@ export function Login() {
         return;
       }
 
-      // Role-based redirect: check custom claims first, then Firestore
-      const token = await cred.user.getIdTokenResult();
+      // Role-based redirect: check custom claims first, then Firestore.
+      // Force-refresh to pick up recently-set custom claims.
+      const token = await cred.user.getIdTokenResult(true);
       const role = token.claims.role as string | undefined;
 
       if (role === 'admin' || role === 'super_admin') {
@@ -76,12 +77,20 @@ export function Login() {
       } else if (role === 'employee') {
         navigate('/employee', { replace: true });
       } else {
-        // Fallback: check Firestore collections by uid
+        // Fallback: check Firestore employers collection, then users collection
         const employerDoc = await getDoc(doc(db, 'employers', cred.user.uid));
         if (employerDoc.exists()) {
           navigate('/employer', { replace: true });
         } else {
-          navigate('/employee', { replace: true });
+          const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+          const userRole = userDoc.exists() ? userDoc.data()?.role : undefined;
+          if (userRole === 'employer_admin') {
+            navigate('/employer', { replace: true });
+          } else if (userRole === 'ops' || userRole === 'admin' || userRole === 'super_admin') {
+            navigate('/ops', { replace: true });
+          } else {
+            navigate('/employee', { replace: true });
+          }
         }
       }
     } catch (err) {
