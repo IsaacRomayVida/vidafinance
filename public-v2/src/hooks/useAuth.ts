@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { createElement, createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -11,7 +11,9 @@ interface AuthState {
   loading: boolean;
 }
 
-export function useAuth(): AuthState {
+const AuthContext = createContext<AuthState | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
     role: null,
@@ -70,5 +72,13 @@ export function useAuth(): AuthState {
     return unsubscribe;
   }, []);
 
-  return state;
+  return createElement(AuthContext.Provider, { value: state }, children);
+}
+
+export function useAuth(): AuthState {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return ctx;
 }

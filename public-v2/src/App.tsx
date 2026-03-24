@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './hooks/useAuth';
 import { MarketingLayout } from './components/layout/MarketingLayout';
 import { RouteGuard } from './components/RouteGuard';
 import { EmployeeLayout } from './components/layouts/EmployeeLayout';
@@ -38,6 +39,7 @@ const NotFound = React.lazy(() => import('./pages/NotFound').then(m => ({ defaul
 
 export default function App() {
   return (
+    <AuthProvider>
     <BrowserRouter>
       <Suspense fallback={<div className="spinner" />}>
         <Routes>
@@ -102,5 +104,6 @@ export default function App() {
         </Routes>
       </Suspense>
     </BrowserRouter>
+    </AuthProvider>
   );
 }
