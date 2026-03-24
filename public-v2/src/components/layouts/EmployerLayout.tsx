@@ -19,7 +19,7 @@ export function EmployerLayout() {
           <Link to="/employer" className="text-xl font-bold text-teal-900">
             VIDA
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <Link
               to="/employer"
               className="text-sm font-medium text-teal-700 hover:text-teal-900"
