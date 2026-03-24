@@ -678,5 +678,12 @@
 
   "onb_strength_weak": "Débil",
   "onb_strength_medium": "Media",
-  "onb_strength_strong": "Fuerte"
+  "onb_strength_strong": "Fuerte",
+
+  "roster_invite_heading": "Invitar Empleados",
+  "roster_invite_desc": "Comparte este código con tus empleados para que puedan registrarse y vincularse a tu empresa.",
+  "roster_invite_code_label": "Código de Empleador",
+  "roster_copy": "Copiar",
+  "roster_copied": "¡Copiado!",
+  "roster_empty": "Aún no hay empleados registrados."
 }

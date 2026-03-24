@@ -678,5 +678,12 @@
 
   "onb_strength_weak": "Weak",
   "onb_strength_medium": "Medium",
-  "onb_strength_strong": "Strong"
+  "onb_strength_strong": "Strong",
+
+  "roster_invite_heading": "Invite Employees",
+  "roster_invite_desc": "Share this code with your employees so they can sign up and link to your company.",
+  "roster_invite_code_label": "Employer Code",
+  "roster_copy": "Copy",
+  "roster_copied": "Copied!",
+  "roster_empty": "No employees enrolled yet."
 }
