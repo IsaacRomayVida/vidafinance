@@ -29,6 +29,8 @@ interface EmployerData {
   docRFC?: string | null;
   docId?: string | null;
   docAddress?: string | null;
+  sampleCurps?: string[];
+  partBStatus?: string;
 }
 
 interface DashStats {
@@ -193,6 +195,124 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/;
+
+function PayrollDeductionCard({ uid, employer, onSubmitted }: { uid: string; employer: EmployerData; onSubmitted: () => void }) {
+  const { t } = useTranslation();
+  const [curps, setCurps] = useState<[string, string, string]>(['', '', '']);
+  const [errors, setErrors] = useState<[string, string, string]>(['', '', '']);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
+  // Already submitted — show pending state
+  if (employer.partBStatus === 'pending' || submitted) {
+    return (
+      <div className="card partb-card">
+        <div className="card-title">{t('dash_partb_title')}</div>
+        <div className="partb-pending">
+          <div className="partb-pending-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" width="24" height="24">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
+            </svg>
+          </div>
+          <p>{submitted ? t('dash_partb_success') : t('dash_partb_pending')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  function handleChange(idx: number, value: string) {
+    const upper = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 18);
+    setCurps(prev => { const next = [...prev] as [string, string, string]; next[idx] = upper; return next; });
+    setErrors(prev => { const next = [...prev] as [string, string, string]; next[idx] = ''; return next; });
+    setSubmitError('');
+  }
+
+  function validate(): boolean {
+    const next: [string, string, string] = ['', '', ''];
+    let valid = true;
+
+    for (let i = 0; i < 3; i++) {
+      const c = curps[i].trim();
+      if (!CURP_REGEX.test(c)) {
+        next[i] = t('dash_partb_curp_invalid');
+        valid = false;
+      }
+    }
+
+    // Check duplicates only if format is valid
+    if (valid) {
+      const seen = new Set<string>();
+      for (let i = 0; i < 3; i++) {
+        if (seen.has(curps[i])) {
+          next[i] = t('dash_partb_curp_duplicate');
+          valid = false;
+        }
+        seen.add(curps[i]);
+      }
+    }
+
+    setErrors(next);
+    return valid;
+  }
+
+  async function handleSubmit() {
+    if (!validate()) return;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      await updateDoc(doc(db, 'employers', uid), {
+        sampleCurps: curps,
+        partBStatus: 'pending',
+      });
+      setSubmitted(true);
+      onSubmitted();
+    } catch {
+      setSubmitError(t('dash_partb_error'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="card partb-card">
+      <div className="card-title">{t('dash_partb_title')}</div>
+      <p className="partb-sub">{t('dash_partb_sub')}</p>
+
+      <div className="partb-fields">
+        {curps.map((curp, i) => (
+          <div key={i} className="partb-field">
+            <label className="partb-label">{t('dash_partb_curp_label', { n: i + 1 })}</label>
+            <input
+              type="text"
+              className={`partb-input${errors[i] ? ' partb-input-error' : ''}`}
+              value={curp}
+              onChange={(e) => handleChange(i, e.target.value)}
+              placeholder={t('dash_partb_curp_placeholder')}
+              maxLength={18}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            {errors[i] && <div className="partb-error">{errors[i]}</div>}
+          </div>
+        ))}
+      </div>
+
+      {submitError && <div className="partb-error partb-submit-error">{submitError}</div>}
+
+      <button
+        className="partb-btn"
+        onClick={handleSubmit}
+        disabled={submitting}
+      >
+        {submitting ? t('dash_partb_submitting') : t('dash_partb_submit')}
+      </button>
     </div>
   );
 }
@@ -386,6 +506,15 @@ export function EmployerDashboard() {
             <div className="stat-change">MXN</div>
           </div>
         </div>
+
+        {/* Payroll Deduction Setup (Part B) */}
+        {employer?.partBStatus !== 'completed' && (
+          <PayrollDeductionCard
+            uid={user!.uid}
+            employer={employer!}
+            onSubmitted={() => setEmployer(prev => prev ? { ...prev, partBStatus: 'pending' } : prev)}
+          />
+        )}
 
         {/* Loans Table */}
         <div className="card">

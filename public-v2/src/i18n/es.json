@@ -659,6 +659,18 @@
   "dash_doc_banner_sub": "Sube los documentos requeridos para que podamos activar tu cuenta en 24–48 horas.",
   "dash_doc_banner_success": "¡Documentos enviados! Los revisaremos en 24–48 horas.",
 
+  "dash_partb_title": "Configuración de Deducción de Nómina",
+  "dash_partb_sub": "Ingresa 3 CURPs de empleados de muestra para que podamos verificar tu registro en el IMSS y activar las deducciones de nómina.",
+  "dash_partb_curp_label": "CURP del Empleado {{n}}",
+  "dash_partb_curp_placeholder": "CURP de 18 caracteres",
+  "dash_partb_curp_invalid": "Formato de CURP inválido",
+  "dash_partb_curp_duplicate": "CURP duplicado",
+  "dash_partb_submit": "Enviar CURPs",
+  "dash_partb_submitting": "Enviando…",
+  "dash_partb_success": "¡CURPs enviados! Los verificaremos en breve.",
+  "dash_partb_error": "Algo salió mal. Por favor intenta de nuevo.",
+  "dash_partb_pending": "Tus CURPs de muestra están siendo verificados. Te notificaremos cuando se complete.",
+
   "onb_m_step1_h": "Ingresa tu <em>código</em>.",
   "onb_m_step1_sub": "Tu empleador te proporcionó un código de acceso.",
   "onb_m_step1_placeholder": "CÓDIGO",
