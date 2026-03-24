@@ -44,7 +44,7 @@ export function useAuth(): AuthState {
               role = (userSnap.exists() ? (userSnap.data()?.role as UserRole) : null) || 'employee';
             }
           } catch (err) {
-            console.warn('[useAuth] Firestore fallback failed, retrying...', err);
+            // Firestore fallback failed — retry silently
             try {
               await new Promise(r => setTimeout(r, 500));
               const retrySnap = await getDoc(doc(db, 'employers', user.uid));
@@ -55,7 +55,7 @@ export function useAuth(): AuthState {
                 role = (retryUserSnap.exists() ? (retryUserSnap.data()?.role as UserRole) : null) || 'employee';
               }
             } catch (retryErr) {
-              console.error('[useAuth] Firestore fallback retry failed', retryErr);
+              // Retry also failed — default to employee role
               role = 'employee';
             }
           }

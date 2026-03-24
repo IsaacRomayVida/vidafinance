@@ -33,7 +33,7 @@ export function EmployerLayout() {
               {t('dash_employees')}
             </Link>
             <Link
-              to="/employer/loans"
+              to="/employer/deductions"
               className="text-sm font-medium text-teal-700 hover:text-teal-900"
             >
               {t('dash_loans')}
