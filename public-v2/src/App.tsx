@@ -1,41 +1,45 @@
+import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MarketingLayout } from './components/layout/MarketingLayout';
 import { RouteGuard } from './components/RouteGuard';
 import { EmployeeLayout } from './components/layouts/EmployeeLayout';
 import { EmployerLayout } from './components/layouts/EmployerLayout';
 import { AdminLayout } from './components/layouts/AdminLayout';
-import { HomePage } from './pages/HomePage';
-import { EmployerPage } from './pages/EmployerPage';
-import { EmployeePage } from './pages/EmployeePage';
-import { AboutPage } from './pages/AboutPage';
-import { SecurityPage } from './pages/SecurityPage';
-import { PrivacyPage } from './pages/PrivacyPage';
-import { TermsPage } from './pages/TermsPage';
-import { PartnersPage } from './pages/PartnersPage';
-import { InvestorsPage } from './pages/InvestorsPage';
-import { ContactPage } from './pages/ContactPage';
-import { PressPage } from './pages/PressPage';
-import { Login } from './pages/Login';
-import { EmployeeDashboard } from './pages/EmployeeDashboard';
-import { LoanWizard } from './pages/LoanWizard';
-import { MyLoans } from './pages/MyLoans';
-import { EmployerDashboard } from './pages/EmployerDashboard';
-import { EmployeeRoster } from './pages/EmployeeRoster';
-import { DeductionReports } from './pages/DeductionReports';
-import { OnboardingWizard } from './pages/OnboardingWizard';
-import { AnalyticsPage } from './pages/AnalyticsPage';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { ReviewQueue } from './pages/ReviewQueue';
-import { PortfolioPage } from './pages/PortfolioPage';
-import { EmployerMgmt } from './pages/EmployerMgmt';
-import { AlertsPage } from './pages/AlertsPage';
-import { Onboarding } from './pages/Onboarding';
-import { NotFound } from './pages/NotFound';
 import './i18n';
+
+// Lazy-loaded page components for code splitting
+const HomePage = React.lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
+const EmployerPage = React.lazy(() => import('./pages/EmployerPage').then(m => ({ default: m.EmployerPage })));
+const EmployeePage = React.lazy(() => import('./pages/EmployeePage').then(m => ({ default: m.EmployeePage })));
+const AboutPage = React.lazy(() => import('./pages/AboutPage').then(m => ({ default: m.AboutPage })));
+const SecurityPage = React.lazy(() => import('./pages/SecurityPage').then(m => ({ default: m.SecurityPage })));
+const PrivacyPage = React.lazy(() => import('./pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
+const TermsPage = React.lazy(() => import('./pages/TermsPage').then(m => ({ default: m.TermsPage })));
+const PartnersPage = React.lazy(() => import('./pages/PartnersPage').then(m => ({ default: m.PartnersPage })));
+const InvestorsPage = React.lazy(() => import('./pages/InvestorsPage').then(m => ({ default: m.InvestorsPage })));
+const ContactPage = React.lazy(() => import('./pages/ContactPage').then(m => ({ default: m.ContactPage })));
+const PressPage = React.lazy(() => import('./pages/PressPage').then(m => ({ default: m.PressPage })));
+const Login = React.lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
+const EmployeeDashboard = React.lazy(() => import('./pages/EmployeeDashboard').then(m => ({ default: m.EmployeeDashboard })));
+const LoanWizard = React.lazy(() => import('./pages/LoanWizard').then(m => ({ default: m.LoanWizard })));
+const MyLoans = React.lazy(() => import('./pages/MyLoans').then(m => ({ default: m.MyLoans })));
+const EmployerDashboard = React.lazy(() => import('./pages/EmployerDashboard').then(m => ({ default: m.EmployerDashboard })));
+const EmployeeRoster = React.lazy(() => import('./pages/EmployeeRoster').then(m => ({ default: m.EmployeeRoster })));
+const DeductionReports = React.lazy(() => import('./pages/DeductionReports').then(m => ({ default: m.DeductionReports })));
+const OnboardingWizard = React.lazy(() => import('./pages/OnboardingWizard').then(m => ({ default: m.OnboardingWizard })));
+const AnalyticsPage = React.lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
+const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const ReviewQueue = React.lazy(() => import('./pages/ReviewQueue').then(m => ({ default: m.ReviewQueue })));
+const PortfolioPage = React.lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
+const EmployerMgmt = React.lazy(() => import('./pages/EmployerMgmt').then(m => ({ default: m.EmployerMgmt })));
+const AlertsPage = React.lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
+const Onboarding = React.lazy(() => import('./pages/Onboarding').then(m => ({ default: m.Onboarding })));
+const NotFound = React.lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
 
 export default function App() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<div className="spinner" />}>
         <Routes>
           {/* Marketing pages */}
           <Route element={<MarketingLayout />}>
@@ -96,6 +100,7 @@ export default function App() {
           {/* 404 catch-all */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
