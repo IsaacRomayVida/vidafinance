@@ -166,6 +166,7 @@ jobs:
           check_health "https://vida-notifications.railway.app/health"   "notification-service" || true
           check_health "https://vida-pdf-generator.railway.app/health"   "pdf-generator"      || true
           check_health "https://vida-ml-service.railway.app/health"      "ml-service"         || true
+          check_health "https://vida-underwriting.railway.app/health"   "underwriting-service" || true
 
           if [ "$ALL_OK" = "false" ]; then
             echo ""

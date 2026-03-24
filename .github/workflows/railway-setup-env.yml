@@ -15,6 +15,7 @@ on:
           - vida-notifications
           - vida-pdf-generator
           - vida-ml-service
+          - vida-underwriting
       redis_url:
         description: "Redis private URL (default: redis://vida-redis.railway.internal:6379)"
         required: false
@@ -164,6 +165,42 @@ jobs:
             --service vida-ml-service
           echo "✅ vida-ml-service environment variables set"
 
+      - name: Set env vars — vida-underwriting
+        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'vida-underwriting' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+          VERIFIK_API_KEY:              ${{ secrets.VERIFIK_API_KEY }}
+          SW_USER:                      ${{ secrets.SW_USER }}
+          SW_PASSWORD:                  ${{ secrets.SW_PASSWORD }}
+          BELVO_SECRET_ID:              ${{ secrets.BELVO_SECRET_ID }}
+          BELVO_SECRET_PASSWORD:        ${{ secrets.BELVO_SECRET_PASSWORD }}
+          RISKSEAL_API_KEY:             ${{ secrets.RISKSEAL_API_KEY }}
+        run: |
+          railway variables set \
+            NODE_ENV=staging \
+            PORT=3003 \
+            REDIS_URL="$REDIS_URL" \
+            FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
+            INTERNAL_SECRET="$INTERNAL_SECRET" \
+            ALLOWED_ORIGINS="https://vida-staging.web.app,https://admin-staging.vida.com" \
+            VERIFIK_API_KEY="$VERIFIK_API_KEY" \
+            VERIFIK_BASE_URL="https://api.verifik.co" \
+            SW_USER="$SW_USER" \
+            SW_PASSWORD="$SW_PASSWORD" \
+            SW_BASE_URL="https://services.sw.com.mx" \
+            BELVO_SECRET_ID="$BELVO_SECRET_ID" \
+            BELVO_SECRET_PASSWORD="$BELVO_SECRET_PASSWORD" \
+            BELVO_BASE_URL="https://sandbox.belvo.com" \
+            RISKSEAL_MOCK="true" \
+            RISKSEAL_API_KEY="$RISKSEAL_API_KEY" \
+            RISKSEAL_BASE_URL="https://api.riskseal.io/v1" \
+            GOOGLE_DOCAI_PROJECT_ID="vida-finance" \
+            GOOGLE_DOCAI_LOCATION="us" \
+            GOOGLE_DOCAI_PROCESSOR_ID="8d46c79a75eb5406" \
+            --service vida-underwriting
+          echo "✅ vida-underwriting environment variables set"
+
       - name: Summary
         run: |
           echo "✅ Railway environment variables setup complete!"
@@ -174,6 +211,7 @@ jobs:
           echo "  - vida-notifications   (port 3003)"
           echo "  - vida-pdf-generator   (port 3004)"
           echo "  - vida-ml-service      (port 3005)"
+          echo "  - vida-underwriting    (port 3003)"
           echo ""
           echo "Next: trigger a deployment to pick up new variables."
           echo "  Go to Actions → Deploy Railway Services → Run workflow → service: all"
