@@ -22,6 +22,8 @@ from redis.asyncio import Redis as AsyncRedis
 from typing import Optional
 
 from models.champion_challenger import ModelRouter
+from models.isolation_forest import FraudPreScreen
+from models.active_learner import HumanReviewRouter
 from services.firestore_client import FirestoreClient
 from services.softcredito_client import SoftcreditoClient
 
@@ -31,9 +33,13 @@ QUEUE_NAME = "vida-underwriting"
 APPROVAL_THRESHOLD = float(os.environ.get("APPROVAL_THRESHOLD", "0.65"))
 CHAMPION_PATH = os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
 CHALLENGER_PATH = os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
+ISOLATION_FOREST_PATH = os.environ.get("ISOLATION_FOREST_PATH", "models/isolation_forest_v1.joblib")
+ACTIVE_LEARNER_PATH = os.environ.get("ACTIVE_LEARNER_PATH", "models/active_learner_v1.joblib")
 
 # Initialised lazily so the module can be imported without creds present
 _router: Optional[ModelRouter] = None
+_fraud_prescreen: Optional[FraudPreScreen] = None
+_human_review_router: Optional[HumanReviewRouter] = None
 _firestore: Optional[FirestoreClient] = None
 _executor = ThreadPoolExecutor(max_workers=10)
 
@@ -48,6 +54,30 @@ def get_router() -> ModelRouter:
             _router.challenger.version,
         )
     return _router
+
+
+def get_fraud_prescreen() -> Optional[FraudPreScreen]:
+    """Load Stage 0 Isolation Forest (optional — graceful degradation)."""
+    global _fraud_prescreen
+    if _fraud_prescreen is None:
+        try:
+            _fraud_prescreen = FraudPreScreen.load(ISOLATION_FOREST_PATH)
+            logger.info("Loaded fraud pre-screen: %s", _fraud_prescreen.version)
+        except FileNotFoundError:
+            logger.warning("Isolation Forest model not found at %s — skipping Stage 0", ISOLATION_FOREST_PATH)
+    return _fraud_prescreen
+
+
+def get_human_review_router() -> Optional[HumanReviewRouter]:
+    """Load Stage 5 active learner (optional — graceful degradation)."""
+    global _human_review_router
+    if _human_review_router is None:
+        try:
+            _human_review_router = HumanReviewRouter.load(ACTIVE_LEARNER_PATH)
+            logger.info("Loaded active learner: %s", _human_review_router.version)
+        except FileNotFoundError:
+            logger.warning("Active learner model not found at %s — skipping Stage 5 routing", ACTIVE_LEARNER_PATH)
+    return _human_review_router
 
 
 def get_firestore() -> FirestoreClient:
@@ -85,6 +115,20 @@ def get_rejection_reason(score: float, features: dict) -> str:
     if score < 0.40:
         return "Credit risk too high based on employment profile"
     return "Does not meet current lending criteria"
+
+
+def build_fraud_prescreen_features(borrower: dict, principal: float, monthly_salary: float) -> dict:
+    """Build feature dict for the Stage 0 Isolation Forest pre-screen."""
+    return {
+        "requests_last_hour": float(borrower.get("requestsLastHour", 0)),
+        "amount_to_salary_ratio": principal / max(monthly_salary, 1),
+        "device_age_days": float(borrower.get("deviceAgeDays", 365)),
+        "ip_reputation_score": float(borrower.get("ipReputationScore", 75)),
+        "session_duration_seconds": float(borrower.get("sessionDurationSeconds", 300)),
+        "interaction_anomaly_score": float(borrower.get("interactionAnomalyScore", 10)),
+        "bureau_inquiries_last_30d": float(borrower.get("bureauInquiriesLast30d", 1)),
+        "distinct_ips_last_24h": float(borrower.get("distinctIpsLast24h", 1)),
+    }
 
 
 def build_model_features(borrower: dict, principal: float, monthly_salary: float, bureau: Optional[dict] = None) -> dict:
@@ -153,6 +197,21 @@ async def process_underwrite_loan(job, job_token=None):
 
     logger.info("[underwriting] Processing loan %s", loan_id)
 
+    # ── 0. Stage 0: Isolation Forest fraud pre-screen ────────────────────────
+    fraud_prescreen_result = None
+    prescreen = get_fraud_prescreen()
+    if prescreen is not None:
+        try:
+            fraud_features = build_fraud_prescreen_features(borrower, principal, monthly_salary)
+            fraud_prescreen_result = prescreen.predict(fraud_features)
+            if fraud_prescreen_result["is_fraud"]:
+                logger.warning(
+                    "[underwriting] Stage 0 FRAUD flag for loan %s (score=%.4f)",
+                    loan_id, fraud_prescreen_result["anomaly_score"],
+                )
+        except Exception as e:
+            logger.warning("[underwriting] Stage 0 pre-screen failed for loan %s: %s", loan_id, e)
+
     # ── 1. Optional bureau enrichment (graceful degradation) ─────────────────
     bureau = None
     try:
@@ -186,6 +245,37 @@ async def process_underwrite_loan(job, job_token=None):
         decision = "rejected"
         rejection_reason = "Minimum 3 months employment tenure required"
 
+    # Stage 0 override: reject if Isolation Forest flagged as fraud
+    if fraud_prescreen_result and fraud_prescreen_result["is_fraud"] and decision != "rejected":
+        decision = "rejected"
+        rejection_reason = "Flagged by Stage 0 fraud pre-screen"
+
+    # ── 5. Stage 5: Active learning human-review routing ─────────────────────
+    route_to_human = False
+    human_review_router = get_human_review_router()
+    if human_review_router is not None and decision != "rejected":
+        try:
+            import numpy as _np
+            feature_vector = _np.array([
+                features.get(f, 0.0) for f in [
+                    "scDiasAtraso", "cdcScore", "carteraVencida",
+                    "imss_tenure_months", "lti", "riskSeal_score",
+                    "employer_tier", "sector_risk", "afore_regularity",
+                    "monthly_salary",
+                ]
+            ], dtype=_np.float64)
+            review_result = human_review_router.should_route_to_human(feature_vector)
+            route_to_human = review_result["route_to_human"]
+            if route_to_human:
+                decision = "manual_review"
+                rejection_reason = None
+                logger.info(
+                    "[underwriting] Loan %s routed to human review (uncertainty=%.4f)",
+                    loan_id, review_result["uncertainty"],
+                )
+        except Exception as e:
+            logger.warning("[underwriting] Stage 5 routing failed for loan %s: %s", loan_id, e)
+
     logger.info(
         "[underwriting] Loan %s → %s (champion=%.3f, challenger=%.3f, threshold=%.2f)",
         loan_id, decision, champion_score, challenger_score, APPROVAL_THRESHOLD,
@@ -204,6 +294,8 @@ async def process_underwrite_loan(job, job_token=None):
         "challengerScore": challenger_score,
         "shapTop5": shap_top5,
         "rejectionReason": rejection_reason,
+        "fraudPrescreen": fraud_prescreen_result,
+        "routedToHumanReview": route_to_human,
         "updatedAt": now_iso,
         "statusHistory": firestore.array_union({
             "from": "pending",
