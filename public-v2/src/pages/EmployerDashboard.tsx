@@ -322,6 +322,12 @@ export function EmployerDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // Stable ref for navigate — useNavigate() can return a new function
+  // on every render with BrowserRouter (non-data router) in react-router v7,
+  // which would re-trigger any useEffect that includes it as a dependency.
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+
   const [employer, setEmployer] = useState<EmployerData | null>(null);
   const [stats, setStats] = useState<DashStats>({});
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -338,12 +344,15 @@ export function EmployerDashboard() {
       return;
     }
 
+    let cancelled = false;
     const uid = user.uid;
 
     (async () => {
       const empDoc = await getDoc(doc(db, 'employers', uid));
+      if (cancelled) return;
+
       if (!empDoc.exists()) {
-        navigate('/employee', { replace: true });
+        navigateRef.current('/employee', { replace: true });
         return;
       }
       const emp = empDoc.data() as EmployerData;
@@ -354,7 +363,7 @@ export function EmployerDashboard() {
         return;
       }
       if (emp.status && emp.status !== 'active' && emp.status !== 'pending_verification') {
-        navigate('/', { replace: true });
+        navigateRef.current('/', { replace: true });
         return;
       }
 
@@ -363,15 +372,19 @@ export function EmployerDashboard() {
         const functions = getFunctions();
         const getEmployerDashboard = httpsCallable<unknown, { stats: DashStats }>(functions, 'getEmployerDashboard');
         const result = await getEmployerDashboard({});
-        setStats(result.data.stats || {});
+        if (!cancelled) setStats(result.data.stats || {});
       } catch {
         // fallback - stats will be computed from loans
       }
 
-      setPageState('dashboard');
-      setLoading(false);
+      if (!cancelled) {
+        setPageState('dashboard');
+        setLoading(false);
+      }
     })();
-  }, [user, navigate]);
+
+    return () => { cancelled = true; };
+  }, [user]);
 
   // Real-time loans listener
   useEffect(() => {
@@ -386,6 +399,9 @@ export function EmployerDashboard() {
     const unsub = onSnapshot(q, (snap) => {
       const loanData = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan));
       setLoans(loanData);
+      setLoading(false);
+    }, () => {
+      // Query error (e.g. missing composite index) — stop loading
       setLoading(false);
     });
 
