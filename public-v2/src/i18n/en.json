@@ -582,6 +582,10 @@
   "modal_purpose_transportation": "Transportation",
   "modal_purpose_debt_consolidation": "Debt consolidation",
   "modal_purpose_other": "Other",
+  "modal_cat_label": "CAT (Total Annual Cost)",
+  "modal_cat_annual": "{{cat}}% annual",
+  "modal_cat_note": "CAT is a standardized measure of cost.",
+  "modal_condusef": "CONDUSEF",
 
   "toast_loan_submitted": "Loan request submitted successfully",
 
@@ -657,6 +661,13 @@
   "onb_e_step4_payroll": "Payroll system",
   "onb_e_step4_payroll_ph": "Select your system",
   "onb_e_step4_payroll_other": "Other",
+  "onb_e_step4_rfc": "RFC (Tax ID)",
+  "onb_e_step4_id": "Official ID",
+  "onb_e_step4_address": "Proof of address",
+  "onb_e_step4_formats": "PDF, PNG or JPG up to 5 MB",
+  "onb_e_step4_upload": "Upload",
+  "onb_e_step4_uploading": "Uploading…",
+  "onb_e_step4_done": "Done",
 
   "onb_e_step5a_h": "Payment <em>setup</em>.",
   "onb_e_step5a_sub": "How your company disburses payments.",
