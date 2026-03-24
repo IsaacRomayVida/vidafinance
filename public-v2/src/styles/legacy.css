@@ -40,11 +40,11 @@ input,select,textarea{font-family:var(--db)}
 .nav-links a::after{content:'';position:absolute;bottom:-4px;left:0;right:0;height:1.5px;background:var(--brand);transform:scaleX(0);transition:transform .3s;transform-origin:left}
 .nav-links a:hover::after{transform:scaleX(1)}
 .nav-right{display:flex;align-items:center;gap:24px}
-.nav-lang{font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--t3);padding:6px 12px;border:1.5px solid rgba(25,68,69,0.1);border-radius:6px;transition:all .3s;text-transform:uppercase}
+.nav-lang{font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--t3);padding:8px 12px;border:1.5px solid rgba(25,68,69,0.1);border-radius:6px;transition:all .3s;text-transform:uppercase;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
 .nav-lang:hover{color:var(--t1);border-color:rgba(25,68,69,0.2)}
 .nav-login{font-size:13.5px;font-weight:600;color:var(--t2);transition:color .3s}
 .nav-login:hover{color:var(--t1)}
-.nav-cta{padding:11px 28px;border-radius:10px;font-size:13px;font-weight:600;background:var(--brand);color:#fff;transition:all .3s}
+.nav-cta{padding:11px 28px;border-radius:12px;font-size:13px;font-weight:600;background:var(--brand);color:#fff;transition:all .3s}
 .nav-cta:hover{background:var(--brand-mid);transform:translateY(-1px)}
 
 /* HERO */
@@ -106,7 +106,7 @@ input,select,textarea{font-family:var(--db)}
 .pm-prog-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--brand),var(--aqua));border-radius:10px;animation:pG 2.2s cubic-bezier(.16,1,.3,1) 1.8s forwards}
 @keyframes pG{to{width:60%}}
 
-.pm-btn{width:100%;padding:14px;border-radius:14px;background:var(--brand);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;position:relative;z-index:2;transition:all .3s;border:none;cursor:pointer}
+.pm-btn{width:100%;padding:14px;border-radius:12px;background:var(--brand);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;position:relative;z-index:2;transition:all .3s;border:none;cursor:pointer}
 .pm-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,0,0,0.1)}
 
 /* Floating chips */
@@ -286,7 +286,7 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 .ft-brand .ft-logo{margin-bottom:12px}
 .ft-brand .vida-logo{height:12px}
 .ft-brand .ft-tag{font-size:13px;line-height:1.6;color:rgba(255,255,255,0.45);max-width:280px}
-.ft-h{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:16px}
+.ft-h{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:16px}
 .ft-col a{display:block;font-size:13.5px;color:rgba(255,255,255,0.55);margin-bottom:12px;transition:color .3s}
 .ft-col a:hover{color:rgba(255,255,255,0.9)}
 .ft-btm{padding-top:24px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,0.4)}
@@ -323,7 +323,7 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 .auth-tab.active{color:var(--t1);border-bottom-color:var(--brand)}
 
 .form-group{margin-bottom:24px}
-.form-group label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--t3);margin-bottom:10px}
+.form-group label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--t3);margin-bottom:10px}
 .form-group input,.form-group select{width:100%;padding:16px 0;border:none;border-bottom:1.5px solid rgba(25,68,69,0.08);border-radius:0;font-size:16px;color:var(--t1);outline:none;transition:all .3s;background:transparent}
 .form-group input:focus,.form-group select:focus{border-bottom-color:var(--brand);box-shadow:none}
 .form-group input::placeholder{color:var(--t3);font-weight:400}
@@ -337,6 +337,24 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 
 .auth-error{background:transparent;border:none;border-left:3px solid var(--danger);color:var(--danger);padding:12px 16px;border-radius:0;font-size:13px;margin-bottom:24px;display:none}
 .auth-error.show{display:block}
+
+/* ============================================= */
+/* CONTACT FORM                                    */
+/* ============================================= */
+.contact-form{max-width:480px}
+.cf-field{margin-bottom:24px}
+.cf-field label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--t3);margin-bottom:10px}
+.cf-field input,.cf-field select,.cf-field textarea{width:100%;padding:16px 0;border:none;border-bottom:1.5px solid rgba(25,68,69,0.08);border-radius:0;font-size:16px;font-family:var(--sf);color:var(--t1);outline:none;transition:all .3s;background:transparent;resize:vertical}
+.cf-field input:focus,.cf-field select:focus,.cf-field textarea:focus{border-bottom-color:var(--brand);box-shadow:none}
+.cf-field input::placeholder,.cf-field textarea::placeholder{color:var(--t3);font-weight:400}
+.cf-btn{width:100%;padding:18px;border-radius:12px;font-size:15px;font-weight:700;background:var(--brand);color:#fff;border:none;cursor:pointer;transition:all .3s;margin-top:16px}
+.cf-btn:hover{background:var(--brand-mid);transform:translateY(-2px);box-shadow:0 8px 28px rgba(25,68,69,0.15)}
+.cf-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.cf-success{padding:32px;text-align:center;font-size:15px;color:var(--t2)}
+
+/* FOOTER LANGUAGE TOGGLE CONSISTENCY */
+.ft-btm button{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.4);padding:8px 12px;border:1.5px solid rgba(255,255,255,0.1)!important;border-radius:6px;transition:all .3s;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;background:none!important;cursor:pointer}
+.ft-btm button:hover{color:rgba(255,255,255,0.8);border-color:rgba(255,255,255,0.2)!important}
 
 /* ============================================= */
 /* DASHBOARD — Editorial, No-Card, Divider-based  */
