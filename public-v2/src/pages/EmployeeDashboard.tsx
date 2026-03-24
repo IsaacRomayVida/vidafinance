@@ -11,9 +11,22 @@ interface EmployeeData {
   name?: string;
   email?: string;
   employerName?: string;
+  employerId?: string;
   creditLimit: number;
   availableCredit: number;
+  bankClabe?: string;
+  employerCode?: string;
 }
+
+const LOAN_PURPOSES = [
+  'emergency',
+  'medical',
+  'education',
+  'home_repair',
+  'transportation',
+  'debt_consolidation',
+  'other',
+] as const;
 
 interface Loan {
   id: string;
@@ -59,7 +72,21 @@ export function EmployeeDashboard() {
         navigate('/employer', { replace: true });
         return;
       }
-      setEmployee(empDoc.data() as EmployeeData);
+      const empData = empDoc.data() as EmployeeData;
+
+      // Fetch employerCode from employer doc
+      if (empData.employerId) {
+        try {
+          const employerDoc = await getDoc(doc(db, 'employers', empData.employerId));
+          if (employerDoc.exists()) {
+            empData.employerCode = employerDoc.data()?.employerCode;
+          }
+        } catch {
+          // employerCode will be unavailable; modal will ask user to enter it
+        }
+      }
+
+      setEmployee(empData);
       setPageState('dashboard');
     })();
   }, [user, navigate]);
@@ -263,6 +290,8 @@ export function EmployeeDashboard() {
       {showModal && employee && (
         <LoanModal
           availableCredit={employee.availableCredit}
+          bankClabe={employee.bankClabe}
+          employerCode={employee.employerCode}
           onClose={() => setShowModal(false)}
           onSubmitted={handleLoanSubmitted}
         />
@@ -305,15 +334,22 @@ function PayNowButton({ loanId, label, errorLabel }: { loanId: string; label: st
 
 function LoanModal({
   availableCredit,
+  bankClabe: savedClabe,
+  employerCode: savedEmployerCode,
   onClose,
   onSubmitted,
 }: {
   availableCredit: number;
+  bankClabe?: string;
+  employerCode?: string;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
   const { t } = useTranslation();
   const [amount, setAmount] = useState(1000);
+  const [bankAccountClabe, setBankAccountClabe] = useState(savedClabe ?? '');
+  const [employerCode, setEmployerCode] = useState(savedEmployerCode ?? '');
+  const [loanPurpose, setLoanPurpose] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -335,12 +371,26 @@ function LoanModal({
       setError(t('modal_minimum'));
       return;
     }
+    if (!/^\d{18}$/.test(bankAccountClabe)) {
+      setError(t('modal_clabe_invalid'));
+      return;
+    }
+    if (!employerCode) {
+      setError(t('modal_employer_code_required'));
+      return;
+    }
 
     setSubmitting(true);
     try {
       const functions = getFunctions();
       const requestLoan = httpsCallable(functions, 'requestLoan');
-      await requestLoan({ amount, term: 30 });
+      await requestLoan({
+        amount,
+        bankAccountClabe,
+        employerCode,
+        termsAccepted: true,
+        ...(loanPurpose ? { loanPurpose } : {}),
+      });
       onSubmitted();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -374,6 +424,51 @@ function LoanModal({
               onChange={(e) => setAmount(parseInt(e.target.value) || 0)}
               required
             />
+          </div>
+
+          {/* CLABE */}
+          <div className="form-group">
+            <label>{t('modal_clabe_label')}</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={18}
+              value={bankAccountClabe}
+              onChange={(e) => setBankAccountClabe(e.target.value.replace(/\D/g, '').slice(0, 18))}
+              placeholder={t('modal_clabe_placeholder')}
+              required
+            />
+            <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4, display: 'block' }}>
+              {t('modal_clabe_hint')}
+            </span>
+          </div>
+
+          {/* Employer Code */}
+          {!savedEmployerCode && (
+            <div className="form-group">
+              <label>{t('modal_employer_code_label')}</label>
+              <input
+                type="text"
+                value={employerCode}
+                onChange={(e) => setEmployerCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12))}
+                placeholder={t('modal_employer_code_placeholder')}
+                required
+              />
+            </div>
+          )}
+
+          {/* Loan Purpose */}
+          <div className="form-group">
+            <label>{t('modal_loan_purpose')}</label>
+            <select
+              value={loanPurpose}
+              onChange={(e) => setLoanPurpose(e.target.value)}
+            >
+              <option value="">{t('modal_purpose_select')}</option>
+              {LOAN_PURPOSES.map((p) => (
+                <option key={p} value={p}>{t(`modal_purpose_${p}`)}</option>
+              ))}
+            </select>
           </div>
 
           {/* Terms */}
