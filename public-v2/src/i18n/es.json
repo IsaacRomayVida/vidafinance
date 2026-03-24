@@ -788,5 +788,9 @@
 
   "loan_wizard_redirect": "Redirigiendo a tu panel para solicitar un préstamo...",
 
-  "onb_go_back": "Regresar"
+  "onb_go_back": "Regresar",
+
+  "error_404": "404",
+  "error_404_message": "Página no encontrada",
+  "error_404_home": "Ir al inicio"
 }

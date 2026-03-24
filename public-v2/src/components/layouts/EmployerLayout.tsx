@@ -4,7 +4,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 
 export function EmployerLayout() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -38,6 +38,9 @@ export function EmployerLayout() {
             >
               {t('dash_loans')}
             </Link>
+            <button className="nav-lang" onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); localStorage.setItem('vida_lang', next); }}>
+              {i18n.language === 'es' ? 'EN' : 'ES'}
+            </button>
             <button
               onClick={handleSignOut}
               className="text-sm font-medium text-gray-500 hover:text-gray-700"
