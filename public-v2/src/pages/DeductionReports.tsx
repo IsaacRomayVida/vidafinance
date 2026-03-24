@@ -1,17 +1,138 @@
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { useAuth } from '../hooks/useAuth';
+
+interface Loan {
+  id: string;
+  employeeName?: string;
+  amount: number;
+  repaymentAmount?: number;
+  termDays?: number;
+  status: string;
+  createdAt?: { seconds: number };
+  [key: string]: unknown;
+}
+
+function fmt(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
 
 export function DeductionReports() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Real-time loans listener — only active/approved loans have deductions
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'loans'),
+      where('employerId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan));
+      setLoans(data);
+      setLoading(false);
+    });
+
+    return unsub;
+  }, [user]);
+
+  // Filter to loans that have payroll deductions (active, approved, overdue, paid)
+  const deductibleLoans = loans.filter(
+    (l) => l.status === 'active' || l.status === 'approved' || l.status === 'disbursement_queued' || l.status === 'overdue' || l.status === 'paid'
+  );
+
+  // Summary stats
+  const totalDeductions = deductibleLoans.reduce((s, l) => s + (l.repaymentAmount ?? l.amount), 0);
+  const activeCount = deductibleLoans.filter((l) => l.status === 'active' || l.status === 'approved' || l.status === 'disbursement_queued').length;
+  const completedCount = deductibleLoans.filter((l) => l.status === 'paid').length;
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-teal-900">
-        {t('deductions_title', 'Payroll Deductions')}
+        {t('ded_title', 'Payroll Deductions')}
       </h1>
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-        <p className="text-sm text-gray-500">
-          {t('deductions_empty', 'No deduction reports available.')}
-        </p>
+      <p className="mt-1 text-sm text-gray-500">
+        {t('ded_subtitle', 'Loan repayments deducted from employee payroll.')}
+      </p>
+
+      {/* Stats */}
+      <div className="stat-grid" style={{ marginTop: 24 }}>
+        <div className="stat-card">
+          <div className="stat-label">{t('ded_total_deductions', 'Total Deductions')}</div>
+          <div className="stat-value">${fmt(totalDeductions)}</div>
+          <div className="stat-change">MXN</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">{t('ded_active_deductions', 'Active')}</div>
+          <div className="stat-value">{activeCount}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">{t('ded_completed', 'Completed')}</div>
+          <div className="stat-value">{completedCount}</div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="card" style={{ marginTop: 24 }}>
+        <div className="card-title">{t('ded_table_title', 'Deduction Schedule')}</div>
+
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <span className="spinner" style={{ borderColor: 'rgba(25,68,69,0.1)', borderTopColor: 'var(--brand)' }} />
+          </div>
+        ) : deductibleLoans.length === 0 ? (
+          <div className="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <path d="M14 2v6h6" />
+            </svg>
+            <p>{t('ded_empty', 'No deduction reports available.')}</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('dash_th_employee', 'Employee')}</th>
+                  <th>{t('ded_th_loan_amount', 'Loan Amount')}</th>
+                  <th>{t('ded_th_deduction', 'Deduction')}</th>
+                  <th>{t('dash_th_term', 'Term')}</th>
+                  <th>{t('dash_th_status', 'Status')}</th>
+                  <th>{t('dash_th_date', 'Date')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deductibleLoans.map((loan) => (
+                  <tr key={loan.id}>
+                    <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
+                    <td>${fmt(loan.amount)}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--brand)' }}>
+                      ${fmt(loan.repaymentAmount ?? loan.amount)}
+                    </td>
+                    <td>{loan.termDays ?? 30} {t('dash_days', 'days')}</td>
+                    <td>
+                      <span className={`badge badge-${loan.status}`}>
+                        {t(`status_${loan.status}`)}
+                      </span>
+                    </td>
+                    <td>
+                      {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString() : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

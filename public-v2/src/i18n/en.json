@@ -761,5 +761,17 @@
 
   "onb_strength_weak": "Weak",
   "onb_strength_medium": "Medium",
-  "onb_strength_strong": "Strong"
+  "onb_strength_strong": "Strong",
+
+  "ded_title": "Payroll Deductions",
+  "ded_subtitle": "Loan repayments deducted from employee payroll.",
+  "ded_total_deductions": "Total Deductions",
+  "ded_active_deductions": "Active",
+  "ded_completed": "Completed",
+  "ded_table_title": "Deduction Schedule",
+  "ded_empty": "No deduction reports available.",
+  "ded_th_loan_amount": "Loan Amount",
+  "ded_th_deduction": "Deduction",
+
+  "loan_wizard_redirect": "Redirecting to your dashboard to apply for a loan..."
 }
