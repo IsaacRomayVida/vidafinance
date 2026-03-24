@@ -37,13 +37,22 @@ interface EmployeeData {
   employerName: string;
   name: string;
   email: string;
+  phone: string;
+  dateOfBirth: string;
+  curp: string;
+  rfc: string;
   salary: string;
+  payFrequency: string;
+  employmentTenure: string;
+  bankClabe: string;
   password: string;
   terms: boolean;
 }
 
 const COMPANY_SIZES = ['1-50', '51-200', '201-500', '500+'];
 const PAYROLL_SYSTEMS = ['Nomipaq', 'Aspel NOI', 'CONTPAQi', 'Workday', 'ADP'];
+const PAY_FREQUENCIES = ['weekly', 'biweekly', 'monthly'];
+const TENURE_OPTIONS = ['<6m', '6m-1y', '1-2y', '2-5y', '5y+'];
 
 function generateEmployerCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -103,12 +112,14 @@ export function Onboarding() {
   // Employee state
   const [memData, setMemData] = useState<EmployeeData>({
     code: '', employerId: '', employerName: '', name: '', email: '',
-    salary: '', password: '', terms: false,
+    phone: '', dateOfBirth: '', curp: '', rfc: '',
+    salary: '', payFrequency: '', employmentTenure: '', bankClabe: '',
+    password: '', terms: false,
   });
   const [codeStatus, setCodeStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const totalSteps = role === 'employer' ? 5 : role === 'employee' ? 5 : 0;
+  const totalSteps = role === 'employer' ? 5 : role === 'employee' ? 6 : 0;
 
   const goForward = useCallback((toStep: number) => {
     setDirection('right');
@@ -219,9 +230,16 @@ export function Onboarding() {
       await setDoc(doc(db, 'employees', uid), {
         name: memData.name,
         email: memData.email,
+        phone: memData.phone,
+        dateOfBirth: memData.dateOfBirth,
+        curp: memData.curp.toUpperCase(),
+        rfc: memData.rfc.toUpperCase(),
         employerId: memData.employerId,
         employerName: memData.employerName,
         monthlySalary: salaryNum,
+        payFrequency: memData.payFrequency,
+        employmentTenure: memData.employmentTenure,
+        bankClabe: memData.bankClabe,
         creditLimit,
         availableCredit: creditLimit,
         createdAt: serverTimestamp(),
@@ -229,7 +247,7 @@ export function Onboarding() {
       await updateDoc(doc(db, 'employers', memData.employerId), {
         totalEmployees: increment(1),
       });
-      goForward(5);
+      goForward(6);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
     } finally {
@@ -251,9 +269,10 @@ export function Onboarding() {
     }
     if (role === 'employee') {
       if (step === 1) return codeStatus === 'found';
-      if (step === 2) return memData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(memData.email);
-      if (step === 3) return salaryNum > 0;
-      if (step === 4) return memData.password.length >= 6 && memData.terms;
+      if (step === 2) return memData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(memData.email) && memData.phone.replace(/\D/g, '').length >= 10 && memData.dateOfBirth !== '';
+      if (step === 3) return memData.curp.trim().length === 18 && memData.rfc.trim().length === 13;
+      if (step === 4) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && /^\d{18}$/.test(memData.bankClabe);
+      if (step === 5) return memData.password.length >= 6 && memData.terms;
     }
     return false;
   };
@@ -261,7 +280,7 @@ export function Onboarding() {
   const handleNext = () => {
     if (role === 'employer' && step === 4) {
       createEmployerAccount();
-    } else if (role === 'employee' && step === 4) {
+    } else if (role === 'employee' && step === 5) {
       createEmployeeAccount();
     } else {
       goForward(step + 1);
@@ -272,12 +291,12 @@ export function Onboarding() {
   const progressPct = totalSteps > 0 ? ((step) / totalSteps) * 100 : 0;
 
   // Is this a final success step?
-  const isFinalStep = (role === 'employer' && step === 5) || (role === 'employee' && step === 5);
+  const isFinalStep = (role === 'employer' && step === 5) || (role === 'employee' && step === 6);
 
   // Action button config
   const getActionLabel = () => {
     if (role === 'employer' && step === 4) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
-    if (role === 'employee' && step === 4) return creating ? t('onb_m_step4_creating') : t('onb_m_step4_btn');
+    if (role === 'employee' && step === 5) return creating ? t('onb_m_step5_creating') : t('onb_m_step5_btn');
     return t('onb_next');
   };
 
@@ -504,7 +523,7 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 2: Name + email */}
+      {/* Step 2: Name + email + phone + DOB */}
       <div className={stageClass(2)}>
         {step === 2 && (
           <div className="onb-content">
@@ -530,27 +549,119 @@ export function Onboarding() {
                 onChange={(e) => setMemData({ ...memData, email: e.target.value })}
               />
             </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step2_phone')}</label>
+              <input
+                type="tel"
+                className="onb-input"
+                placeholder={t('onb_m_step2_phone_ph')}
+                value={memData.phone}
+                onChange={(e) => setMemData({ ...memData, phone: e.target.value.replace(/[^\d+\- ]/g, '') })}
+              />
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step2_dob')}</label>
+              <input
+                type="date"
+                className="onb-input"
+                value={memData.dateOfBirth}
+                onChange={(e) => setMemData({ ...memData, dateOfBirth: e.target.value })}
+              />
+            </div>
           </div>
         )}
       </div>
 
-      {/* Step 3: Salary + credit preview */}
+      {/* Step 3: CURP + RFC */}
       <div className={stageClass(3)}>
         {step === 3 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step3_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step3_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step3_salary')}</label>
+              <label className="onb-label">{t('onb_m_step3_curp')}</label>
+              <input
+                autoFocus
+                className={`onb-input${memData.curp.length > 0 && memData.curp.length !== 18 ? ' invalid' : memData.curp.length === 18 ? ' valid' : ''}`}
+                placeholder={t('onb_m_step3_curp_ph')}
+                maxLength={18}
+                value={memData.curp}
+                onChange={(e) => setMemData({ ...memData, curp: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+              />
+              <div className="onb-input-hint">{t('onb_m_step3_curp_hint')}</div>
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step3_rfc')}</label>
+              <input
+                className={`onb-input${memData.rfc.length > 0 && memData.rfc.length !== 13 ? ' invalid' : memData.rfc.length === 13 ? ' valid' : ''}`}
+                placeholder={t('onb_m_step3_rfc_ph')}
+                maxLength={13}
+                value={memData.rfc}
+                onChange={(e) => setMemData({ ...memData, rfc: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+              />
+              <div className="onb-input-hint">{t('onb_m_step3_rfc_hint')}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 4: Salary + pay frequency + tenure + CLABE + credit preview */}
+      <div className={stageClass(4)}>
+        {step === 4 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
+            <p className="onb-sub">{t('onb_m_step4_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step4_salary')}</label>
               <input
                 autoFocus
                 type="text"
                 inputMode="numeric"
                 className="onb-input"
-                placeholder={t('onb_m_step3_salary_ph')}
+                placeholder={t('onb_m_step4_salary_ph')}
                 value={memData.salary}
                 onChange={(e) => setMemData({ ...memData, salary: e.target.value.replace(/[^\d,]/g, '') })}
               />
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step4_pay_freq')}</label>
+              <div className="onb-tiles">
+                {PAY_FREQUENCIES.map((freq) => (
+                  <button
+                    key={freq}
+                    className={`onb-tile${memData.payFrequency === freq ? ' active' : ''}`}
+                    onClick={() => setMemData({ ...memData, payFrequency: freq })}
+                  >
+                    <div className="onb-tile-val">{t(`onb_m_step4_freq_${freq}`)}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step4_tenure')}</label>
+              <select
+                className="onb-select"
+                value={memData.employmentTenure}
+                onChange={(e) => setMemData({ ...memData, employmentTenure: e.target.value })}
+              >
+                <option value="">{t('onb_m_step4_tenure_ph')}</option>
+                {TENURE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{t(`onb_m_step4_tenure_${opt}`)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_m_step4_clabe')}</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={`onb-input${memData.bankClabe.length > 0 && memData.bankClabe.length !== 18 ? ' invalid' : memData.bankClabe.length === 18 ? ' valid' : ''}`}
+                placeholder={t('onb_m_step4_clabe_ph')}
+                maxLength={18}
+                value={memData.bankClabe}
+                onChange={(e) => setMemData({ ...memData, bankClabe: e.target.value.replace(/\D/g, '') })}
+              />
+              <div className="onb-input-hint">{t('onb_m_step4_clabe_hint')}</div>
             </div>
             {creditAmount > 0 && (
               <div className="onb-credit-sim">
@@ -567,12 +678,12 @@ export function Onboarding() {
                     <div className="onb-ring-amount">
                       ${creditAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
                     </div>
-                    <div className="onb-ring-label">{t('onb_m_step3_credit_label')}</div>
+                    <div className="onb-ring-label">{t('onb_m_step4_credit_label')}</div>
                   </div>
                 </div>
                 <div className="onb-approved-tag">
                   <span className="onb-approved-dot" />
-                  {t('onb_m_step3_preapproved')}
+                  {t('onb_m_step4_preapproved')}
                 </div>
               </div>
             )}
@@ -580,19 +691,19 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 4: Password + terms */}
-      <div className={stageClass(4)}>
-        {step === 4 && (
+      {/* Step 5: Password + terms */}
+      <div className={stageClass(5)}>
+        {step === 5 && (
           <div className="onb-content">
-            <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
-            <p className="onb-sub">{t('onb_m_step4_sub')}</p>
+            <h1 className="onb-h"><RichText html={t('onb_m_step5_h')} /></h1>
+            <p className="onb-sub">{t('onb_m_step5_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step4_pass')}</label>
+              <label className="onb-label">{t('onb_m_step5_pass')}</label>
               <input
                 autoFocus
                 type="password"
                 className="onb-input"
-                placeholder={t('onb_m_step4_pass_ph')}
+                placeholder={t('onb_m_step5_pass_ph')}
                 value={memData.password}
                 onChange={(e) => setMemData({ ...memData, password: e.target.value })}
               />
@@ -605,16 +716,16 @@ export function Onboarding() {
                 onChange={(e) => setMemData({ ...memData, terms: e.target.checked })}
               />
               <label>
-                {t('onb_m_step4_terms')}{' '}
-                <Link to="/terms" target="_blank">{t('onb_m_step4_terms_link')}</Link>
+                {t('onb_m_step5_terms')}{' '}
+                <Link to="/terms" target="_blank">{t('onb_m_step5_terms_link')}</Link>
               </label>
             </div>
           </div>
         )}
       </div>
 
-      {/* Step 5: Employee success */}
-      <div className={stageClass(5)}>
+      {/* Step 6: Employee success */}
+      <div className={stageClass(6)}>
         <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">
@@ -622,11 +733,11 @@ export function Onboarding() {
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
-            <h1 className="onb-h"><RichText html={t('onb_m_step5_h')} /></h1>
-            <p className="onb-sub">{t('onb_m_step5_sub')}</p>
+            <h1 className="onb-h"><RichText html={t('onb_m_step6_h')} /></h1>
+            <p className="onb-sub">{t('onb_m_step6_sub')}</p>
             <div className="onb-approved-tag">
               <span className="onb-approved-dot" />
-              {t('onb_m_step5_tag')}
+              {t('onb_m_step6_tag')}
             </div>
             <div className="onb-big-amount">
               <span className="onb-cur">$</span>
@@ -634,7 +745,7 @@ export function Onboarding() {
             </div>
             <p className="onb-sub" style={{ marginBottom: 0 }}>MXN</p>
             <button className="onb-btn" onClick={() => navigate('/employee')}>
-              {t('onb_m_step5_cta')}
+              {t('onb_m_step6_cta')}
             </button>
           </div>
         </div>
