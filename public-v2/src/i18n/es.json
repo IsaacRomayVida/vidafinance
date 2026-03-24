@@ -742,6 +742,11 @@
   "onb_m_step4_clabe": "CLABE interbancaria",
   "onb_m_step4_clabe_ph": "18 dígitos",
   "onb_m_step4_clabe_hint": "Tu cuenta CLABE de 18 dígitos para recibir tu crédito",
+  "onb_validation_curp_format": "Formato de CURP inválido",
+  "onb_validation_rfc_format": "Formato de RFC inválido",
+  "onb_validation_clabe_invalid": "CLABE inválida",
+  "onb_validation_email_invalid": "Correo electrónico inválido",
+  "onb_validation_dob_age": "Debes tener entre 18 y 65 años",
   "onb_m_step4_preapproved": "Pre-aprobado",
   "onb_m_step4_credit_label": "CRÉDITO DISPONIBLE",
 

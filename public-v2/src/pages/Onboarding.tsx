@@ -93,6 +93,29 @@ function getPasswordStrength(pw: string): 'weak' | 'medium' | 'strong' {
   return 'strong';
 }
 
+const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function validateClabeCheckDigit(clabe: string): boolean {
+  if (!/^\d{18}$/.test(clabe)) return false;
+  const weights = [3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7];
+  const sum = weights.reduce((acc, w, i) => acc + (parseInt(clabe[i]) * w) % 10, 0);
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === parseInt(clabe[17]);
+}
+
+function getAge(dateOfBirth: string): number {
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 function RichText({ html }: { html: string }) {
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
@@ -286,20 +309,56 @@ export function Onboarding() {
   const creditAmount = Math.min(Math.max(salaryNum * 0.3, 0), 5000);
 
   // -- Step validation --
+  const validationErrors = (): string[] => {
+    const errors: string[] = [];
+    if (role === 'employer') {
+      if (step === 2) {
+        if (!EMAIL_REGEX.test(empData.email) && empData.email.length > 0) errors.push(t('onb_validation_email_invalid'));
+      }
+      if (step === 3) {
+        if (empData.rfc.trim().length > 0 && !RFC_REGEX.test(empData.rfc.trim())) errors.push(t('onb_validation_rfc_format'));
+      }
+      if (step === 5) {
+        if (empData.bankClabe.length === 18 && !validateClabeCheckDigit(empData.bankClabe)) errors.push(t('onb_validation_clabe_invalid'));
+      }
+    }
+    if (role === 'employee') {
+      if (step === 2) {
+        if (!EMAIL_REGEX.test(memData.email) && memData.email.length > 0) errors.push(t('onb_validation_email_invalid'));
+        if (memData.dateOfBirth !== '') {
+          const age = getAge(memData.dateOfBirth);
+          if (age < 18 || age > 65) errors.push(t('onb_validation_dob_age'));
+        }
+      }
+      if (step === 3) {
+        if (memData.curp.trim().length > 0 && !CURP_REGEX.test(memData.curp.trim())) errors.push(t('onb_validation_curp_format'));
+        if (memData.rfc.trim().length > 0 && !RFC_REGEX.test(memData.rfc.trim())) errors.push(t('onb_validation_rfc_format'));
+      }
+      if (step === 4) {
+        if (memData.bankClabe.length === 18 && !validateClabeCheckDigit(memData.bankClabe)) errors.push(t('onb_validation_clabe_invalid'));
+      }
+    }
+    return errors;
+  };
+
   const canProceed = (): boolean => {
+    if (validationErrors().length > 0) return false;
     if (role === 'employer') {
       if (step === 1) return empData.company.trim().length > 0;
-      if (step === 2) return empData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(empData.email) && empData.phone.trim().length >= 10;
-      if (step === 3) return empData.rfc.trim().length >= 12 && empData.state !== '' && empData.industry !== '';
+      if (step === 2) return empData.name.trim().length > 0 && EMAIL_REGEX.test(empData.email) && empData.phone.trim().length >= 10;
+      if (step === 3) return RFC_REGEX.test(empData.rfc.trim()) && empData.state !== '' && empData.industry !== '';
       if (step === 4) return empData.employeeCount !== '' && empData.payFrequency !== '' && empData.payrollSystem !== '';
-      if (step === 5) return empData.usesDispersora !== '' && empData.bankClabe.trim().length === 18;
+      if (step === 5) return empData.usesDispersora !== '' && validateClabeCheckDigit(empData.bankClabe);
       if (step === 6) return empData.password.length >= 6 && empData.terms;
     }
     if (role === 'employee') {
       if (step === 1) return codeStatus === 'found';
-      if (step === 2) return memData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(memData.email) && memData.phone.replace(/\D/g, '').length >= 10 && memData.dateOfBirth !== '';
-      if (step === 3) return memData.curp.trim().length === 18 && memData.rfc.trim().length === 13;
-      if (step === 4) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && /^\d{18}$/.test(memData.bankClabe);
+      if (step === 2) {
+        const age = memData.dateOfBirth ? getAge(memData.dateOfBirth) : -1;
+        return memData.name.trim().length > 0 && EMAIL_REGEX.test(memData.email) && memData.phone.replace(/\D/g, '').length >= 10 && memData.dateOfBirth !== '' && age >= 18 && age <= 65;
+      }
+      if (step === 3) return CURP_REGEX.test(memData.curp.trim()) && RFC_REGEX.test(memData.rfc.trim());
+      if (step === 4) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && validateClabeCheckDigit(memData.bankClabe);
       if (step === 5) return memData.password.length >= 6 && memData.terms;
     }
     return false;
@@ -450,7 +509,7 @@ export function Onboarding() {
                 placeholder={t('onb_e_step3_rfc_ph')}
                 maxLength={13}
                 value={empData.rfc}
-                onChange={(e) => setEmpData({ ...empData, rfc: e.target.value.toUpperCase() })}
+                onChange={(e) => setEmpData({ ...empData, rfc: e.target.value.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '') })}
               />
               <div className="onb-input-hint">{t('onb_e_step3_rfc_hint')}</div>
             </div>
@@ -721,7 +780,7 @@ export function Onboarding() {
               <label className="onb-label">{t('onb_m_step3_curp')}</label>
               <input
                 autoFocus
-                className={`onb-input${memData.curp.length > 0 && memData.curp.length !== 18 ? ' invalid' : memData.curp.length === 18 ? ' valid' : ''}`}
+                className={`onb-input${memData.curp.length > 0 && !CURP_REGEX.test(memData.curp) ? ' invalid' : CURP_REGEX.test(memData.curp) ? ' valid' : ''}`}
                 placeholder={t('onb_m_step3_curp_ph')}
                 maxLength={18}
                 value={memData.curp}
@@ -732,11 +791,11 @@ export function Onboarding() {
             <div className="onb-field">
               <label className="onb-label">{t('onb_m_step3_rfc')}</label>
               <input
-                className={`onb-input${memData.rfc.length > 0 && memData.rfc.length !== 13 ? ' invalid' : memData.rfc.length === 13 ? ' valid' : ''}`}
+                className={`onb-input${memData.rfc.length > 0 && !RFC_REGEX.test(memData.rfc) ? ' invalid' : RFC_REGEX.test(memData.rfc) ? ' valid' : ''}`}
                 placeholder={t('onb_m_step3_rfc_ph')}
                 maxLength={13}
                 value={memData.rfc}
-                onChange={(e) => setMemData({ ...memData, rfc: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                onChange={(e) => setMemData({ ...memData, rfc: e.target.value.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '') })}
               />
               <div className="onb-input-hint">{t('onb_m_step3_rfc_hint')}</div>
             </div>
@@ -794,7 +853,7 @@ export function Onboarding() {
               <input
                 type="text"
                 inputMode="numeric"
-                className={`onb-input${memData.bankClabe.length > 0 && memData.bankClabe.length !== 18 ? ' invalid' : memData.bankClabe.length === 18 ? ' valid' : ''}`}
+                className={`onb-input${memData.bankClabe.length > 0 && !validateClabeCheckDigit(memData.bankClabe) ? ' invalid' : validateClabeCheckDigit(memData.bankClabe) ? ' valid' : ''}`}
                 placeholder={t('onb_m_step4_clabe_ph')}
                 maxLength={18}
                 value={memData.bankClabe}
@@ -945,6 +1004,9 @@ export function Onboarding() {
         <div style={{ padding: '16px 20px', flexShrink: 0, position: 'relative', zIndex: 10 }}>
           <div className="onb-content" style={{ margin: '0 auto' }}>
             {error && <div className="onb-error show">{error}</div>}
+            {validationErrors().map((ve, i) => (
+              <div key={i} className="onb-error show">{ve}</div>
+            ))}
             <button
               className="onb-btn"
               onClick={handleNext}

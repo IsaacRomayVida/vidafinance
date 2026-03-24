@@ -742,6 +742,11 @@
   "onb_m_step4_clabe": "Bank CLABE",
   "onb_m_step4_clabe_ph": "18 digits",
   "onb_m_step4_clabe_hint": "Your 18-digit CLABE account to receive your credit",
+  "onb_validation_curp_format": "Invalid CURP format",
+  "onb_validation_rfc_format": "Invalid RFC format",
+  "onb_validation_clabe_invalid": "Invalid CLABE",
+  "onb_validation_email_invalid": "Invalid email address",
+  "onb_validation_dob_age": "You must be between 18 and 65 years old",
   "onb_m_step4_preapproved": "Pre-approved",
   "onb_m_step4_credit_label": "AVAILABLE CREDIT",
 
