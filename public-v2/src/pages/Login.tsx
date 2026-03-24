@@ -54,6 +54,9 @@ export function Login() {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
 
+      // Reload user to pick up server-side changes (e.g. autoVerifyTestAccounts)
+      await cred.user.reload();
+
       // Check email verification
       if (!cred.user.emailVerified) {
         await sendEmailVerification(cred.user);
