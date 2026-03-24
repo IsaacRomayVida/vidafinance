@@ -1,7 +1,7 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import * as functions from 'firebase-functions/v1';
+import { beforeUserCreated } from 'firebase-functions/v2/identity';
 import * as admin from 'firebase-admin';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -77,12 +77,12 @@ async function callML(path: string, body: Record<string, unknown>): Promise<Reco
 
 // ── autoVerifyTestAccounts — auto-verify @vida-test.com on signup ────────────
 
-export const autoVerifyTestAccounts = functions.auth.user().onCreate(async (user) => {
-  if (user.email && user.email.endsWith('@vida-test.com')) {
-    const admin = await import('firebase-admin');
-    await admin.auth().updateUser(user.uid, { emailVerified: true });
+export const autoVerifyTestAccounts = beforeUserCreated((event) => {
+  const user = event.data;
+  if (user?.email && user.email.endsWith('@vida-test.com')) {
+    return { emailVerified: true };
   }
-  return null;
+  return {};
 });
 
 // ── api — health endpoint ────────────────────────────────────────────────────
