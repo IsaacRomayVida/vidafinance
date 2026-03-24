@@ -437,6 +437,7 @@ table tr:last-child td{border-bottom:none}
 /* =============================================
    ONBOARDING WIZARD — Light Canvas, Editorial
    ============================================= */
+.onb-page{position:relative;overflow:hidden}
 .onb{position:fixed;top:0;left:0;right:0;bottom:0;z-index:500;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
 .onb-blob{position:absolute;border-radius:50%;filter:blur(120px);pointer-events:none;opacity:.5}
 .onb-blob.ob1{width:500px;height:500px;background:rgba(168,213,208,0.06);top:-10%;right:-5%;animation:bd1 14s ease-in-out infinite}
@@ -816,6 +817,7 @@ table tr:last-child td{border-bottom:none}
   .emo-title{font-size:17px}
   .scenario-amt{font-size:24px}
   .scenario-t{font-size:17px}
+  .scenario{max-width:100%;box-sizing:border-box}
   .sal-in{font-size:24px;padding:18px 48px 18px 28px}
   .calc-result-num{font-size:46px}
   .calc-cta{font-size:17px}

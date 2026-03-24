@@ -924,7 +924,7 @@ export function Onboarding() {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg1, #faf9f7)' }}>
+    <div className="onb-page" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg1, #faf9f7)' }}>
       {/* Background blobs */}
       <div className="onb-blob ob1" />
       <div className="onb-blob ob2" />
