@@ -44,7 +44,8 @@ service cloud.firestore {
       allow update: if isAdmin()
         || (isOwner(employerId)
           && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['name', 'email', 'phone', 'contactName', 'contactEmail', 'contactPhone']));
+             .hasOnly(['name', 'email', 'phone', 'contactName', 'contactEmail', 'contactPhone',
+                        'docRFC', 'docId', 'docAddress', 'sampleCurps', 'partBStatus']));
       allow delete: if false;
     }
 

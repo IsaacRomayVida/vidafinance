@@ -29,6 +29,8 @@ interface EmployerData {
   docRFC?: string | null;
   docId?: string | null;
   docAddress?: string | null;
+  sampleCurps?: string[];
+  partBStatus?: string;
 }
 
 interface DashStats {
@@ -193,6 +195,125 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/;
+
+function CurpCollectionCard({ uid, employer, onSubmitted }: { uid: string; employer: EmployerData; onSubmitted: (curps: string[]) => void }) {
+  const { t } = useTranslation();
+  const [curps, setCurps] = useState<[string, string, string]>(['', '', '']);
+  const [errors, setErrors] = useState<[string, string, string]>(['', '', '']);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(!!employer.sampleCurps?.length);
+  const [submitError, setSubmitError] = useState('');
+
+  if (submitted || (employer.sampleCurps && employer.sampleCurps.length > 0)) {
+    return (
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-5 w-5"><path d="M20 6L9 17l-5-5" /></svg>
+          </div>
+          <div>
+            <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>{t('dash_curp_title')}</div>
+            <div className="text-xs" style={{ color: 'var(--t3)' }}>{t('dash_curp_already_submitted')}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function validate(): boolean {
+    const next: [string, string, string] = ['', '', ''];
+    let valid = true;
+    const seen = new Set<string>();
+
+    for (let i = 0; i < 3; i++) {
+      const v = curps[i].trim().toUpperCase();
+      if (!CURP_RE.test(v)) {
+        next[i] = t('dash_curp_invalid');
+        valid = false;
+      } else if (seen.has(v)) {
+        next[i] = t('dash_curp_duplicate');
+        valid = false;
+      }
+      seen.add(v);
+    }
+
+    setErrors(next);
+    return valid;
+  }
+
+  async function handleSubmit() {
+    if (!validate()) return;
+    setSubmitting(true);
+    setSubmitError('');
+
+    const normalized = curps.map(c => c.trim().toUpperCase());
+    try {
+      await updateDoc(doc(db, 'employers', uid), {
+        sampleCurps: normalized,
+        partBStatus: 'pending_verification',
+      });
+      setSubmitted(true);
+      onSubmitted(normalized);
+    } catch {
+      setSubmitError(t('dash_curp_error'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 24 }}>
+      <div className="card-title">{t('dash_curp_title')}</div>
+      <p className="text-sm mb-5" style={{ color: 'var(--t2)' }}>{t('dash_curp_subtitle')}</p>
+
+      <div className="flex flex-col gap-3" style={{ maxWidth: 480 }}>
+        {([0, 1, 2] as const).map((i) => (
+          <div key={i}>
+            <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--t2)' }}>
+              {t('dash_curp_label', { n: i + 1 })}
+            </label>
+            <input
+              type="text"
+              maxLength={18}
+              value={curps[i]}
+              onChange={(e) => {
+                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                setCurps(prev => { const n = [...prev] as [string, string, string]; n[i] = val; return n; });
+                if (errors[i]) setErrors(prev => { const n = [...prev] as [string, string, string]; n[i] = ''; return n; });
+              }}
+              placeholder={t('dash_curp_placeholder')}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              style={{
+                borderColor: errors[i] ? '#ef4444' : 'rgba(25,68,69,0.15)',
+                outline: 'none',
+                fontFamily: 'monospace',
+                letterSpacing: '0.05em',
+              }}
+            />
+            {errors[i] && <div className="text-xs text-red-500 mt-1">{errors[i]}</div>}
+          </div>
+        ))}
+      </div>
+
+      {submitError && <div className="text-sm text-red-500 mt-3">{submitError}</div>}
+
+      <button
+        onClick={handleSubmit}
+        disabled={submitting || curps.some(c => c.trim().length === 0)}
+        className="mt-4 rounded-lg px-6 py-2.5 text-sm font-semibold text-white transition-all"
+        style={{
+          background: 'var(--brand)',
+          opacity: submitting || curps.some(c => c.trim().length === 0) ? 0.5 : 1,
+          cursor: submitting ? 'wait' : 'pointer',
+        }}
+      >
+        {submitting ? t('dash_curp_submitting') : t('dash_curp_submit')}
+      </button>
     </div>
   );
 }
@@ -386,6 +507,13 @@ export function EmployerDashboard() {
             <div className="stat-change">MXN</div>
           </div>
         </div>
+
+        {/* Payroll Deduction Setup — CURP Collection */}
+        <CurpCollectionCard
+          uid={user!.uid}
+          employer={employer!}
+          onSubmitted={(curps) => setEmployer(prev => prev ? { ...prev, sampleCurps: curps, partBStatus: 'pending_verification' } : prev)}
+        />
 
         {/* Loans Table */}
         <div className="card">
