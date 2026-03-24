@@ -826,6 +826,7 @@ table tr:last-child td{border-bottom:none}
 @media (max-width: 480px){
   .wrap{padding:0 20px}
   .nav-inner{padding:0 20px}
+  .nav-cta{padding:8px 16px;font-size:12px;white-space:nowrap}
   .hero{padding:40px 0 48px}
   .hero-inner{padding:0 20px}
   .hero h1{font-size:48px}
