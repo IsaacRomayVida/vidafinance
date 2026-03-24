@@ -81,6 +81,30 @@ function generateEmployerCode(): string {
   return code;
 }
 
+const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function validateCLABE(clabe: string): boolean {
+  if (!/^\d{18}$/.test(clabe)) return false;
+  const weights = [3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7];
+  let sum = 0;
+  for (let i = 0; i < 17; i++) {
+    sum += (parseInt(clabe[i]) * weights[i]) % 10;
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === parseInt(clabe[17]);
+}
+
+function getAge(dateStr: string): number {
+  const today = new Date();
+  const birth = new Date(dateStr);
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
 function getPasswordStrength(pw: string): 'weak' | 'medium' | 'strong' {
   if (pw.length < 6) return 'weak';
   let score = 0;
@@ -289,7 +313,7 @@ export function Onboarding() {
   const canProceed = (): boolean => {
     if (role === 'employer') {
       if (step === 1) return empData.company.trim().length > 0;
-      if (step === 2) return empData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(empData.email) && empData.phone.trim().length >= 10;
+      if (step === 2) return empData.name.trim().length > 0 && EMAIL_REGEX.test(empData.email) && empData.phone.trim().length >= 10;
       if (step === 3) return empData.rfc.trim().length >= 12 && empData.state !== '' && empData.industry !== '';
       if (step === 4) return empData.employeeCount !== '' && empData.payFrequency !== '' && empData.payrollSystem !== '';
       if (step === 5) return empData.usesDispersora !== '' && empData.bankClabe.trim().length === 18;
@@ -297,9 +321,13 @@ export function Onboarding() {
     }
     if (role === 'employee') {
       if (step === 1) return codeStatus === 'found';
-      if (step === 2) return memData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(memData.email) && memData.phone.replace(/\D/g, '').length >= 10 && memData.dateOfBirth !== '';
-      if (step === 3) return memData.curp.trim().length === 18 && memData.rfc.trim().length === 13;
-      if (step === 4) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && /^\d{18}$/.test(memData.bankClabe);
+      if (step === 2) {
+        if (!memData.name.trim() || !EMAIL_REGEX.test(memData.email) || memData.phone.replace(/\D/g, '').length < 10 || !memData.dateOfBirth) return false;
+        const age = getAge(memData.dateOfBirth);
+        return age >= 18 && age <= 65;
+      }
+      if (step === 3) return CURP_REGEX.test(memData.curp.trim()) && RFC_REGEX.test(memData.rfc.trim());
+      if (step === 4) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && validateCLABE(memData.bankClabe);
       if (step === 5) return memData.password.length >= 6 && memData.terms;
     }
     return false;
@@ -702,10 +730,13 @@ export function Onboarding() {
               <label className="onb-label">{t('onb_m_step2_dob')}</label>
               <input
                 type="date"
-                className="onb-input"
+                className={`onb-input${memData.dateOfBirth && (getAge(memData.dateOfBirth) < 18 || getAge(memData.dateOfBirth) > 65) ? ' invalid' : memData.dateOfBirth && getAge(memData.dateOfBirth) >= 18 && getAge(memData.dateOfBirth) <= 65 ? ' valid' : ''}`}
                 value={memData.dateOfBirth}
                 onChange={(e) => setMemData({ ...memData, dateOfBirth: e.target.value })}
               />
+              {memData.dateOfBirth && (getAge(memData.dateOfBirth) < 18 || getAge(memData.dateOfBirth) > 65) && (
+                <div className="onb-input-hint error">{t('onb_m_step2_dob_age_error')}</div>
+              )}
             </div>
           </div>
         )}
@@ -721,7 +752,7 @@ export function Onboarding() {
               <label className="onb-label">{t('onb_m_step3_curp')}</label>
               <input
                 autoFocus
-                className={`onb-input${memData.curp.length > 0 && memData.curp.length !== 18 ? ' invalid' : memData.curp.length === 18 ? ' valid' : ''}`}
+                className={`onb-input${memData.curp.length > 0 && !CURP_REGEX.test(memData.curp) ? ' invalid' : CURP_REGEX.test(memData.curp) ? ' valid' : ''}`}
                 placeholder={t('onb_m_step3_curp_ph')}
                 maxLength={18}
                 value={memData.curp}
@@ -732,11 +763,11 @@ export function Onboarding() {
             <div className="onb-field">
               <label className="onb-label">{t('onb_m_step3_rfc')}</label>
               <input
-                className={`onb-input${memData.rfc.length > 0 && memData.rfc.length !== 13 ? ' invalid' : memData.rfc.length === 13 ? ' valid' : ''}`}
+                className={`onb-input${memData.rfc.length > 0 && !RFC_REGEX.test(memData.rfc) ? ' invalid' : RFC_REGEX.test(memData.rfc) ? ' valid' : ''}`}
                 placeholder={t('onb_m_step3_rfc_ph')}
                 maxLength={13}
                 value={memData.rfc}
-                onChange={(e) => setMemData({ ...memData, rfc: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                onChange={(e) => setMemData({ ...memData, rfc: e.target.value.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '') })}
               />
               <div className="onb-input-hint">{t('onb_m_step3_rfc_hint')}</div>
             </div>
@@ -794,7 +825,7 @@ export function Onboarding() {
               <input
                 type="text"
                 inputMode="numeric"
-                className={`onb-input${memData.bankClabe.length > 0 && memData.bankClabe.length !== 18 ? ' invalid' : memData.bankClabe.length === 18 ? ' valid' : ''}`}
+                className={`onb-input${memData.bankClabe.length > 0 && !validateCLABE(memData.bankClabe) ? ' invalid' : validateCLABE(memData.bankClabe) ? ' valid' : ''}`}
                 placeholder={t('onb_m_step4_clabe_ph')}
                 maxLength={18}
                 value={memData.bankClabe}

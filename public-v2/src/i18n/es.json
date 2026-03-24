@@ -582,6 +582,10 @@
   "modal_purpose_transportation": "Transporte",
   "modal_purpose_debt_consolidation": "Consolidación de deudas",
   "modal_purpose_other": "Otro",
+  "modal_cat_label": "CAT (Costo Anual Total)",
+  "modal_cat_annual": "% anual",
+  "modal_cat_note": "El CAT es una medida estandarizada del costo.",
+  "modal_cat_condusef": "CONDUSEF",
 
   "toast_loan_submitted": "Solicitud de préstamo enviada exitosamente",
 
@@ -657,6 +661,14 @@
   "onb_e_step4_payroll": "Sistema de nómina",
   "onb_e_step4_payroll_ph": "Selecciona tu sistema",
   "onb_e_step4_payroll_other": "Otro",
+  "onb_e_step4_rfc": "Documento RFC",
+  "onb_e_step4_formats": "Formatos aceptados: PDF, JPG, PNG",
+  "onb_e_step4_upload": "Subir Documento",
+  "onb_e_step4_uploading": "Subiendo...",
+  "onb_e_step4_done": "Subido",
+  "onb_e_step4_id": "Identificación Oficial",
+  "onb_e_step4_address": "Comprobante de Domicilio",
+  "onb_e_step4_error": "Error al subir. Por favor intenta de nuevo.",
 
   "onb_e_step5a_h": "Configuración de <em>pagos</em>.",
   "onb_e_step5a_sub": "Cómo tu empresa dispersa los pagos.",
@@ -714,6 +726,7 @@
   "onb_m_step2_phone": "Teléfono",
   "onb_m_step2_phone_ph": "55 1234 5678",
   "onb_m_step2_dob": "Fecha de nacimiento",
+  "onb_m_step2_dob_age_error": "La edad debe estar entre 18 y 65 años",
 
   "onb_m_step3_h": "Tu <em>identificación</em>.",
   "onb_m_step3_sub": "Necesitamos tu CURP y RFC para verificar tu identidad.",

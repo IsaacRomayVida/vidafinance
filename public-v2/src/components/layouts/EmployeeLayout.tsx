@@ -19,7 +19,7 @@ export function EmployeeLayout() {
           <Link to="/employee" className="text-xl font-bold text-teal-900">
             VIDA
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center" style={{ gap: 16 }}>
             <Link
               to="/employee"
               className="text-sm font-medium text-teal-700 hover:text-teal-900"
