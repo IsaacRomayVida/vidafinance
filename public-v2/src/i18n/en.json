@@ -786,5 +786,7 @@
   "ded_th_loan_amount": "Loan Amount",
   "ded_th_deduction": "Deduction",
 
-  "loan_wizard_redirect": "Redirecting to your dashboard to apply for a loan..."
+  "loan_wizard_redirect": "Redirecting to your dashboard to apply for a loan...",
+
+  "onb_go_back": "Go back"
 }

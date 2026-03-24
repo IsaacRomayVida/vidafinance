@@ -316,7 +316,7 @@ export function Onboarding() {
       if (step === 2) return empData.name.trim().length > 0 && EMAIL_REGEX.test(empData.email) && empData.phone.trim().length >= 10;
       if (step === 3) return empData.rfc.trim().length >= 12 && empData.state !== '' && empData.industry !== '';
       if (step === 4) return empData.employeeCount !== '' && empData.payFrequency !== '' && empData.payrollSystem !== '';
-      if (step === 5) return empData.usesDispersora !== '' && empData.bankClabe.trim().length === 18;
+      if (step === 5) return empData.usesDispersora !== '' && validateCLABE(empData.bankClabe);
       if (step === 6) return empData.password.length >= 6 && empData.terms;
     }
     if (role === 'employee') {
@@ -952,7 +952,7 @@ export function Onboarding() {
       <div className="onb-body">
         {/* Back button */}
         {role && !isFinalStep && (
-          <button className="onb-back" onClick={goBack} aria-label="Go back">
+          <button className="onb-back" onClick={goBack} aria-label={t('onb_go_back')}>
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
               <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
