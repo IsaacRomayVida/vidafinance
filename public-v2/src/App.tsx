@@ -75,6 +75,7 @@ export default function App() {
               <Route path="/employer" element={<EmployerDashboard />} />
               <Route path="/employer/dashboard" element={<Navigate to="/employer" replace />} />
               <Route path="/employer/employees" element={<EmployeeRoster />} />
+              <Route path="/employer/loans" element={<MyLoans />} />
               <Route path="/employer/deductions" element={<DeductionReports />} />
               <Route path="/employer/onboarding" element={<OnboardingWizard />} />
               <Route path="/employer/analytics" element={<AnalyticsPage />} />
