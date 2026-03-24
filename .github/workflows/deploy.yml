@@ -172,6 +172,8 @@ jobs:
             dir: services/pdf-generator
           - name: vida-ml-service
             dir: services/ml-service
+          - name: vida-underwriting
+            dir: services/underwriting-service
     steps:
       - uses: actions/checkout@v4
 
@@ -234,6 +236,7 @@ jobs:
           check_health "https://vida-notifications.railway.app/health"   "notification-service"
           check_health "https://vida-pdf-generator.railway.app/health"   "pdf-generator"
           check_health "https://vida-ml-service.railway.app/health"      "ml-service"
+          check_health "https://vida-underwriting.railway.app/health"   "underwriting-service"
 
       - name: Notify Slack on success
         if: success()
