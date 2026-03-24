@@ -761,5 +761,17 @@
 
   "onb_strength_weak": "Débil",
   "onb_strength_medium": "Media",
-  "onb_strength_strong": "Fuerte"
+  "onb_strength_strong": "Fuerte",
+
+  "ded_title": "Deducciones de Nómina",
+  "ded_subtitle": "Pagos de préstamos deducidos de la nómina del empleado.",
+  "ded_total_deductions": "Total de Deducciones",
+  "ded_active_deductions": "Activas",
+  "ded_completed": "Completadas",
+  "ded_table_title": "Calendario de Deducciones",
+  "ded_empty": "No hay reportes de deducciones disponibles.",
+  "ded_th_loan_amount": "Monto del Préstamo",
+  "ded_th_deduction": "Deducción",
+
+  "loan_wizard_redirect": "Redirigiendo a tu panel para solicitar un préstamo..."
 }
