@@ -68,30 +68,30 @@ export function Login() {
       const token = await cred.user.getIdTokenResult(true);
       const role = token.claims.role as string | undefined;
 
-      if (role === 'admin' || role === 'super_admin') {
-        navigate('/ops', { replace: true });
-      } else if (role === 'ops') {
-        navigate('/ops', { replace: true });
-      } else if (role === 'employer_admin') {
-        navigate('/employer', { replace: true });
-      } else if (role === 'employee') {
-        navigate('/employee', { replace: true });
-      } else {
-        // Fallback: check Firestore employers collection, then users collection
+      // Resolve the effective role: custom claims → Firestore fallback
+      let effectiveRole: string | undefined = role;
+
+      if (!effectiveRole) {
         const employerDoc = await getDoc(doc(db, 'employers', cred.user.uid));
         if (employerDoc.exists()) {
-          navigate('/employer', { replace: true });
+          effectiveRole = 'employer_admin';
         } else {
           const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
           const userRole = userDoc.exists() ? userDoc.data()?.role : undefined;
-          if (userRole === 'employer_admin') {
-            navigate('/employer', { replace: true });
-          } else if (userRole === 'ops' || userRole === 'admin' || userRole === 'super_admin') {
-            navigate('/ops', { replace: true });
-          } else {
-            navigate('/employee', { replace: true });
-          }
+          effectiveRole = userRole || 'employee';
         }
+      }
+
+      // Cache the resolved role so RouteGuard's useAuth() can pick it up
+      // immediately without re-running Firestore reads (avoids race condition).
+      sessionStorage.setItem('vida_auth_role', effectiveRole);
+
+      if (effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'ops') {
+        navigate('/ops', { replace: true });
+      } else if (effectiveRole === 'employer_admin') {
+        navigate('/employer', { replace: true });
+      } else {
+        navigate('/employee', { replace: true });
       }
     } catch (err) {
       const code = (err as AuthError).code ?? '';

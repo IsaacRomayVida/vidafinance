@@ -32,7 +32,15 @@ export function useAuth(): AuthState {
           role = (tokenResult.claims.role as UserRole) ?? null;
         }
 
-        // 3. Firestore fallback: check employers/{uid} then users/{uid}
+        // 3. Check sessionStorage cache (set by Login.tsx to avoid race condition)
+        if (!role) {
+          const cached = sessionStorage.getItem('vida_auth_role') as UserRole | null;
+          if (cached) {
+            role = cached;
+          }
+        }
+
+        // 4. Firestore fallback: check employers/{uid} then users/{uid}
         if (!role) {
           try {
             const employerSnap = await getDoc(doc(db, 'employers', user.uid));
