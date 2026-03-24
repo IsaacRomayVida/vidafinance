@@ -87,7 +87,7 @@ export const autoVerifyTestAccounts = functions.auth.user().onCreate(async (user
 // ── api — health endpoint ────────────────────────────────────────────────────
 
 export const api = onRequest({ cors: true }, async (req, res) => {
-  if (req.path === '/api/health') {
+  if (req.path === '/health' || req.path === '/api/health') {
     res.json({ status: 'ok', service: 'vida-finance', timestamp: new Date().toISOString() });
     return;
   }
