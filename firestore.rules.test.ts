@@ -177,6 +177,14 @@ describe('employers collection', () => {
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'employers/employer1')));
   });
 
+  it('user without claims can read their own employer record', async () => {
+    await seedEmployer('employer1');
+
+    // No custom claims — simulates user before claims propagate
+    const ctx = testEnv.authenticatedContext('employer1');
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'employers/employer1')));
+  });
+
   it(`employer cannot read another employer's record`, async () => {
     await seedEmployer('employer2');
 
@@ -198,10 +206,17 @@ describe('employers collection', () => {
     await assertFails(getDoc(doc(ctx.firestore(), 'employers/employer1')));
   });
 
-  it('employer create is denied for non-admins', async () => {
-    const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+  it('user can create their own employer record during onboarding', async () => {
+    const ctx = testEnv.authenticatedContext('employer1');
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'employers/employer1'), { name: 'My Company', status: 'pending_verification' })
+    );
+  });
+
+  it('user cannot create an employer record for another user', async () => {
+    const ctx = testEnv.authenticatedContext('employer1');
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'employers/employer1'), { name: 'My Company', status: 'pending' })
+      setDoc(doc(ctx.firestore(), 'employers/employer2'), { name: 'My Company', status: 'pending' })
     );
   });
 
@@ -330,10 +345,59 @@ describe('audit_log collection', () => {
   });
 });
 
+// ── users collection ─────────────────────────────────────────────────────────
+
+describe('users collection', () => {
+  async function seedUser(userId: string, data: Record<string, unknown> = {}) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${userId}`), {
+        email: 'test@example.com',
+        role: 'employee',
+        ...data,
+      });
+    });
+  }
+
+  it('user can read their own profile', async () => {
+    await seedUser('user1', { role: 'employer_admin' });
+
+    const ctx = testEnv.authenticatedContext('user1', { role: 'employer_admin' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'users/user1')));
+  });
+
+  it('user without claims can read their own profile', async () => {
+    await seedUser('user1', { role: 'employer_admin' });
+
+    const ctx = testEnv.authenticatedContext('user1');
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'users/user1')));
+  });
+
+  it('user cannot read another user profile', async () => {
+    await seedUser('user2');
+
+    const ctx = testEnv.authenticatedContext('user1');
+    await assertFails(getDoc(doc(ctx.firestore(), 'users/user2')));
+  });
+
+  it('user cannot write to users collection', async () => {
+    const ctx = testEnv.authenticatedContext('user1');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'users/user1'), { role: 'admin' })
+    );
+  });
+
+  it('anonymous user cannot read users', async () => {
+    await seedUser('user1');
+
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), 'users/user1')));
+  });
+});
+
 // ── Anonymous user denied everywhere ─────────────────────────────────────────
 
 describe('unauthenticated user', () => {
-  const collections = ['loans', 'employers', 'employees', 'audit_log', 'repayments', 'portfolio_snapshots'];
+  const collections = ['loans', 'employers', 'employees', 'users', 'audit_log', 'repayments', 'portfolio_snapshots'];
 
   it.each(collections)('is denied on %s collection', async (col) => {
     const ctx = testEnv.unauthenticatedContext();
