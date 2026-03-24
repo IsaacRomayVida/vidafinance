@@ -788,5 +788,9 @@
 
   "loan_wizard_redirect": "Redirecting to your dashboard to apply for a loan...",
 
-  "onb_go_back": "Go back"
+  "onb_go_back": "Go back",
+
+  "error_404": "404",
+  "error_404_message": "Page not found",
+  "error_404_home": "Go home"
 }
