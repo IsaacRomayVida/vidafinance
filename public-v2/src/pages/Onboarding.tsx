@@ -22,8 +22,15 @@ interface EmployerData {
   company: string;
   name: string;
   email: string;
-  companySize: string;
+  phone: string;
+  rfc: string;
+  state: string;
+  industry: string;
+  employeeCount: string;
+  payFrequency: string;
   payrollSystem: string;
+  usesDispersora: string;
+  bankClabe: string;
   docRFC: string;
   docId: string;
   docAddress: string;
@@ -44,6 +51,18 @@ interface EmployeeData {
 
 const COMPANY_SIZES = ['1-50', '51-200', '201-500', '500+'];
 const PAYROLL_SYSTEMS = ['Nomipaq', 'Aspel NOI', 'CONTPAQi', 'Workday', 'ADP'];
+const PAY_FREQUENCIES = ['weekly', 'biweekly', 'monthly'];
+const INDUSTRIES = [
+  'manufacturing', 'retail', 'services', 'technology', 'construction',
+  'healthcare', 'education', 'hospitality', 'agriculture', 'logistics', 'other',
+];
+const MX_STATES = [
+  'Aguascalientes', 'Baja California', 'Baja California Sur', 'Campeche', 'Chiapas',
+  'Chihuahua', 'Ciudad de México', 'Coahuila', 'Colima', 'Durango', 'Estado de México',
+  'Guanajuato', 'Guerrero', 'Hidalgo', 'Jalisco', 'Michoacán', 'Morelos', 'Nayarit',
+  'Nuevo León', 'Oaxaca', 'Puebla', 'Querétaro', 'Quintana Roo', 'San Luis Potosí',
+  'Sinaloa', 'Sonora', 'Tabasco', 'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas',
+];
 
 function generateEmployerCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -97,7 +116,8 @@ export function Onboarding() {
 
   // Employer state
   const [empData, setEmpData] = useState<EmployerData>({
-    company: '', name: '', email: '', companySize: '', payrollSystem: '',
+    company: '', name: '', email: '', phone: '', rfc: '', state: '', industry: '',
+    employeeCount: '', payFrequency: '', payrollSystem: '', usesDispersora: '', bankClabe: '',
     docRFC: '', docId: '', docAddress: '', password: '', terms: false,
   });
   // Employee state
@@ -108,7 +128,7 @@ export function Onboarding() {
   const [codeStatus, setCodeStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const totalSteps = role === 'employer' ? 5 : role === 'employee' ? 5 : 0;
+  const totalSteps = role === 'employer' ? 7 : role === 'employee' ? 5 : 0;
 
   const goForward = useCallback((toStep: number) => {
     setDirection('right');
@@ -186,9 +206,16 @@ export function Onboarding() {
         name: empData.name,
         companyName: empData.company,
         email: empData.email,
-        employerCode: generateEmployerCode(),
-        companySize: empData.companySize,
+        phone: empData.phone,
+        rfc: empData.rfc,
+        state: empData.state,
+        industry: empData.industry,
+        employeeCount: empData.employeeCount,
+        payFrequency: empData.payFrequency,
         payrollSystem: empData.payrollSystem,
+        usesDispersora: empData.usesDispersora === 'yes',
+        bankClabe: empData.bankClabe,
+        employerCode: generateEmployerCode(),
         status: 'pending_verification',
         docRFC: null,
         docId: null,
@@ -199,7 +226,7 @@ export function Onboarding() {
         activeLoans: 0,
         totalDisbursed: 0,
       });
-      goForward(5);
+      goForward(7);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
     } finally {
@@ -245,9 +272,11 @@ export function Onboarding() {
   const canProceed = (): boolean => {
     if (role === 'employer') {
       if (step === 1) return empData.company.trim().length > 0;
-      if (step === 2) return empData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(empData.email);
-      if (step === 3) return empData.companySize !== '' && empData.payrollSystem !== '';
-      if (step === 4) return empData.password.length >= 6 && empData.terms;
+      if (step === 2) return empData.name.trim().length > 0 && /\S+@\S+\.\S+/.test(empData.email) && empData.phone.trim().length >= 10;
+      if (step === 3) return empData.rfc.trim().length >= 12 && empData.state !== '' && empData.industry !== '';
+      if (step === 4) return empData.employeeCount !== '' && empData.payFrequency !== '' && empData.payrollSystem !== '';
+      if (step === 5) return empData.usesDispersora !== '' && empData.bankClabe.trim().length === 18;
+      if (step === 6) return empData.password.length >= 6 && empData.terms;
     }
     if (role === 'employee') {
       if (step === 1) return codeStatus === 'found';
@@ -259,7 +288,7 @@ export function Onboarding() {
   };
 
   const handleNext = () => {
-    if (role === 'employer' && step === 4) {
+    if (role === 'employer' && step === 6) {
       createEmployerAccount();
     } else if (role === 'employee' && step === 4) {
       createEmployeeAccount();
@@ -272,11 +301,11 @@ export function Onboarding() {
   const progressPct = totalSteps > 0 ? ((step) / totalSteps) * 100 : 0;
 
   // Is this a final success step?
-  const isFinalStep = (role === 'employer' && step === 5) || (role === 'employee' && step === 5);
+  const isFinalStep = (role === 'employer' && step === 7) || (role === 'employee' && step === 5);
 
   // Action button config
   const getActionLabel = () => {
-    if (role === 'employer' && step === 4) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
+    if (role === 'employer' && step === 6) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
     if (role === 'employee' && step === 4) return creating ? t('onb_m_step4_creating') : t('onb_m_step4_btn');
     return t('onb_next');
   };
@@ -349,7 +378,7 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 2: Name + email */}
+      {/* Step 2: Name + email + phone */}
       <div className={stageClass(2)}>
         {step === 2 && (
           <div className="onb-content">
@@ -375,52 +404,163 @@ export function Onboarding() {
                 onChange={(e) => setEmpData({ ...empData, email: e.target.value })}
               />
             </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step2_phone')}</label>
+              <input
+                type="tel"
+                className="onb-input"
+                placeholder={t('onb_e_step2_phone_ph')}
+                value={empData.phone}
+                onChange={(e) => setEmpData({ ...empData, phone: e.target.value.replace(/[^\d+\-() ]/g, '') })}
+              />
+            </div>
           </div>
         )}
       </div>
 
-      {/* Step 3: Company size + payroll */}
+      {/* Step 3: RFC + state + industry */}
       <div className={stageClass(3)}>
         {step === 3 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step3_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step3_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step3_size')}</label>
-              <div className="onb-tiles">
-                {COMPANY_SIZES.map((size) => (
-                  <button
-                    key={size}
-                    className={`onb-tile${empData.companySize === size ? ' active' : ''}`}
-                    onClick={() => setEmpData({ ...empData, companySize: size })}
-                  >
-                    <div className="onb-tile-val">{size}</div>
-                    <div className="onb-tile-lbl">{t('onb_e_step3_employees')}</div>
-                  </button>
-                ))}
-              </div>
+              <label className="onb-label">{t('onb_e_step3_rfc')}</label>
+              <input
+                autoFocus
+                className="onb-input"
+                placeholder={t('onb_e_step3_rfc_ph')}
+                maxLength={13}
+                value={empData.rfc}
+                onChange={(e) => setEmpData({ ...empData, rfc: e.target.value.toUpperCase() })}
+              />
+              <div className="onb-input-hint">{t('onb_e_step3_rfc_hint')}</div>
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step3_payroll')}</label>
+              <label className="onb-label">{t('onb_e_step3_state')}</label>
               <select
                 className="onb-select"
-                value={empData.payrollSystem}
-                onChange={(e) => setEmpData({ ...empData, payrollSystem: e.target.value })}
+                value={empData.state}
+                onChange={(e) => setEmpData({ ...empData, state: e.target.value })}
               >
-                <option value="">{t('onb_e_step3_payroll_ph')}</option>
-                {PAYROLL_SYSTEMS.map((ps) => (
-                  <option key={ps} value={ps}>{ps}</option>
+                <option value="">{t('onb_e_step3_state_ph')}</option>
+                {MX_STATES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
                 ))}
-                <option value="Other">{t('onb_e_step3_payroll_other')}</option>
+              </select>
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step3_industry')}</label>
+              <select
+                className="onb-select"
+                value={empData.industry}
+                onChange={(e) => setEmpData({ ...empData, industry: e.target.value })}
+              >
+                <option value="">{t('onb_e_step3_industry_ph')}</option>
+                {INDUSTRIES.map((ind) => (
+                  <option key={ind} value={ind}>{t(`onb_e_industry_${ind}`)}</option>
+                ))}
               </select>
             </div>
           </div>
         )}
       </div>
 
-      {/* Step 4: Password + terms */}
+      {/* Step 4: Employee count + pay frequency + payroll system */}
       <div className={stageClass(4)}>
         {step === 4 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_e_step4_h')} /></h1>
+            <p className="onb-sub">{t('onb_e_step4_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step4_size')}</label>
+              <div className="onb-tiles">
+                {COMPANY_SIZES.map((size) => (
+                  <button
+                    key={size}
+                    className={`onb-tile${empData.employeeCount === size ? ' active' : ''}`}
+                    onClick={() => setEmpData({ ...empData, employeeCount: size })}
+                  >
+                    <div className="onb-tile-val">{size}</div>
+                    <div className="onb-tile-lbl">{t('onb_e_step4_employees')}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step4_freq')}</label>
+              <div className="onb-tiles">
+                {PAY_FREQUENCIES.map((freq) => (
+                  <button
+                    key={freq}
+                    className={`onb-tile${empData.payFrequency === freq ? ' active' : ''}`}
+                    onClick={() => setEmpData({ ...empData, payFrequency: freq })}
+                  >
+                    <div className="onb-tile-val">{t(`onb_e_freq_${freq}`)}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step4_payroll')}</label>
+              <select
+                className="onb-select"
+                value={empData.payrollSystem}
+                onChange={(e) => setEmpData({ ...empData, payrollSystem: e.target.value })}
+              >
+                <option value="">{t('onb_e_step4_payroll_ph')}</option>
+                {PAYROLL_SYSTEMS.map((ps) => (
+                  <option key={ps} value={ps}>{ps}</option>
+                ))}
+                <option value="Other">{t('onb_e_step4_payroll_other')}</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 5: Dispersora + bank CLABE */}
+      <div className={stageClass(5)}>
+        {step === 5 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_e_step5a_h')} /></h1>
+            <p className="onb-sub">{t('onb_e_step5a_sub')}</p>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step5a_dispersora')}</label>
+              <div className="onb-tiles">
+                <button
+                  className={`onb-tile${empData.usesDispersora === 'yes' ? ' active' : ''}`}
+                  onClick={() => setEmpData({ ...empData, usesDispersora: 'yes' })}
+                >
+                  <div className="onb-tile-val">{t('onb_e_step5a_yes')}</div>
+                </button>
+                <button
+                  className={`onb-tile${empData.usesDispersora === 'no' ? ' active' : ''}`}
+                  onClick={() => setEmpData({ ...empData, usesDispersora: 'no' })}
+                >
+                  <div className="onb-tile-val">{t('onb_e_step5a_no')}</div>
+                </button>
+              </div>
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">{t('onb_e_step5a_clabe')}</label>
+              <input
+                className="onb-input"
+                placeholder={t('onb_e_step5a_clabe_ph')}
+                maxLength={18}
+                inputMode="numeric"
+                value={empData.bankClabe}
+                onChange={(e) => setEmpData({ ...empData, bankClabe: e.target.value.replace(/\D/g, '') })}
+              />
+              <div className="onb-input-hint">{t('onb_e_step5a_clabe_hint')}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 6: Password + terms */}
+      <div className={stageClass(6)}>
+        {step === 6 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step5_sub')}</p>
@@ -451,8 +591,8 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 5: Employer success */}
-      <div className={stageClass(5)}>
+      {/* Step 7: Employer success */}
+      <div className={stageClass(7)}>
         <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">
