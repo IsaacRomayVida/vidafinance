@@ -154,7 +154,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                     </div>
                   ) : (
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(201,168,76,0.12)' }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" className="h-4 w-4">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" className="h-4 w-4">
                         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
                       </svg>
                     </div>
@@ -216,7 +216,7 @@ function PayrollDeductionCard({ uid, employer, onSubmitted }: { uid: string; emp
         <div className="card-title">{t('dash_partb_title')}</div>
         <div className="partb-pending">
           <div className="partb-pending-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" width="24" height="24">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" width="24" height="24">
               <circle cx="12" cy="12" r="10" />
               <path d="M12 6v6l4 2" />
             </svg>
@@ -425,7 +425,7 @@ export function EmployerDashboard() {
     return (
       <div className="mx-auto max-w-lg py-20 text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-50">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" className="h-8 w-8">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" className="h-8 w-8">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v6l4 2" />
           </svg>
