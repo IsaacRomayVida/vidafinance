@@ -16,8 +16,8 @@ const { runFraudGates }            = require("./stages/stage0-fraud");
 const { runIdentityValidation }    = require("./stages/stage1-identity");
 const { runBureauAndEmployment }   = require("./stages/stage2-bureau");
 const { runAutoApproveGate }       = require("./stages/stage3-autoapprove");
-const { runFullKYC }               = require("./stages/stage4-kyc");
-const { runManualReview }          = require("./stages/stage5-review");
+const { runStage4 }                = require("./stages/stage4-kyc");
+const { runStage5 }                = require("./stages/stage5-review");
 
 const STAGE_NAMES = [
   "employerA", "employerB", "stage0", "stage1",
@@ -135,7 +135,20 @@ async function runPipeline({ applicant, employer }, options = {}) {
   // ── Stage 4: Full KYC (conditional) ──────────────────────────────────
   if (results.stage3.escalateToStage === 4) {
     try {
-      results.stage4 = await runFullKYC(applicant, results, stageOpts);
+      const stage4Raw = await runStage4({
+        loanId: correlationId,
+        correlationId,
+        applicant,
+        bankConnection: applicant.bankConnection || null,
+        previousStages: results,
+      });
+      results.stage4 = {
+        pass: stage4Raw.decision === "approve",
+        escalateToStage: stage4Raw.escalateTo === "stage5" ? 5 : null,
+        reason: stage4Raw.decision === "reject" ? "KYC_DECLINED" : stage4Raw.reason,
+        data: stage4Raw.details || {},
+        cost: [{ api: "metamap-kyc", mxn: 12.0 }],
+      };
     } catch (err) {
       log.error({ correlationId, stage: "stage4", err: err.message }, "Stage failed");
       results.stage4 = { pass: false, escalateToStage: 5, reason: "STAGE_ERROR", error: err.message, cost: [] };
@@ -164,7 +177,24 @@ async function runPipeline({ applicant, employer }, options = {}) {
 
 async function runStage5AndFinalize(applicant, results, stageOpts, correlationId, startTime) {
   try {
-    results.stage5 = await runManualReview(applicant, results, stageOpts);
+    const stage5Raw = await runStage5({
+      loanId: correlationId,
+      correlationId,
+      applicant,
+      accumulatedSignals: results,
+      firestore: stageOpts.db || null,
+    });
+    const amlDetails = stage5Raw.details?.aml || {};
+    const isHardReject = amlDetails.criminalRecordFound ||
+      (amlDetails.amlLists || []).some(l => l.matchType === "CONFIRMED");
+    results.stage5 = {
+      pass: false,
+      pendingReview: !isHardReject,
+      reason: isHardReject ? "AML_CRIMINAL_REJECT" : stage5Raw.reason,
+      slaHours: 24,
+      data: stage5Raw.details || {},
+      cost: [{ api: "metamap-aml", mxn: 8.0 }],
+    };
   } catch (err) {
     const log = stageOpts.logger || console;
     log.error({ correlationId, stage: "stage5", err: err.message }, "Stage failed");

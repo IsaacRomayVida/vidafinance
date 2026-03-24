@@ -3,7 +3,7 @@
  * Stage 0: Fraud Gates
  *
  * Checks:
- *   1. Device fingerprint (Sardine behavioral biometrics)
+ *   1. Device fingerprint (MetaMap behavioral biometrics)
  *   2. INFONAVIT/FONACOT senior claimant detection (Belvo)
  *   3. RiskSeal digital footprint: < 30 → escalate to Stage 5
  *   4. Isolation Forest anomaly detection (ML service)
@@ -11,7 +11,7 @@
  * ~20% reject rate.
  */
 const { checkDigitalFootprint } = require("../riskseal-client");
-const { checkBehavioralRisk } = require("../sardine-client");
+const { checkBehavioralRisk } = require("../metamap-client");
 const { getINFONAVIT } = require("../belvo-client");
 
 const ML_SERVICE_URL = () => process.env.ML_SERVICE_URL || "http://localhost:3005";
@@ -43,15 +43,15 @@ async function runFraudGates(applicant, _priorResults, { logger } = {}) {
 
   const checks = [];
 
-  // 1. Device fingerprint (Sardine)
+  // 1. Device fingerprint (MetaMap behavioral biometrics)
   if (applicant.sessionKey) {
     checks.push(
       checkBehavioralRisk(applicant.sessionKey, applicant.userId)
-        .then(r => ({ key: "sardine", result: r }))
-        .catch(err => ({ key: "sardine", result: { pass: true, skipped: true, error: err.message } }))
+        .then(r => ({ key: "metamapBehavioral", result: r }))
+        .catch(err => ({ key: "metamapBehavioral", result: { pass: true, skipped: true, error: err.message } }))
     );
   } else {
-    checks.push(Promise.resolve({ key: "sardine", result: { pass: true, skipped: true, reason: "no_session_key" } }));
+    checks.push(Promise.resolve({ key: "metamapBehavioral", result: { pass: true, skipped: true, reason: "no_session_key" } }));
   }
 
   // 2. INFONAVIT/FONACOT senior claimant detection
@@ -92,8 +92,8 @@ async function runFraudGates(applicant, _priorResults, { logger } = {}) {
   }
 
   // Decision logic
-  // Sardine very_high = hard reject
-  if (data.sardine.risk_level === "very_high") {
+  // MetaMap behavioral very_high = hard reject
+  if (data.metamapBehavioral.risk_level === "very_high") {
     return {
       pass: false,
       escalateToStage: null,
@@ -141,14 +141,14 @@ async function runFraudGates(applicant, _priorResults, { logger } = {}) {
     }
   }
 
-  // Sardine high = flag but continue
-  const sardineFlag = data.sardine.risk_level === "high";
+  // MetaMap behavioral high = flag but continue
+  const behavioralFlag = data.metamapBehavioral.risk_level === "high";
 
   return {
     pass: true,
     escalateToStage: null,
     reason: null,
-    flags: { sardineFlag, infonavitFlag: !!data.infonavitFlag },
+    flags: { behavioralFlag, infonavitFlag: !!data.infonavitFlag },
     data,
     cost: costItems,
   };

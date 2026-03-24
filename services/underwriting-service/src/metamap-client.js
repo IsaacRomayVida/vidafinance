@@ -3,8 +3,8 @@
  * metamap-client.js
  * MetaMap (formerly Mati) — unified KYC, biometrics, AML, and device signals.
  *
- * Replaces Incode (KYC), Sardine (behavioral), and Truora (AML) with a single
- * provider. Supports two verification flows:
+ * Unified provider for KYC, behavioral biometrics, and AML. Supports
+ * multiple verification flows:
  *   - KYC flow (Stage 3–4): document, facematch, liveness, device, behavioral, gov-check
  *   - AML flow (Stage 5): aml-screening, criminal-records, pep-check
  *
@@ -415,6 +415,65 @@ function extractDeviceSignals(deviceData) {
   };
 }
 
+// ─── Behavioral Risk Check ────────────────────────────────────────────────────
+
+/**
+ * Check behavioral risk via MetaMap device/behavioral signals.
+ * Used in Stage 0 fraud gates.
+ * @param {string} sessionKey — device session identifier
+ * @param {string} userId — applicant user ID
+ * @returns {{ pass, risk_level, score }}
+ */
+async function checkBehavioralRisk(sessionKey, userId) {
+  if (MOCK()) {
+    return { pass: true, risk_level: "low", score: 15, mocked: true };
+  }
+
+  await acquireToken();
+  return withRetry(async () => {
+    const token = await getAccessToken();
+    const res = await fetch(`${BASE()}/v2/verifications`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        flowId: process.env.METAMAP_FLOW_ID_BEHAVIORAL,
+        metadata: { sessionKey, userId },
+      }),
+      timeout: 15000,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`MetaMap behavioral check ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const verificationId = data.id || data._id;
+
+    // Poll for result
+    const result = await pollVerification(verificationId, "", {
+      maxWaitMs: 30000,
+      pollIntervalMs: 3000,
+      isAML: false,
+    });
+
+    const anomalyScore = result.behavioralAnalysis?.anomalyScore || 0;
+    const riskLevel = anomalyScore >= 0.9 ? "very_high"
+      : anomalyScore >= 0.7 ? "high"
+      : anomalyScore >= 0.4 ? "medium"
+      : "low";
+
+    return {
+      pass: riskLevel !== "very_high",
+      risk_level: riskLevel,
+      score: Math.round(anomalyScore * 100),
+    };
+  });
+}
+
 module.exports = {
   createVerification,
   pollVerification,
@@ -422,6 +481,7 @@ module.exports = {
   parseKYCResult,
   parseAMLResult,
   extractDeviceSignals,
+  checkBehavioralRisk,
   STAGE_4_MODULES,
   STAGE_5_MODULES,
 };
