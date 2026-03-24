@@ -54,8 +54,16 @@ export function Login() {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
 
+      // Reload user to pick up server-side changes (e.g. auto-verified email)
+      await cred.user.reload();
+
+      // Skip verification for auto-verified test accounts (@vida-test.com).
+      // These are verified server-side by a Cloud Function on signup, but
+      // there can be a race if the function hasn't finished yet.
+      const isAutoVerified = cred.user.email?.endsWith('@vida-test.com');
+
       // Check email verification
-      if (!cred.user.emailVerified) {
+      if (!cred.user.emailVerified && !isAutoVerified) {
         await sendEmailVerification(cred.user);
         setInfo(t('auth_verify_email'));
         await auth.signOut();

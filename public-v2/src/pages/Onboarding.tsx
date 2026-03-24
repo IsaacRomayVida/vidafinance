@@ -181,6 +181,8 @@ export function Onboarding() {
     setError('');
     try {
       const cred = await createUserWithEmailAndPassword(auth, empData.email, empData.password);
+      // Force token refresh so Firestore picks up the new auth state
+      await cred.user.getIdToken(true);
       const uid = cred.user.uid;
       await setDoc(doc(db, 'employers', uid), {
         name: empData.name,
@@ -215,6 +217,8 @@ export function Onboarding() {
       const salaryNum = parseFloat(memData.salary.replace(/,/g, ''));
       const creditLimit = Math.min(salaryNum * 0.3, 5000);
       const cred = await createUserWithEmailAndPassword(auth, memData.email, memData.password);
+      // Force token refresh so Firestore picks up the new auth state
+      await cred.user.getIdToken(true);
       const uid = cred.user.uid;
       await setDoc(doc(db, 'employees', uid), {
         name: memData.name,
@@ -296,7 +300,7 @@ export function Onboarding() {
       </h1>
       <p className="onb-sub">{t('onb_welcome_sub')}</p>
 
-      <div className="onb-roles">
+      <div className="onb-chooser">
         <button className="onb-role" onClick={() => selectRole('employer')}>
           <div className="onb-role-icon">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -387,7 +391,7 @@ export function Onboarding() {
             <p className="onb-sub">{t('onb_e_step3_sub')}</p>
             <div className="onb-field">
               <label className="onb-label">{t('onb_e_step3_size')}</label>
-              <div className="onb-tiles">
+              <div className="onb-size-grid">
                 {COMPANY_SIZES.map((size) => (
                   <button
                     key={size}
