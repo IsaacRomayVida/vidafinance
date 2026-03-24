@@ -78,18 +78,12 @@ jobs:
         env:
           METAMAP_MOCK: 'true'
           RISKSEAL_MOCK: 'true'
-          INCODE_MOCK: 'true'
-          TRUORA_MOCK: 'true'
-          SARDINE_MOCK: 'true'
 
       - name: Run Python integration tests
         run: cd services/ml-service && python3 -m pytest ../../tests/integration/test_decision_paths.py -v
         env:
           METAMAP_MOCK: 'true'
           RISKSEAL_MOCK: 'true'
-          INCODE_MOCK: 'true'
-          TRUORA_MOCK: 'true'
-          SARDINE_MOCK: 'true'
 
   # ─────────────────────────────────────────────
   # JOB 2: Deploy Firebase

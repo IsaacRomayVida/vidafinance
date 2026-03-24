@@ -6,7 +6,7 @@
  *
  * Prerequisites:
  *   1. All external APIs in mock mode on staging:
- *      TRUORA_MOCK=true, RISKSEAL_MOCK=true, SARDINE_MOCK=true, INCODE_MOCK=true
+ *      METAMAP_MOCK=true, RISKSEAL_MOCK=true
  *   2. Environment variables set:
  *      STAGING_URL      — Firebase Functions base URL
  *      FIREBASE_API_KEY — Firebase Web API key (staging)

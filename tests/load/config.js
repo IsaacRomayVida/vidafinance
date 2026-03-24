@@ -7,7 +7,7 @@
  *   INTERNAL_SECRET    — Shared internal secret for service-to-service auth
  *
  * Mock mode env vars (set on staging services):
- *   TRUORA_MOCK=true, RISKSEAL_MOCK=true, SARDINE_MOCK=true, INCODE_MOCK=true
+ *   METAMAP_MOCK=true, RISKSEAL_MOCK=true
  */
 
 // ── Ramp stages ─────────────────────────────────────────────────────────────

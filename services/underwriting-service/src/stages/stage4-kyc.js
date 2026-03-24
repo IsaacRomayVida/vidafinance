@@ -379,8 +379,34 @@ function buildResult({ loanId, correlationId, startedAt, decision, reason, escal
   };
 }
 
+/**
+ * Pipeline-compatible wrapper for runStage4.
+ * Adapts (applicant, priorResults, opts) → context object.
+ */
+async function runFullKYC(applicant, priorResults, opts = {}) {
+  const result = await runStage4({
+    loanId: priorResults?.correlationId || "unknown",
+    correlationId: priorResults?.correlationId || "unknown",
+    applicant,
+    bankConnection: applicant.bankConnection || null,
+    previousStages: priorResults,
+  });
+
+  // Adapt result to pipeline's expected format
+  const pass = result.decision === "approve";
+  const escalateToStage = result.decision === "escalate" ? 5 : null;
+  return {
+    pass,
+    escalateToStage,
+    reason: !pass ? (result.reason || "KYC_DECLINED") : null,
+    data: result.details || {},
+    cost: [{ api: "metamap-kyc", mxn: 15.0 }],
+  };
+}
+
 module.exports = {
   runStage4,
+  runFullKYC,
   runMetaMapVerification,
   runBelvoCashFlow,
   runAnomalyDetection,

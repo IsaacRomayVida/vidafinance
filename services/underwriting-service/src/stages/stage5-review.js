@@ -462,8 +462,35 @@ function buildResult({ loanId, correlationId, startedAt, decision, reason, riskL
   };
 }
 
+/**
+ * Pipeline-compatible wrapper for runStage5.
+ * Adapts (applicant, priorResults, opts) → context object.
+ */
+async function runManualReview(applicant, priorResults, opts = {}) {
+  const result = await runStage5({
+    loanId: priorResults?.correlationId || "unknown",
+    correlationId: priorResults?.correlationId || "unknown",
+    applicant,
+    accumulatedSignals: priorResults,
+    firestore: opts.db || null,
+  });
+
+  // Adapt result to pipeline's expected format
+  const pass = result.decision === "approved";
+  const pendingReview = result.decision === "pending_review";
+  return {
+    pass,
+    pendingReview,
+    reason: result.reason || null,
+    slaHours: pendingReview ? 24 : null,
+    data: result.details || {},
+    cost: [{ api: "metamap-aml", mxn: 12.0 }],
+  };
+}
+
 module.exports = {
   runStage5,
+  runManualReview,
   runAMLCheck,
   generateRiskNarrative,
   calculateQueuePriority,

@@ -84,41 +84,45 @@ function mockRiskSeal(rfc) {
   return { score: 72, risk_level: "medium", pass: true };
 }
 
-// Truora mock (from truora-client.js)
-function mockTruora(rfc) {
+// MetaMap AML mock
+function mockMetaMapAML(rfc) {
   const seed = (rfc || "").slice(-3);
   if (seed === "XXX") return {
-    check_id: `mock-${rfc}`, status: "completed",
-    criminal_record: false, pep: false,
-    aml_watchlists: [{ list: "OFAC", match_type: "CONFIRMED" }],
+    verificationId: `mock-aml-${rfc}`, status: "flagged",
+    amlScreening: { hit: true, lists: [{ list: "OFAC", matchType: "CONFIRMED" }] },
+    criminalRecords: { found: false, records: [] },
+    pepCheck: { isPEP: false },
     hard_reject: true,
   };
   if (seed === "YYY") return {
-    check_id: `mock-${rfc}`, status: "completed",
-    criminal_record: false, pep: false,
-    aml_watchlists: [{ list: "CNBV_LISTA_NEGRA", match_type: "FUZZY" }],
+    verificationId: `mock-aml-${rfc}`, status: "flagged",
+    amlScreening: { hit: true, lists: [{ list: "CNBV_LISTA_NEGRA", matchType: "FUZZY" }] },
+    criminalRecords: { found: false, records: [] },
+    pepCheck: { isPEP: false },
     hard_reject: false, requires_human_review: true,
   };
   return {
-    check_id: `mock-${rfc}`, status: "completed",
-    criminal_record: false, pep: false, aml_watchlists: [],
+    verificationId: `mock-aml-${rfc}`, status: "clear",
+    amlScreening: { hit: false, lists: [] },
+    criminalRecords: { found: false, records: [] },
+    pepCheck: { isPEP: false },
     hard_reject: false,
   };
 }
 
-// Truora parseResult (from truora-client.js)
-function parseTruoraResult(result) {
-  const confirmedAML = (result.aml_watchlists || []).some(h => h.match_type === "CONFIRMED");
-  const fuzzyAML = (result.aml_watchlists || []).some(h => h.match_type === "FUZZY");
+// MetaMap AML parseResult
+function parseMetaMapAMLResult(result) {
+  const confirmedAML = (result.amlScreening?.lists || []).some(h => h.matchType === "CONFIRMED");
+  const fuzzyAML = (result.amlScreening?.lists || []).some(h => h.matchType === "FUZZY");
   return {
-    hard_reject: confirmedAML || !!result.criminal_record,
-    requires_human_review: fuzzyAML || !!result.pep,
-    pass: !confirmedAML && !result.criminal_record,
+    hard_reject: confirmedAML || !!result.criminalRecords?.found,
+    requires_human_review: fuzzyAML || !!result.pepCheck?.isPEP,
+    pass: !confirmedAML && !result.criminalRecords?.found,
   };
 }
 
-// Incode mock (from incode-client.js)
-function mockIncode(rfc) {
+// MetaMap KYC mock
+function mockMetaMapKYC(rfc) {
   const seed = (rfc || "").slice(-3);
   if (seed === "XXX") return {
     overall: "DECLINED",
@@ -140,8 +144,8 @@ function mockIncode(rfc) {
   };
 }
 
-// Sardine mock (from sardine-client.js)
-function mockSardine(sessionKey) {
+// MetaMap behavioral biometrics mock
+function mockMetaMapBehavioral(sessionKey) {
   const seed = (sessionKey || "").slice(-3);
   if (seed === "BAD") return { risk_level: "very_high", score: 95, pass: false };
   if (seed === "MED") return { risk_level: "high", score: 72, pass: false };
@@ -230,8 +234,8 @@ function runDecisionPipeline(applicant) {
 
   // ── Stage 3: Auto-approve gate ────────────────────────────────────
   if (currentStage === 3 && empScore.risk_tier === 1) {
-    // KYC via Incode
-    const kyc = mockIncode(applicant.rfc);
+    // KYC via MetaMap
+    const kyc = mockMetaMapKYC(applicant.rfc);
     result.stagesReached.push("stage_3_kyc");
 
     if (kyc.overall === "APPROVED") {
@@ -264,11 +268,11 @@ function runDecisionPipeline(applicant) {
   if (currentStage === 4) {
     result.stagesReached.push("stage_4_verification");
 
-    // Incode liveness check
-    const kyc = mockIncode(applicant.rfc);
+    // MetaMap KYC liveness check
+    const kyc = mockMetaMapKYC(applicant.rfc);
 
-    // Sardine behavioral biometrics
-    const behavioral = mockSardine(applicant.sardineSessionKey || "default");
+    // MetaMap behavioral biometrics
+    const behavioral = mockMetaMapBehavioral(applicant.behavioralSessionKey || "default");
 
     // Open Banking check (simplified — pass/fail based on flag)
     const openBankingClean = applicant.openBankingClean !== false;
@@ -312,11 +316,11 @@ function runDecisionPipeline(applicant) {
   if (currentStage === 5) {
     result.stagesReached.push("stage_5_full_underwriting");
 
-    // Truora AML check
-    const truoraRaw = mockTruora(applicant.rfc);
-    const truoraDecision = parseTruoraResult(truoraRaw);
+    // MetaMap AML check
+    const amlRaw = mockMetaMapAML(applicant.rfc);
+    const amlDecision = parseMetaMapAMLResult(amlRaw);
 
-    if (truoraDecision.hard_reject) {
+    if (amlDecision.hard_reject) {
       result.decision = "rejected";
       result.reason = "aml_hard_reject";
       result.firestoreUpdate = { status: "rejected", rejectionReason: result.reason, stage: 5 };
@@ -324,7 +328,7 @@ function runDecisionPipeline(applicant) {
       return result;
     }
 
-    if (truoraDecision.requires_human_review) {
+    if (amlDecision.requires_human_review) {
       result.decision = "human_review";
       result.reason = "aml_fuzzy_match_review";
       result.firestoreUpdate = { status: "under_review", stage: 5, requiresHumanReview: true };
@@ -385,7 +389,7 @@ const BASE_APPLICANT = {
   employer: GOOD_EMPLOYER_TIER1,
   bureauResponse: GOOD_BUREAU_RESPONSE,
   loanAmount: 1500,
-  sardineSessionKey: "session-default-OK",
+  behavioralSessionKey: "session-default-OK",
   openBankingClean: true,
 };
 
@@ -488,12 +492,12 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
           bdc: {},
         },
         openBankingClean: true,
-        sardineSessionKey: "session-default-OK",
+        behavioralSessionKey: "session-default-OK",
       });
 
       // Score 550 → Stage 4 escalation
       expect(result.bureauDecision.escalateToStage).toBe(4);
-      // Default mock RFC → Incode APPROVED, Sardine low risk, RiskSeal pass
+      // Default mock RFC → MetaMap KYC APPROVED, behavioral low risk, RiskSeal pass
       expect(result.decision).toBe("approved");
       expect(result.reason).toBe("approved_stage_4");
       expect(result.firestoreUpdate.stage).toBe(4);
@@ -622,8 +626,8 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
       expect(result.firestoreUpdate.status).toBe("rejected");
     });
 
-    test("14. MetaMap/Incode document verification failed (fake INE) → reject at Stage 4", () => {
-      // RFC ending in XXX → Incode DECLINED (expired/fake document)
+    test("14. MetaMap document verification failed (fake INE) → reject at Stage 4", () => {
+      // RFC ending in XXX → MetaMap KYC DECLINED (expired/fake document)
       const result = runDecisionPipeline({
         ...BASE_APPLICANT,
         rfc: "GARL900101XXX",
@@ -633,7 +637,7 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
         },
       });
 
-      // Score 550 → Stage 4, RFC XXX → Incode DECLINED + RiskSeal fail
+      // Score 550 → Stage 4, RFC XXX → MetaMap KYC DECLINED + RiskSeal fail
       // RiskSeal score 12 → escalates to Stage 5 before document check
       // But document check happens in parallel at Stage 4
       expect(result.stagesReached).toContain("stage_4_verification");
@@ -643,7 +647,7 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
 
     test("14b. Document verification failed at Stage 4 (non-XXX RFC for isolated test)", () => {
       // Use a custom pipeline to test document rejection in isolation
-      // Simulate Incode returning DECLINED but RiskSeal passing
+      // Simulate MetaMap KYC returning DECLINED but RiskSeal passing
       const applicant = {
         ...BASE_APPLICANT,
         bureauResponse: {
@@ -655,14 +659,14 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
       const bureauDecision = parseBureauDecision(applicant.bureauResponse);
       expect(bureauDecision.escalateToStage).toBe(4);
 
-      // Directly test Incode mock for XXX seed
-      const incodeResult = mockIncode("GARL900101XXX");
-      expect(incodeResult.overall).toBe("DECLINED");
-      expect(incodeResult.idValidation.pass).toBe(false);
+      // Directly test MetaMap KYC mock for XXX seed
+      const kycResult = mockMetaMapKYC("GARL900101XXX");
+      expect(kycResult.overall).toBe("DECLINED");
+      expect(kycResult.idValidation.pass).toBe(false);
     });
 
-    test("15. MetaMap/Truora AML hit → flag for human review at Stage 5", () => {
-      // RFC ending in YYY → Truora fuzzy AML match → human review
+    test("15. MetaMap AML hit → flag for human review at Stage 5", () => {
+      // RFC ending in YYY → MetaMap fuzzy AML match → human review
       const result = runDecisionPipeline({
         ...BASE_APPLICANT,
         rfc: "GARL900101YYY",
@@ -682,7 +686,7 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
     });
 
     test("15b. Confirmed AML (OFAC) → hard reject at Stage 5", () => {
-      // RFC ending in XXX → Truora confirmed OFAC match → hard reject
+      // RFC ending in XXX → MetaMap confirmed OFAC match → hard reject
       const result = runDecisionPipeline({
         ...BASE_APPLICANT,
         rfc: "GARL900101XXX",
@@ -703,26 +707,26 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
   describe("Edge cases", () => {
 
     test("16. MetaMap API timeout → fallback to local model (graceful degradation)", () => {
-      // Test that when Incode/MetaMap returns error, pipeline still proceeds
+      // Test that when MetaMap returns error, pipeline still proceeds
       // In mock mode, the mock always returns — but we test the concept:
       // If Stage 4 KYC fails (non-DECLINED, non-APPROVED), escalate to Stage 5
       const result = runDecisionPipeline({
         ...BASE_APPLICANT,
-        rfc: "GARL900101YYY", // → Incode MANUAL_REVIEW
+        rfc: "GARL900101YYY", // → MetaMap KYC MANUAL_REVIEW
         bureauResponse: {
           cdc: { score: 550, diasAtraso: 0, carteraVencida: false },
           bdc: {},
         },
       });
 
-      // Score 550 → Stage 4, RFC YYY → Incode MANUAL_REVIEW
+      // Score 550 → Stage 4, RFC YYY → MetaMap KYC MANUAL_REVIEW
       // RiskSeal YYY → score 38 (high risk, but >= 30 so no RiskSeal escalation)
-      // Sardine passes, open banking clean — but Incode not APPROVED/DECLINED
+      // Behavioral passes, open banking clean — but MetaMap KYC not APPROVED/DECLINED
       // Falls through to "other Stage 4 failures" → Stage 5
       expect(result.stagesReached).toContain("stage_4_verification");
-      // With YYY: RiskSeal score=38 ≥ 30, Sardine passes, but behavioral pass check...
+      // With YYY: RiskSeal score=38 ≥ 30, behavioral passes, but KYC pass check...
       // Actually YYY RFC → RiskSeal score 38 (pass: score >= 30 → true)
-      // But Incode overall is MANUAL_REVIEW, liveness passes
+      // But MetaMap KYC overall is MANUAL_REVIEW, liveness passes
       // So kyc.liveness.pass=true, openBankingClean=true, behavioral.pass=true
       // BUT kyc.overall isn't checked in the pass branch — only liveness+OB+behavioral
       // With YYY: all three pass → approved at Stage 4
@@ -964,31 +968,31 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
       expect(mockRiskSeal("RFC123ABC").score).toBe(72);
     });
 
-    test("Truora: XXX → hard reject, YYY → human review, default → clean", () => {
-      const xxx = parseTruoraResult(mockTruora("RFC123XXX"));
+    test("MetaMap AML: XXX → hard reject, YYY → human review, default → clean", () => {
+      const xxx = parseMetaMapAMLResult(mockMetaMapAML("RFC123XXX"));
       expect(xxx.hard_reject).toBe(true);
       expect(xxx.pass).toBe(false);
 
-      const yyy = parseTruoraResult(mockTruora("RFC123YYY"));
+      const yyy = parseMetaMapAMLResult(mockMetaMapAML("RFC123YYY"));
       expect(yyy.hard_reject).toBe(false);
       expect(yyy.requires_human_review).toBe(true);
 
-      const clean = parseTruoraResult(mockTruora("RFC123ABC"));
+      const clean = parseMetaMapAMLResult(mockMetaMapAML("RFC123ABC"));
       expect(clean.hard_reject).toBe(false);
       expect(clean.requires_human_review).toBe(false);
       expect(clean.pass).toBe(true);
     });
 
-    test("Incode: XXX → declined, YYY → manual review, default → approved", () => {
-      expect(mockIncode("RFC123XXX").overall).toBe("DECLINED");
-      expect(mockIncode("RFC123YYY").overall).toBe("MANUAL_REVIEW");
-      expect(mockIncode("RFC123ABC").overall).toBe("APPROVED");
+    test("MetaMap KYC: XXX → declined, YYY → manual review, default → approved", () => {
+      expect(mockMetaMapKYC("RFC123XXX").overall).toBe("DECLINED");
+      expect(mockMetaMapKYC("RFC123YYY").overall).toBe("MANUAL_REVIEW");
+      expect(mockMetaMapKYC("RFC123ABC").overall).toBe("APPROVED");
     });
 
-    test("Sardine: BAD → very_high, MED → high, default → low (pass)", () => {
-      expect(mockSardine("sessionBAD").pass).toBe(false);
-      expect(mockSardine("sessionMED").pass).toBe(false);
-      expect(mockSardine("sessionOK").pass).toBe(true);
+    test("MetaMap Behavioral: BAD → very_high, MED → high, default → low (pass)", () => {
+      expect(mockMetaMapBehavioral("sessionBAD").pass).toBe(false);
+      expect(mockMetaMapBehavioral("sessionMED").pass).toBe(false);
+      expect(mockMetaMapBehavioral("sessionOK").pass).toBe(true);
     });
 
     test("Lista 69-B: DEF → hard reject, PRE → flag, default → pass", () => {

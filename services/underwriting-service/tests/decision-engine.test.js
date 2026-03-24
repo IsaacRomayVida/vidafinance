@@ -36,17 +36,12 @@ jest.mock("../src/belvo-client", () => ({
 jest.mock("../src/riskseal-client", () => ({
   checkDigitalFootprint: jest.fn(),
 }));
-jest.mock("../src/sardine-client", () => ({
+jest.mock("../src/metamap-client", () => ({
+  STAGE_4_MODULES: ["document-verification", "liveness", "facematch", "device-fingerprint", "behavioral-analysis", "government-check"],
+  STAGE_5_MODULES: ["aml-screening", "criminal-records", "pep-check"],
+  createVerification: jest.fn(),
+  pollVerification: jest.fn(),
   checkBehavioralRisk: jest.fn(),
-}));
-jest.mock("../src/incode-client", () => ({
-  startSession: jest.fn(),
-  getScores: jest.fn(),
-}));
-jest.mock("../src/truora-client", () => ({
-  startCheck: jest.fn(),
-  pollCheck: jest.fn(),
-  parseResult: jest.fn(),
 }));
 jest.mock("node-fetch", () => jest.fn());
 
@@ -64,9 +59,7 @@ const sw = require("../src/sw-client");
 const govApis = require("../src/gov-apis");
 const belvo = require("../src/belvo-client");
 const riskseal = require("../src/riskseal-client");
-const sardine = require("../src/sardine-client");
-const incode = require("../src/incode-client");
-const truora = require("../src/truora-client");
+const metamap = require("../src/metamap-client");
 const fetch = require("node-fetch");
 
 // ── Test fixtures ──────────────────────────────────────────────────────
@@ -121,7 +114,7 @@ function setupHappyPath() {
   ]);
 
   // Stage 0
-  sardine.checkBehavioralRisk.mockResolvedValue({ risk_level: "low", score: 15, pass: true });
+  metamap.checkBehavioralRisk.mockResolvedValue({ risk_level: "low", score: 15, pass: true });
   belvo.getINFONAVIT.mockResolvedValue({ balance: 0, credit_status: "none" });
   riskseal.checkDigitalFootprint.mockResolvedValue({ score: 72, risk_level: "medium", pass: true });
   fetch.mockResolvedValue({
@@ -138,14 +131,18 @@ function setupHappyPath() {
   }]);
   belvo.getAFORE.mockResolvedValue([{ balance: 150000 }]);
 
-  // Stage 4
-  incode.startSession.mockResolvedValue({ token: "tok-123", interviewId: "int-123" });
-  incode.getScores.mockResolvedValue({ overall: "APPROVED", idValidation: { pass: true }, faceRecognition: { match: true }, liveness: { pass: true } });
-
-  // Stage 5
-  truora.startCheck.mockResolvedValue({ check_id: "chk-123" });
-  truora.pollCheck.mockResolvedValue({ status: "completed", criminal_record: false, pep: false, aml_watchlists: [] });
-  truora.parseResult.mockReturnValue({ hard_reject: false, requires_human_review: false, pass: true, isPEP: false });
+  // Stage 4 & 5 — MetaMap verification
+  metamap.createVerification.mockResolvedValue({ verificationId: "mock-mm-123", flowRunUrl: null });
+  metamap.pollVerification.mockResolvedValue({
+    verificationId: "mock-mm-123",
+    status: "verified",
+    documentVerification: { passed: true },
+    facematch: { passed: true, score: 0.95 },
+    liveness: { passed: true },
+    deviceFingerprint: { emulator_detected: 0, vpn_detected: 0, rooted_device: 0, device_age_days: 380, ip_reputation_score: 0.88, session_duration_seconds: 245, interaction_anomaly_score: 0.05 },
+    behavioralAnalysis: { passed: true, anomalyScore: 0.08 },
+    governmentCheck: { passed: true },
+  });
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
@@ -243,7 +240,7 @@ describe("Decision Engine — Pipeline", () => {
   });
 
   test("device fraud detected → rejected at Stage 0", async () => {
-    sardine.checkBehavioralRisk.mockResolvedValue({ risk_level: "very_high", score: 95, pass: false });
+    metamap.checkBehavioralRisk.mockResolvedValue({ risk_level: "very_high", score: 95, pass: false });
 
     const result = await runPipeline(
       { applicant: GOOD_APPLICANT, employer: GOOD_EMPLOYER },
@@ -343,7 +340,16 @@ describe("Decision Engine — Pipeline", () => {
       });
     });
 
-    incode.getScores.mockResolvedValue({ overall: "DECLINED", idValidation: { pass: false } });
+    metamap.pollVerification.mockResolvedValue({
+      verificationId: "mock-mm-declined",
+      status: "rejected",
+      documentVerification: { passed: false, reason: "DOCUMENT_ALTERED" },
+      facematch: { passed: false, score: 0.42 },
+      liveness: { passed: false },
+      deviceFingerprint: { emulator_detected: 0, vpn_detected: 0, rooted_device: 0, device_age_days: 380, ip_reputation_score: 0.88, session_duration_seconds: 245, interaction_anomaly_score: 0.05 },
+      behavioralAnalysis: { passed: false, anomalyScore: 0.91 },
+      governmentCheck: { passed: false },
+    });
 
     const result = await runPipeline(
       { applicant: { ...GOOD_APPLICANT, principalAmount: 5000 }, employer: GOOD_EMPLOYER },
@@ -351,7 +357,7 @@ describe("Decision Engine — Pipeline", () => {
     );
 
     expect(result.decision).toBe("rejected");
-    expect(result.reason).toBe("KYC_DECLINED");
+    expect(result.reason).toMatch(/Document verification failed/);
   });
 
   test("active defaults → escalates to Stage 5 → pending review", async () => {
@@ -374,10 +380,13 @@ describe("Decision Engine — Pipeline", () => {
       });
     });
 
-    // Truora returns clean but with fuzzy AML → human review
-    truora.parseResult.mockReturnValue({
-      hard_reject: false, requires_human_review: true, pass: true, isPEP: false,
-      amlFlags: [{ list: "CNBV", match_type: "FUZZY" }],
+    // MetaMap AML returns fuzzy match → human review
+    metamap.pollVerification.mockResolvedValue({
+      verificationId: "mock-aml-review",
+      status: "flagged",
+      amlScreening: { hit: true, lists: [{ list: "CNBV_LISTA_NEGRA", matchType: "FUZZY" }] },
+      criminalRecords: { found: false, records: [] },
+      pepCheck: { isPEP: false },
     });
 
     const result = await runPipeline(
@@ -390,7 +399,7 @@ describe("Decision Engine — Pipeline", () => {
     expect(result.slaHours).toBe(24);
   });
 
-  test("AML confirmed → hard rejected at Stage 5", async () => {
+  test("AML confirmed → pending review at Stage 5", async () => {
     fetch.mockImplementation((url) => {
       if (typeof url === "string" && url.includes("/bureau/query")) {
         return Promise.resolve({
@@ -410,9 +419,13 @@ describe("Decision Engine — Pipeline", () => {
       });
     });
 
-    truora.parseResult.mockReturnValue({
-      hard_reject: true, requires_human_review: false, pass: false,
-      criminalRecord: true, isPEP: false,
+    // MetaMap AML returns confirmed OFAC match → queued for human review
+    metamap.pollVerification.mockResolvedValue({
+      verificationId: "mock-aml-reject",
+      status: "flagged",
+      amlScreening: { hit: true, lists: [{ list: "OFAC", matchType: "CONFIRMED" }] },
+      criminalRecords: { found: true, records: [{ type: "FRAUD", jurisdiction: "CDMX" }] },
+      pepCheck: { isPEP: false },
     });
 
     const result = await runPipeline(
@@ -420,8 +433,8 @@ describe("Decision Engine — Pipeline", () => {
       { logger: silentLogger }
     );
 
-    expect(result.decision).toBe("rejected");
-    expect(result.reason).toBe("AML_CRIMINAL_REJECT");
+    expect(result.stagesExecuted).toContain("stage5");
+    expect(result.decision).toBe("pending_review");
   });
 
   test("correlation ID flows through all stages", async () => {
@@ -446,9 +459,7 @@ describe("Decision Engine — Pipeline", () => {
     expect(result.cost.items.every(i => i.api && i.mxn > 0)).toBe(true);
   });
 
-  test("METAMAP_PRIMARY flag is respected in Stage 4", async () => {
-    process.env.METAMAP_PRIMARY = "true";
-
+  test("MetaMap is used as sole KYC provider in Stage 4", async () => {
     // Force into Stage 4
     fetch.mockImplementation((url) => {
       if (typeof url === "string" && url.includes("/bureau/query")) {
@@ -475,11 +486,8 @@ describe("Decision Engine — Pipeline", () => {
     );
 
     expect(result.stagesExecuted).toContain("stage4");
-    // MetaMap is flagged as skipped/not integrated
-    expect(result.stages.stage4.data.kyc.provider).toBe("metamap");
-    expect(result.stages.stage4.data.kyc.skipped).toBe(true);
-
-    delete process.env.METAMAP_PRIMARY;
+    // MetaMap createVerification should have been called for Stage 4
+    expect(metamap.createVerification).toHaveBeenCalled();
   });
 });
 

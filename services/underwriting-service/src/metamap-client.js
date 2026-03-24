@@ -3,8 +3,8 @@
  * metamap-client.js
  * MetaMap (formerly Mati) — unified KYC, biometrics, AML, and device signals.
  *
- * Replaces Incode (KYC), Sardine (behavioral), and Truora (AML) with a single
- * provider. Supports two verification flows:
+ * Unified provider for KYC, behavioral biometrics, and AML. Supports two
+ * verification flows:
  *   - KYC flow (Stage 3–4): document, facematch, liveness, device, behavioral, gov-check
  *   - AML flow (Stage 5): aml-screening, criminal-records, pep-check
  *
@@ -415,6 +415,74 @@ function extractDeviceSignals(deviceData) {
   };
 }
 
+/**
+ * Lightweight behavioral risk check via MetaMap device/behavioral modules.
+ *
+ * @param {string} sessionKey — device session key
+ * @param {string} userId — user identifier
+ * @returns {{ risk_level, score, pass }}
+ */
+async function checkBehavioralRisk(sessionKey, userId) {
+  if (MOCK()) {
+    return mockBehavioralRisk(sessionKey);
+  }
+
+  await acquireToken();
+  return withRetry(async () => {
+    const token = await getAccessToken();
+
+    const res = await fetch(`${BASE()}/v2/verifications`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        flowId: process.env.METAMAP_FLOW_ID_BEHAVIORAL,
+        metadata: { sessionKey, userId },
+      }),
+      timeout: 15000,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`MetaMap behavioral check ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const verificationId = data.id || data._id;
+
+    // Poll for behavioral result
+    const result = await pollVerification(verificationId, "", {
+      maxWaitMs: 30000,
+      pollIntervalMs: 3000,
+      isAML: false,
+    });
+
+    const anomalyScore = result.behavioralAnalysis?.anomalyScore || 0;
+    const riskLevel = anomalyScore >= 0.85 ? "very_high"
+      : anomalyScore >= 0.60 ? "high"
+      : anomalyScore >= 0.35 ? "medium"
+      : "low";
+
+    return {
+      risk_level: riskLevel,
+      score: Math.round(anomalyScore * 100),
+      pass: riskLevel !== "very_high" && riskLevel !== "high",
+    };
+  });
+}
+
+/**
+ * Mock behavioral risk result (seed-based deterministic mock).
+ */
+function mockBehavioralRisk(sessionKey = "") {
+  const seed = (sessionKey || "").slice(-3);
+  if (seed === "BAD") return { risk_level: "very_high", score: 95, pass: false };
+  if (seed === "MED") return { risk_level: "high", score: 72, pass: false };
+  return { risk_level: "low", score: 15, pass: true };
+}
+
 module.exports = {
   createVerification,
   pollVerification,
@@ -422,6 +490,7 @@ module.exports = {
   parseKYCResult,
   parseAMLResult,
   extractDeviceSignals,
+  checkBehavioralRisk,
   STAGE_4_MODULES,
   STAGE_5_MODULES,
 };
