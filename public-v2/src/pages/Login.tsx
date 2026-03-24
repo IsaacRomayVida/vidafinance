@@ -16,9 +16,8 @@ function mapAuthError(code: string): string {
   switch (code) {
     case 'auth/wrong-password':
     case 'auth/invalid-credential':
-      return 'auth_error_wrong_password';
     case 'auth/user-not-found':
-      return 'auth_error_user_not_found';
+      return 'auth_error_invalid_credentials';
     case 'auth/too-many-requests':
       return 'auth_error_too_many_requests';
     case 'auth/invalid-email':
