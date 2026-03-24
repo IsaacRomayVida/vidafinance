@@ -657,6 +657,11 @@
   "onb_e_step4_payroll": "Payroll system",
   "onb_e_step4_payroll_ph": "Select your system",
   "onb_e_step4_payroll_other": "Other",
+  "onb_e_step4_rfc": "Tax ID (RFC)",
+  "onb_e_step4_formats": "Accepted formats: PDF, JPG, PNG",
+  "onb_e_step4_upload": "Upload Document",
+  "onb_e_step4_id": "Official ID",
+  "onb_e_step4_address": "Proof of Address",
 
   "onb_e_step5a_h": "Payment <em>setup</em>.",
   "onb_e_step5a_sub": "How your company disburses payments.",
@@ -761,5 +766,9 @@
 
   "onb_strength_weak": "Weak",
   "onb_strength_medium": "Medium",
-  "onb_strength_strong": "Strong"
+  "onb_strength_strong": "Strong",
+
+  "loan_cat_annual": "% annual",
+  "loan_cat_description": "CAT is a standardized measure of the total cost of financing.",
+  "loan_condusef_ref": "For more information, visit CONDUSEF"
 }

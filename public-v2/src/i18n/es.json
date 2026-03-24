@@ -657,6 +657,11 @@
   "onb_e_step4_payroll": "Sistema de nómina",
   "onb_e_step4_payroll_ph": "Selecciona tu sistema",
   "onb_e_step4_payroll_other": "Otro",
+  "onb_e_step4_rfc": "RFC (Registro Federal de Contribuyentes)",
+  "onb_e_step4_formats": "Formatos aceptados: PDF, JPG, PNG",
+  "onb_e_step4_upload": "Subir Documento",
+  "onb_e_step4_id": "Identificación Oficial",
+  "onb_e_step4_address": "Comprobante de Domicilio",
 
   "onb_e_step5a_h": "Configuración de <em>pagos</em>.",
   "onb_e_step5a_sub": "Cómo tu empresa dispersa los pagos.",
@@ -761,5 +766,9 @@
 
   "onb_strength_weak": "Débil",
   "onb_strength_medium": "Media",
-  "onb_strength_strong": "Fuerte"
+  "onb_strength_strong": "Fuerte",
+
+  "loan_cat_annual": "% anual",
+  "loan_cat_description": "El CAT es una medida estandarizada del costo total de financiamiento.",
+  "loan_condusef_ref": "Para más información consulta CONDUSEF"
 }

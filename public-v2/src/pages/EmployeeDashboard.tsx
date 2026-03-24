@@ -504,11 +504,11 @@ function LoanModal({
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
               <span style={{ fontSize: 13, color: 'var(--t3)' }}>CAT (Costo Anual Total)</span>
-              <span className="cat-highlight">{cat}% anual</span>
+              <span className="cat-highlight">{cat}{t('loan_cat_annual')}</span>
             </div>
             <p className="cat-note">
-              El CAT es una medida estandarizada del costo.{' '}
-              <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener noreferrer">CONDUSEF</a>
+              {t('loan_cat_description')}{' '}
+              <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener noreferrer">{t('loan_condusef_ref')}</a>
             </p>
           </div>
 
