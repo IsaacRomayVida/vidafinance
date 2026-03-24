@@ -1,6 +1,6 @@
 :root{
   --brand:#194445;--brand-mid:#1d5253;--brand-light:#247a6e;
-  --aqua:#a8d5d0;--aqua-soft:#dceeed;--gold:#c9a84c;
+  --aqua:#a8d5d0;--aqua-soft:#dceeed;--gold:#a28657;
   --bg:#ffffff;--bg2:#f5f8f7;
   --t1:#0c1e1f;--t2:#4a6364;--t3:#93aaa9;
   --df:'DM Serif Display',Georgia,serif;--db:'DM Sans',sans-serif;
@@ -156,7 +156,7 @@ input,select,textarea{font-family:var(--db)}
 .emo-desc{font-size:13px;color:var(--t3);line-height:1.45}
 
 /* SECTION SHARED */
-.section{padding:120px 0}
+.section{padding:120px 0;overflow-x:hidden}
 .section.tinted{background:var(--bg2)}
 .tag{font-size:10.5px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--brand-light);opacity:.5;margin-bottom:20px}
 .sh{font-family:var(--df);font-size:48px;color:var(--t1);line-height:1.06;letter-spacing:-.025em;margin-bottom:16px}
@@ -241,8 +241,8 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 
 /* SCENARIOS */
 .scenario-header{margin-bottom:56px}
-.scenario-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0}
-.scenario{padding:32px 24px;border-left:1px solid rgba(25,68,69,0.04)}
+.scenario-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;max-width:100%}
+.scenario{padding:32px 24px;border-left:1px solid rgba(25,68,69,0.04);max-width:100%}
 .scenario:first-child{border-left:none;padding-left:0}
 .scenario:last-child{padding-right:0}
 .scenario-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:20px}
@@ -279,7 +279,7 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 
 /* CLOSING */
 .closing{padding:160px 64px;text-align:center;position:relative;overflow:hidden;background:var(--brand);border-radius:32px 32px 0 0}
-.closing-glow{position:absolute;width:600px;height:600px;top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(168,213,208,0.06),transparent 70%);filter:blur(60px);pointer-events:none}
+.closing-glow{position:absolute;width:600px;height:600px;max-width:100%;top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(168,213,208,0.06),transparent 70%);filter:blur(60px);pointer-events:none}
 .closing h2{font-family:var(--df);font-size:72px;color:#fff;line-height:1;margin-bottom:20px;position:relative;z-index:2;letter-spacing:-.04em}
 .closing h2 em{font-style:italic;color:var(--aqua)}
 .closing-sub{font-size:17px;color:rgba(255,255,255,0.55);line-height:1.6;margin-bottom:52px;position:relative;z-index:2}
@@ -472,7 +472,7 @@ table tr:last-child td{border-bottom:none}
    ONBOARDING WIZARD — Light Canvas, Editorial
    ============================================= */
 .onb{position:fixed;top:0;left:0;right:0;bottom:0;z-index:500;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
-.onb-blob{position:absolute;border-radius:50%;filter:blur(120px);pointer-events:none;opacity:.5}
+.onb-blob{position:absolute;border-radius:50%;filter:blur(120px);pointer-events:none;opacity:.5;max-width:100%}
 .onb-blob.ob1{width:500px;height:500px;background:rgba(168,213,208,0.06);top:-10%;right:-5%;animation:bd1 14s ease-in-out infinite}
 .onb-blob.ob2{width:350px;height:350px;background:rgba(201,168,76,0.03);bottom:-5%;left:-5%;animation:bd2 18s ease-in-out infinite}
 
