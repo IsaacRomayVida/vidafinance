@@ -137,8 +137,15 @@ function PasswordStrengthBar({ password, t }: { password: string; t: (k: string)
 }
 
 export function Onboarding() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+
+  const toggleLang = () => {
+    const next = i18n.language === 'es' ? 'en' : 'es';
+    i18n.changeLanguage(next);
+    localStorage.setItem('vida_lang', next);
+    document.documentElement.lang = next;
+  };
 
   const [role, setRole] = useState<Role>(null);
   const [step, setStep] = useState(0);
@@ -937,6 +944,7 @@ export function Onboarding() {
           </svg>
         </div>
         <div className="onb-top-right">
+          <button className="nav-lang" onClick={toggleLang}>{t('lang_toggle')}</button>
           <Link to="/login">
             {t('onb_already_account')} <strong>{t('onb_login')}</strong>
           </Link>

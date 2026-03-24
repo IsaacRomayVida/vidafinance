@@ -786,5 +786,9 @@
   "ded_th_loan_amount": "Monto del Préstamo",
   "ded_th_deduction": "Deducción",
 
-  "loan_wizard_redirect": "Redirigiendo a tu panel para solicitar un préstamo..."
+  "loan_wizard_redirect": "Redirigiendo a tu panel para solicitar un préstamo...",
+
+  "error_404": "404",
+  "error_404_message": "Página no encontrada",
+  "error_404_home": "Volver al inicio"
 }
