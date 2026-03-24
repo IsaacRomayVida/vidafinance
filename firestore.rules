@@ -39,7 +39,7 @@ service cloud.firestore {
     // Only admins can create records for other users.
     // =============================================
     match /employers/{employerId} {
-      allow read: if isOwner(employerId) || isOps();
+      allow read: if true;  // Public read for invite code lookup
       allow create: if isAdmin() || isOwner(employerId);
       allow update: if isAdmin()
         || (isOwner(employerId)
@@ -52,13 +52,13 @@ service cloud.firestore {
     // EMPLOYEES COLLECTION
     // Employees can read/update their own record (limited fields).
     // Employers can read their own employees (via employerId match).
-    // Only ops/admin can create employees.
+    // Authenticated users can create their own employee record (self-registration).
     // =============================================
     match /employees/{employeeId} {
       allow read: if isOwner(employeeId)
                   || (isAuthenticated() && resource.data.employerId == request.auth.uid)
                   || isOps();
-      allow create: if isOps();
+      allow create: if request.auth != null && request.auth.uid == employeeId;
       allow update: if isOps()
         || (isOwner(employeeId)
           && request.resource.data.diff(resource.data).affectedKeys()
