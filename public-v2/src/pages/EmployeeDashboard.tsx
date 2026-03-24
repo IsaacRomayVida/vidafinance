@@ -11,9 +11,21 @@ interface EmployeeData {
   name?: string;
   email?: string;
   employerName?: string;
+  employerId?: string;
+  bankClabe?: string;
   creditLimit: number;
   availableCredit: number;
 }
+
+const LOAN_PURPOSES = [
+  'emergency',
+  'medical',
+  'education',
+  'home_repair',
+  'transportation',
+  'debt_consolidation',
+  'other',
+] as const;
 
 interface Loan {
   id: string;
@@ -263,6 +275,8 @@ export function EmployeeDashboard() {
       {showModal && employee && (
         <LoanModal
           availableCredit={employee.availableCredit}
+          employerId={employee.employerId}
+          savedClabe={employee.bankClabe}
           onClose={() => setShowModal(false)}
           onSubmitted={handleLoanSubmitted}
         />
@@ -305,10 +319,14 @@ function PayNowButton({ loanId, label, errorLabel }: { loanId: string; label: st
 
 function LoanModal({
   availableCredit,
+  employerId,
+  savedClabe,
   onClose,
   onSubmitted,
 }: {
   availableCredit: number;
+  employerId?: string;
+  savedClabe?: string;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
@@ -317,6 +335,31 @@ function LoanModal({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [employerCode, setEmployerCode] = useState('');
+  const [loadingEmployer, setLoadingEmployer] = useState(true);
+  const [clabe, setClabe] = useState(savedClabe || '');
+  const [editingClabe, setEditingClabe] = useState(!savedClabe);
+  const [loanPurpose, setLoanPurpose] = useState('');
+
+  // Fetch employer code from employer doc
+  useEffect(() => {
+    if (!employerId) {
+      setLoadingEmployer(false);
+      return;
+    }
+    (async () => {
+      try {
+        const empDoc = await getDoc(doc(db, 'employers', employerId));
+        if (empDoc.exists()) {
+          setEmployerCode(empDoc.data().employerCode || '');
+        }
+      } catch {
+        // employer code will be empty, submit will fail with server validation
+      } finally {
+        setLoadingEmployer(false);
+      }
+    })();
+  }, [employerId]);
 
   const fee = Math.round(amount * 0.3);
   const total = amount + fee;
@@ -335,12 +378,26 @@ function LoanModal({
       setError(t('modal_minimum'));
       return;
     }
+    if (!employerCode) {
+      setError(t('modal_no_employer'));
+      return;
+    }
+    if (!/^\d{18}$/.test(clabe)) {
+      setError(t('modal_clabe_invalid'));
+      return;
+    }
 
     setSubmitting(true);
     try {
       const functions = getFunctions();
       const requestLoan = httpsCallable(functions, 'requestLoan');
-      await requestLoan({ amount, term: 30 });
+      await requestLoan({
+        amount,
+        bankAccountClabe: clabe,
+        employerCode,
+        termsAccepted: true,
+        ...(loanPurpose ? { loanPurpose } : {}),
+      });
       onSubmitted();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -374,6 +431,50 @@ function LoanModal({
               onChange={(e) => setAmount(parseInt(e.target.value) || 0)}
               required
             />
+          </div>
+
+          {/* CLABE */}
+          <div className="form-group">
+            <label>{t('modal_clabe_label')}</label>
+            {savedClabe && !editingClabe ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14, color: 'var(--t1)', fontFamily: 'var(--mono, monospace)' }}>
+                  {'****' + savedClabe.slice(-4)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setEditingClabe(true); setClabe(''); }}
+                  style={{ fontSize: 12, color: 'var(--brand)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                >
+                  {t('modal_clabe_edit')}
+                </button>
+              </div>
+            ) : (
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={18}
+                placeholder={t('modal_clabe_placeholder')}
+                value={clabe}
+                onChange={(e) => setClabe(e.target.value.replace(/\D/g, '').slice(0, 18))}
+                required
+              />
+            )}
+          </div>
+
+          {/* Loan Purpose */}
+          <div className="form-group">
+            <label>{t('modal_purpose_label')}</label>
+            <select
+              value={loanPurpose}
+              onChange={(e) => setLoanPurpose(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="">{t('modal_purpose_none')}</option>
+              {LOAN_PURPOSES.map((p) => (
+                <option key={p} value={p}>{t(`modal_purpose_${p}`)}</option>
+              ))}
+            </select>
           </div>
 
           {/* Terms */}
@@ -429,7 +530,7 @@ function LoanModal({
           {/* Submit */}
           <button
             type="submit"
-            disabled={!termsAccepted || submitting}
+            disabled={!termsAccepted || submitting || loadingEmployer}
             className="btn-primary"
           >
             {submitting ? (
