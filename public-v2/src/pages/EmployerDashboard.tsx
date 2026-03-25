@@ -136,8 +136,8 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
   return (
     <div className="mx-auto max-w-xl py-10 sm:py-16 px-6 sm:px-8">
       <div className="rounded-2xl p-6 sm:p-10" style={{ background: 'rgba(162,134,87,0.08)' }}>
-        <h2 className="mb-3" style={{ color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em' }}>{t('dash_doc_banner_h')}</h2>
-        <p className="text-sm mb-8" style={{ color: 'var(--t2)', lineHeight: '1.6' }}>{t('dash_doc_banner_sub')}</p>
+        <h2 className="mb-3" style={{ color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '24px', fontWeight: 400, letterSpacing: '-0.02em' }}>{t('dash_doc_banner_h')}</h2>
+        <p className="mb-10" style={{ color: 'var(--t2)', lineHeight: '1.7', fontSize: '14px' }}>{t('dash_doc_banner_sub')}</p>
 
         <div className="flex flex-col gap-5">
           {DOC_SLOTS.map((slot) => {
@@ -146,11 +146,11 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
             const error = errors[slot.key];
 
             return (
-              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-white p-5 sm:p-6" style={{ border: '1px solid rgba(25,68,69,0.04)', boxShadow: '0 2px 8px rgba(25,68,69,0.02)' }}>
-                <div className="flex items-center gap-3 min-w-0">
+              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-white p-6 sm:p-7" style={{ border: '1px solid rgba(25,68,69,0.04)', boxShadow: '0 2px 8px rgba(25,68,69,0.02)' }}>
+                <div className="flex items-center gap-4 min-w-0">
                   {done ? (
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.08)' }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-4 w-4"><path d="M20 6L9 17l-5-5" /></svg>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-5 w-5"><path d="M20 6L9 17l-5-5" /></svg>
                     </div>
                   ) : (
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(162,134,87,0.08)' }}>
@@ -179,7 +179,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                   <button
                     disabled={done || busy}
                     onClick={() => fileRefs.current[slot.key]?.click()}
-                    className="rounded-lg px-4 py-2 text-xs font-semibold transition-all"
+                    className="transition-all"
                     style={{
                       background: done ? 'rgba(36,122,110,0.08)' : '#194445',
                       color: done ? '#247a6e' : '#fff',
