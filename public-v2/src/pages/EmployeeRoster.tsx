@@ -52,7 +52,7 @@ export function EmployeeRoster() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-teal-900">
+      <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 28, color: "#0c1e1f", fontWeight: 400, letterSpacing: "-0.02em" }}>
         {t('dash_employees', 'Employees')}
       </h1>
 

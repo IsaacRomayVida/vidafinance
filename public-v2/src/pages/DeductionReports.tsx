@@ -57,10 +57,10 @@ export function DeductionReports() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-teal-900">
+      <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 28, color: "#0c1e1f", fontWeight: 400, letterSpacing: "-0.02em" }}>
         {t('ded_title', 'Payroll Deductions')}
       </h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p style={{ fontSize: 14, color: "#4a6364", marginTop: 4 }}>
         {t('ded_subtitle', 'Loan repayments deducted from employee payroll.')}
       </p>
 

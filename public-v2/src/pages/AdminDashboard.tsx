@@ -1,7 +1,7 @@
 export function AdminDashboard() {
   return (
     <div>
-      <h1 className="text-2xl font-bold text-teal-900">Operations Dashboard</h1>
+      <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 28, color: "#0c1e1f", fontWeight: 400, letterSpacing: "-0.02em" }}>Operations Dashboard</h1>
       <div className="stat-grid">
         <div className="stat-card">
           <p className="stat-label">Total Employers</p>
