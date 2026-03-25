@@ -851,6 +851,9 @@ table tr:last-child td{border-bottom:none}
   .emo-title{font-size:17px}
   .scenario-amt{font-size:24px}
   .scenario-t{font-size:17px}
+  .scenario{max-width:100%;box-sizing:border-box;min-width:0;overflow:hidden}
+  .scenario-grid{overflow:hidden}
+  .ft-btm-links{flex-wrap:wrap}
   .sal-in{font-size:24px;padding:18px 48px 18px 28px}
   .calc-result-num{font-size:46px}
   .calc-cta{font-size:17px}
