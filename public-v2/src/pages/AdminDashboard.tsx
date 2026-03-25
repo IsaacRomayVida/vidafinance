@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
-import { useAuth } from '../hooks/useAuth';
+
 
 interface Employer {
   id: string;
@@ -32,7 +32,6 @@ function fmt(n: number): string {
 }
 
 export function AdminDashboard() {
-  const { user } = useAuth();
   const [employers, setEmployers] = useState<Employer[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,7 +106,6 @@ export function AdminDashboard() {
   };
 
   const pendingEmployers = employers.filter(e => e.status === 'pending_verification' || e.status === 'pending_review');
-  const activeEmployers = employers.filter(e => e.status === 'active');
   const pendingLoans = loans.filter(l => l.status === 'pending');
   const activeLoans = loans.filter(l => l.status === 'active' || l.status === 'approved' || l.status === 'disbursement_queued');
 
