@@ -56,16 +56,18 @@ export function DeductionReports() {
   const completedCount = deductibleLoans.filter((l) => l.status === 'paid').length;
 
   return (
-    <div>
-      <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 28, color: "#0c1e1f", fontWeight: 400, letterSpacing: "-0.02em" }}>
-        {t('ded_title', 'Payroll Deductions')}
-      </h1>
-      <p style={{ fontSize: 14, color: "#4a6364", marginTop: 4 }}>
-        {t('ded_subtitle', 'Loan repayments deducted from employee payroll.')}
-      </p>
+    <div style={{ maxWidth: 520, margin: '0 auto', padding: '48px 0 64px' }}>
+      <div style={{ marginBottom: 40, padding: '0 4px' }}>
+        <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 26, color: "#0c1e1f", fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 16 }}>
+          {t('ded_title', 'Deducciones de Nomina')}
+        </h1>
+        <p style={{ fontSize: 14, color: "#4a6364", lineHeight: 1.7 }}>
+          {t('ded_subtitle', 'Pagos de prestamos deducidos de la nomina del empleado.')}
+        </p>
+      </div>
 
       {/* Stats */}
-      <div className="stat-grid" style={{ marginTop: 24 }}>
+      <div className="stat-grid">
         <div className="stat-card">
           <div className="stat-label">{t('ded_total_deductions', 'Total Deductions')}</div>
           <div className="stat-value">${fmt(totalDeductions)}</div>
