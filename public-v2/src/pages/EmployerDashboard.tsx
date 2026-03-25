@@ -134,9 +134,9 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
   }
 
   return (
-    <div className="mx-auto max-w-2xl py-8 sm:py-12 px-4">
+    <div className="mx-auto max-w-2xl py-8 sm:py-12 px-5 sm:px-6 mt-4">
       <div className="rounded-2xl p-4 sm:p-8" style={{ background: 'rgba(162,134,87,0.12)' }}>
-        <h2 className="text-lg sm:text-xl font-bold text-teal-900 mb-2">{t('dash_doc_banner_h')}</h2>
+        <h2 className="text-lg sm:text-xl font-bold text-teal-900 mb-2" style={{ color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif" }}>{t('dash_doc_banner_h')}</h2>
         <p className="text-sm mb-6" style={{ color: 'var(--t2)' }}>{t('dash_doc_banner_sub')}</p>
 
         <div className="flex flex-col gap-4">
@@ -146,7 +146,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
             const error = errors[slot.key];
 
             return (
-              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-white p-3 sm:p-4" style={{ border: '1px solid rgba(25,68,69,0.08)' }}>
+              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-white p-4 shadow-sm" style={{ border: '1px solid rgba(25,68,69,0.06)' }}>
                 <div className="flex items-center gap-3 min-w-0">
                   {done ? (
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
@@ -181,8 +181,13 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                     onClick={() => fileRefs.current[slot.key]?.click()}
                     className="rounded-lg px-4 py-2 text-xs font-semibold transition-all"
                     style={{
-                      background: done ? 'rgba(36,122,110,0.12)' : 'var(--brand)',
+                      background: done ? 'rgba(36,122,110,0.12)' : '#194445',
                       color: done ? '#247a6e' : '#fff',
+                      borderRadius: '10px',
+                      padding: '10px 20px',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      border: 'none',
                       opacity: busy ? 0.6 : 1,
                       cursor: done ? 'default' : 'pointer',
                     }}
