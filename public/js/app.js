@@ -809,7 +809,7 @@ function renderDocLinks(l) {
 }
 
 function fireConfetti() {
-  const colors = ['#c9a84c','#a8d5d0','#247a6e','#fff','#dceeed'];
+  const colors = ['#a28657','#a8d5d0','#247a6e','#fff','#dceeed'];
   for (let i = 0; i < 60; i++) {
     const el = document.createElement('div');
     el.className = 'confetti-piece';
@@ -1744,8 +1744,8 @@ function renderDocUploadBanner(app, uid) {
   function renderBanner() {
     const rows = docSlots.map(s => {
       const done = !!uploaded[s.key];
-      const iconBg = done ? 'rgba(36,122,110,0.12)' : 'rgba(201,168,76,0.12)';
-      const iconStroke = done ? '#247a6e' : '#c9a84c';
+      const iconBg = done ? 'rgba(36,122,110,0.12)' : 'rgba(162,134,87,0.12)';
+      const iconStroke = done ? '#247a6e' : '#a28657';
       const icon = done
         ? `<svg viewBox="0 0 24 24" fill="none" stroke="${iconStroke}" stroke-width="2.5" style="width:16px;height:16px"><path d="M20 6L9 17l-5-5"/></svg>`
         : `<svg viewBox="0 0 24 24" fill="none" stroke="${iconStroke}" stroke-width="2" style="width:16px;height:16px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>`;
@@ -1765,7 +1765,7 @@ function renderDocUploadBanner(app, uid) {
     }).join('');
 
     app.innerHTML = `<div style="max-width:640px;margin:48px auto;padding:0 16px">
-      <div style="background:rgba(201,168,76,0.12);border-radius:16px;padding:32px">
+      <div style="background:rgba(162,134,87,0.12);border-radius:16px;padding:32px">
         <h2 style="font-size:20px;font-weight:700;color:var(--brand);margin:0 0 8px">${t('dash_doc_banner_h')}</h2>
         <p style="font-size:14px;color:var(--t2);margin:0 0 24px">${t('dash_doc_banner_sub')}</p>
         <div style="display:flex;flex-direction:column;gap:16px">${rows}</div>

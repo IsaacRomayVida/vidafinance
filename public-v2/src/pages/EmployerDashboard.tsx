@@ -135,7 +135,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
 
   return (
     <div className="mx-auto max-w-2xl py-12 px-4">
-      <div className="rounded-2xl p-8" style={{ background: 'rgba(201,168,76,0.12)' }}>
+      <div className="rounded-2xl p-8" style={{ background: 'rgba(162,134,87,0.12)' }}>
         <h2 className="text-xl font-bold text-teal-900 mb-2">{t('dash_doc_banner_h')}</h2>
         <p className="text-sm mb-6" style={{ color: 'var(--t2)' }}>{t('dash_doc_banner_sub')}</p>
 
@@ -153,7 +153,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                       <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-4 w-4"><path d="M20 6L9 17l-5-5" /></svg>
                     </div>
                   ) : (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(201,168,76,0.12)' }}>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(162,134,87,0.12)' }}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" className="h-4 w-4">
                         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
                       </svg>
