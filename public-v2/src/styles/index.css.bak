@@ -410,16 +410,16 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 
 .dash-content{padding:40px 48px;max-width:960px}
 
+/* Dashboard metrics — no cards, divider grid */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;margin-bottom:48px;border-top:1px solid rgba(25,68,69,0.04)}
+.stat-card{background:transparent;border-radius:0;padding:28px 24px 28px 0;box-shadow:none;border-bottom:1px solid rgba(25,68,69,0.04);border-right:1px solid rgba(25,68,69,0.04)}
+.stat-card:last-child{border-right:none}
+.stat-card .stat-label{font-size:10.5px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
+.stat-card .stat-value{font-family:var(--df);font-size:36px;color:var(--t1);letter-spacing:-.02em}
+.stat-card .stat-change{font-size:11px;font-weight:600;color:var(--t3);margin-top:6px}
 
-/* stat-grid moved to legacy.css */
-
-
-
-
-
-
-/* card moved to legacy.css */
-
+.card{background:transparent;border-radius:0;padding:0;box-shadow:none;margin-bottom:32px;border-top:1px solid rgba(25,68,69,0.04);padding-top:32px}
+.card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--t3);margin-bottom:24px}
 
 /* Payroll Deduction Setup (Part B) card */
 .partb-card{max-width:560px}
@@ -482,9 +482,9 @@ table tr:last-child td{border-bottom:none}
 .modal-close{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;border:1px solid rgba(25,68,69,0.06);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:var(--t3);transition:all .3s}
 .modal-close:hover{border-color:rgba(25,68,69,0.15);color:var(--t1);transform:rotate(90deg)}
 
-/* empty-state moved to legacy.css */
-
-
+.empty-state{text-align:center;padding:72px 20px;color:var(--t3)}
+.empty-state svg{margin-bottom:16px;opacity:.15}
+.empty-state p{font-size:14px;line-height:1.6;max-width:320px;margin:0 auto}
 
 /* Toast notifications */
 .toast{position:fixed;top:20px;right:20px;background:var(--brand);color:#fff;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:600;z-index:2000;transform:translateX(120%);transition:transform .4s cubic-bezier(.16,1,.3,1);box-shadow:0 8px 32px rgba(25,68,69,0.15)}
@@ -850,9 +850,9 @@ table tr:last-child td{border-bottom:none}
   .dash-header{padding:20px}
   .dash-header h1{font-size:24px}
   .dash-content{padding:24px 20px}
-
-
-
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .stat-card{padding:20px 16px 20px 0}
+  .stat-card .stat-value{font-size:28px}
 }
 @media (max-width: 480px){
   .wrap{padding:0 20px}
@@ -897,8 +897,8 @@ table tr:last-child td{border-bottom:none}
   .footer-inner{padding:36px 20px 28px}
   .ft-top{grid-template-columns:1fr;gap:24px}
   .nav-menu a{font-size:28px}
-
-
+  .stat-grid{grid-template-columns:1fr}
+  .stat-card{border-right:none}
   .auth-card h2{font-size:30px}
 }
 
