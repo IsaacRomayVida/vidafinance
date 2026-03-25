@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
@@ -9,8 +9,9 @@ interface Employer {
   companyName: string;
   email: string;
   status: string;
+  employerCode: string;
+  companySize?: string;
   createdAt?: { seconds: number };
-  employerCode?: string;
   docRFC?: string | null;
 }
 
@@ -19,275 +20,267 @@ interface Loan {
   employeeName: string;
   employerName: string;
   amount: number;
+  total: number;
   status: string;
   createdAt?: { seconds: number };
   mlCreditScore?: number;
   mlDefaultProb?: number;
 }
 
-interface Stats {
-  totalEmployers: number;
-  totalEmployees: number;
-  activeLoans: number;
-  totalDisbursed: number;
+function fmt(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 export function AdminDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<Stats>({ totalEmployers: 0, totalEmployees: 0, activeLoans: 0, totalDisbursed: 0 });
   const [employers, setEmployers] = useState<Employer[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [tab, setTab] = useState<'employers' | 'loans'>('employers');
 
-  // Fetch stats
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const functions = getFunctions();
-        const getAdminDash = httpsCallable<unknown, { stats: Stats }>(functions, 'getAdminDashboard');
-        const result = await getAdminDash({});
-        setStats(result.data.stats || stats);
-      } catch (e) {
-        console.warn('getAdminDashboard failed:', e);
-      }
-    })();
-  }, [user]);
-
-  // Real-time employers
+  // Real-time employers listener
   useEffect(() => {
     const q = query(collection(db, 'employers'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(q, (snap) => {
       setEmployers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Employer)));
       setLoading(false);
-    }, () => setLoading(false));
+    });
+    return unsub;
   }, []);
 
-  // Real-time loans
+  // Real-time loans listener
   useEffect(() => {
     const q = query(collection(db, 'loans'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(q, (snap) => {
       setLoans(snap.docs.map(d => ({ id: d.id, ...d.data() } as Loan)));
-    }, () => {});
+    });
+    return unsub;
   }, []);
 
-  const handleApproveEmployer = async (employerId: string) => {
+  const approveEmployer = async (employerId: string) => {
     setActionLoading(employerId);
     try {
-      const functions = getFunctions();
-      const approve = httpsCallable(functions, 'approveEmployer');
-      await approve({ employerId, decision: 'approved' });
-    } catch (e) {
+      const fn = httpsCallable(getFunctions(), 'approveEmployer');
+      await fn({ employerId, decision: 'approved' });
+    } catch (e: unknown) {
       console.error('Approve failed:', e);
       alert('Error: ' + (e as Error).message);
     }
     setActionLoading(null);
   };
 
-  const handleRejectEmployer = async (employerId: string) => {
-    const reason = prompt('Rejection reason:');
-    if (!reason) return;
+  const rejectEmployer = async (employerId: string) => {
     setActionLoading(employerId);
     try {
-      const functions = getFunctions();
-      const approve = httpsCallable(functions, 'approveEmployer');
-      await approve({ employerId, decision: 'rejected', rejectionReason: reason });
-    } catch (e) {
+      const fn = httpsCallable(getFunctions(), 'approveEmployer');
+      await fn({ employerId, decision: 'rejected', rejectionReason: 'Rejected by admin' });
+    } catch (e: unknown) {
       console.error('Reject failed:', e);
       alert('Error: ' + (e as Error).message);
     }
     setActionLoading(null);
   };
 
-  const handleLoanDecision = async (loanId: string, decision: 'approved' | 'rejected') => {
-    if (decision === 'rejected') {
-      const note = prompt('Rejection note:');
-      if (!note) return;
-      setActionLoading(loanId);
-      try {
-        const functions = getFunctions();
-        const submit = httpsCallable(functions, 'submitReviewDecision');
-        await submit({ loanId, decision, note });
-      } catch (e) { alert('Error: ' + (e as Error).message); }
-      setActionLoading(null);
-      return;
-    }
+  const approveLoan = async (loanId: string) => {
     setActionLoading(loanId);
     try {
-      const functions = getFunctions();
-      const submit = httpsCallable(functions, 'submitReviewDecision');
-      await submit({ loanId, decision });
-    } catch (e) { alert('Error: ' + (e as Error).message); }
+      const fn = httpsCallable(getFunctions(), 'submitReviewDecision');
+      await fn({ loanId, decision: 'approved' });
+    } catch (e: unknown) {
+      console.error('Approve loan failed:', e);
+      alert('Error: ' + (e as Error).message);
+    }
     setActionLoading(null);
   };
 
-  const fmt = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const rejectLoan = async (loanId: string) => {
+    setActionLoading(loanId);
+    try {
+      const fn = httpsCallable(getFunctions(), 'submitReviewDecision');
+      await fn({ loanId, decision: 'rejected', reason: 'Rejected by admin' });
+    } catch (e: unknown) {
+      console.error('Reject loan failed:', e);
+      alert('Error: ' + (e as Error).message);
+    }
+    setActionLoading(null);
+  };
+
   const pendingEmployers = employers.filter(e => e.status === 'pending_verification' || e.status === 'pending_review');
   const activeEmployers = employers.filter(e => e.status === 'active');
   const pendingLoans = loans.filter(l => l.status === 'pending');
+  const activeLoans = loans.filter(l => l.status === 'active' || l.status === 'approved' || l.status === 'disbursement_queued');
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    fontSize: 12, fontWeight: active ? 700 : 500,
-    color: active ? '#194445' : '#93aaa9',
-    textDecoration: 'none', padding: '14px 0',
+    fontSize: 12,
+    fontWeight: active ? 700 : 500,
+    color: active ? '#fff' : 'rgba(168,213,208,0.4)',
+    textDecoration: 'none',
+    padding: '14px 0',
     borderBottom: active ? '2px solid #a28657' : '2px solid transparent',
-    letterSpacing: '0.5px', textTransform: 'uppercase',
-    background: 'none', border: 'none', cursor: 'pointer',
+    letterSpacing: '0.5px',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    background: 'none',
+    border: 'none',
   });
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', padding: '48px 0 64px' }}>
-      <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', marginBottom: 32 }}>
-        Operations Dashboard
-      </h1>
-
+    <div style={{ maxWidth: 700, margin: '0 auto' }}>
       {/* Stats */}
       <div className="stat-grid">
         <div className="stat-card">
           <div className="stat-label">Employers</div>
-          <div className="stat-value">{stats.totalEmployers || employers.length}</div>
+          <div className="stat-value">{employers.length}</div>
+          <div className="stat-change">{pendingEmployers.length} pending</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Employees</div>
-          <div className="stat-value">{stats.totalEmployees}</div>
+          <div className="stat-label">Loans</div>
+          <div className="stat-value">{loans.length}</div>
+          <div className="stat-change">{pendingLoans.length} pending</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Active Loans</div>
-          <div className="stat-value">{stats.activeLoans || loans.filter(l => l.status === 'active').length}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Disbursed</div>
-          <div className="stat-value">${fmt(stats.totalDisbursed)}</div>
-          <div className="stat-change">MXN</div>
+          <div className="stat-label">Active</div>
+          <div className="stat-value">{activeLoans.length}</div>
+          <div className="stat-change">${fmt(activeLoans.reduce((s, l) => s + l.amount, 0))} MXN</div>
         </div>
       </div>
 
-      {/* Tab navigation */}
-      <div style={{ display: 'flex', gap: 32, borderBottom: '1px solid rgba(25,68,69,0.04)', marginBottom: 24 }}>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 32, marginBottom: 24, borderBottom: '1px solid rgba(25,68,69,0.06)' }}>
         <button onClick={() => setTab('employers')} style={tabStyle(tab === 'employers')}>
-          Employers {pendingEmployers.length > 0 && `(${pendingEmployers.length})`}
+          Employers ({pendingEmployers.length} pending)
         </button>
         <button onClick={() => setTab('loans')} style={tabStyle(tab === 'loans')}>
-          Loans {pendingLoans.length > 0 && `(${pendingLoans.length})`}
+          Loans ({pendingLoans.length} pending)
         </button>
       </div>
 
+      {/* Employer List */}
       {tab === 'employers' && (
-        <div>
-          {/* Pending employers */}
-          {pendingEmployers.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2.2px', color: '#a28657', marginBottom: 16 }}>
-                Pending Review ({pendingEmployers.length})
-              </div>
-              {pendingEmployers.map(emp => (
-                <div key={emp.id} style={{ background: '#fff', borderRadius: 16, padding: '24px', border: '1px solid rgba(25,68,69,0.04)', marginBottom: 12, boxShadow: '0 1px 4px rgba(25,68,69,0.02)' }}>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: '#0c1e1f', marginBottom: 4 }}>{emp.companyName}</div>
-                  <div style={{ fontSize: 12, color: '#93aaa9', marginBottom: 4 }}>{emp.email}</div>
-                  <div style={{ fontSize: 11, color: '#93aaa9', marginBottom: 16 }}>
-                    Code: {emp.employerCode} · Docs: {emp.docRFC ? '✓' : '✗'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#93aaa9' }}>Loading...</div>
+          ) : employers.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#93aaa9' }}>No employers yet</div>
+          ) : (
+            employers.map(emp => (
+              <div key={emp.id} style={{
+                background: '#fff', borderRadius: 20, padding: '24px 24px',
+                border: '1px solid rgba(25,68,69,0.04)', boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: '#0c1e1f', marginBottom: 4 }}>
+                      {emp.companyName || 'Unnamed'}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#93aaa9' }}>{emp.email}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
+                    letterSpacing: '0.5px', textTransform: 'uppercase',
+                    background: emp.status === 'active' ? 'rgba(36,122,110,0.08)' : emp.status === 'rejected' ? 'rgba(220,80,60,0.08)' : 'rgba(162,134,87,0.08)',
+                    color: emp.status === 'active' ? '#247a6e' : emp.status === 'rejected' ? '#dc503c' : '#a28657',
+                  }}>
+                    {emp.status}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#4a6364', marginBottom: 16 }}>
+                  Code: <strong>{emp.employerCode}</strong> · Size: {emp.companySize || '—'} · Docs: {emp.docRFC ? '✓' : '—'}
+                </div>
+                {(emp.status === 'pending_verification' || emp.status === 'pending_review') && (
+                  <div style={{ display: 'flex', gap: 12 }}>
                     <button
+                      onClick={() => approveEmployer(emp.id)}
                       disabled={actionLoading === emp.id}
-                      onClick={() => handleApproveEmployer(emp.id)}
-                      style={{ flex: 1, background: '#194445', color: '#fff', borderRadius: 60, padding: '12px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', opacity: actionLoading === emp.id ? 0.5 : 1 }}
+                      style={{
+                        flex: 1, background: '#194445', color: '#fff', borderRadius: 60,
+                        padding: '12px 20px', fontSize: 13, fontWeight: 600, border: 'none',
+                        cursor: 'pointer', opacity: actionLoading === emp.id ? 0.5 : 1,
+                      }}
                     >
-                      {actionLoading === emp.id ? '...' : 'Approve'}
+                      {actionLoading === emp.id ? 'Processing...' : 'Approve'}
                     </button>
                     <button
+                      onClick={() => rejectEmployer(emp.id)}
                       disabled={actionLoading === emp.id}
-                      onClick={() => handleRejectEmployer(emp.id)}
-                      style={{ flex: 1, background: 'none', color: '#dc503c', borderRadius: 60, padding: '12px', fontSize: 13, fontWeight: 600, border: '1px solid rgba(220,80,60,0.2)', cursor: 'pointer' }}
+                      style={{
+                        flex: 1, background: 'rgba(220,80,60,0.06)', color: '#dc503c', borderRadius: 60,
+                        padding: '12px 20px', fontSize: 13, fontWeight: 600, border: 'none',
+                        cursor: 'pointer', opacity: actionLoading === emp.id ? 0.5 : 1,
+                      }}
                     >
                       Reject
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* Active employers */}
-          {activeEmployers.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2.2px', color: '#93aaa9', marginBottom: 16 }}>
-                Active ({activeEmployers.length})
+                )}
               </div>
-              {activeEmployers.map(emp => (
-                <div key={emp.id} style={{ background: '#fff', borderRadius: 16, padding: '20px 24px', border: '1px solid rgba(25,68,69,0.04)', marginBottom: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#0c1e1f' }}>{emp.companyName}</div>
-                  <div style={{ fontSize: 12, color: '#93aaa9' }}>{emp.email} · {emp.employerCode}</div>
-                </div>
-              ))}
-            </div>
+            ))
           )}
-          {loading && <div style={{ textAlign: 'center', padding: 40, color: '#93aaa9' }}>Loading...</div>}
-          {!loading && employers.length === 0 && <div style={{ textAlign: 'center', padding: 40, color: '#93aaa9' }}>No employers registered yet.</div>}
         </div>
       )}
 
+      {/* Loan List */}
       {tab === 'loans' && (
-        <div>
-          {pendingLoans.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2.2px', color: '#a28657', marginBottom: 16 }}>
-                Pending Review ({pendingLoans.length})
-              </div>
-              {pendingLoans.map(loan => (
-                <div key={loan.id} style={{ background: '#fff', borderRadius: 16, padding: '24px', border: '1px solid rgba(25,68,69,0.04)', marginBottom: 12, boxShadow: '0 1px 4px rgba(25,68,69,0.02)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 15, color: '#0c1e1f', marginBottom: 4 }}>{loan.employeeName}</div>
-                      <div style={{ fontSize: 12, color: '#93aaa9' }}>{loan.employerName}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {loans.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#93aaa9' }}>No loans yet</div>
+          ) : (
+            loans.map(loan => (
+              <div key={loan.id} style={{
+                background: '#fff', borderRadius: 20, padding: '24px 24px',
+                border: '1px solid rgba(25,68,69,0.04)', boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#0c1e1f', marginBottom: 4 }}>
+                      {loan.employeeName || 'Unknown'}
                     </div>
-                    <div style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 22, color: '#0c1e1f' }}>
-                      ${fmt(loan.amount)}
-                    </div>
+                    <div style={{ fontSize: 12, color: '#93aaa9' }}>{loan.employerName}</div>
                   </div>
-                  {loan.mlCreditScore != null && (
-                    <div style={{ fontSize: 11, color: '#93aaa9', marginBottom: 16 }}>
-                      ML Score: {loan.mlCreditScore} · Default Prob: {((loan.mlDefaultProb || 0) * 100).toFixed(0)}%
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
+                    letterSpacing: '0.5px', textTransform: 'uppercase',
+                    background: loan.status === 'active' ? 'rgba(36,122,110,0.08)' : loan.status === 'rejected' ? 'rgba(220,80,60,0.08)' : loan.status === 'paid' ? 'rgba(36,122,110,0.08)' : 'rgba(162,134,87,0.08)',
+                    color: loan.status === 'active' ? '#247a6e' : loan.status === 'rejected' ? '#dc503c' : loan.status === 'paid' ? '#1a5e3a' : '#a28657',
+                  }}>
+                    {loan.status}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 24, fontSize: 12, color: '#4a6364', marginBottom: loan.status === 'pending' ? 16 : 0 }}>
+                  <span>Amount: <strong>${fmt(loan.amount)}</strong></span>
+                  <span>Total: <strong>${fmt(loan.total)}</strong></span>
+                  {loan.mlCreditScore && <span>Score: <strong>{loan.mlCreditScore}</strong></span>}
+                </div>
+                {loan.status === 'pending' && (
+                  <div style={{ display: 'flex', gap: 12 }}>
                     <button
+                      onClick={() => approveLoan(loan.id)}
                       disabled={actionLoading === loan.id}
-                      onClick={() => handleLoanDecision(loan.id, 'approved')}
-                      style={{ flex: 1, background: '#194445', color: '#fff', borderRadius: 60, padding: '12px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', opacity: actionLoading === loan.id ? 0.5 : 1 }}
+                      style={{
+                        flex: 1, background: '#194445', color: '#fff', borderRadius: 60,
+                        padding: '12px 20px', fontSize: 13, fontWeight: 600, border: 'none',
+                        cursor: 'pointer', opacity: actionLoading === loan.id ? 0.5 : 1,
+                      }}
                     >
-                      {actionLoading === loan.id ? '...' : 'Approve Loan'}
+                      {actionLoading === loan.id ? 'Processing...' : 'Approve Loan'}
                     </button>
                     <button
+                      onClick={() => rejectLoan(loan.id)}
                       disabled={actionLoading === loan.id}
-                      onClick={() => handleLoanDecision(loan.id, 'rejected')}
-                      style={{ flex: 1, background: 'none', color: '#dc503c', borderRadius: 60, padding: '12px', fontSize: 13, fontWeight: 600, border: '1px solid rgba(220,80,60,0.2)', cursor: 'pointer' }}
+                      style={{
+                        flex: 1, background: 'rgba(220,80,60,0.06)', color: '#dc503c', borderRadius: 60,
+                        padding: '12px 20px', fontSize: 13, fontWeight: 600, border: 'none',
+                        cursor: 'pointer', opacity: actionLoading === loan.id ? 0.5 : 1,
+                      }}
                     >
                       Reject
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {loans.filter(l => l.status !== 'pending').length > 0 && (
-            <div>
-              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2.2px', color: '#93aaa9', marginBottom: 16 }}>
-                All Loans ({loans.filter(l => l.status !== 'pending').length})
+                )}
               </div>
-              {loans.filter(l => l.status !== 'pending').map(loan => (
-                <div key={loan.id} style={{ background: '#fff', borderRadius: 16, padding: '20px 24px', border: '1px solid rgba(25,68,69,0.04)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0c1e1f' }}>{loan.employeeName}</div>
-                    <div style={{ fontSize: 12, color: '#93aaa9' }}>{loan.employerName} · ${fmt(loan.amount)}</div>
-                  </div>
-                  <span className={`badge badge-${loan.status}`}>{loan.status}</span>
-                </div>
-              ))}
-            </div>
+            ))
           )}
-          {loans.length === 0 && <div style={{ textAlign: 'center', padding: 40, color: '#93aaa9' }}>No loan applications yet.</div>}
         </div>
       )}
     </div>
