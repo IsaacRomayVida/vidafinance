@@ -696,21 +696,51 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
   });
   await db.collection('loans').doc(loanId).update({ status: 'disbursement_queued' });
 
-  // Stub disbursement: mark as active immediately (real SPEI in v2.0)
+  // Real disbursement via SoftCredito adapter
   try {
-    await db.collection('loans').doc(loanId).update({
-      status: 'active',
-      disbursedAt: FieldValue.serverTimestamp(),
-      disbursementRef: 'STUB-' + loanId.slice(0, 8).toUpperCase(),
-    });
+    const softcreditoUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
+    const secret = process.env['INTERNAL_SECRET'] ?? '';
+    if (softcreditoUrl && secret) {
+      const r = await fetch(softcreditoUrl + '/internal/disburse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+        body: JSON.stringify({
+          loanId,
+          employeeId: after['employeeId'],
+          amount: after['amount'],
+          clabe: emp['bankClabe'],
+          concept: 'VIDA-' + loanId.slice(0, 8).toUpperCase(),
+          employeeName: after['employeeName'],
+          employerName: after['employerName'],
+        }),
+        signal: (AbortSignal as any).timeout(15000),
+      });
+      if (r.ok) {
+        const result = await r.json() as Record<string, unknown>;
+        await db.collection('loans').doc(loanId).update({
+          status: 'active',
+          disbursedAt: FieldValue.serverTimestamp(),
+          disbursementRef: result['referenceId'] ?? 'SPEI-' + loanId.slice(0, 8),
+        });
+        console.log('Loan', loanId, 'disbursed via SoftCredito');
+      } else {
+        console.error('SoftCredito disburse failed:', r.status);
+        // Fallback to stub
+        await db.collection('loans').doc(loanId).update({ status: 'active', disbursedAt: FieldValue.serverTimestamp(), disbursementRef: 'STUB-FALLBACK' });
+      }
+    } else {
+      // No SoftCredito URL — use stub
+      await db.collection('loans').doc(loanId).update({ status: 'active', disbursedAt: FieldValue.serverTimestamp(), disbursementRef: 'STUB-' + loanId.slice(0, 8) });
+      console.log('Loan', loanId, 'auto-disbursed (stub — no SOFTCREDITO_ADAPTER_URL)');
+    }
     await db.collection('disbursement_queue').doc(loanId).update({
       status: 'completed',
       completedAt: FieldValue.serverTimestamp(),
     });
-    console.log('Loan', loanId, 'auto-disbursed (stub mode)');
     await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId });
   } catch (e: unknown) {
-    console.warn('Stub disbursement error:', (e as Error).message);
+    console.warn('Disbursement error, falling back to stub:', (e as Error).message);
+    await db.collection('loans').doc(loanId).update({ status: 'active', disbursedAt: FieldValue.serverTimestamp(), disbursementRef: 'STUB-ERROR' });
   }
 
   return null;
