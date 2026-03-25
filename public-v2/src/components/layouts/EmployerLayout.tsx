@@ -14,12 +14,12 @@ export function EmployerLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 flex-wrap gap-y-2">
-          <Link to="/employer" className="text-xl font-bold text-teal-900">
+      <header className="border-b border-gray-200 bg-white" style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
+        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 flex-wrap gap-y-2" style={{ display: 'flex', maxWidth: '72rem', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', flexWrap: 'wrap', gap: '8px 0' }}>
+          <Link to="/employer" className="text-xl font-bold text-teal-900" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#134e4a', textDecoration: 'none' }}>
             VIDA
           </Link>
-          <div className="flex items-center flex-wrap" style={{ gap: '12px 16px' }}>
+          <div className="flex items-center flex-wrap" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px 16px' }}>
             <Link
               to="/employer"
               className="text-sm font-medium text-teal-700 hover:text-teal-900"
@@ -51,7 +51,7 @@ export function EmployerLayout() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-6xl px-6 py-8" style={{ maxWidth: '72rem', margin: '0 auto', padding: '32px 24px' }}>
         <Outlet />
       </main>
     </div>
