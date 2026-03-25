@@ -34,6 +34,7 @@ const ReviewQueue = React.lazy(() => import('./pages/ReviewQueue').then(m => ({ 
 const PortfolioPage = React.lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
 const EmployerMgmt = React.lazy(() => import('./pages/EmployerMgmt').then(m => ({ default: m.EmployerMgmt })));
 const AlertsPage = React.lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
+const SystemHealth = React.lazy(() => import('./pages/SystemHealth').then(m => ({ default: m.SystemHealth })));
 const Onboarding = React.lazy(() => import('./pages/Onboarding').then(m => ({ default: m.Onboarding })));
 const NotFound = React.lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
 
@@ -96,6 +97,7 @@ export default function App() {
               <Route path="/ops/portfolio" element={<PortfolioPage />} />
               <Route path="/ops/employers" element={<EmployerMgmt />} />
               <Route path="/ops/alerts" element={<AlertsPage />} />
+              <Route path="/ops/health" element={<SystemHealth />} />
             </Route>
           </Route>
 

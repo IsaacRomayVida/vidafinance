@@ -33,6 +33,7 @@ export function AdminLayout() {
               { path: '/ops', label: 'Dashboard' },
               { path: '/ops/employers', label: 'Employers' },
               { path: '/ops/loans', label: 'Loans' },
+              { path: '/ops/health', label: 'Health' },
             ].map(({ path, label }) => (
               <Link
                 key={path}
