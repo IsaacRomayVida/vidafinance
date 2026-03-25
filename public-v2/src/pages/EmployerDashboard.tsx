@@ -135,18 +135,18 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
 
   return (
     <div className="mx-auto max-w-xl py-10 sm:py-16 px-6 sm:px-8">
-      <div className="rounded-2xl p-6 sm:p-10" style={{ background: 'rgba(162,134,87,0.08)' }}>
-        <h2 className="mb-3" style={{ color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '24px', fontWeight: 400, letterSpacing: '-0.02em' }}>{t('dash_doc_banner_h')}</h2>
+      <div className="rounded-2xl p-7 sm:p-12" style={{ background: 'rgba(162,134,87,0.06)' }}>
+        <h2 className="mb-4" style={{ color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: '1.2' }}>{t('dash_doc_banner_h')}</h2>
         <p className="mb-10" style={{ color: 'var(--t2)', lineHeight: '1.7', fontSize: '14px' }}>{t('dash_doc_banner_sub')}</p>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4">
           {DOC_SLOTS.map((slot) => {
             const done = !!uploads[slot.key];
             const busy = !!uploading[slot.key];
             const error = errors[slot.key];
 
             return (
-              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-white p-6 sm:p-7" style={{ border: '1px solid rgba(25,68,69,0.04)', boxShadow: '0 2px 8px rgba(25,68,69,0.02)' }}>
+              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-white p-6 sm:p-8" style={{ border: '1px solid rgba(25,68,69,0.03)', boxShadow: '0 1px 4px rgba(25,68,69,0.02)' }}>
                 <div className="flex items-center gap-4 min-w-0">
                   {done ? (
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.08)' }}>
@@ -160,8 +160,8 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold" style={{ color: 'var(--t1)', fontSize: '15px', marginBottom: '2px' }}>{t(slot.i18nKey)}</div>
-                    <div style={{ color: 'var(--t3)', fontSize: '12px' }}>{t('onb_e_step4_formats')}</div>
+                    <div className="font-semibold" style={{ color: 'var(--t1)', fontSize: '14px', marginBottom: '3px', letterSpacing: '-0.01em' }}>{t(slot.i18nKey)}</div>
+                    <div style={{ color: 'var(--t3)', fontSize: '11.5px', lineHeight: '1.4' }}>{t('onb_e_step4_formats')}</div>
                     {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
                   </div>
                 </div>
@@ -181,11 +181,11 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                     onClick={() => fileRefs.current[slot.key]?.click()}
                     className="transition-all"
                     style={{
-                      background: done ? 'rgba(36,122,110,0.08)' : '#194445',
+                      background: done ? 'rgba(36,122,110,0.06)' : '#194445',
                       color: done ? '#247a6e' : '#fff',
                       borderRadius: '60px',
-                      padding: '12px 28px',
-                      fontSize: '13px',
+                      padding: '10px 22px',
+                      fontSize: '12px',
                       fontWeight: 600,
                       border: 'none',
                       letterSpacing: '0.3px',
