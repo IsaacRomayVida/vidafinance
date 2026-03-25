@@ -134,34 +134,34 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
   }
 
   return (
-    <div className="mx-auto max-w-2xl py-8 sm:py-12 px-5 sm:px-6 mt-4">
-      <div className="rounded-2xl p-4 sm:p-8" style={{ background: 'rgba(162,134,87,0.12)' }}>
-        <h2 className="text-lg sm:text-xl font-bold text-teal-900 mb-2" style={{ color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif" }}>{t('dash_doc_banner_h')}</h2>
-        <p className="text-sm mb-6" style={{ color: 'var(--t2)' }}>{t('dash_doc_banner_sub')}</p>
+    <div className="mx-auto max-w-xl py-10 sm:py-16 px-6 sm:px-8">
+      <div className="rounded-2xl p-6 sm:p-10" style={{ background: 'rgba(162,134,87,0.08)' }}>
+        <h2 className="mb-3" style={{ color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em' }}>{t('dash_doc_banner_h')}</h2>
+        <p className="text-sm mb-8" style={{ color: 'var(--t2)', lineHeight: '1.6' }}>{t('dash_doc_banner_sub')}</p>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           {DOC_SLOTS.map((slot) => {
             const done = !!uploads[slot.key];
             const busy = !!uploading[slot.key];
             const error = errors[slot.key];
 
             return (
-              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-white p-4 shadow-sm" style={{ border: '1px solid rgba(25,68,69,0.06)' }}>
+              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-white p-5 sm:p-6" style={{ border: '1px solid rgba(25,68,69,0.04)', boxShadow: '0 2px 8px rgba(25,68,69,0.02)' }}>
                 <div className="flex items-center gap-3 min-w-0">
                   {done ? (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.08)' }}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-4 w-4"><path d="M20 6L9 17l-5-5" /></svg>
                     </div>
                   ) : (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(162,134,87,0.12)' }}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(162,134,87,0.08)' }}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" className="h-4 w-4">
                         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
                       </svg>
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>{t(slot.i18nKey)}</div>
-                    <div className="text-xs" style={{ color: 'var(--t3)' }}>{t('onb_e_step4_formats')}</div>
+                    <div className="font-semibold" style={{ color: 'var(--t1)', fontSize: '15px', marginBottom: '2px' }}>{t(slot.i18nKey)}</div>
+                    <div style={{ color: 'var(--t3)', fontSize: '12px' }}>{t('onb_e_step4_formats')}</div>
                     {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
                   </div>
                 </div>
@@ -181,13 +181,14 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                     onClick={() => fileRefs.current[slot.key]?.click()}
                     className="rounded-lg px-4 py-2 text-xs font-semibold transition-all"
                     style={{
-                      background: done ? 'rgba(36,122,110,0.12)' : '#194445',
+                      background: done ? 'rgba(36,122,110,0.08)' : '#194445',
                       color: done ? '#247a6e' : '#fff',
-                      borderRadius: '10px',
-                      padding: '10px 20px',
-                      fontSize: '14px',
+                      borderRadius: '60px',
+                      padding: '12px 28px',
+                      fontSize: '13px',
                       fontWeight: 600,
                       border: 'none',
+                      letterSpacing: '0.3px',
                       opacity: busy ? 0.6 : 1,
                       cursor: done ? 'default' : 'pointer',
                     }}
@@ -493,7 +494,7 @@ export function EmployerDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="dash-header">
+      <div style={{ marginBottom: 8 }} className="dash-header">
         <h1>{employer?.companyName}</h1>
         <div className="dash-user">
           <span>
