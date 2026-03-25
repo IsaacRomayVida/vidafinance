@@ -393,6 +393,7 @@ function LoanModal({
       const requestLoan = httpsCallable(functions, 'requestLoan');
       await requestLoan({
         amount,
+        term: 30,
         bankAccountClabe: clabe,
         employerCode,
         termsAccepted: true,
