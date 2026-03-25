@@ -15,11 +15,11 @@ export function EmployerLayout() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 flex-wrap gap-y-2">
+        <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-3">
           <Link to="/employer" className="text-xl font-bold text-teal-900" style={{ fontSize: '20px', fontWeight: 700, color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif" }}>
             VIDA
           </Link>
-          <div className="flex items-center flex-wrap" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderBottom: '1px solid rgba(25,68,69,0.08)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <div className="flex items-center gap-3" style={{ overflowX: 'auto', whiteSpace: 'nowrap' }}>
             <Link
               to="/employer"
               className="text-sm font-medium text-teal-700 hover:text-teal-900"
