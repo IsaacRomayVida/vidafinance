@@ -104,7 +104,6 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
 
   useEffect(() => {
     if (uploadCount < 3) return;
-    // All 3 docs uploaded — save to Firestore
     (async () => {
       try {
         await updateDoc(doc(db, 'employers', uid), {
@@ -115,95 +114,147 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
         setAllDone(true);
         setTimeout(onComplete, 3000);
       } catch {
-        // Firestore update failed — URLs are still in storage
+        // Firestore update failed
       }
     })();
   }, [uploadCount, uploads, uid, onComplete]);
 
   if (allDone) {
     return (
-      <div className="mx-auto max-w-lg py-12 sm:py-20 px-4 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-7 w-7 sm:h-8 sm:w-8">
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(36,122,110,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" style={{ width: 28, height: 28 }}>
             <path d="M20 6L9 17l-5-5" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-teal-900">{t('dash_doc_banner_success')}</h2>
+        <h2 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 24, color: '#194445', fontWeight: 400 }}>{t('dash_doc_banner_success')}</h2>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-xl py-10 sm:py-16 px-6 sm:px-8">
-      <div className="rounded-2xl p-7 sm:p-12" style={{ background: 'rgba(162,134,87,0.06)' }}>
-        <h2 className="mb-4" style={{ color: '#194445', fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: '1.2' }}>{t('dash_doc_banner_h')}</h2>
-        <p className="mb-10" style={{ color: 'var(--t2)', lineHeight: '1.7', fontSize: '14px' }}>{t('dash_doc_banner_sub')}</p>
+    <div style={{ maxWidth: 520, margin: '0 auto', padding: '48px 24px 64px' }}>
+      {/* Header section */}
+      <div style={{ marginBottom: 40 }}>
+        <h2 style={{
+          fontFamily: "'DM Serif Display',Georgia,serif",
+          fontSize: 26,
+          color: '#194445',
+          fontWeight: 400,
+          letterSpacing: '-0.02em',
+          lineHeight: 1.15,
+          marginBottom: 16,
+        }}>
+          {t('dash_doc_banner_h')}
+        </h2>
+        <p style={{
+          fontSize: 14,
+          color: '#4a6364',
+          lineHeight: 1.7,
+          maxWidth: 380,
+        }}>
+          {t('dash_doc_banner_sub')}
+        </p>
+      </div>
 
-        <div className="flex flex-col gap-4">
-          {DOC_SLOTS.map((slot) => {
-            const done = !!uploads[slot.key];
-            const busy = !!uploading[slot.key];
-            const error = errors[slot.key];
+      {/* Document cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {DOC_SLOTS.map((slot) => {
+          const done = !!uploads[slot.key];
+          const busy = !!uploading[slot.key];
+          const error = errors[slot.key];
 
-            return (
-              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-white p-6 sm:p-8" style={{ border: '1px solid rgba(25,68,69,0.03)', boxShadow: '0 1px 4px rgba(25,68,69,0.02)' }}>
-                <div className="flex items-center gap-4 min-w-0">
+          return (
+            <div
+              key={slot.key}
+              style={{
+                background: '#fff',
+                borderRadius: 20,
+                padding: '28px 24px',
+                border: '1px solid rgba(25,68,69,0.04)',
+                boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
+              }}
+            >
+              {/* Icon + Text row */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
+                <div style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  background: done ? 'rgba(36,122,110,0.06)' : 'rgba(162,134,87,0.06)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
                   {done ? (
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.08)' }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-5 w-5"><path d="M20 6L9 17l-5-5" /></svg>
-                    </div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" style={{ width: 20, height: 20 }}><path d="M20 6L9 17l-5-5" /></svg>
                   ) : (
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(162,134,87,0.08)' }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" className="h-4 w-4">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
-                      </svg>
-                    </div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5" style={{ width: 20, height: 20 }}>
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
+                    </svg>
                   )}
-                  <div className="min-w-0">
-                    <div className="font-semibold" style={{ color: 'var(--t1)', fontSize: '14px', marginBottom: '3px', letterSpacing: '-0.01em' }}>{t(slot.i18nKey)}</div>
-                    <div style={{ color: 'var(--t3)', fontSize: '11.5px', lineHeight: '1.4' }}>{t('onb_e_step4_formats')}</div>
-                    {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
-                  </div>
                 </div>
-                <div>
-                  <input
-                    ref={(el) => { fileRefs.current[slot.key] = el; }}
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFile(slot, file);
-                    }}
-                  />
-                  <button
-                    disabled={done || busy}
-                    onClick={() => fileRefs.current[slot.key]?.click()}
-                    className="transition-all"
-                    style={{
-                      background: done ? 'rgba(36,122,110,0.06)' : '#194445',
-                      color: done ? '#247a6e' : '#fff',
-                      borderRadius: '60px',
-                      padding: '10px 22px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      border: 'none',
-                      letterSpacing: '0.3px',
-                      opacity: busy ? 0.6 : 1,
-                      cursor: done ? 'default' : 'pointer',
-                    }}
-                  >
-                    {busy ? t('onb_e_step4_uploading') : done ? t('onb_e_step4_done') : t('onb_e_step4_upload')}
-                  </button>
+                <div style={{ paddingTop: 2 }}>
+                  <div style={{
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: '#0c1e1f',
+                    marginBottom: 6,
+                    letterSpacing: '-0.01em',
+                  }}>
+                    {t(slot.i18nKey)}
+                  </div>
+                  <div style={{
+                    fontSize: 12,
+                    color: '#93aaa9',
+                    lineHeight: 1.4,
+                  }}>
+                    {t('onb_e_step4_formats')}
+                  </div>
+                  {error && <div style={{ fontSize: 12, color: '#dc503c', marginTop: 6 }}>{error}</div>}
                 </div>
               </div>
-            );
-          })}
-        </div>
+
+              {/* Button */}
+              <input
+                ref={(el) => { fileRefs.current[slot.key] = el; }}
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFile(slot, file);
+                }}
+              />
+              <button
+                disabled={done || busy}
+                onClick={() => fileRefs.current[slot.key]?.click()}
+                style={{
+                  width: '100%',
+                  background: done ? 'rgba(36,122,110,0.04)' : '#194445',
+                  color: done ? '#247a6e' : '#fff',
+                  borderRadius: 60,
+                  padding: '14px 24px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  border: 'none',
+                  letterSpacing: '0.2px',
+                  opacity: busy ? 0.6 : 1,
+                  cursor: done ? 'default' : 'pointer',
+                  transition: 'all 0.3s',
+                }}
+              >
+                {busy ? t('onb_e_step4_uploading') : done ? t('onb_e_step4_done') : t('onb_e_step4_upload')}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
+
 
 const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/;
 
