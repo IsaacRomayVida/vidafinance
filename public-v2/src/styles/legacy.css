@@ -836,6 +836,7 @@ table tr:last-child td{border-bottom:none}
   .dash-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .dash-tab-btn{padding:8px 12px;font-size:12px}
   .partb-input{font-size:14px;padding:10px 14px}
+  .partb-card{margin-bottom:16px}
 }
 @media (max-width: 480px){
   .wrap{padding:0 20px}
@@ -883,6 +884,8 @@ table tr:last-child td{border-bottom:none}
   .stat-grid{grid-template-columns:1fr}
   .stat-card{border-right:none}
   .auth-card h2{font-size:30px}
+  .dash-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .dash-tab-btn{padding:6px 10px;font-size:11px;white-space:nowrap}
 }
 
 .employer-card{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid rgba(25,68,69,.06)}

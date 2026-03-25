@@ -122,9 +122,9 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
 
   if (allDone) {
     return (
-      <div className="mx-auto max-w-lg py-20 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-8 w-8">
+      <div className="mx-auto max-w-lg py-12 sm:py-20 px-4 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" className="h-7 w-7 sm:h-8 sm:w-8">
             <path d="M20 6L9 17l-5-5" />
           </svg>
         </div>
@@ -134,9 +134,9 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
   }
 
   return (
-    <div className="mx-auto max-w-2xl py-12 px-4">
-      <div className="rounded-2xl p-8" style={{ background: 'rgba(162,134,87,0.12)' }}>
-        <h2 className="text-xl font-bold text-teal-900 mb-2">{t('dash_doc_banner_h')}</h2>
+    <div className="mx-auto max-w-2xl py-8 sm:py-12 px-4">
+      <div className="rounded-2xl p-4 sm:p-8" style={{ background: 'rgba(162,134,87,0.12)' }}>
+        <h2 className="text-lg sm:text-xl font-bold text-teal-900 mb-2">{t('dash_doc_banner_h')}</h2>
         <p className="text-sm mb-6" style={{ color: 'var(--t2)' }}>{t('dash_doc_banner_sub')}</p>
 
         <div className="flex flex-col gap-4">
@@ -146,7 +146,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
             const error = errors[slot.key];
 
             return (
-              <div key={slot.key} className="flex items-center justify-between rounded-xl bg-white p-4" style={{ border: '1px solid rgba(25,68,69,0.08)' }}>
+              <div key={slot.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-white p-3 sm:p-4" style={{ border: '1px solid rgba(25,68,69,0.08)' }}>
                 <div className="flex items-center gap-3 min-w-0">
                   {done ? (
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(36,122,110,0.12)' }}>
@@ -418,9 +418,9 @@ export function EmployerDashboard() {
 
   if (pageState === 'verify_email') {
     return (
-      <div className="mx-auto max-w-lg py-20 text-center">
-        <h2 className="text-xl font-bold text-teal-900">{t('dash_verify_email')}</h2>
-        <p className="mt-4 text-sm text-gray-500">{t('dash_verify_email_desc')}</p>
+      <div className="mx-auto max-w-lg py-12 sm:py-20 px-4 text-center">
+        <h2 className="text-lg sm:text-xl font-bold text-teal-900">{t('dash_verify_email')}</h2>
+        <p className="mt-3 sm:mt-4 text-sm text-gray-500">{t('dash_verify_email_desc')}</p>
         <button
           onClick={() => signOut(auth).then(() => navigate('/login'))}
           className="mt-6 rounded-lg bg-teal-700 px-6 py-2 text-sm font-medium text-white hover:bg-teal-800"
@@ -439,15 +439,15 @@ export function EmployerDashboard() {
       }} />;
     }
     return (
-      <div className="mx-auto max-w-lg py-20 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-50">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" className="h-8 w-8">
+      <div className="mx-auto max-w-lg py-12 sm:py-20 px-4 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-amber-50">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" className="h-7 w-7 sm:h-8 sm:w-8">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v6l4 2" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-teal-900">{t('dash_account_created')}</h2>
-        <p className="mt-4 text-sm text-gray-500">{t('dash_pending_verification')}</p>
+        <h2 className="text-lg sm:text-xl font-bold text-teal-900">{t('dash_account_created')}</h2>
+        <p className="mt-3 sm:mt-4 text-sm text-gray-500">{t('dash_pending_verification')}</p>
         <button
           onClick={() => signOut(auth).then(() => navigate('/'))}
           className="mt-6 rounded-lg bg-teal-700 px-6 py-2 text-sm font-medium text-white hover:bg-teal-800"
