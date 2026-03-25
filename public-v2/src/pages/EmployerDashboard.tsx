@@ -489,7 +489,7 @@ export function EmployerDashboard() {
   }
 
   if (pageState === 'pending_verification') {
-    const needsDocs = !employer?.docRFC;
+    const needsDocs = !employer?.docRFC || employer.docRFC === '';
     if (needsDocs) {
       return <DocUploadBanner uid={user!.uid} onComplete={() => {
         setEmployer(prev => prev ? { ...prev, docRFC: 'pending', docId: 'pending', docAddress: 'pending' } : prev);

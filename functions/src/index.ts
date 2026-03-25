@@ -696,37 +696,21 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
   });
   await db.collection('loans').doc(loanId).update({ status: 'disbursement_queued' });
 
+  // Stub disbursement: mark as active immediately (real SPEI in v2.0)
   try {
-    await getQueue('vida-disbursements').add('disburse', {
-      loanId,
-      employeeId: after['employeeId'],
-      amount: after['amount'],
-      clabe: emp['bankClabe'],
-      concept: 'VIDA-' + loanId.slice(0, 8).toUpperCase(),
-      employeeName: after['employeeName'],
-      employerName: after['employerName'],
+    await db.collection('loans').doc(loanId).update({
+      status: 'active',
+      disbursedAt: FieldValue.serverTimestamp(),
+      disbursementRef: 'STUB-' + loanId.slice(0, 8).toUpperCase(),
     });
-    await getQueue('vida-notifications').add('loan_approved', {
-      type: 'loan_approved',
-      loanId,
-      employeeId: after['employeeId'],
-      employeeName: after['employeeName'],
-      phone: emp['phone'],
-      amount: after['amount'],
+    await db.collection('disbursement_queue').doc(loanId).update({
+      status: 'completed',
+      completedAt: FieldValue.serverTimestamp(),
     });
-    await getQueue('vida-pdfs').add('loan_contract', {
-      type: 'loan_contract',
-      loanId,
-      employeeId: after['employeeId'],
-      employeeName: after['employeeName'],
-      employerName: after['employerName'],
-      amount: after['amount'],
-      total: after['total'],
-      fee: after['fee'],
-      dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
-    });
+    console.log('Loan', loanId, 'auto-disbursed (stub mode)');
+    await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId });
   } catch (e: unknown) {
-    console.warn('Queue unavailable:', (e as Error).message);
+    console.warn('Stub disbursement error:', (e as Error).message);
   }
 
   return null;
@@ -848,13 +832,10 @@ export const weeklyPortfolioSnapshot = onSchedule(
 export const systemHealthCheck = onSchedule(
   { schedule: '*/5 * * * *', timeZone: 'America/Mexico_City' },
   async () => {
-    const services = [
-      { name: 'payment-server', url: process.env['PAYMENT_SERVER_URL'] + '/health' },
-      { name: 'softcredito-adapter', url: process.env['SOFTCREDITO_ADAPTER_URL'] + '/health' },
-      { name: 'notification-service', url: process.env['NOTIFICATION_SERVICE_URL'] + '/health' },
-      { name: 'pdf-generator', url: process.env['PDF_GENERATOR_URL'] + '/health' },
-      { name: 'ml-service', url: process.env['ML_SERVICE_URL'] + '/health' },
-    ];
+    // Railway services decommissioned — check only Cloud Functions + Firestore
+    const services: { name: string; url: string }[] = [];
+    if (process.env['PAYMENT_SERVER_URL']) services.push({ name: 'payment-server', url: process.env['PAYMENT_SERVER_URL'] + '/health' });
+    if (process.env['ML_SERVICE_URL']) services.push({ name: 'ml-service', url: process.env['ML_SERVICE_URL'] + '/health' });
 
     const results = await Promise.allSettled(
       services.map(async (s) => {
