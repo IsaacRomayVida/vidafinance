@@ -382,7 +382,7 @@ input[type="range"]::-moz-range-track{height:3px;background:transparent}
 
 /* Dashboard metrics — no cards, divider grid */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;margin-bottom:48px;border-top:1px solid rgba(25,68,69,0.04)}
-.stat-card{background:transparent;border-radius:0;padding:28px 24px 28px 0;box-shadow:none;border-bottom:1px solid rgba(25,68,69,0.04);border-right:1px solid rgba(25,68,69,0.04)}
+.stat-card{background:transparent;border-radius:0;padding:28px 24px;box-shadow:none;border-bottom:1px solid rgba(25,68,69,0.04);border-right:1px solid rgba(25,68,69,0.04)}
 .stat-card:last-child{border-right:none}
 .stat-card .stat-label{font-size:10.5px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
 .stat-card .stat-value{font-family:var(--df);font-size:36px;color:var(--t1);letter-spacing:-.02em}
@@ -831,7 +831,7 @@ table tr:last-child td{border-bottom:none}
   .dash-header h1{font-size:24px}
   .dash-content{padding:24px 20px}
   .stat-grid{grid-template-columns:1fr 1fr}
-  .stat-card{padding:20px 16px 20px 0}
+  .stat-card{padding:20px 16px}
   .stat-card .stat-value{font-size:28px}
   .dash-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .dash-tab-btn{padding:8px 12px;font-size:12px}
@@ -881,8 +881,9 @@ table tr:last-child td{border-bottom:none}
   .footer-inner{padding:36px 20px 28px}
   .ft-top{grid-template-columns:1fr;gap:24px}
   .nav-menu a{font-size:28px}
-  .stat-grid{grid-template-columns:1fr}
-  .stat-card{border-right:none}
+  .stat-grid{grid-template-columns:1fr;gap:0}
+  .stat-card{padding:20px 0;border-right:none}
+  .stat-card .stat-value{font-size:28px}
   .auth-card h2{font-size:30px}
   .dash-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
   .dash-tab-btn{padding:6px 10px;font-size:11px;white-space:nowrap}
