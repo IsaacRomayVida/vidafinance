@@ -15,11 +15,11 @@ export function EmployerLayout() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 flex-wrap gap-y-2">
           <Link to="/employer" className="text-xl font-bold text-teal-900">
             VIDA
           </Link>
-          <div className="flex items-center" style={{ gap: 16 }}>
+          <div className="flex items-center flex-wrap" style={{ gap: '12px 16px' }}>
             <Link
               to="/employer"
               className="text-sm font-medium text-teal-700 hover:text-teal-900"
