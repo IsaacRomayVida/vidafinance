@@ -797,5 +797,22 @@
 
   "error_404": "404",
   "error_404_message": "Page not found",
-  "error_404_home": "Go home"
+  "error_404_home": "Go home",
+
+  "pay_modal_title": "Make a Payment",
+  "pay_modal_subtitle": "Loan",
+  "pay_total_owed": "Total Owed",
+  "pay_total_paid": "Total Paid",
+  "pay_remaining": "Remaining Balance",
+  "pay_generating": "Generating link...",
+  "pay_generate_link": "Generate Payment Link",
+  "pay_checkout_ready": "Checkout Ready",
+  "pay_checkout_desc": "Click below to complete your payment via Conekta.",
+  "pay_open_checkout": "Open Checkout",
+  "pay_generate_new": "Generate new link",
+  "pay_history": "Payment History",
+  "pay_status_pending": "Pending",
+  "pay_status_processing": "Processing",
+  "pay_status_paid": "Paid",
+  "pay_status_completed": "Paid"
 }

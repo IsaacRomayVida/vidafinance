@@ -797,5 +797,22 @@
 
   "error_404": "404",
   "error_404_message": "Página no encontrada",
-  "error_404_home": "Ir al inicio"
+  "error_404_home": "Ir al inicio",
+
+  "pay_modal_title": "Realizar un Pago",
+  "pay_modal_subtitle": "Préstamo",
+  "pay_total_owed": "Total Adeudado",
+  "pay_total_paid": "Total Pagado",
+  "pay_remaining": "Saldo Restante",
+  "pay_generating": "Generando enlace...",
+  "pay_generate_link": "Generar Enlace de Pago",
+  "pay_checkout_ready": "Checkout Listo",
+  "pay_checkout_desc": "Haz clic abajo para completar tu pago a través de Conekta.",
+  "pay_open_checkout": "Abrir Checkout",
+  "pay_generate_new": "Generar nuevo enlace",
+  "pay_history": "Historial de Pagos",
+  "pay_status_pending": "Pendiente",
+  "pay_status_processing": "Procesando",
+  "pay_status_paid": "Pagado",
+  "pay_status_completed": "Pagado"
 }
