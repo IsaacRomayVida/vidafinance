@@ -12,6 +12,7 @@ import { Queue } from 'bullmq';
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { getRedis } from './utils/redis';
+import { notifyLoanEvent } from './utils/notify';
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
@@ -365,6 +366,11 @@ export const approveEmployer = onCall(
           console.warn('SoftCrédito registration warning:', (e as Error).message);
         }
 
+        await notifyLoanEvent('employer_approved', {
+          email: emp['email'] as string,
+          companyName: emp['companyName'] as string,
+        });
+
         try {
           await getQueue('vida-notifications').add('employer_activated', {
             type: 'employer_activated',
@@ -625,6 +631,12 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
       activeLoans: FieldValue.increment(1),
       totalDisbursed: FieldValue.increment(afterData['amount'] as number),
     });
+    await notifyLoanEvent('loan_approved', {
+      phone: afterData['employeePhone'] as string | null,
+      email: afterData['employeeEmail'] as string | null,
+      employeeName: afterData['employeeName'] as string,
+      amount: afterData['amount'] as number,
+    });
     try {
       await auditLog(db, {
         action: 'loan.approved',
@@ -708,6 +720,12 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       completedAt: FieldValue.serverTimestamp(),
     });
     console.log('Loan', loanId, 'auto-disbursed (stub mode)');
+    await notifyLoanEvent('loan_disbursed', {
+      phone: after['employeePhone'] as string | null,
+      email: after['employeeEmail'] as string | null,
+      employeeName: after['employeeName'] as string,
+      amount: after['amount'] as number,
+    });
     await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId });
   } catch (e: unknown) {
     console.warn('Stub disbursement error:', (e as Error).message);
@@ -734,6 +752,14 @@ export const dailyLoanCheck = onSchedule(
       const daysOver = Math.floor((Date.now() - (loan['dueDate'] as FirebaseFirestore.Timestamp).toMillis()) / 86400000);
 
       await doc.ref.update({ status: 'overdue', overdueDetectedAt: now });
+
+      await notifyLoanEvent('loan_overdue', {
+        phone: loan['employeePhone'] as string | null,
+        email: loan['employeeEmail'] as string | null,
+        employeeName: loan['employeeName'] as string,
+        amount: loan['total'] as number,
+        dueDate: (loan['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
+      });
 
       await db.collection('overdue_log').doc(doc.id).set({
         loanId: doc.id,
