@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import {
   doc,
@@ -47,6 +48,7 @@ interface EmployeeData {
   phone: string;
   dateOfBirth: string;
   curp: string;
+  gender: string;
   rfc: string;
   salary: string;
   payFrequency: string;
@@ -155,12 +157,18 @@ export function Onboarding() {
   // Employee state
   const [memData, setMemData] = useState<EmployeeData>({
     code: '', employerId: '', employerName: '', name: '', email: '',
-    phone: '', dateOfBirth: '', curp: '', rfc: '',
+    phone: '', dateOfBirth: '', curp: '', gender: '', rfc: '',
     salary: '', payFrequency: '', employmentTenure: '', bankClabe: '',
     password: '', terms: false,
   });
   const [codeStatus, setCodeStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // CURP validation state
+  const [curpStatus, setCurpStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid' | 'error'>('idle');
+  const [curpError, setCurpError] = useState('');
+  const curpDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastValidatedCurp = useRef('');
 
   const totalSteps = role === 'employer' ? 7 : role === 'employee' ? 6 : 0;
 
@@ -229,6 +237,55 @@ export function Onboarding() {
     debounceRef.current = setTimeout(() => lookupCode(upper), 500);
   };
 
+  // -- CURP validation via Cloud Function --
+  const validateCURPRemote = useCallback(async (curp: string, expectedName: string) => {
+    if (lastValidatedCurp.current === curp) return;
+    lastValidatedCurp.current = curp;
+    setCurpStatus('validating');
+    setCurpError('');
+    try {
+      const functions = getFunctions();
+      const validate = httpsCallable<
+        { curp: string; expectedName?: string },
+        { valid: boolean; fullName?: string; dateOfBirth?: string; gender?: 'M' | 'F'; matchesExpectedName?: boolean }
+      >(functions, 'validateCURP');
+      const { data } = await validate({ curp, ...(expectedName ? { expectedName } : {}) });
+      if (data.valid) {
+        setCurpStatus('valid');
+        setMemData((d) => ({
+          ...d,
+          ...(data.fullName ? { name: data.fullName } : {}),
+          ...(data.dateOfBirth ? { dateOfBirth: data.dateOfBirth } : {}),
+          ...(data.gender ? { gender: data.gender } : {}),
+        }));
+      } else {
+        setCurpStatus('invalid');
+        setCurpError(
+          data.matchesExpectedName === false
+            ? t('onb_m_step3_curp_name_mismatch')
+            : t('onb_m_step3_curp_invalid')
+        );
+      }
+    } catch {
+      setCurpStatus('error');
+      setCurpError(t('onb_m_step3_curp_validation_error'));
+    }
+  }, [t]);
+
+  const handleCurpChange = (val: string) => {
+    const upper = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    setMemData((d) => ({ ...d, curp: upper }));
+    // Reset validation state when CURP changes
+    if (upper !== lastValidatedCurp.current) {
+      setCurpStatus('idle');
+      setCurpError('');
+    }
+    if (curpDebounceRef.current) clearTimeout(curpDebounceRef.current);
+    if (CURP_REGEX.test(upper)) {
+      curpDebounceRef.current = setTimeout(() => validateCURPRemote(upper, memData.name), 600);
+    }
+  };
+
   // -- Employer account creation --
   const createEmployerAccount = async () => {
     setCreating(true);
@@ -283,6 +340,7 @@ export function Onboarding() {
         phone: memData.phone,
         dateOfBirth: memData.dateOfBirth,
         curp: memData.curp.toUpperCase(),
+        gender: memData.gender || null,
         rfc: memData.rfc.toUpperCase(),
         employerId: memData.employerId,
         employerName: memData.employerName,
@@ -326,7 +384,7 @@ export function Onboarding() {
         const age = getAge(memData.dateOfBirth);
         return age >= 18 && age <= 65;
       }
-      if (step === 3) return CURP_REGEX.test(memData.curp.trim()) && RFC_REGEX.test(memData.rfc.trim());
+      if (step === 3) return curpStatus === 'valid' && RFC_REGEX.test(memData.rfc.trim());
       if (step === 4) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && validateCLABE(memData.bankClabe);
       if (step === 5) return memData.password.length >= 6 && memData.terms;
     }
@@ -752,13 +810,29 @@ export function Onboarding() {
               <label className="onb-label">{t('onb_m_step3_curp')}</label>
               <input
                 autoFocus
-                className={`onb-input${memData.curp.length > 0 && !CURP_REGEX.test(memData.curp) ? ' invalid' : CURP_REGEX.test(memData.curp) ? ' valid' : ''}`}
+                className={`onb-input${
+                  curpStatus === 'invalid' || curpStatus === 'error' ? ' invalid'
+                    : curpStatus === 'valid' ? ' valid'
+                    : memData.curp.length > 0 && !CURP_REGEX.test(memData.curp) ? ' invalid'
+                    : ''
+                }`}
                 placeholder={t('onb_m_step3_curp_ph')}
                 maxLength={18}
                 value={memData.curp}
-                onChange={(e) => setMemData({ ...memData, curp: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                onChange={(e) => handleCurpChange(e.target.value)}
               />
-              <div className="onb-input-hint">{t('onb_m_step3_curp_hint')}</div>
+              {curpStatus === 'validating' && (
+                <div className="onb-input-hint">{t('onb_m_step3_curp_validating')}</div>
+              )}
+              {curpError && (
+                <div className="onb-input-hint error">{curpError}</div>
+              )}
+              {curpStatus === 'valid' && (
+                <div className="onb-input-hint success">{t('onb_m_step3_curp_verified')}</div>
+              )}
+              {curpStatus === 'idle' && !curpError && (
+                <div className="onb-input-hint">{t('onb_m_step3_curp_hint')}</div>
+              )}
             </div>
             <div className="onb-field">
               <label className="onb-label">{t('onb_m_step3_rfc')}</label>

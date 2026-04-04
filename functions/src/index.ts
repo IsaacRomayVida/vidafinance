@@ -97,6 +97,66 @@ export const api = onRequest({ cors: true }, async (req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
+// ── validateCURP — unauthenticated (used during registration) ────────────────
+
+interface ValidateCURPData {
+  curp: string;
+  expectedName?: string;
+}
+
+interface ValidateCURPResult {
+  valid: boolean;
+  fullName?: string;
+  dateOfBirth?: string;
+  gender?: 'M' | 'F';
+  matchesExpectedName?: boolean;
+}
+
+const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+
+export const validateCURP = onCall(
+  { cors: true, enforceAppCheck: false },
+  async (request): Promise<ValidateCURPResult> => {
+    const { curp, expectedName } = (request.data ?? {}) as ValidateCURPData;
+
+    if (!curp || typeof curp !== 'string' || !CURP_REGEX.test(curp.toUpperCase())) {
+      throw new HttpsError('invalid-argument', 'Invalid CURP format');
+    }
+
+    const adapterUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
+    if (!adapterUrl) {
+      throw new HttpsError('unavailable', 'CURP validation service not configured');
+    }
+
+    const resp = await fetch(`${adapterUrl}/curp/validate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '',
+      },
+      body: JSON.stringify({
+        curp: curp.toUpperCase(),
+        ...(expectedName ? { expectedName } : {}),
+      }),
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      throw new HttpsError('internal', `CURP validation failed: ${resp.status} ${body}`);
+    }
+
+    const result = await resp.json() as Record<string, unknown>;
+
+    return {
+      valid: result['valid'] === true,
+      fullName: typeof result['fullName'] === 'string' ? result['fullName'] : undefined,
+      dateOfBirth: typeof result['dateOfBirth'] === 'string' ? result['dateOfBirth'] : undefined,
+      gender: result['gender'] === 'M' || result['gender'] === 'F' ? result['gender'] : undefined,
+      matchesExpectedName: typeof result['matchesExpectedName'] === 'boolean' ? result['matchesExpectedName'] : undefined,
+    };
+  }
+);
+
 // ── requestLoan — employee only ──────────────────────────────────────────────
 
 interface RequestLoanData {
