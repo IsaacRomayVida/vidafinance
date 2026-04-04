@@ -127,6 +127,39 @@ app.post('/webhooks/conekta', async (req, res) => {
       if (loanId) await db.collection('payment_failures').add({ loanId, conektaOrderId: data.object.id, reason: data.object.payment_status, ts: admin.firestore.FieldValue.serverTimestamp() });
     }
 
+    if (type === 'charge.paid') {
+      const { loanId, employeeId } = data.object.metadata || {};
+      if (!loanId || !employeeId) throw new Error('Missing metadata on charge.paid');
+      const amount = data.object.amount / 100; // Conekta uses centavos
+      const chargeId = data.object.id;
+
+      await db.runTransaction(async tx => {
+        const ref = db.collection('loans').doc(loanId);
+        const doc = await tx.get(ref);
+        if (!doc.exists || doc.data().status === 'paid') return;
+        const loanData = doc.data();
+        const newBalance = (loanData.remainingBalance ?? loanData.amount) - amount;
+        const updates = { remainingBalance: newBalance };
+        if (newBalance <= 0) {
+          updates.status = 'paid';
+          updates.paidAt = admin.firestore.FieldValue.serverTimestamp();
+        }
+        tx.update(ref, updates);
+        tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: 'card', conektaChargeId: chargeId, status: 'completed', createdAt: admin.firestore.FieldValue.serverTimestamp() });
+      });
+    }
+
+    if (type === 'charge.payment_failure') {
+      const { loanId, employeeId } = data.object.metadata || {};
+      await db.collection('payment_failures').add({
+        loanId: loanId || null,
+        employeeId: employeeId || null,
+        conektaChargeId: data.object.id,
+        reason: data.object.failure_message,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
     res.json({ received: true });
   } catch (err) {
     await db.collection('incident_log').add({ source: 'conekta-webhook', error: err.message, ts: admin.firestore.FieldValue.serverTimestamp() });
