@@ -11,7 +11,7 @@ import { Queue } from 'bullmq';
 
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
-import { getRedis } from './utils/redis';
+import { checkRateLimit } from './utils/rateLimiter';
 import { notifyLoanEvent } from './utils/notify';
 
 // Re-export fully-implemented cloud functions from their own modules
@@ -173,13 +173,10 @@ export const requestLoan = onCall(
         const { amount, term } = data;
         const uid = auth.uid;
 
-        // Rate limit: max 3 requests per hour via Redis
+        // Rate limit: max 3 requests per day via Redis
         try {
-          const r = getRedis();
-          const key = 'rate:loans:' + uid;
-          const cnt = await r.incr(key);
-          if (cnt === 1) await r.expire(key, 3600);
-          if (cnt > 3) throw new HttpsError('resource-exhausted', 'Máximo 3 solicitudes por hora');
+          const allowed = await checkRateLimit(`rl:loan:${uid}`, 3, 86400);
+          if (!allowed) throw new HttpsError('resource-exhausted', 'Too many loan requests today');
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
           console.warn('Redis rate limit unavailable:', (e as Error).message);

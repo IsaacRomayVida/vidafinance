@@ -41,6 +41,11 @@ jest.mock('bullmq', () => ({
   })),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue(true);
+jest.mock('../utils/rateLimiter', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 const mockFetch = jest.fn();
 jest.mock('node-fetch', () => ({
   __esModule: true,
@@ -277,16 +282,11 @@ describe('handleRequestLoan', () => {
 
   // ── Rate Limiting ───────────────────────────────────────────────────────────
 
-  it('throws resource-exhausted when Redis returns count > 3', async () => {
+  it('throws resource-exhausted when rate limit is exceeded', async () => {
     const db = buildMockDb();
     (getFirestore as jest.Mock).mockReturnValue(db);
 
-    const MockIORedis = IORedis as unknown as jest.Mock;
-    MockIORedis.mockImplementationOnce(() => ({
-      incr: jest.fn().mockResolvedValue(4),
-      expire: jest.fn().mockResolvedValue(1),
-      ttl: jest.fn().mockResolvedValue(3541),
-    }));
+    mockCheckRateLimit.mockResolvedValueOnce(false);
 
     await expect(handleRequestLoan(authRequest)).rejects.toMatchObject({
       code: 'resource-exhausted',
@@ -297,12 +297,7 @@ describe('handleRequestLoan', () => {
     const db = buildMockDb();
     (getFirestore as jest.Mock).mockReturnValue(db);
 
-    const MockIORedis = IORedis as unknown as jest.Mock;
-    MockIORedis.mockImplementationOnce(() => ({
-      incr: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
-      expire: jest.fn(),
-      ttl: jest.fn(),
-    }));
+    mockCheckRateLimit.mockRejectedValueOnce(new Error('ECONNREFUSED'));
 
     const result = await handleRequestLoan(authRequest);
     expect(result.status).toBe('pending');
@@ -527,43 +522,17 @@ describe('handleRequestLoan', () => {
     );
   });
 
-  it('correctly sets the first rate-limit request expiry in Redis', async () => {
+  it('calls checkRateLimit with correct key and daily window', async () => {
     const db = buildMockDb();
     (getFirestore as jest.Mock).mockReturnValue(db);
 
-    // incr returns 1 → should also call expire
-    const MockIORedis = IORedis as unknown as jest.Mock;
-    const mockExpire = jest.fn().mockResolvedValue(1);
-    MockIORedis.mockImplementationOnce(() => ({
-      incr: jest.fn().mockResolvedValue(1),
-      expire: mockExpire,
-      ttl: jest.fn().mockResolvedValue(3600),
-    }));
-
     await handleRequestLoan(authRequest);
 
-    expect(mockExpire).toHaveBeenCalledWith(
-      `ratelimit:requestLoan:user-123`,
-      3600
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      'rl:loan:user-123',
+      3,
+      86400
     );
-  });
-
-  it('does not call expire when this is not the first request', async () => {
-    const db = buildMockDb();
-    (getFirestore as jest.Mock).mockReturnValue(db);
-
-    // incr returns 2 → should NOT call expire (TTL already running)
-    const MockIORedis = IORedis as unknown as jest.Mock;
-    const mockExpire = jest.fn().mockResolvedValue(1);
-    MockIORedis.mockImplementationOnce(() => ({
-      incr: jest.fn().mockResolvedValue(2),
-      expire: mockExpire,
-      ttl: jest.fn().mockResolvedValue(3300),
-    }));
-
-    await handleRequestLoan(authRequest);
-
-    expect(mockExpire).not.toHaveBeenCalled();
   });
 
   // ── Credit Bureau Check ────────────────────────────────────────────────────

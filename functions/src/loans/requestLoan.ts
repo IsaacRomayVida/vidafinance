@@ -6,6 +6,7 @@ import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 import { z } from 'zod';
 import fetch from 'node-fetch';
+import { checkRateLimit } from '../utils/rateLimiter';
 
 // ─── Input Schema ─────────────────────────────────────────────────────────────
 
@@ -179,21 +180,11 @@ export async function handleRequestLoan(request: {
   }
   const input: RequestLoanInput = validationResult.data;
 
-  // 3. Rate limiting — 3 requests/hour/user via Redis
+  // 3. Rate limiting — 3 requests/day/user via Redis
   try {
-    const redis = getRedisClient();
-    const rateLimitKey = `ratelimit:requestLoan:${uid}`;
-    const requestCount = await redis.incr(rateLimitKey);
-    if (requestCount === 1) {
-      await redis.expire(rateLimitKey, 3600);
-    }
-    if (requestCount > 3) {
-      const ttl = await redis.ttl(rateLimitKey);
-      throw new HttpsError(
-        'resource-exhausted',
-        `Loan request limit reached. Try again in ${Math.ceil(ttl / 60)} minutes.`,
-        { retryAfterSeconds: ttl }
-      );
+    const allowed = await checkRateLimit(`rl:loan:${uid}`, 3, 86400);
+    if (!allowed) {
+      throw new HttpsError('resource-exhausted', 'Too many loan requests today');
     }
   } catch (e: unknown) {
     if (e instanceof HttpsError) throw e;
