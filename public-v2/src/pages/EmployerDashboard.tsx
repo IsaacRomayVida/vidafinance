@@ -19,6 +19,11 @@ interface Loan {
   [key: string]: unknown;
 }
 
+interface CurpConfig {
+  prefixes: string[];
+  mode: 'allowlist' | 'open';
+}
+
 interface EmployerData {
   companyName?: string;
   name?: string;
@@ -31,6 +36,7 @@ interface EmployerData {
   docAddress?: string | null;
   sampleCurps?: string[];
   partBStatus?: string;
+  curpConfig?: CurpConfig;
 }
 
 interface DashStats {
@@ -374,6 +380,239 @@ function PayrollDeductionCard({ uid, employer, onSubmitted }: { uid: string; emp
   );
 }
 
+const CURP_PREFIX_REGEX = /^[A-Z]{2}\d{2}$/;
+
+function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpdated: (config: CurpConfig) => void }) {
+  const { t } = useTranslation();
+  const existing = employer.curpConfig;
+  const [mode, setMode] = useState<'allowlist' | 'open'>(existing?.mode ?? 'open');
+  const [prefixInput, setPrefixInput] = useState('');
+  const [prefixes, setPrefixes] = useState<string[]>(existing?.prefixes ?? []);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [inputError, setInputError] = useState('');
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    setSaved(false);
+    try {
+      const functions = getFunctions();
+      const updateCurpConfig = httpsCallable<{ prefixes: string[]; mode: string }, { success: boolean }>(
+        functions,
+        'updateEmployerCurpConfig'
+      );
+      await updateCurpConfig({ prefixes, mode });
+      setSaved(true);
+      onUpdated({ prefixes, mode });
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError(t('curp_config_error'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addPrefix() {
+    const val = prefixInput.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    if (val.length !== 4) {
+      setInputError(t('curp_config_prefix_invalid'));
+      return;
+    }
+    if (!CURP_PREFIX_REGEX.test(val)) {
+      setInputError(t('curp_config_prefix_invalid'));
+      return;
+    }
+    if (prefixes.includes(val)) {
+      setInputError(t('curp_config_prefix_duplicate'));
+      return;
+    }
+    setPrefixes(prev => [...prev, val]);
+    setPrefixInput('');
+    setInputError('');
+    setSaved(false);
+  }
+
+  function removePrefix(idx: number) {
+    setPrefixes(prev => prev.filter((_, i) => i !== idx));
+    setSaved(false);
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 24 }}>
+      <div className="card-title">{t('curp_config_title')}</div>
+      <p style={{ fontSize: 13, color: '#4a6364', lineHeight: 1.6, marginBottom: 24 }}>
+        {t('curp_config_desc')}
+      </p>
+
+      {/* Mode toggle */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+        <button
+          onClick={() => { setMode('open'); setSaved(false); }}
+          style={{
+            flex: 1,
+            padding: '14px 16px',
+            borderRadius: 16,
+            border: mode === 'open' ? '2px solid #194445' : '1.5px solid rgba(25,68,69,0.1)',
+            background: mode === 'open' ? 'rgba(25,68,69,0.03)' : '#fff',
+            cursor: 'pointer',
+            transition: 'all .2s',
+          }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', marginBottom: 4 }}>
+            {t('curp_config_mode_open')}
+          </div>
+          <div style={{ fontSize: 12, color: '#93aaa9', lineHeight: 1.4 }}>
+            {t('curp_config_mode_open_desc')}
+          </div>
+        </button>
+        <button
+          onClick={() => { setMode('allowlist'); setSaved(false); }}
+          style={{
+            flex: 1,
+            padding: '14px 16px',
+            borderRadius: 16,
+            border: mode === 'allowlist' ? '2px solid #194445' : '1.5px solid rgba(25,68,69,0.1)',
+            background: mode === 'allowlist' ? 'rgba(25,68,69,0.03)' : '#fff',
+            cursor: 'pointer',
+            transition: 'all .2s',
+          }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', marginBottom: 4 }}>
+            {t('curp_config_mode_allowlist')}
+          </div>
+          <div style={{ fontSize: 12, color: '#93aaa9', lineHeight: 1.4 }}>
+            {t('curp_config_mode_allowlist_desc')}
+          </div>
+        </button>
+      </div>
+
+      {/* Prefix list (only shown when mode is allowlist) */}
+      {mode === 'allowlist' && (
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#0c1e1f', display: 'block', marginBottom: 8 }}>
+            {t('curp_config_prefixes_label')}
+          </label>
+
+          {/* Input row */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              type="text"
+              value={prefixInput}
+              onChange={(e) => {
+                setPrefixInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4));
+                setInputError('');
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPrefix(); } }}
+              placeholder={t('curp_config_prefix_placeholder')}
+              maxLength={4}
+              spellCheck={false}
+              autoComplete="off"
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                borderRadius: 12,
+                border: inputError ? '1.5px solid #dc503c' : '1.5px solid rgba(25,68,69,0.1)',
+                fontSize: 14,
+                fontFamily: 'monospace',
+                letterSpacing: '0.1em',
+                outline: 'none',
+                transition: 'border .2s',
+              }}
+            />
+            <button
+              onClick={addPrefix}
+              style={{
+                padding: '12px 20px',
+                borderRadius: 12,
+                background: '#194445',
+                color: '#fff',
+                border: 'none',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t('curp_config_add')}
+            </button>
+          </div>
+          {inputError && <div style={{ fontSize: 12, color: '#dc503c', marginBottom: 8 }}>{inputError}</div>}
+
+          {/* Prefix chips */}
+          {prefixes.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {prefixes.map((p, i) => (
+                <span
+                  key={i}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(25,68,69,0.04)',
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    fontWeight: 600,
+                    color: '#194445',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  {p}
+                  <button
+                    onClick={() => removePrefix(i)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: 0,
+                      lineHeight: 1,
+                      color: '#93aaa9',
+                      fontSize: 16,
+                    }}
+                    aria-label={`Remove ${p}`}
+                  >
+                    &times;
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 12, color: '#93aaa9', fontStyle: 'italic' }}>
+              {t('curp_config_no_prefixes')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Save button */}
+      {error && <div style={{ fontSize: 12, color: '#dc503c', marginBottom: 12 }}>{error}</div>}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        style={{
+          width: '100%',
+          padding: '14px 24px',
+          borderRadius: 60,
+          background: saved ? 'rgba(36,122,110,0.04)' : '#194445',
+          color: saved ? '#247a6e' : '#fff',
+          border: 'none',
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: '0.2px',
+          cursor: saving ? 'default' : 'pointer',
+          opacity: saving ? 0.6 : 1,
+          transition: 'all .3s',
+        }}
+      >
+        {saving ? t('curp_config_saving') : saved ? t('curp_config_saved') : t('curp_config_save')}
+      </button>
+    </div>
+  );
+}
+
 export function EmployerDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -588,6 +827,12 @@ export function EmployerDashboard() {
             onSubmitted={() => setEmployer(prev => prev ? { ...prev, partBStatus: 'pending' } : prev)}
           />
         )}
+
+        {/* CURP Configuration */}
+        <CurpConfigCard
+          employer={employer!}
+          onUpdated={(config) => setEmployer(prev => prev ? { ...prev, curpConfig: config } : prev)}
+        />
 
         {/* Loans Table */}
         <div className="card">

@@ -706,6 +706,51 @@ export const setEmployerClaims = onCall(
   )
 );
 
+// ── updateEmployerCurpConfig — employer CURP allowlist configuration ─────────
+
+interface UpdateCurpConfigData {
+  prefixes: string[];
+  mode: 'allowlist' | 'open';
+}
+
+export const updateEmployerCurpConfig = onCall(
+  { cors: true, enforceAppCheck: false },
+  withAuth<UpdateCurpConfigData, { success: boolean }>(
+    ['employer_admin'],
+    async (data, auth) =>
+      withErrorHandling({ functionName: 'updateEmployerCurpConfig', uid: auth.uid }, async () => {
+        const { prefixes, mode } = data;
+
+        const resolvedMode = mode === 'allowlist' ? 'allowlist' : 'open';
+        const resolvedPrefixes = Array.isArray(prefixes)
+          ? prefixes
+              .map((p) => String(p).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))
+              .filter((p) => p.length === 4)
+          : [];
+
+        const uid = auth.uid;
+        const empDoc = await db.collection('employers').doc(uid).get();
+        if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
+
+        await db.collection('employers').doc(uid).update({
+          curpConfig: { prefixes: resolvedPrefixes, mode: resolvedMode },
+        });
+
+        try {
+          await auditLog(db, {
+            action: 'employer.updateCurpConfig',
+            actorUid: auth.uid,
+            actorRole: auth.role,
+            targetId: uid,
+            after: { prefixes: resolvedPrefixes, mode: resolvedMode },
+          });
+        } catch (_) { /* non-critical */ }
+
+        return { success: true };
+      })
+  )
+);
+
 // ── Firestore document triggers ──────────────────────────────────────────────
 
 export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (event) => {
