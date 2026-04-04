@@ -158,6 +158,34 @@ export const requestLoan = onCall(
         const fee = Math.round(amount * 0.3);
         const dueDate = Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
 
+        // Try full underwriting pipeline first
+        const uwUrl = process.env['UNDERWRITING_SERVICE_URL'];
+        const intSecret = process.env['INTERNAL_SECRET'] ?? '';
+        let uwDecision: string | null = null;
+        let uwResult: Record<string, unknown> | null = null;
+
+        if (uwUrl && intSecret) {
+          try {
+            const uwRes = await fetch(uwUrl + '/underwrite', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-internal-secret': intSecret },
+              body: JSON.stringify({
+                applicant: { curp: emp['curp'] || '', fullName: emp['fullName'] || emp['name'] || '', rfc: emp['rfc'] || '' },
+                employer: { rfc: employer['rfc'] || '', companyName: employer['companyName'] || '' },
+                loanAmount: amount,
+              }),
+              signal: (AbortSignal as any).timeout(30000),
+            });
+            if (uwRes.ok) {
+              uwResult = await uwRes.json() as Record<string, unknown>;
+              uwDecision = uwResult['decision'] as string;
+              console.log('UW pipeline:', uwDecision, uwResult['correlationId']);
+            }
+          } catch (e: unknown) {
+            console.warn('UW service unavailable, fallback to inline ML:', (e as Error).message);
+          }
+        }
+
         const loanExtra: Record<string, unknown> = {};
         try {
           const ml = await callML('/underwrite/employee', {
@@ -213,6 +241,9 @@ export const requestLoan = onCall(
             contractUrl: null,
             receiptUrl: null,
             ...loanExtra,
+            uwCorrelationId: uwResult?.['correlationId'] ?? null,
+            uwDecision: uwDecision ?? null,
+            uwLastStage: uwResult?.['lastStage'] ?? null,
             createdAt: FieldValue.serverTimestamp(),
             acceptedAt: FieldValue.serverTimestamp(),
           });

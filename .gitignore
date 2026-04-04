@@ -25,3 +25,4 @@ tests/load/results/*.json
 tests/load/results/*.txt
 tests/load/results/*.csv
 !tests/load/results/.gitkeep
+functions/.env
