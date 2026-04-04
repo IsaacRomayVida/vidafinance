@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "dotenv": "^16.0.0",
+    "eslint": "^10.2.0",
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
