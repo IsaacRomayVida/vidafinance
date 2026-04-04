@@ -1,4 +1,5 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
 
@@ -32,7 +33,7 @@ export const queueHealthCheck = onSchedule(
         }
       }
     } catch (e: unknown) {
-      console.warn('Queue health check failed:', (e as Error).message);
+      logger.warn('Queue health check failed', { error: (e as Error).message, service: 'functions' });
     }
   }
 );

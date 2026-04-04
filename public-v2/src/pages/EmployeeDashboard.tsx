@@ -65,16 +65,13 @@ export function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [paymentLoan, setPaymentLoan] = useState<Loan | null>(null);
-  const [pageState, setPageState] = useState<'loading' | 'verify_email' | 'dashboard'>('loading');
+  const [pageState, setPageState] = useState<'loading' | 'dashboard'>('loading');
+
+  const needsEmailVerification = user ? !user.emailVerified : false;
 
   // Fetch employee doc
   useEffect(() => {
-    if (!user) return;
-
-    if (!user.emailVerified) {
-      setPageState('verify_email');
-      return;
-    }
+    if (!user || needsEmailVerification) return;
 
     const uid = user.uid;
 
@@ -87,7 +84,7 @@ export function EmployeeDashboard() {
       setEmployee(empDoc.data() as EmployeeData);
       setPageState('dashboard');
     })();
-  }, [user, navigate]);
+  }, [user, navigate, needsEmailVerification]);
 
   // Real-time loans listener
   useEffect(() => {
@@ -151,7 +148,7 @@ export function EmployeeDashboard() {
     );
   }
 
-  if (pageState === 'verify_email') {
+  if (needsEmailVerification) {
     return (
       <div className="mx-auto max-w-lg py-20 text-center">
         <h2 className="text-xl font-bold text-teal-900">{t('dash_verify_email')}</h2>
@@ -175,8 +172,7 @@ export function EmployeeDashboard() {
   const activeLoans = loans.filter((l) => l.status === 'active' || l.status === 'overdue');
   const nextRepayment = activeLoans
     .filter((l) => l.dueDate)
-    .sort((a, b) => (a.dueDate!.seconds - b.dueDate!.seconds))
-    [0];
+    .sort((a, b) => (a.dueDate!.seconds - b.dueDate!.seconds))[0];
 
   return (
     <div>

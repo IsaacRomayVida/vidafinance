@@ -1,4 +1,5 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
 
@@ -66,9 +67,9 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         status: 'completed',
         completedAt: FieldValue.serverTimestamp(),
       });
-      console.log('Loan', loanId, 'disbursed via SoftCrédito, ref:', result.ref);
+      logger.info('Loan disbursed via SoftCrédito', { loanId, ref: result.ref, service: 'functions' });
     } catch (e: unknown) {
-      console.warn('SoftCrédito disbursement failed, falling back to stub:', (e as Error).message);
+      logger.warn('SoftCrédito disbursement failed, falling back to stub', { error: (e as Error).message, loanId, service: 'functions' });
       // Fallback to stub on failure
       try {
         await db.collection('loans').doc(loanId).update({
@@ -81,9 +82,9 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           status: 'completed',
           completedAt: FieldValue.serverTimestamp(),
         });
-        console.log('Loan', loanId, 'auto-disbursed (stub fallback)');
+        logger.info('Loan auto-disbursed (stub fallback)', { loanId, service: 'functions' });
       } catch (stubErr: unknown) {
-        console.warn('Stub fallback error:', (stubErr as Error).message);
+        logger.warn('Stub fallback error', { error: (stubErr as Error).message, loanId, service: 'functions' });
       }
     }
   } else {
@@ -98,9 +99,9 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         status: 'completed',
         completedAt: FieldValue.serverTimestamp(),
       });
-      console.log('Loan', loanId, 'auto-disbursed (stub mode)');
+      logger.info('Loan auto-disbursed (stub mode)', { loanId, service: 'functions' });
     } catch (e: unknown) {
-      console.warn('Stub disbursement error:', (e as Error).message);
+      logger.warn('Stub disbursement error', { error: (e as Error).message, loanId, service: 'functions' });
     }
   }
 
@@ -127,12 +128,12 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           await db.collection('loans').doc(loanId).update({
             softcreditoDeductionId: result['deductionId'] ?? null,
           });
-          console.log('Payroll deduction registered for loan', loanId);
+          logger.info('Payroll deduction registered', { loanId, service: 'functions' });
         }
       });
     }
   } catch (e: unknown) {
-    console.warn('Payroll deduction registration failed:', (e as Error).message);
+    logger.warn('Payroll deduction registration failed', { error: (e as Error).message, loanId, service: 'functions' });
   }
 
   try {
@@ -145,14 +146,14 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       amount: after['amount'],
     });
   } catch (e: unknown) {
-    console.warn('Queue unavailable:', (e as Error).message);
+    logger.warn('Queue unavailable', { error: (e as Error).message, loanId, service: 'functions' });
   }
 
   // Call PDF Generator HTTP endpoint to create loan contract
   try {
     const pdfBaseUrl = process.env['PDF_GENERATOR_URL'];
     if (!pdfBaseUrl) {
-      console.warn('PDF_GENERATOR_URL not configured — skipping contract generation');
+      logger.warn('PDF_GENERATOR_URL not configured — skipping contract generation', { loanId, service: 'functions' });
     } else {
       const r = await fetch(pdfBaseUrl + '/contracts/generate', {
         method: 'POST',
@@ -168,14 +169,14 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         signal: (AbortSignal as any).timeout(30000),
       });
       if (!r.ok) {
-        console.warn(`PDF Generator returned ${r.status} for loan ${loanId}`);
+        logger.warn('PDF Generator returned error', { status: r.status, loanId, service: 'functions' });
       } else {
         const body = await r.json() as { contractUrl?: string };
-        console.log(`Contract generated for loan ${loanId}: ${body.contractUrl}`);
+        logger.info('Contract generated', { loanId, contractUrl: body.contractUrl, service: 'functions' });
       }
     }
   } catch (e: unknown) {
-    console.warn('PDF Generator unavailable — skipping contract generation:', (e as Error).message);
+    logger.warn('PDF Generator unavailable — skipping contract generation', { error: (e as Error).message, loanId, service: 'functions' });
   }
 
   // Notify employee of disbursement

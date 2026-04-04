@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const userSnap = await getDoc(doc(db, 'users', user.uid));
               role = (userSnap.exists() ? (userSnap.data()?.role as UserRole) : null) || 'employee';
             }
-          } catch (err) {
+          } catch {
             // Firestore fallback failed — retry silently
             try {
               await new Promise(r => setTimeout(r, 500));
@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const retryUserSnap = await getDoc(doc(db, 'users', user.uid));
                 role = (retryUserSnap.exists() ? (retryUserSnap.data()?.role as UserRole) : null) || 'employee';
               }
-            } catch (retryErr) {
+            } catch {
               // Retry also failed — default to employee role
               role = 'employee';
             }

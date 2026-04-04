@@ -622,23 +622,20 @@ export function EmployerDashboard() {
   // on every render with BrowserRouter (non-data router) in react-router v7,
   // which would re-trigger any useEffect that includes it as a dependency.
   const navigateRef = useRef(navigate);
-  navigateRef.current = navigate;
+  useEffect(() => { navigateRef.current = navigate; }, [navigate]);
 
   const [employer, setEmployer] = useState<EmployerData | null>(null);
   const [stats, setStats] = useState<DashStats>({});
   const [loans, setLoans] = useState<Loan[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [loading, setLoading] = useState(true);
-  const [pageState, setPageState] = useState<'loading' | 'verify_email' | 'pending_verification' | 'dashboard'>('loading');
+  const [pageState, setPageState] = useState<'loading' | 'pending_verification' | 'dashboard'>('loading');
+
+  const needsEmailVerification = user ? !user.emailVerified : false;
 
   // Fetch employer doc and dashboard stats
   useEffect(() => {
-    if (!user) return;
-
-    if (!user.emailVerified) {
-      setPageState('verify_email');
-      return;
-    }
+    if (!user || needsEmailVerification) return;
 
     let cancelled = false;
     const uid = user.uid;
@@ -680,7 +677,7 @@ export function EmployerDashboard() {
     })();
 
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, needsEmailVerification]);
 
   // Real-time loans listener
   useEffect(() => {
@@ -712,7 +709,7 @@ export function EmployerDashboard() {
     );
   }
 
-  if (pageState === 'verify_email') {
+  if (needsEmailVerification) {
     return (
       <div className="mx-auto max-w-lg py-12 sm:py-20 px-4 text-center">
         <h2 className="text-lg sm:text-xl font-bold text-teal-900">{t('dash_verify_email')}</h2>

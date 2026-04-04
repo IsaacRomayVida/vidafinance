@@ -57,8 +57,8 @@ export function AdminDashboard() {
         const getAdminDash = httpsCallable<unknown, { stats: DashStats }>(functions, 'getAdminDashboard');
         const result = await getAdminDash({});
         if (result.data.stats) setStats(result.data.stats);
-      } catch (e) {
-        console.warn('getAdminDashboard error:', e);
+      } catch {
+        // Dashboard stats fetch failed — non-critical, UI shows stale data
       }
     })();
   }, [user]);
@@ -93,8 +93,8 @@ export function AdminDashboard() {
       const getAdminDash = httpsCallable<unknown, { stats: DashStats }>(functions, 'getAdminDashboard');
       const result = await getAdminDash({});
       if (result.data.stats) setStats(result.data.stats);
-    } catch (e: any) {
-      alert('Error: ' + (e?.message || 'Unknown error'));
+    } catch (e: unknown) {
+      alert('Error: ' + ((e as Error)?.message || 'Unknown error'));
     } finally {
       setActionLoading(null);
     }
@@ -106,8 +106,8 @@ export function AdminDashboard() {
       const functions = getFunctions();
       const fn = httpsCallable(functions, 'submitReviewDecision');
       await fn({ loanId, decision, note: decision === 'rejected' ? 'Not approved' : 'Approved by ops' });
-    } catch (e: any) {
-      alert('Error: ' + (e?.message || 'Unknown error'));
+    } catch (e: unknown) {
+      alert('Error: ' + ((e as Error)?.message || 'Unknown error'));
     } finally {
       setActionLoading(null);
     }

@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import sgMail from '@sendgrid/mail';
+import { logger } from 'firebase-functions';
 
 const twilioClient = process.env.TWILIO_ACCOUNT_SID
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -32,7 +33,7 @@ function vidaEmailTemplate(title: string, body: string): string {
 
 export async function sendSMS(to: string, body: string): Promise<void> {
   if (!twilioClient) {
-    console.log(`[notify] Twilio not configured — skipping SMS to ${to}: ${body}`);
+    logger.info('[notify] Twilio not configured — skipping SMS', { to, service: 'notify' });
     return;
   }
   try {
@@ -41,7 +42,7 @@ export async function sendSMS(to: string, body: string): Promise<void> {
       from: TWILIO_FROM,
       body,
     });
-    console.log(`[notify] SMS sent to ${to}`);
+    logger.info('[notify] SMS sent', { to, service: 'notify' });
   } catch (err) {
     console.error(`[notify] SMS failed to ${to}:`, err);
   }
@@ -49,7 +50,7 @@ export async function sendSMS(to: string, body: string): Promise<void> {
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   if (!process.env.SENDGRID_API_KEY) {
-    console.log(`[notify] SendGrid not configured — skipping email to ${to}: ${subject}`);
+    logger.info('[notify] SendGrid not configured — skipping email', { to, subject, service: 'notify' });
     return;
   }
   try {
@@ -59,7 +60,7 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
       subject,
       html,
     });
-    console.log(`[notify] Email sent to ${to}`);
+    logger.info('[notify] Email sent', { to, service: 'notify' });
   } catch (err) {
     console.error(`[notify] Email failed to ${to}:`, err);
   }
@@ -204,6 +205,6 @@ export async function notifyLoanEvent(event: string, data: Record<string, unknow
     }
 
     default:
-      console.log(`[notify] Unknown loan event: ${event}`);
+      logger.warn('[notify] Unknown loan event', { event, service: 'notify' });
   }
 }
