@@ -12,6 +12,7 @@ import { Queue } from 'bullmq';
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { getRedis } from './utils/redis';
+import { callML as callInlineML } from './utils/callML';
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
@@ -158,15 +159,49 @@ export const requestLoan = onCall(
 
         const loanExtra: Record<string, unknown> = {};
         try {
-          const ml = await callML('/underwrite/employee', {
-            employeeId: uid,
-            monthlySalary: emp['monthlySalary'] ?? 0,
-            employerTier: employer['riskTier'] ?? 2,
-            existingLoans: 0,
-            bankClabe: emp['bankClabe'] ?? null,
-            amount,
-            requestsLastHour: 0,
-          });
+          let ml: Record<string, unknown>;
+          const uwUrl = process.env['UNDERWRITING_SERVICE_URL'];
+          if (uwUrl) {
+            // Full 8-stage underwriting pipeline
+            const uwResult = await fetch(uwUrl + '/underwrite', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '',
+              },
+              body: JSON.stringify({
+                applicant: {
+                  employeeId: uid,
+                  monthlySalary: emp['monthlySalary'] ?? 0,
+                  employerTier: employer['riskTier'] ?? 2,
+                  existingLoans: 0,
+                  bankClabe: emp['bankClabe'] ?? null,
+                },
+                employer: {
+                  employerId: emp['employerId'],
+                  employerCode: employer['employerCode'],
+                  riskTier: employer['riskTier'] ?? 2,
+                  status: employer['status'],
+                },
+                loanAmount: amount,
+              }),
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              signal: (AbortSignal as any).timeout(10000),
+            });
+            if (!uwResult.ok) throw new Error(`Underwriting service: ${uwResult.status}`);
+            ml = (await uwResult.json()) as unknown as Record<string, unknown>;
+          } else {
+            // Fallback to inline ML scoring
+            ml = await callInlineML('/underwrite/employee', {
+              employeeId: uid,
+              monthlySalary: emp['monthlySalary'] ?? 0,
+              employerTier: employer['riskTier'] ?? 2,
+              existingLoans: 0,
+              bankClabe: emp['bankClabe'] ?? null,
+              amount,
+              requestsLastHour: 0,
+            });
+          }
           if (ml['fraud'] && (ml['fraud'] as Record<string, unknown>)['is_fraud'])
             throw new HttpsError('permission-denied', 'Solicitud marcada como sospechosa');
           if ((ml['default_probability'] as number) > 0.4)
@@ -178,7 +213,7 @@ export const requestLoan = onCall(
           });
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
-          console.warn('ML unavailable:', (e as Error).message);
+          console.warn('Underwriting/ML unavailable:', (e as Error).message);
         }
 
         await db.runTransaction(async (tx) => {
