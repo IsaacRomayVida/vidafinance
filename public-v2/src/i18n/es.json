@@ -759,6 +759,15 @@
   "onb_m_step3_rfc_ph": "13 caracteres alfanuméricos",
   "onb_m_step3_rfc_hint": "Tu Registro Federal de Contribuyentes (13 caracteres)",
 
+  "onb_m_kyc_h": "Verifica tu <em>identidad</em>.",
+  "onb_m_kyc_sub": "Completa la verificación con foto de tu identificación oficial y una selfie.",
+  "onb_m_kyc_btn": "Verificar Identidad",
+  "onb_m_kyc_pending": "Verificación en proceso...",
+  "onb_m_kyc_approved": "Identidad verificada",
+  "onb_m_kyc_rejected": "Verificación rechazada. Intenta de nuevo.",
+  "onb_m_kyc_retry": "Reintentar Verificación",
+  "onb_m_kyc_desc": "Necesitamos verificar tu identidad con una foto de tu INE/pasaporte y una selfie. Este proceso toma menos de 2 minutos.",
+
   "onb_m_step4_h": "Tu crédito <em>pre-aprobado</em>.",
   "onb_m_step4_sub": "Ingresa tu información laboral y bancaria.",
   "onb_m_step4_salary": "Salario mensual",
