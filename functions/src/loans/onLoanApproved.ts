@@ -1,5 +1,6 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import fetch from 'node-fetch';
 
 import { getQueue } from '../utils/queue';
 
@@ -45,19 +46,38 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       phone: emp['phone'],
       amount: after['amount'],
     });
-    await getQueue('vida-pdfs').add('loan_contract', {
-      type: 'loan_contract',
-      loanId,
-      employeeId: after['employeeId'],
-      employeeName: after['employeeName'],
-      employerName: after['employerName'],
-      amount: after['amount'],
-      total: after['total'],
-      fee: after['fee'],
-      dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
-    });
   } catch (e: unknown) {
     console.warn('Queue unavailable:', (e as Error).message);
+  }
+
+  // Call PDF Generator HTTP endpoint to create loan contract
+  try {
+    const pdfBaseUrl = process.env['PDF_GENERATOR_URL'];
+    if (!pdfBaseUrl) {
+      console.warn('PDF_GENERATOR_URL not configured — skipping contract generation');
+    } else {
+      const r = await fetch(pdfBaseUrl + '/contracts/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '',
+        },
+        body: JSON.stringify({
+          loanId,
+          employeeId: after['employeeId'],
+        }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        signal: (AbortSignal as any).timeout(30000),
+      });
+      if (!r.ok) {
+        console.warn(`PDF Generator returned ${r.status} for loan ${loanId}`);
+      } else {
+        const body = await r.json() as { contractUrl?: string };
+        console.log(`Contract generated for loan ${loanId}: ${body.contractUrl}`);
+      }
+    }
+  } catch (e: unknown) {
+    console.warn('PDF Generator unavailable — skipping contract generation:', (e as Error).message);
   }
 
   return null;

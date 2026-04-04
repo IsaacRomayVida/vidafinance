@@ -174,6 +174,59 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: "100kb" }));
 
+app.post("/contracts/generate", requireInternal, async (req, res) => {
+  const { loanId, employeeId } = req.body;
+  if (!loanId || !employeeId) {
+    return res.status(400).json({ error: "loanId and employeeId are required" });
+  }
+
+  try {
+    const loan = (await db.collection("loans").doc(loanId).get()).data();
+    if (!loan) return res.status(404).json({ error: "Loan not found" });
+
+    const cat = (
+      (Math.pow(1 + loan.fee / loan.amount, 365 / 30) - 1) * 100
+    ).toFixed(0);
+    const html = CONTRACT_TPL({
+      loanId: loanId.slice(0, 8).toUpperCase(),
+      issuedDate: new Date().toLocaleDateString("es-MX"),
+      dueDate: loan.dueDate.toDate().toLocaleDateString("es-MX"),
+      employeeName: loan.employeeName,
+      employerName: loan.employerName,
+      amount: fmt(loan.amount),
+      fee: fmt(loan.fee),
+      total: fmt(loan.total),
+      cat,
+      sofomRfc: process.env.SOFOM_RFC || "VIDA240101XXX",
+      sofomAddress:
+        process.env.SOFOM_ADDRESS ||
+        "Paseo de la Reforma 250 Piso 12, CDMX",
+    });
+    const pdf = await renderPDF(html);
+    const url = await upload(pdf, `loans/${loanId}/contrato_${Date.now()}.pdf`);
+
+    await db.collection("loans").doc(loanId).update({
+      contractUrl: url,
+      contractGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await db
+      .collection("employees")
+      .doc(employeeId)
+      .collection("documents")
+      .add({
+        type: "loan_contract",
+        loanId,
+        url,
+        generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+    res.json({ contractUrl: url });
+  } catch (err) {
+    console.error("Contract generation failed:", err);
+    res.status(500).json({ error: "Contract generation failed" });
+  }
+});
+
 app.get("/health", async (req, res) => {
   const redisOk = await redis
     .ping()
