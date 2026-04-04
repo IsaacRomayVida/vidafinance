@@ -134,6 +134,77 @@ app.post('/webhooks/conekta', async (req, res) => {
   }
 });
 
+// ── Create checkout (Conekta) ───────────────────────────────────────
+app.post('/create-checkout', requireInternal, async (req, res) => {
+  const { loanId, amount, employeeId, employeeName, concept } = req.body;
+  if (!loanId || !amount || !employeeId) {
+    return res.status(400).json({ error: 'Missing required fields: loanId, amount, employeeId' });
+  }
+
+  const apiKey = process.env.CONEKTA_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Conekta API key not configured' });
+  }
+
+  try {
+    const fetch = require('node-fetch');
+    const orderPayload = {
+      currency: 'MXN',
+      customer_info: { name: employeeName || 'Empleado', email: `${employeeId}@vida.internal` },
+      line_items: [{
+        name: concept || `Pago préstamo ${loanId}`,
+        unit_price: Math.round(amount * 100),
+        quantity: 1,
+      }],
+      checkout: {
+        type: 'Integration',
+        allowed_payment_methods: ['card', 'cash', 'bank_transfer'],
+        expires_at: Math.floor((Date.now() + 24 * 60 * 60 * 1000) / 1000),
+      },
+      metadata: { loanId, employeeId },
+    };
+
+    const conektaRes = await fetch('https://api.conekta.io/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/vnd.conekta-v2.2.0+json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(orderPayload),
+    });
+
+    if (!conektaRes.ok) {
+      const errBody = await conektaRes.text();
+      await db.collection('incident_log').add({
+        source: 'create-checkout',
+        loanId,
+        error: errBody,
+        ts: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return res.status(502).json({ error: 'Conekta order creation failed', details: errBody });
+    }
+
+    const order = await conektaRes.json();
+    const paymentUrl = order.checkout?.url;
+    const orderId = order.id;
+
+    if (!paymentUrl || !orderId) {
+      return res.status(502).json({ error: 'Invalid Conekta response: missing checkout URL or order ID' });
+    }
+
+    res.json({ paymentUrl, orderId });
+  } catch (err) {
+    await db.collection('incident_log').add({
+      source: 'create-checkout',
+      loanId,
+      error: err.message,
+      ts: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Internal repayment (from SoftCrédito payroll deduction sync) ────
 app.post('/internal/repayment', requireInternal, async (req, res) => {
   const { loanId, employeeId, amount, ref, method } = req.body;
