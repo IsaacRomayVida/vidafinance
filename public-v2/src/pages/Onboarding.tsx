@@ -170,7 +170,12 @@ export function Onboarding() {
   const curpDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidatedCurp = useRef('');
 
-  const totalSteps = role === 'employer' ? 7 : role === 'employee' ? 6 : 0;
+  // KYC verification state
+  const [kycStatus, setKycStatus] = useState<'not_started' | 'pending_review' | 'approved' | 'rejected'>('not_started');
+  const [metamapVerificationId, setMetamapVerificationId] = useState('');
+  const [metamapIdentityId, setMetamapIdentityId] = useState('');
+
+  const totalSteps = role === 'employer' ? 7 : role === 'employee' ? 7 : 0;
 
   const goForward = useCallback((toStep: number) => {
     setDirection('right');
@@ -286,6 +291,29 @@ export function Onboarding() {
     }
   };
 
+  // -- MetaMap KYC verification --
+  const startKYC = () => {
+    const metamapWidget = new (window as any).MetamapWidget({
+      clientId: '69c5763020d348c911b0a852',
+      flowId: '69d108faeddcd073bc64de62',
+      metadata: {
+        curp: memData.curp,
+      },
+    });
+    metamapWidget.mount();
+
+    metamapWidget.on('metamap:userFinishedSdk', ({ identityId, verificationId }: { identityId: string; verificationId: string }) => {
+      setMetamapVerificationId(verificationId);
+      setMetamapIdentityId(identityId);
+      setKycStatus('pending_review');
+      goForward(5);
+    });
+
+    metamapWidget.on('metamap:exitedSdk', () => {
+      // User closed without completing — stay on current step
+    });
+  };
+
   // -- Employer account creation --
   const createEmployerAccount = async () => {
     setCreating(true);
@@ -350,12 +378,16 @@ export function Onboarding() {
         bankClabe: memData.bankClabe,
         creditLimit,
         availableCredit: creditLimit,
+        kycStatus: kycStatus === 'not_started' ? 'not_started' : 'pending_review',
+        ...(metamapVerificationId ? { metamapVerificationId } : {}),
+        ...(metamapIdentityId ? { metamapIdentityId } : {}),
+        ...(metamapVerificationId ? { kycStartedAt: serverTimestamp() } : {}),
         createdAt: serverTimestamp(),
       });
       await updateDoc(doc(db, 'employers', memData.employerId), {
         totalEmployees: increment(1),
       });
-      goForward(6);
+      goForward(7);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
     } finally {
@@ -385,8 +417,9 @@ export function Onboarding() {
         return age >= 18 && age <= 65;
       }
       if (step === 3) return curpStatus === 'valid' && RFC_REGEX.test(memData.rfc.trim());
-      if (step === 4) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && validateCLABE(memData.bankClabe);
-      if (step === 5) return memData.password.length >= 6 && memData.terms;
+      if (step === 4) return kycStatus === 'pending_review' || kycStatus === 'approved';
+      if (step === 5) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && validateCLABE(memData.bankClabe);
+      if (step === 6) return memData.password.length >= 6 && memData.terms;
     }
     return false;
   };
@@ -394,7 +427,7 @@ export function Onboarding() {
   const handleNext = () => {
     if (role === 'employer' && step === 6) {
       createEmployerAccount();
-    } else if (role === 'employee' && step === 5) {
+    } else if (role === 'employee' && step === 6) {
       createEmployeeAccount();
     } else {
       goForward(step + 1);
@@ -405,12 +438,12 @@ export function Onboarding() {
   const progressPct = totalSteps > 0 ? ((step) / totalSteps) * 100 : 0;
 
   // Is this a final success step?
-  const isFinalStep = (role === 'employer' && step === 7) || (role === 'employee' && step === 6);
+  const isFinalStep = (role === 'employer' && step === 7) || (role === 'employee' && step === 7);
 
   // Action button config
   const getActionLabel = () => {
     if (role === 'employer' && step === 6) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
-    if (role === 'employee' && step === 5) return creating ? t('onb_m_step5_creating') : t('onb_m_step5_btn');
+    if (role === 'employee' && step === 6) return creating ? t('onb_m_step5_creating') : t('onb_m_step5_btn');
     return t('onb_next');
   };
 
@@ -849,9 +882,67 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 4: Salary + pay frequency + tenure + CLABE + credit preview */}
+      {/* Step 4: KYC verification via MetaMap */}
       <div className={stageClass(4)}>
         {step === 4 && (
+          <div className="onb-content">
+            <h1 className="onb-h"><RichText html={t('onb_m_kyc_h')} /></h1>
+            <p className="onb-sub">{t('onb_m_kyc_sub')}</p>
+
+            {kycStatus === 'not_started' && (
+              <div className="onb-kyc-card">
+                <div className="onb-kyc-icon">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent, #2d6a4f)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 12l2 2 4-4" />
+                    <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" />
+                  </svg>
+                </div>
+                <p className="onb-kyc-desc">{t('onb_m_kyc_desc')}</p>
+                <button className="onb-btn" onClick={startKYC}>
+                  {t('onb_m_kyc_btn')}
+                </button>
+              </div>
+            )}
+
+            {kycStatus === 'pending_review' && (
+              <div className="onb-kyc-card">
+                <div className="onb-kyc-spinner" />
+                <p className="onb-kyc-status">{t('onb_m_kyc_pending')}</p>
+              </div>
+            )}
+
+            {kycStatus === 'approved' && (
+              <div className="onb-kyc-card">
+                <div className="onb-check-circle" style={{ width: 56, height: 56, margin: '0 auto 16px' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                <p className="onb-kyc-status success">{t('onb_m_kyc_approved')}</p>
+              </div>
+            )}
+
+            {kycStatus === 'rejected' && (
+              <div className="onb-kyc-card">
+                <div className="onb-kyc-icon rejected">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#c1121f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M15 9l-6 6M9 9l6 6" />
+                  </svg>
+                </div>
+                <p className="onb-kyc-status error">{t('onb_m_kyc_rejected')}</p>
+                <button className="onb-btn" onClick={() => { setKycStatus('not_started'); startKYC(); }}>
+                  {t('onb_m_kyc_retry')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Step 5: Salary + pay frequency + tenure + CLABE + credit preview */}
+      <div className={stageClass(5)}>
+        {step === 5 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step4_sub')}</p>
@@ -935,9 +1026,9 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 5: Password + terms */}
-      <div className={stageClass(5)}>
-        {step === 5 && (
+      {/* Step 6: Password + terms */}
+      <div className={stageClass(6)}>
+        {step === 6 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step5_sub')}</p>
@@ -968,8 +1059,8 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 6: Employee success */}
-      <div className={stageClass(6)}>
+      {/* Step 7: Employee success */}
+      <div className={stageClass(7)}>
         <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">

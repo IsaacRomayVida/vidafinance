@@ -632,6 +632,17 @@ table tr:last-child td{border-bottom:none}
 .onb-approved-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(36,122,110,0.06);padding:8px 20px;border-radius:12px;font-size:11px;font-weight:700;color:var(--success);letter-spacing:2px;text-transform:uppercase;margin-bottom:24px}
 .onb-approved-dot{width:6px;height:6px;background:var(--success);border-radius:50%;box-shadow:0 0 8px rgba(36,122,110,0.4)}
 
+/* KYC verification card */
+.onb-kyc-card{text-align:center;padding:40px 24px;border:1px solid rgba(25,68,69,0.08);border-radius:16px;background:rgba(255,255,255,0.6);backdrop-filter:blur(8px);margin-top:24px}
+.onb-kyc-icon{margin:0 auto 20px}
+.onb-kyc-icon.rejected{opacity:.9}
+.onb-kyc-desc{font-size:14px;color:var(--t2);line-height:1.6;margin:0 0 28px;max-width:360px;margin-left:auto;margin-right:auto}
+.onb-kyc-status{font-size:16px;font-weight:600;color:var(--t1);margin:16px 0 0}
+.onb-kyc-status.success{color:var(--success)}
+.onb-kyc-status.error{color:var(--danger,#c1121f)}
+.onb-kyc-spinner{width:40px;height:40px;border:3px solid rgba(25,68,69,0.08);border-top-color:var(--success);border-radius:50%;margin:0 auto;animation:kycSpin 1s linear infinite}
+@keyframes kycSpin{to{transform:rotate(360deg)}}
+
 /* Confetti */
 .confetti-piece{position:fixed;width:8px;height:8px;border-radius:2px;z-index:600;animation:confettiFall 3s ease-out forwards;pointer-events:none}
 @keyframes confettiFall{0%{transform:translateY(0) rotate(0deg) scale(1);opacity:1}100%{transform:translateY(100vh) rotate(720deg) scale(0);opacity:0}}
