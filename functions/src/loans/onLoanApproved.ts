@@ -3,6 +3,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
 
 import { getQueue } from '../utils/queue';
+import { notifyLoanEvent } from '../utils/notify';
 
 export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) => {
   const before = event.data!.before.data();
@@ -176,6 +177,9 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
   } catch (e: unknown) {
     console.warn('PDF Generator unavailable — skipping contract generation:', (e as Error).message);
   }
+
+  // Notify employee of disbursement
+  await notifyLoanEvent('loan_disbursed', { employeePhone: emp['phone'], employeeEmail: emp['email'], employeeName: after['employeeName'], loanAmount: after['amount'] }).catch(() => {});
 
   return null;
 });
