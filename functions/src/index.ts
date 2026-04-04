@@ -1,4 +1,5 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { beforeUserCreated } from 'firebase-functions/v2/identity';
@@ -180,7 +181,7 @@ export const requestLoan = onCall(
           if (!allowed) throw new HttpsError('resource-exhausted', 'Too many loan requests today');
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
-          console.warn('Redis rate limit unavailable:', (e as Error).message);
+          logger.warn('Redis rate limit unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
         if (typeof amount !== 'number' || amount < 500 || amount > 5000)
@@ -237,10 +238,10 @@ export const requestLoan = onCall(
             if (uwRes.ok) {
               uwResult = await uwRes.json() as Record<string, unknown>;
               uwDecision = uwResult['decision'] as string;
-              console.log('UW pipeline:', uwDecision, uwResult['correlationId']);
+              logger.info('UW pipeline', { decision: uwDecision, correlationId: uwResult['correlationId'], service: 'functions' });
             }
           } catch (e: unknown) {
-            console.warn('UW service unavailable, fallback to inline ML:', (e as Error).message);
+            logger.warn('UW service unavailable, fallback to inline ML', { error: (e as Error).message, service: 'functions' });
           }
         }
 
@@ -266,7 +267,7 @@ export const requestLoan = onCall(
           });
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
-          console.warn('ML unavailable:', (e as Error).message);
+          logger.warn('ML unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
         await db.runTransaction(async (tx) => {
@@ -434,7 +435,7 @@ export const approveEmployer = onCall(
           }
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
-          console.warn('ML scoring unavailable:', (e as Error).message);
+          logger.warn('ML scoring unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
         try {
@@ -453,7 +454,7 @@ export const approveEmployer = onCall(
             }),
           });
         } catch (e: unknown) {
-          console.warn('SoftCrédito registration warning:', (e as Error).message);
+          logger.warn('SoftCrédito registration warning', { error: (e as Error).message, service: 'functions' });
         }
 
         try {
@@ -466,7 +467,7 @@ export const approveEmployer = onCall(
             employerCode: emp['employerCode'],
           });
         } catch (e: unknown) {
-          console.warn('Notification queue unavailable:', (e as Error).message);
+          logger.warn('Notification queue unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
         try {
@@ -671,7 +672,7 @@ export const updateEmployerTier = onCall(
 export const onEmployerDocCreated = onDocumentCreated('employers/{uid}', async (event) => {
   const uid = event.params['uid'];
   await admin.auth().setCustomUserClaims(uid, { role: 'employer_admin' });
-  console.log(`Set employer_admin claim for uid=${uid}`);
+  logger.info('Set employer_admin claim', { uid, service: 'functions' });
   return null;
 });
 
@@ -873,10 +874,10 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         status: 'completed',
         completedAt: FieldValue.serverTimestamp(),
       });
-      console.log('Loan', loanId, 'disbursed via SoftCrédito, ref:', result.ref);
+      logger.info('Loan disbursed via SoftCrédito', { loanId, ref: result.ref, service: 'functions' });
       await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId });
     } catch (e: unknown) {
-      console.warn('SoftCrédito disbursement failed, falling back to stub:', (e as Error).message);
+      logger.warn('SoftCrédito disbursement failed, falling back to stub', { error: (e as Error).message, loanId, service: 'functions' });
       sendSlackAlert('Disbursement failed for loan ' + loanId, 'critical').catch(() => {});
       // Fallback to stub on failure
       try {
@@ -890,10 +891,10 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           status: 'completed',
           completedAt: FieldValue.serverTimestamp(),
         });
-        console.log('Loan', loanId, 'auto-disbursed (stub fallback)');
+        logger.info('Loan auto-disbursed (stub fallback)', { loanId, service: 'functions' });
         await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { mode: 'stub_fallback', error: (e as Error).message } });
       } catch (stubErr: unknown) {
-        console.warn('Stub fallback error:', (stubErr as Error).message);
+        logger.warn('Stub fallback error', { error: (stubErr as Error).message, loanId, service: 'functions' });
       }
     }
   } else {
@@ -908,10 +909,10 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         status: 'completed',
         completedAt: FieldValue.serverTimestamp(),
       });
-      console.log('Loan', loanId, 'auto-disbursed (stub mode)');
+      logger.info('Loan auto-disbursed (stub mode)', { loanId, service: 'functions' });
       await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { mode: 'stub' } });
     } catch (e: unknown) {
-      console.warn('Stub disbursement error:', (e as Error).message);
+      logger.warn('Stub disbursement error', { error: (e as Error).message, loanId, service: 'functions' });
     }
   }
 
@@ -938,12 +939,12 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           await db.collection('loans').doc(loanId).update({
             softcreditoDeductionId: result['deductionId'] ?? null,
           });
-          console.log('Payroll deduction registered for loan', loanId);
+          logger.info('Payroll deduction registered', { loanId, service: 'functions' });
         }
       });
     }
   } catch (e: unknown) {
-    console.warn('Payroll deduction registration failed:', (e as Error).message);
+    logger.warn('Payroll deduction registration failed', { error: (e as Error).message, loanId, service: 'functions' });
   }
 
   return null;
@@ -1137,7 +1138,7 @@ export const queueHealthCheck = onSchedule(
         }
       }
     } catch (e: unknown) {
-      console.warn('Queue health check failed:', (e as Error).message);
+      logger.warn('Queue health check failed', { error: (e as Error).message, service: 'functions' });
     }
   }
 );

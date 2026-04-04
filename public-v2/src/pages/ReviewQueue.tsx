@@ -110,8 +110,8 @@ export function ReviewQueue() {
         const functions = getFunctions();
         const fn = httpsCallable(functions, 'submitReviewDecision');
         await fn({ reviewId, decision, notes: notesMap[reviewId] || undefined });
-      } catch (e: any) {
-        alert('Error: ' + (e?.message || 'Unknown error'));
+      } catch (e: unknown) {
+        alert('Error: ' + ((e as Error)?.message || 'Unknown error'));
       } finally {
         setActionLoading(null);
       }

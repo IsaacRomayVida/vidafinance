@@ -293,6 +293,7 @@ export function Onboarding() {
 
   // -- MetaMap KYC verification --
   const startKYC = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const metamapWidget = new (window as any).MetamapWidget({
       clientId: '69c5763020d348c911b0a852',
       flowId: '69d108faeddcd073bc64de62',
