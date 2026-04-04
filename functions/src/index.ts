@@ -13,6 +13,7 @@ import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { checkRateLimit } from './utils/rateLimiter';
 import { notifyLoanEvent } from './utils/notify';
+import { sendSlackAlert } from './utils/slackAlert';
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
@@ -831,6 +832,7 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId });
     } catch (e: unknown) {
       console.warn('SoftCrédito disbursement failed, falling back to stub:', (e as Error).message);
+      sendSlackAlert('Disbursement failed for loan ' + loanId, 'critical').catch(() => {});
       // Fallback to stub on failure
       try {
         await db.collection('loans').doc(loanId).update({
@@ -953,6 +955,10 @@ export const dailyLoanCheck = onSchedule(
           targetId: doc.id,
         });
       } catch (_) { /* non-critical */ }
+    }
+
+    if (overdueSnap.size > 0) {
+      sendSlackAlert('New overdue loans detected: ' + overdueSnap.size, 'warning').catch(() => {});
     }
 
     const tomorrow = Timestamp.fromMillis(Date.now() + 25 * 60 * 60 * 1000);
