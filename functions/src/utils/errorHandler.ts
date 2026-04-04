@@ -1,5 +1,6 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
+import { sendSlackAlert } from './slackAlert';
 
 export enum VidaErrorCode {
   LOAN_LIMIT_EXCEEDED = 'LOAN_LIMIT_EXCEEDED',
@@ -61,6 +62,7 @@ export function handleError(error: unknown, context: ErrorContext): never {
   }
 
   // Generic catch-all — never expose internal details to clients.
+  sendSlackAlert(`${context.functionName} failed: ${error instanceof Error ? error.message : String(error)}`, 'critical').catch(() => {});
   throw new HttpsError('internal', 'An unexpected error occurred. Please try again.');
 }
 
