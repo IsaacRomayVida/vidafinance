@@ -709,6 +709,33 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
     });
     console.log('Loan', loanId, 'auto-disbursed (stub mode)');
     await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId });
+
+    // Register payroll deduction with SoftCrédito after successful disbursement
+    try {
+      const scRes = await fetch(process.env['SOFTCREDITO_ADAPTER_URL'] + '/internal/register-deduction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '',
+        },
+        body: JSON.stringify({
+          loanId,
+          employeeId: after['employeeId'],
+          employerId: after['employerId'],
+          amount: after['total'],
+          dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp)?.toDate?.()?.toISOString() ?? null,
+        }),
+      });
+      const scData = await scRes.json() as { deductionId?: string };
+      if (scData.deductionId) {
+        await db.collection('loans').doc(loanId).update({
+          softcreditoDeductionId: scData.deductionId,
+        });
+        console.log('Loan', loanId, 'payroll deduction registered:', scData.deductionId);
+      }
+    } catch (e: unknown) {
+      console.warn('SoftCrédito deduction registration warning:', (e as Error).message);
+    }
   } catch (e: unknown) {
     console.warn('Stub disbursement error:', (e as Error).message);
   }
