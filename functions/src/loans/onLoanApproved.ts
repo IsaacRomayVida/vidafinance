@@ -103,6 +103,37 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
     }
   }
 
+  // Register payroll deduction with SoftCrédito
+  try {
+    const scUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
+    const secret = process.env['INTERNAL_SECRET'] ?? '';
+    if (scUrl && secret) {
+      await fetch(scUrl + '/internal/register-deduction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+        body: JSON.stringify({
+          loanId,
+          employeeId: after['employeeId'],
+          employerId: after['employerId'],
+          amount: after['total'],
+          dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
+        }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        signal: (AbortSignal as any).timeout(10000),
+      }).then(async (r) => {
+        if (r.ok) {
+          const result = await r.json() as Record<string, unknown>;
+          await db.collection('loans').doc(loanId).update({
+            softcreditoDeductionId: result['deductionId'] ?? null,
+          });
+          console.log('Payroll deduction registered for loan', loanId);
+        }
+      });
+    }
+  } catch (e: unknown) {
+    console.warn('Payroll deduction registration failed:', (e as Error).message);
+  }
+
   try {
     await getQueue('vida-notifications').add('loan_approved', {
       type: 'loan_approved',
