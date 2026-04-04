@@ -83,6 +83,23 @@ export async function notifyLoanEvent(event: string, data: Record<string, unknow
       break;
     }
 
+    case 'loan_rejected': {
+      if (employeePhone) {
+        await sendSMS(
+          employeePhone,
+          `Hi ${employeeName}, unfortunately your loan request for ${loanAmount ?? 'the requested amount'} was not approved at this time.`,
+        );
+      }
+      if (employeeEmail) {
+        await sendEmail(
+          employeeEmail,
+          'Loan Request Update — Vida Finance',
+          `<p>Hi ${employeeName},</p><p>Unfortunately, your loan request for <strong>${loanAmount ?? 'the requested amount'}</strong> was not approved at this time.</p><p>— Vida Finance</p>`,
+        );
+      }
+      break;
+    }
+
     case 'loan_disbursed': {
       if (employeePhone) {
         await sendSMS(

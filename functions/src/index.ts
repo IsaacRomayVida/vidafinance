@@ -12,6 +12,7 @@ import { Queue } from 'bullmq';
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { getRedis } from './utils/redis';
+import { notifyLoanEvent } from './utils/notify';
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
@@ -388,6 +389,8 @@ export const approveEmployer = onCall(
           });
         } catch (_) { /* non-critical */ }
 
+        await notifyLoanEvent('employer_approved', { employerEmail: emp['email'], employerName: emp['companyName'] }).catch(() => {});
+
         return { success: true, approved: true };
       })
   )
@@ -636,6 +639,7 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
         after: { status: 'approved' },
       });
     } catch (_) { /* non-critical */ }
+    await notifyLoanEvent('loan_approved', { employeePhone: afterData['employeePhone'], employeeEmail: afterData['employeeEmail'], employeeName: afterData['employeeName'], loanAmount: afterData['amount'] }).catch(() => {});
   }
 
   if (beforeData['status'] === 'pending' && afterData['status'] === 'rejected') {
@@ -652,6 +656,7 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
         after: { status: 'rejected' },
       });
     } catch (_) { /* non-critical */ }
+    await notifyLoanEvent('loan_rejected', { employeePhone: afterData['employeePhone'], employeeEmail: afterData['employeeEmail'], employeeName: afterData['employeeName'], loanAmount: afterData['amount'] }).catch(() => {});
   }
 
   if (beforeData['status'] === 'approved' && afterData['status'] === 'paid') {
@@ -774,6 +779,8 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       console.warn('Stub disbursement error:', (e as Error).message);
     }
   }
+
+  await notifyLoanEvent('loan_disbursed', { employeePhone: emp['phone'], employeeEmail: emp['email'], employeeName: after['employeeName'], loanAmount: after['amount'] }).catch(() => {});
 
   return null;
 });
