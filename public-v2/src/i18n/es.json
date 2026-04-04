@@ -840,5 +840,26 @@
   "pay_status_pending": "Pendiente",
   "pay_status_processing": "Procesando",
   "pay_status_paid": "Pagado",
-  "pay_status_completed": "Pagado"
+  "pay_status_completed": "Pagado",
+
+  "wiz_title": "Solicitar Préstamo",
+  "wiz_subtitle": "Hola {{name}}, completa los pasos para solicitar tu préstamo.",
+  "wiz_step_1_label": "Paso 1 de 4",
+  "wiz_step_1_title": "¿Cuánto necesitas?",
+  "wiz_step_2_label": "Paso 2 de 4",
+  "wiz_step_2_title": "Condiciones del préstamo",
+  "wiz_step_3_label": "Paso 3 de 4",
+  "wiz_step_3_title": "¿Para qué es el préstamo?",
+  "wiz_step_3_desc": "Selecciona el propósito de tu solicitud.",
+  "wiz_step_4_label": "Paso 4 de 4",
+  "wiz_step_4_title": "Revisa y confirma",
+  "wiz_monthly_fee": "Comisión mensual",
+  "wiz_payroll_deduction": "Deducción de nómina",
+  "wiz_next": "Continuar",
+  "wiz_back": "Atrás",
+  "wiz_step_indicator": "Paso {{current}} de {{total}}",
+  "wiz_success_title": "¡Solicitud enviada!",
+  "wiz_success_desc": "Tu solicitud de préstamo ha sido recibida y está en revisión. Te notificaremos cuando sea aprobada.",
+  "wiz_success_ref": "Número de referencia",
+  "wiz_success_back": "Volver al panel"
 }
