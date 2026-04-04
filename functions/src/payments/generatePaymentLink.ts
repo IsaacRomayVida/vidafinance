@@ -66,7 +66,16 @@ export const generatePaymentLink = onCall(
 
           const internalSecret = process.env['INTERNAL_SECRET'] ?? process.env['INTERNAL_API_SECRET'] ?? '';
 
-          const response = await fetch(`${paymentServerUrl}/payment-links/oxxo`, {
+          const employeeId = loanUserId;
+          const employeeName =
+            (loan['borrowerSnapshot'] as Record<string, unknown> | undefined)?.['fullName'] ??
+            (loan['employeeName'] as string | undefined) ??
+            '';
+          const amount =
+            (loan['principalAmount'] as number | undefined) ?? (loan['amount'] as number);
+          const concept = `Pago préstamo ${input.loanId}`;
+
+          const response = await fetch(`${paymentServerUrl}/create-checkout`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -74,12 +83,10 @@ export const generatePaymentLink = onCall(
             },
             body: JSON.stringify({
               loanId: input.loanId,
-              amount: (loan['principalAmount'] as number | undefined) ?? (loan['amount'] as number),
-              borrowerName:
-                (loan['borrowerSnapshot'] as Record<string, unknown> | undefined)?.['fullName'] ??
-                loan['employeeName'],
-              borrowerEmail: auth.email,
-              expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+              amount,
+              employeeId,
+              employeeName,
+              concept,
             }),
           });
 
