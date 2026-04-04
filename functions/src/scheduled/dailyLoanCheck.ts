@@ -10,6 +10,32 @@ export const dailyLoanCheck = onSchedule(
     const db = getFirestore();
     const now = Timestamp.now();
 
+    // ── Sync repayments from SoftCrédito payroll deductions ──────────
+    let repaymentsSynced = 0;
+    let repaymentSyncError: string | null = null;
+    try {
+      const adapterUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
+      if (adapterUrl) {
+        const resp = await fetch(adapterUrl + '/internal/sync-repayments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '',
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          signal: (AbortSignal as any).timeout(30_000),
+        });
+        if (resp.ok) {
+          const body = (await resp.json()) as { synced?: number };
+          repaymentsSynced = body.synced ?? 0;
+        } else {
+          repaymentSyncError = `HTTP ${resp.status}`;
+        }
+      }
+    } catch (err) {
+      repaymentSyncError = err instanceof Error ? err.message : 'unknown error';
+    }
+
     const overdueSnap = await db
       .collection('loans')
       .where('status', '==', 'active')
@@ -84,6 +110,8 @@ export const dailyLoanCheck = onSchedule(
       job: 'dailyLoanCheck',
       ranAt: now,
       overdueFound: overdueSnap.size,
+      repaymentsSynced,
+      ...(repaymentSyncError ? { repaymentSyncError } : {}),
       status: 'complete',
     });
   }
