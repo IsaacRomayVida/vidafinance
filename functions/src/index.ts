@@ -17,6 +17,7 @@ import { getRedis } from './utils/redis';
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
 export { generatePaymentLink } from './payments/generatePaymentLink';
 export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
+export { getSystemHealth } from './admin/getSystemHealth';
 
 initializeApp();
 const db = getFirestore();
