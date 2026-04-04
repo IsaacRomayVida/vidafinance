@@ -840,5 +840,26 @@
   "pay_status_pending": "Pending",
   "pay_status_processing": "Processing",
   "pay_status_paid": "Paid",
-  "pay_status_completed": "Paid"
+  "pay_status_completed": "Paid",
+
+  "wiz_title": "Request a Loan",
+  "wiz_subtitle": "Hi {{name}}, complete the steps to request your loan.",
+  "wiz_step_1_label": "Step 1 of 4",
+  "wiz_step_1_title": "How much do you need?",
+  "wiz_step_2_label": "Step 2 of 4",
+  "wiz_step_2_title": "Loan terms",
+  "wiz_step_3_label": "Step 3 of 4",
+  "wiz_step_3_title": "What is the loan for?",
+  "wiz_step_3_desc": "Select the purpose of your request.",
+  "wiz_step_4_label": "Step 4 of 4",
+  "wiz_step_4_title": "Review & confirm",
+  "wiz_monthly_fee": "Monthly fee",
+  "wiz_payroll_deduction": "Payroll deduction",
+  "wiz_next": "Continue",
+  "wiz_back": "Back",
+  "wiz_step_indicator": "Step {{current}} of {{total}}",
+  "wiz_success_title": "Request submitted!",
+  "wiz_success_desc": "Your loan request has been received and is under review. We'll notify you when it's approved.",
+  "wiz_success_ref": "Reference number",
+  "wiz_success_back": "Back to dashboard"
 }
