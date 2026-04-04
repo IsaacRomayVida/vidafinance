@@ -95,6 +95,38 @@ app.post('/webhooks/metamap', async (req, res) => {
   }
 });
 
+// ── Underwrite endpoint ─────────────────────────────────────────────
+app.post('/underwrite', requireInternal, async (req, res) => {
+  const { runPipeline } = require('./src/decision-engine');
+  const { applicant, employer, loanAmount } = req.body;
+
+  if (!applicant || !employer) {
+    return res.status(400).json({ error: 'Missing applicant or employer data' });
+  }
+
+  try {
+    const result = await runPipeline(
+      { applicant, employer },
+      { logger: console, db, correlationId: req.body.correlationId }
+    );
+
+    res.json({
+      decision: result.decision,
+      reason: result.reason,
+      correlationId: result.correlationId,
+      durationMs: result.durationMs,
+      lastStage: result.lastStage,
+      stagesExecuted: result.stagesExecuted,
+      cost: result.cost,
+      stages: result.stages,
+      slaHours: result.slaHours || null,
+    });
+  } catch (err) {
+    console.error('Underwriting pipeline error:', err.message);
+    res.status(500).json({ error: 'Pipeline error', message: err.message });
+  }
+});
+
 if (require.main === module) {
   app.listen(process.env.PORT || 3003, () => console.log('vida-underwriting-service on', process.env.PORT || 3003));
 }
