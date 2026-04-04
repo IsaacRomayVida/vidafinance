@@ -6,7 +6,8 @@ tsconfig.test.json
 *.log
 .env
 .env.local
-functions/.env
+!functions/.env
+functions/.env.local
 functions/node_modules/
 .DS_Store
 service-account.json
