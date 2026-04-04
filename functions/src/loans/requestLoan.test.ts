@@ -41,6 +41,12 @@ jest.mock('bullmq', () => ({
   })),
 }));
 
+const mockFetch = jest.fn();
+jest.mock('node-fetch', () => ({
+  __esModule: true,
+  default: (...args: unknown[]) => mockFetch(...args),
+}));
+
 import { getFirestore } from 'firebase-admin/firestore';
 import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
@@ -49,6 +55,7 @@ import {
   handleRequestLoan,
   _resetRedisForTesting,
   TERMS_VERSION,
+  fetchBureauScore,
 } from './requestLoan';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
@@ -70,6 +77,9 @@ const mockBorrower = {
   employerId: 'employer-abc',
   fullName: 'Juan García López',
   curpHash: 'abc123hash',
+  curp: 'GARL850101HDFRPN09',
+  rfc: 'GARL850101AB1',
+  dateOfBirth: '1985-01-01',
   monthlySalary: 20000,
   payFrequency: 'biweekly',
   employmentTenureMonths: 24,
@@ -160,6 +170,11 @@ function buildMockDb({
 beforeEach(() => {
   jest.clearAllMocks();
   _resetRedisForTesting();
+  process.env['SOFTCREDITO_ADAPTER_URL'] = 'http://localhost:3004';
+  mockFetch.mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve({ bureau_score: 720, active_defaults: 0, days_past_due: 0 }),
+  });
   (getFirestore as jest.Mock).mockReturnValue(buildMockDb());
 });
 
@@ -549,5 +564,111 @@ describe('handleRequestLoan', () => {
     await handleRequestLoan(authRequest);
 
     expect(mockExpire).not.toHaveBeenCalled();
+  });
+
+  // ── Credit Bureau Check ────────────────────────────────────────────────────
+
+  it('calls SoftCrédito bureau/query and stores bureau fields on loan document', async () => {
+    const db = buildMockDb();
+    (getFirestore as jest.Mock).mockReturnValue(db);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ bureau_score: 680, active_defaults: 2, days_past_due: 45 }),
+    });
+
+    await handleRequestLoan(authRequest);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:3004/bureau/query',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          curp: mockBorrower.curp,
+          fullName: mockBorrower.fullName,
+          dateOfBirth: mockBorrower.dateOfBirth,
+          rfc: mockBorrower.rfc,
+        }),
+      })
+    );
+
+    expect(db.loanDocRef.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bureauScore: 680,
+        bureauDefaults: 2,
+        bureauDaysPastDue: 45,
+      })
+    );
+  });
+
+  it('continues with null bureau fields when SoftCrédito is unavailable', async () => {
+    const db = buildMockDb();
+    (getFirestore as jest.Mock).mockReturnValue(db);
+
+    mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+    const result = await handleRequestLoan(authRequest);
+
+    expect(result.status).toBe('pending');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Credit bureau check unavailable — continuing without bureau data',
+      expect.objectContaining({ error: 'ECONNREFUSED', userId: 'user-123' })
+    );
+    expect(db.loanDocRef.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bureauScore: null,
+        bureauDefaults: null,
+        bureauDaysPastDue: null,
+      })
+    );
+  });
+
+  it('continues with null bureau fields when bureau returns non-OK status', async () => {
+    const db = buildMockDb();
+    (getFirestore as jest.Mock).mockReturnValue(db);
+
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 503 });
+
+    const result = await handleRequestLoan(authRequest);
+
+    expect(result.status).toBe('pending');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Credit bureau check unavailable — continuing without bureau data',
+      expect.objectContaining({ error: 'Bureau query failed with status 503' })
+    );
+  });
+});
+
+// ─── fetchBureauScore unit tests ─────────────────────────────────────────────
+
+describe('fetchBureauScore', () => {
+  it('throws when SOFTCREDITO_ADAPTER_URL is not set', async () => {
+    delete process.env['SOFTCREDITO_ADAPTER_URL'];
+
+    await expect(
+      fetchBureauScore({ curp: 'X', fullName: 'X', dateOfBirth: 'X', rfc: 'X' })
+    ).rejects.toThrow('SOFTCREDITO_ADAPTER_URL not configured');
+  });
+
+  it('parses bureau response correctly', async () => {
+    process.env['SOFTCREDITO_ADAPTER_URL'] = 'http://localhost:3004';
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ bureau_score: 750, active_defaults: 1, days_past_due: 30 }),
+    });
+
+    const result = await fetchBureauScore({
+      curp: 'GARL850101HDFRPN09',
+      fullName: 'Juan García López',
+      dateOfBirth: '1985-01-01',
+      rfc: 'GARL850101AB1',
+    });
+
+    expect(result).toEqual({
+      bureauScore: 750,
+      bureauDefaults: 1,
+      bureauDaysPastDue: 30,
+    });
   });
 });

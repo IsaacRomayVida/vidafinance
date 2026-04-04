@@ -5,6 +5,7 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 import { z } from 'zod';
+import fetch from 'node-fetch';
 
 // ─── Input Schema ─────────────────────────────────────────────────────────────
 
@@ -116,6 +117,41 @@ export function getUnderwritingQueue(): Queue {
       ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {}),
     },
   });
+}
+
+// ─── Credit Bureau (SoftCrédito) ─────────────────────────────────────────────
+
+export interface BureauResult {
+  bureauScore: number | null;
+  bureauDefaults: number | null;
+  bureauDaysPastDue: number | null;
+}
+
+export async function fetchBureauScore(params: {
+  curp: string;
+  fullName: string;
+  dateOfBirth: string;
+  rfc: string;
+}): Promise<BureauResult> {
+  const baseUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
+  if (!baseUrl) {
+    throw new Error('SOFTCREDITO_ADAPTER_URL not configured');
+  }
+  const res = await fetch(`${baseUrl}/bureau/query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    timeout: 10_000,
+  });
+  if (!res.ok) {
+    throw new Error(`Bureau query failed with status ${res.status}`);
+  }
+  const data = (await res.json()) as Record<string, unknown>;
+  return {
+    bureauScore: (data['bureau_score'] as number) ?? null,
+    bureauDefaults: (data['active_defaults'] as number) ?? null,
+    bureauDaysPastDue: (data['days_past_due'] as number) ?? null,
+  };
 }
 
 // ─── Core Handler (exported for testing) ─────────────────────────────────────
@@ -241,7 +277,24 @@ export async function handleRequestLoan(request: {
     );
   }
 
-  // 9. Write loan document to Firestore
+  // 9. Credit bureau check via SoftCrédito (non-blocking — failure logged, not thrown)
+  let bureauResult: BureauResult = { bureauScore: null, bureauDefaults: null, bureauDaysPastDue: null };
+  try {
+    bureauResult = await fetchBureauScore({
+      curp: borrower['curp'] as string,
+      fullName: borrower['fullName'] as string,
+      dateOfBirth: borrower['dateOfBirth'] as string,
+      rfc: borrower['rfc'] as string,
+    });
+  } catch (e: unknown) {
+    logger.warn('Credit bureau check unavailable — continuing without bureau data', {
+      error: (e as Error).message,
+      userId: uid,
+      service: 'functions',
+    });
+  }
+
+  // 10. Write loan document to Firestore
   const loanRef = db.collection('loans').doc();
   const loanId = loanRef.id;
   const correlationId = randomUUID();
@@ -280,6 +333,9 @@ export async function handleRequestLoan(request: {
       employerName: employer['name'] as string,
       employerIndustry: employer['industry'] as string,
     },
+    bureauScore: bureauResult.bureauScore,
+    bureauDefaults: bureauResult.bureauDefaults,
+    bureauDaysPastDue: bureauResult.bureauDaysPastDue,
     bankAccountClabe: input.bankAccountClabe,
     loanPurpose: input.loanPurpose ?? null,
     termsVersion: TERMS_VERSION,
@@ -288,7 +344,7 @@ export async function handleRequestLoan(request: {
     updatedAt: now,
   });
 
-  // 10. Dispatch to underwriting queue (non-blocking — failure logged, not thrown)
+  // 11. Dispatch to underwriting queue (non-blocking — failure logged, not thrown)
   try {
     const queue = getUnderwritingQueue();
     await queue.add('underwrite_loan', {
