@@ -7,6 +7,7 @@ import {
   orderBy,
   onSnapshot,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 
@@ -256,6 +257,46 @@ export function MyLoans() {
   );
 }
 
+function PayButton({ loanId, t }: { loanId: string; t: ReturnType<typeof useTranslation>['t'] }) {
+  const [loading, setLoading] = useState(false);
+  const [payUrl, setPayUrl] = useState('');
+  const [error, setError] = useState('');
+
+  const handlePay = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (payUrl) {
+      window.open(payUrl, '_blank');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const functions = getFunctions();
+      const genPayLink = httpsCallable<{ loanId: string }, { paymentUrl: string }>(functions, 'generatePaymentLink');
+      const result = await genPayLink({ loanId });
+      setPayUrl(result.data.paymentUrl);
+      window.open(result.data.paymentUrl, '_blank');
+    } catch {
+      setError(t('dash_pay_error', 'Error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <button
+        onClick={handlePay}
+        disabled={loading}
+        className="btn-sm btn-approve"
+      >
+        {loading ? <span className="spinner" /> : t('dash_pay_now', 'Pagar')}
+      </button>
+      {error && <span style={{ fontSize: 10, color: 'var(--danger)' }}>{error}</span>}
+    </div>
+  );
+}
+
 function LoanRow({
   loan,
   balance,
@@ -271,6 +312,9 @@ function LoanRow({
   onToggle: () => void;
   t: ReturnType<typeof useTranslation>['t'];
 }) {
+  const hasPending = repayments.some((r) => r.status === 'pending');
+  const hasProcessing = repayments.some((r) => r.status === 'processing');
+
   return (
     <>
       <tr
@@ -284,9 +328,21 @@ function LoanRow({
           </span>
         </td>
         <td>
-          <span className={`badge badge-${loan.status}`}>
-            {t(`status_${loan.status}`, loan.status)}
-          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+            <span className={`badge badge-${loan.status}`}>
+              {t(`status_${loan.status}`, loan.status)}
+            </span>
+            {hasPending && (
+              <span className="badge badge-pending" style={{ fontSize: 10 }}>
+                {t('pay_status_pending', 'Pending')}
+              </span>
+            )}
+            {hasProcessing && (
+              <span className="badge badge-approved" style={{ fontSize: 10 }}>
+                {t('pay_status_processing', 'Processing')}
+              </span>
+            )}
+          </div>
         </td>
         <td>{fmtDate(loan.disbursedAt)}</td>
         <td>{fmtDate(loan.dueDate)}</td>
@@ -295,6 +351,9 @@ function LoanRow({
         </td>
         <td>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {['active', 'overdue'].includes(loan.status) && (
+              <PayButton loanId={loan.id} t={t} />
+            )}
             {loan.contractUrl && (
               <a
                 href={loan.contractUrl}
@@ -420,7 +479,7 @@ function LoanRow({
                             border: '1px solid rgba(25,68,69,0.04)',
                           }}
                         >
-                          <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span
                               style={{
                                 fontSize: 14,
@@ -435,10 +494,30 @@ function LoanRow({
                                 style={{
                                   fontSize: 11,
                                   color: 'var(--t3)',
-                                  marginLeft: 8,
                                 }}
                               >
                                 {r.method}
+                              </span>
+                            )}
+                            {r.status && (
+                              <span
+                                className={`badge ${
+                                  r.status === 'completed'
+                                    ? 'badge-repaid'
+                                    : r.status === 'processing'
+                                      ? 'badge-approved'
+                                      : 'badge-pending'
+                                }`}
+                                style={{ fontSize: 10 }}
+                              >
+                                {t(
+                                  `pay_status_${r.status}`,
+                                  r.status === 'completed'
+                                    ? 'Paid'
+                                    : r.status === 'processing'
+                                      ? 'Processing'
+                                      : 'Pending',
+                                )}
                               </span>
                             )}
                           </div>

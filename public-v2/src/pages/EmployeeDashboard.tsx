@@ -7,6 +7,17 @@ import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 
+interface Repayment {
+  id: string;
+  loanId: string;
+  amount: number;
+  paidAt?: { seconds: number };
+  createdAt?: { seconds: number };
+  method?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
 interface EmployeeData {
   name?: string;
   email?: string;
@@ -50,8 +61,10 @@ export function EmployeeDashboard() {
 
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [paymentLoan, setPaymentLoan] = useState<Loan | null>(null);
   const [pageState, setPageState] = useState<'loading' | 'verify_email' | 'dashboard'>('loading');
 
   // Fetch employee doc
@@ -93,6 +106,32 @@ export function EmployeeDashboard() {
 
     return unsub;
   }, [user, pageState]);
+
+  // Real-time repayments listener
+  useEffect(() => {
+    if (!user || pageState !== 'dashboard') return;
+
+    const q = query(
+      collection(db, 'repayments'),
+      where('employeeId', '==', user.uid),
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setRepayments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Repayment)));
+    });
+
+    return unsub;
+  }, [user, pageState]);
+
+  // Group repayments by loanId
+  const repaymentsByLoan = repayments.reduce<Record<string, Repayment[]>>(
+    (acc, r) => {
+      if (!acc[r.loanId]) acc[r.loanId] = [];
+      acc[r.loanId].push(r);
+      return acc;
+    },
+    {},
+  );
 
   const handleLoanSubmitted = useCallback(() => {
     setShowModal(false);
@@ -242,28 +281,57 @@ export function EmployeeDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loans.map((loan) => (
-                    <tr key={loan.id}>
-                      <td style={{ fontWeight: 500 }}>${fmt(loan.amount)}</td>
-                      <td>{loan.termDays ?? 30} {t('dash_days')}</td>
-                      <td>${fmt(loan.repaymentAmount || loan.total || 0)}</td>
-                      <td>
-                        <span className={`badge badge-${loan.status}`}>
-                          {t(`status_${loan.status}`)}
-                        </span>
-                      </td>
-                      <td>
-                        {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString() : '—'}
-                      </td>
-                      <td>
-                        {['active', 'overdue'].includes(loan.status) ? (
-                          <PayNowButton loanId={loan.id} label={t('dash_pay_now')} errorLabel={t('dash_pay_error')} />
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {loans.map((loan) => {
+                    const loanRepayments = repaymentsByLoan[loan.id] || [];
+                    const hasPending = loanRepayments.some((r) => r.status === 'pending');
+                    const hasProcessing = loanRepayments.some((r) => r.status === 'processing');
+                    const totalPaid = loanRepayments
+                      .filter((r) => r.status === 'completed')
+                      .reduce((sum, r) => sum + (r.amount || 0), 0);
+
+                    return (
+                      <tr key={loan.id}>
+                        <td style={{ fontWeight: 500 }}>${fmt(loan.amount)}</td>
+                        <td>{loan.termDays ?? 30} {t('dash_days')}</td>
+                        <td>${fmt(loan.repaymentAmount || loan.total || 0)}</td>
+                        <td>
+                          <span className={`badge badge-${loan.status}`}>
+                            {t(`status_${loan.status}`)}
+                          </span>
+                          {hasPending && (
+                            <span className="badge badge-pending" style={{ marginLeft: 4, fontSize: 10 }}>
+                              {t('pay_status_pending', 'Pending')}
+                            </span>
+                          )}
+                          {hasProcessing && (
+                            <span className="badge badge-approved" style={{ marginLeft: 4, fontSize: 10 }}>
+                              {t('pay_status_processing', 'Processing')}
+                            </span>
+                          )}
+                          {totalPaid > 0 && !hasPending && !hasProcessing && (
+                            <span className="badge badge-repaid" style={{ marginLeft: 4, fontSize: 10 }}>
+                              {t('pay_status_paid', 'Paid')}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString() : '—'}
+                        </td>
+                        <td>
+                          {['active', 'overdue'].includes(loan.status) ? (
+                            <button
+                              onClick={() => setPaymentLoan(loan)}
+                              className="btn-sm btn-approve"
+                            >
+                              {t('dash_pay_now')}
+                            </button>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -281,39 +349,222 @@ export function EmployeeDashboard() {
           onSubmitted={handleLoanSubmitted}
         />
       )}
+
+      {/* Payment Modal */}
+      {paymentLoan && (
+        <PaymentModal
+          loan={paymentLoan}
+          repayments={repaymentsByLoan[paymentLoan.id] || []}
+          onClose={() => setPaymentLoan(null)}
+        />
+      )}
     </div>
   );
 }
 
-function PayNowButton({ loanId, label, errorLabel }: { loanId: string; label: string; errorLabel: string }) {
+function PaymentModal({
+  loan,
+  repayments,
+  onClose,
+}: {
+  loan: Loan;
+  repayments: Repayment[];
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [paymentUrl, setPaymentUrl] = useState('');
 
-  const handlePay = async () => {
+  const totalOwed = loan.repaymentAmount || loan.total || 0;
+  const totalPaid = repayments
+    .filter((r) => r.status === 'completed')
+    .reduce((sum, r) => sum + (r.amount || 0), 0);
+  const remaining = Math.max(0, totalOwed - totalPaid);
+
+  const sortedRepayments = [...repayments].sort((a, b) => {
+    const aTime = (a.paidAt || a.createdAt)?.seconds ?? 0;
+    const bTime = (b.paidAt || b.createdAt)?.seconds ?? 0;
+    return bTime - aTime;
+  });
+
+  const handleGenerateLink = async () => {
     setLoading(true);
+    setError('');
     try {
       const functions = getFunctions();
-      const generatePaymentLink = httpsCallable<{ loanId: string }, { paymentUrl: string }>(functions, 'generatePaymentLink');
-      const result = await generatePaymentLink({ loanId });
-      window.open(result.data.paymentUrl, '_blank');
+      const genPayLink = httpsCallable<{ loanId: string }, { paymentUrl: string; orderId: string; expiresIn: string }>(
+        functions,
+        'generatePaymentLink',
+      );
+      const result = await genPayLink({ loanId: loan.id });
+      setPaymentUrl(result.data.paymentUrl);
     } catch {
-      alert(errorLabel);
+      setError(t('dash_pay_error'));
     } finally {
       setLoading(false);
     }
   };
 
+  const statusBadge = (status?: string) => {
+    switch (status) {
+      case 'completed':
+        return <span className="badge badge-repaid">{t('pay_status_paid', 'Paid')}</span>;
+      case 'processing':
+        return <span className="badge badge-approved">{t('pay_status_processing', 'Processing')}</span>;
+      default:
+        return <span className="badge badge-pending">{t('pay_status_pending', 'Pending')}</span>;
+    }
+  };
+
   return (
-    <button
-      onClick={handlePay}
-      disabled={loading}
-      className="btn-sm btn-approve"
+    <div
+      className="modal-overlay show"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      {loading ? (
-        <span className="spinner" />
-      ) : (
-        label
-      )}
-    </button>
+      <div className="modal" style={{ position: 'relative', maxWidth: 480 }}>
+        <div className="modal-close" onClick={onClose}>✕</div>
+
+        <h3>{t('pay_modal_title', 'Make a Payment')}</h3>
+        <p className="modal-sub" style={{ marginBottom: 20 }}>
+          {t('pay_modal_subtitle', 'Loan')} · ${fmt(loan.amount)} MXN
+        </p>
+
+        {/* Payment summary */}
+        <div style={{
+          borderTop: '1px solid rgba(25,68,69,0.06)',
+          borderBottom: '1px solid rgba(25,68,69,0.06)',
+          padding: '20px 0',
+          marginBottom: 20,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+            <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('pay_total_owed', 'Total Owed')}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>${fmt(totalOwed)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+            <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('pay_total_paid', 'Total Paid')}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>${fmt(totalPaid)}</span>
+          </div>
+          <div style={{ height: 1, background: 'rgba(25,68,69,0.06)', margin: '4px 0' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+            <span style={{ fontFamily: 'var(--df)', fontSize: 15, color: 'var(--t1)' }}>
+              {t('pay_remaining', 'Remaining Balance')}
+            </span>
+            <span style={{ fontFamily: 'var(--df)', fontSize: 18, color: remaining > 0 ? 'var(--t1)' : 'var(--success)' }}>
+              ${fmt(remaining)}
+            </span>
+          </div>
+          {loan.dueDate && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+              <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_due_date')}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: loan.status === 'overdue' ? 'var(--danger)' : 'var(--t1)' }}>
+                {new Date(loan.dueDate.seconds * 1000).toLocaleDateString()}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Payment action */}
+        {!paymentUrl ? (
+          <>
+            {error && (
+              <div className="auth-error show" style={{ marginBottom: 12 }}>{error}</div>
+            )}
+            <button
+              onClick={handleGenerateLink}
+              disabled={loading}
+              className="btn-primary"
+            >
+              {loading ? (
+                <><span className="spinner" /> {t('pay_generating', 'Generating link...')}</>
+              ) : (
+                t('pay_generate_link', 'Generate Payment Link')
+              )}
+            </button>
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div style={{
+              background: 'var(--bg2)',
+              borderRadius: 12,
+              padding: '20px 16px',
+              marginBottom: 16,
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 2, color: 'var(--gold)', marginBottom: 10 }}>
+                {t('pay_checkout_ready', 'Checkout Ready')}
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 16 }}>
+                {t('pay_checkout_desc', 'Click below to complete your payment via Conekta.')}
+              </p>
+              <a
+                href={paymentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary"
+                style={{ display: 'inline-block', textDecoration: 'none', textAlign: 'center' }}
+              >
+                {t('pay_open_checkout', 'Open Checkout')}
+              </a>
+            </div>
+            <button
+              onClick={() => { setPaymentUrl(''); setError(''); }}
+              style={{ background: 'none', border: 'none', color: 'var(--t3)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              {t('pay_generate_new', 'Generate new link')}
+            </button>
+          </div>
+        )}
+
+        {/* Payment history */}
+        {sortedRepayments.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <div style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: 2.2,
+              color: 'var(--gold)',
+              marginBottom: 12,
+            }}>
+              {t('pay_history', 'Payment History')}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {sortedRepayments.map((r) => (
+                <div
+                  key={r.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 14px',
+                    background: 'var(--bg2)',
+                    borderRadius: 10,
+                    border: '1px solid rgba(25,68,69,0.04)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>
+                      ${fmt(r.amount)}
+                    </span>
+                    {statusBadge(r.status)}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+                      {r.paidAt || r.createdAt
+                        ? new Date(((r.paidAt || r.createdAt)!.seconds) * 1000).toLocaleDateString()
+                        : '—'}
+                    </div>
+                    {r.method && (
+                      <div style={{ fontSize: 10, color: 'var(--t3)' }}>{r.method}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
