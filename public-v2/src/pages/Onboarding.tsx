@@ -457,7 +457,7 @@ export function Onboarding() {
 
   // -- Render role selection (step 0) --
   const renderRoleSelection = () => (
-    <div className="onb-content wide" style={{maxWidth:640,width:640,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+    <div className="onb-content wide">
       <h1 className="onb-h">
         <RichText html={t('onb_welcome')} />
       </h1>
@@ -498,9 +498,9 @@ export function Onboarding() {
   const renderEmployerSteps = () => (
     <>
       {/* Step 1: Company name */}
-      <div className={stageClass(1)}>
+      <div className={stageClass(1)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 1 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step1_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step1_sub')}</p>
             <div className="onb-field">
@@ -517,9 +517,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 2: Name + email + phone */}
-      <div className={stageClass(2)}>
+      <div className={stageClass(2)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 2 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step2_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step2_sub')}</p>
             <div className="onb-field">
@@ -557,9 +557,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 3: RFC + state + industry */}
-      <div className={stageClass(3)}>
+      <div className={stageClass(3)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 3 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step3_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step3_sub')}</p>
             <div className="onb-field">
@@ -605,9 +605,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 4: Employee count + pay frequency + payroll system */}
-      <div className={stageClass(4)}>
+      <div className={stageClass(4)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 4 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step4_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step4_sub')}</p>
             <div className="onb-field">
@@ -658,9 +658,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 5: Dispersora + bank CLABE */}
-      <div className={stageClass(5)}>
+      <div className={stageClass(5)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 5 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step5a_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step5a_sub')}</p>
             <div className="onb-field">
@@ -697,9 +697,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 6: Password + terms */}
-      <div className={stageClass(6)}>
+      <div className={stageClass(6)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 6 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step5_sub')}</p>
             <div className="onb-field">
@@ -730,8 +730,8 @@ export function Onboarding() {
       </div>
 
       {/* Step 7: Employer success */}
-      <div className={stageClass(7)}>
-        <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+      <div className={stageClass(7)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
+        <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -757,9 +757,9 @@ export function Onboarding() {
   const renderEmployeeSteps = () => (
     <>
       {/* Step 1: Employer code */}
-      <div className={stageClass(1)}>
+      <div className={stageClass(1)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 1 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step1_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step1_sub')}</p>
             <div className="onb-field">
@@ -783,9 +783,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 2: Name + email + phone + DOB */}
-      <div className={stageClass(2)}>
+      <div className={stageClass(2)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 2 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step2_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step2_sub')}</p>
             <div className="onb-field">
@@ -835,9 +835,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 3: CURP + RFC */}
-      <div className={stageClass(3)}>
+      <div className={stageClass(3)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 3 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step3_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step3_sub')}</p>
             <div className="onb-field">
@@ -884,9 +884,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 4: KYC verification via MetaMap */}
-      <div className={stageClass(4)}>
+      <div className={stageClass(4)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 4 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_kyc_h')} /></h1>
             <p className="onb-sub">{t('onb_m_kyc_sub')}</p>
 
@@ -942,9 +942,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 5: Salary + pay frequency + tenure + CLABE + credit preview */}
-      <div className={stageClass(5)}>
+      <div className={stageClass(5)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 5 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step4_sub')}</p>
             <div className="onb-field">
@@ -1028,9 +1028,9 @@ export function Onboarding() {
       </div>
 
       {/* Step 6: Password + terms */}
-      <div className={stageClass(6)}>
+      <div className={stageClass(6)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
         {step === 6 && (
-          <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+          <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step5_sub')}</p>
             <div className="onb-field">
@@ -1061,8 +1061,8 @@ export function Onboarding() {
       </div>
 
       {/* Step 7: Employee success */}
-      <div className={stageClass(7)}>
-        <div className="onb-content" style={{maxWidth:520,width:520,padding:"0 24px",boxSizing:"border-box",justifySelf:"center",alignSelf:"center"}}>
+      <div className={stageClass(7)} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
+        <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1129,7 +1129,7 @@ export function Onboarding() {
         )}
 
         {/* Role selection stage */}
-        <div className={!role ? 'onb-stage active' : 'onb-stage left'}>
+        <div className={!role ? 'onb-stage active' : 'onb-stage left'} style={{display:'flex',justifyContent:'center',alignItems:'center',width:'100%',height:'100%'}}>
           {renderRoleSelection()}
         </div>
 
