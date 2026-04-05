@@ -20,7 +20,7 @@ interface HealthResult {
 }
 
 export const getSystemHealth = onCall(
-  { enforceAppCheck: true },
+  { enforceAppCheck: false },
   withAuth(['ops', 'admin', 'super_admin'], async (_data, auth) =>
     withErrorHandling({ functionName: 'getSystemHealth', uid: auth.uid }, async () => {
       const db = getFirestore();

@@ -24,7 +24,7 @@ input,select,textarea{font-family:var(--db)}
 .d1{transition-delay:.1s}.d2{transition-delay:.2s}.d3{transition-delay:.3s}.d4{transition-delay:.4s}.d5{transition-delay:.5s}.d6{transition-delay:.6s}
 
 /* NAV */
-.nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid rgba(25,68,69,0.04)}
+.nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,1);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid rgba(25,68,69,0.04)}
 .nav-inner{max-width:var(--mx);margin:0 auto;padding:0 64px;display:flex;justify-content:space-between;align-items:center;height:72px}
 .nav-left{display:flex;align-items:center;gap:56px}
 .nav-logo{display:inline-flex;align-items:center}
@@ -458,7 +458,7 @@ table tr:last-child td{border-bottom:none}
 .btn-reject:hover{border-color:rgba(220,80,60,0.3)}
 
 /* Loan request modal */
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,1);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
 .modal-overlay.show{display:flex}
 .modal{background:transparent;max-width:420px;width:100%;padding:0}
 .modal h3{font-family:var(--df);font-size:32px;color:var(--t1);margin-bottom:8px;letter-spacing:-.02em}

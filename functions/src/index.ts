@@ -492,16 +492,61 @@ export const approveEmployer = onCall(
 
 export const getPortfolioReport = onCall(
   { cors: true, enforceAppCheck: false },
-  withAuth<Record<string, never>, { snapshots: unknown[] }>(
+  withAuth<{ period?: string }, Record<string, unknown>>(
     ['admin', 'super_admin', 'ops'],
-    async (_data, auth) =>
+    async (data, auth) =>
       withErrorHandling({ functionName: 'getPortfolioReport', uid: auth.uid }, async () => {
-        const snap = await db
-          .collection('portfolio_snapshots')
-          .orderBy('snapshotDate', 'desc')
-          .limit(52)
-          .get();
-        return { snapshots: snap.docs.map((d) => ({ id: d.id, ...d.data() })) };
+        const period = (data as { period?: string })?.period || '30d';
+        const now = new Date();
+        let cutoff: Date | null = null;
+        if (period === '7d') cutoff = new Date(now.getTime() - 7 * 86400000);
+        else if (period === '30d') cutoff = new Date(now.getTime() - 30 * 86400000);
+        else if (period === '90d') cutoff = new Date(now.getTime() - 90 * 86400000);
+
+        let query = db.collection('loans') as FirebaseFirestore.Query;
+        if (cutoff) query = query.where('createdAt', '>=', cutoff);
+        const snap = await query.get();
+
+        let totalDisbursed = 0;
+        let totalRepaid = 0;
+        let totalRevenue = 0;
+        let defaulted = 0;
+        const byStatus: Record<string, number> = {};
+        const byEmployer: Record<string, { count: number; volume: number }> = {};
+
+        for (const doc of snap.docs) {
+          const d = doc.data();
+          const amount = Number(d.amount) || 0;
+          const status = String(d.status || 'unknown');
+          byStatus[status] = (byStatus[status] || 0) + 1;
+
+          if (['disbursed', 'repaid', 'overdue', 'in_collections', 'written_off'].includes(status)) {
+            totalDisbursed += amount;
+          }
+          if (status === 'repaid') {
+            totalRepaid += amount;
+            totalRevenue += Number(d.fee) || Number(d.commission) || 0;
+          }
+          if (['overdue', 'in_collections', 'written_off'].includes(status)) {
+            defaulted++;
+          }
+
+          const eid = String(d.employerId || 'unknown');
+          if (!byEmployer[eid]) byEmployer[eid] = { count: 0, volume: 0 };
+          byEmployer[eid].count++;
+          byEmployer[eid].volume += amount;
+        }
+
+        const totalLoans = snap.size;
+        const defaultRate = totalLoans > 0 ? ((defaulted / totalLoans) * 100).toFixed(1) + '%' : '0%';
+
+        return {
+          period,
+          summary: { totalLoans, totalDisbursedMXN: totalDisbursed, totalRepaidMXN: totalRepaid, totalRevenueMXN: totalRevenue, defaultRate },
+          byStatus,
+          byEmployer,
+          generatedAt: now.toISOString(),
+        };
       })
   )
 );
