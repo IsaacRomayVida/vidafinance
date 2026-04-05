@@ -1,25 +1,27 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
 import es from './es.json';
 import en from './en.json';
 
+const savedLang = localStorage.getItem('vida_lang') || 'es';
+
 i18n
-  .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
       es: { translation: es },
       en: { translation: en },
     },
-    lng: 'es',
-    fallbackLng: 'en',
+    lng: savedLang,
+    fallbackLng: 'es',
     interpolation: { escapeValue: false },
-    detection: {
-      order: ['localStorage', 'navigator'],
-      lookupLocalStorage: 'vida_lang',
-      caches: ['localStorage'],
-    },
   });
+
+// Keep <html lang=""> in sync with the active language
+document.documentElement.lang = savedLang;
+i18n.on('languageChanged', (lang) => {
+  document.documentElement.lang = lang;
+  localStorage.setItem('vida_lang', lang);
+});
 
 export default i18n;
