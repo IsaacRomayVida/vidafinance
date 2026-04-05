@@ -514,7 +514,7 @@ table tr:last-child td{border-bottom:none}
 .onb-stage.left{transform:translateX(-100%);opacity:0;pointer-events:none}
 .onb-stage.right{transform:translateX(100%);opacity:0;pointer-events:none}
 
-.onb-content{max-width:520px;width:100%;text-align:center;margin:0 auto;padding:0 24px;box-sizing:border-box}
+.onb-content{max-width:520px;width:calc(100% - 48px);text-align:center;padding:0 24px;box-sizing:border-box}
 .onb-content.wide{max-width:640px}
 
 .onb-back{position:absolute;top:50%;left:32px;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid rgba(25,68,69,0.08);background:transparent;display:grid;place-items:center;color:var(--t3);cursor:pointer;transition:all .3s;z-index:20;font-size:0}
