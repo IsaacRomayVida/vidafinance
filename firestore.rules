@@ -39,7 +39,9 @@ service cloud.firestore {
     // Only admins can create records for other users.
     // =============================================
     match /employers/{employerId} {
-      allow read: if isOwner(employerId) || isOps();
+      // Allow list queries for employer code lookup during employee onboarding
+      allow list: if true;
+      allow get: if isOwner(employerId) || isOps();
       allow create: if isAdmin() || isOwner(employerId);
       allow update: if isAdmin()
         || (isOwner(employerId)
