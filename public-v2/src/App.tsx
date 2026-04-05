@@ -38,77 +38,82 @@ const SystemHealth = React.lazy(() => import('./pages/SystemHealth').then(m => (
 const Onboarding = React.lazy(() => import('./pages/Onboarding').then(m => ({ default: m.Onboarding })));
 const NotFound = React.lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
 
+const PageSpinner = () => (
+  <div className="loading-page">
+    <div className="spinner" />
+  </div>
+);
+
 export default function App() {
   return (
     <AuthProvider>
     <BrowserRouter>
-      <Suspense fallback={<div className="spinner" />}>
-        <Routes>
-          {/* Marketing pages */}
-          <Route element={<MarketingLayout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/employers" element={<EmployerPage />} />
-            <Route path="/employees" element={<EmployeePage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/security" element={<SecurityPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/partners" element={<PartnersPage />} />
-            <Route path="/investors" element={<InvestorsPage />} />
-            <Route path="/contact" element={<ContactPage />} />
-            <Route path="/press" element={<PressPage />} />
+      <Routes>
+        {/* Marketing pages */}
+        <Route element={<MarketingLayout />}>
+          <Route path="/" element={<Suspense fallback={<PageSpinner />}><HomePage /></Suspense>} />
+          <Route path="/employers" element={<Suspense fallback={<PageSpinner />}><EmployerPage /></Suspense>} />
+          <Route path="/employees" element={<Suspense fallback={<PageSpinner />}><EmployeePage /></Suspense>} />
+          <Route path="/about" element={<Suspense fallback={<PageSpinner />}><AboutPage /></Suspense>} />
+          <Route path="/security" element={<Suspense fallback={<PageSpinner />}><SecurityPage /></Suspense>} />
+          <Route path="/privacy" element={<Suspense fallback={<PageSpinner />}><PrivacyPage /></Suspense>} />
+          <Route path="/terms" element={<Suspense fallback={<PageSpinner />}><TermsPage /></Suspense>} />
+          <Route path="/partners" element={<Suspense fallback={<PageSpinner />}><PartnersPage /></Suspense>} />
+          <Route path="/investors" element={<Suspense fallback={<PageSpinner />}><InvestorsPage /></Suspense>} />
+          <Route path="/contact" element={<Suspense fallback={<PageSpinner />}><ContactPage /></Suspense>} />
+          <Route path="/press" element={<Suspense fallback={<PageSpinner />}><PressPage /></Suspense>} />
+        </Route>
+
+        {/* Get-started and onboarding redirect to contact */}
+        <Route path="/get-started" element={<Navigate to="/contact" replace />} />
+        <Route path="/onboarding" element={<Suspense fallback={<PageSpinner />}><Onboarding /></Suspense>} />
+
+        {/* Auth */}
+        <Route path="/login" element={<Suspense fallback={<PageSpinner />}><Login /></Suspense>} />
+
+        {/* Employee portal — Suspense is INSIDE the guard so auth checks
+            always run before any lazy chunk is loaded */}
+        <Route element={<RouteGuard allowedRoles={['employee']} />}>
+          <Route element={<EmployeeLayout />}>
+            <Route path="/employee" element={<Suspense fallback={<PageSpinner />}><EmployeeDashboard /></Suspense>} />
+            <Route path="/employee/dashboard" element={<Navigate to="/employee" replace />} />
+            <Route path="/employee/apply" element={<Suspense fallback={<PageSpinner />}><LoanWizard /></Suspense>} />
+            <Route path="/employee/loans" element={<Suspense fallback={<PageSpinner />}><MyLoans /></Suspense>} />
           </Route>
+        </Route>
 
-          {/* Get-started and onboarding redirect to contact */}
-          <Route path="/get-started" element={<Navigate to="/contact" replace />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-
-          {/* Auth */}
-          <Route path="/login" element={<Login />} />
-
-          {/* Employee portal */}
-          <Route element={<RouteGuard allowedRoles={['employee']} />}>
-            <Route element={<EmployeeLayout />}>
-              <Route path="/employee" element={<EmployeeDashboard />} />
-              <Route path="/employee/dashboard" element={<Navigate to="/employee" replace />} />
-              <Route path="/employee/apply" element={<LoanWizard />} />
-              <Route path="/employee/loans" element={<MyLoans />} />
-            </Route>
+        {/* Employer portal */}
+        <Route element={<RouteGuard allowedRoles={['employer_admin']} />}>
+          <Route element={<EmployerLayout />}>
+            <Route path="/employer" element={<Suspense fallback={<PageSpinner />}><EmployerDashboard /></Suspense>} />
+            <Route path="/employer/dashboard" element={<Navigate to="/employer" replace />} />
+            <Route path="/employer/employees" element={<Suspense fallback={<PageSpinner />}><EmployeeRoster /></Suspense>} />
+            <Route path="/employer/loans" element={<Navigate to="/employer/deductions" replace />} />
+            <Route path="/employer/deductions" element={<Suspense fallback={<PageSpinner />}><DeductionReports /></Suspense>} />
+            <Route path="/employer/onboarding" element={<Suspense fallback={<PageSpinner />}><OnboardingWizard /></Suspense>} />
+            <Route path="/employer/analytics" element={<Suspense fallback={<PageSpinner />}><AnalyticsPage /></Suspense>} />
           </Route>
+        </Route>
 
-          {/* Employer portal */}
-          <Route element={<RouteGuard allowedRoles={['employer_admin']} />}>
-            <Route element={<EmployerLayout />}>
-              <Route path="/employer" element={<EmployerDashboard />} />
-              <Route path="/employer/dashboard" element={<Navigate to="/employer" replace />} />
-              <Route path="/employer/employees" element={<EmployeeRoster />} />
-              <Route path="/employer/loans" element={<Navigate to="/employer/deductions" replace />} />
-              <Route path="/employer/deductions" element={<DeductionReports />} />
-              <Route path="/employer/onboarding" element={<OnboardingWizard />} />
-              <Route path="/employer/analytics" element={<AnalyticsPage />} />
-            </Route>
+        {/* Ops / Admin portal */}
+        <Route element={<RouteGuard allowedRoles={['ops', 'admin', 'super_admin']} />}>
+          <Route element={<AdminLayout />}>
+            <Route path="/ops" element={<Suspense fallback={<PageSpinner />}><AdminDashboard /></Suspense>} />
+            <Route path="/ops/review-queue" element={<Suspense fallback={<PageSpinner />}><ReviewQueue /></Suspense>} />
+            <Route path="/ops/portfolio" element={<Suspense fallback={<PageSpinner />}><PortfolioPage /></Suspense>} />
+            <Route path="/ops/employers" element={<Suspense fallback={<PageSpinner />}><EmployerMgmt /></Suspense>} />
+            <Route path="/ops/alerts" element={<Suspense fallback={<PageSpinner />}><AlertsPage /></Suspense>} />
+            <Route path="/ops/health" element={<Suspense fallback={<PageSpinner />}><SystemHealth /></Suspense>} />
           </Route>
+        </Route>
 
-          {/* Ops / Admin portal */}
-          <Route element={<RouteGuard allowedRoles={['ops', 'admin', 'super_admin']} />}>
-            <Route element={<AdminLayout />}>
-              <Route path="/ops" element={<AdminDashboard />} />
-              <Route path="/ops/review-queue" element={<ReviewQueue />} />
-              <Route path="/ops/portfolio" element={<PortfolioPage />} />
-              <Route path="/ops/employers" element={<EmployerMgmt />} />
-              <Route path="/ops/alerts" element={<AlertsPage />} />
-              <Route path="/ops/health" element={<SystemHealth />} />
-            </Route>
-          </Route>
+        {/* Legacy /admin → /ops redirect */}
+        <Route path="/admin" element={<Navigate to="/ops" replace />} />
+        <Route path="/admin/*" element={<Navigate to="/ops" replace />} />
 
-          {/* Legacy /admin → /ops redirect */}
-          <Route path="/admin" element={<Navigate to="/ops" replace />} />
-          <Route path="/admin/*" element={<Navigate to="/ops" replace />} />
-
-          {/* 404 catch-all */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
+        {/* 404 catch-all */}
+        <Route path="*" element={<Suspense fallback={<PageSpinner />}><NotFound /></Suspense>} />
+      </Routes>
     </BrowserRouter>
     </AuthProvider>
   );

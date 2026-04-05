@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, type UserRole } from '../hooks/useAuth';
 
 interface RouteGuardProps {
@@ -7,6 +7,7 @@ interface RouteGuardProps {
 
 export function RouteGuard({ allowedRoles }: RouteGuardProps) {
   const { user, role, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -17,7 +18,7 @@ export function RouteGuard({ allowedRoles }: RouteGuardProps) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
   if (!allowedRoles.includes(role)) {
