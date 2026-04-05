@@ -616,8 +616,8 @@ export function Onboarding() {
                 {COMPANY_SIZES.map((size) => (
                   <button
                     key={size}
-                    className={`onb-tile${empData.employeeCount === size ? ' active' : ''}`}
-                    onClick={() => setEmpData({ ...empData, employeeCount: size })}
+                    type="button" className={`onb-tile${empData.employeeCount === size ? ' active' : ''}`}
+                    onClick={() => setEmpData(prev => ({ ...prev, employeeCount: size }))}
                   >
                     <div className="onb-tile-val">{size}</div>
                     <div className="onb-tile-lbl">{t('onb_e_step4_employees')}</div>
@@ -631,8 +631,8 @@ export function Onboarding() {
                 {PAY_FREQUENCIES.map((freq) => (
                   <button
                     key={freq}
-                    className={`onb-tile${empData.payFrequency === freq ? ' active' : ''}`}
-                    onClick={() => setEmpData({ ...empData, payFrequency: freq })}
+                    type="button" className={`onb-tile${empData.payFrequency === freq ? ' active' : ''}`}
+                    onClick={() => setEmpData(prev => ({ ...prev, payFrequency: freq }))}
                   >
                     <div className="onb-tile-val">{t(`onb_e_freq_${freq}`)}</div>
                   </button>
@@ -667,14 +667,14 @@ export function Onboarding() {
               <label className="onb-label">{t('onb_e_step5a_dispersora')}</label>
               <div className="onb-tiles">
                 <button
-                  className={`onb-tile${empData.usesDispersora === 'yes' ? ' active' : ''}`}
-                  onClick={() => setEmpData({ ...empData, usesDispersora: 'yes' })}
+                  type="button" className={`onb-tile${empData.usesDispersora === 'yes' ? ' active' : ''}`}
+                  onClick={() => setEmpData(prev => ({ ...prev, usesDispersora: 'yes' }))}
                 >
                   <div className="onb-tile-val">{t('onb_e_step5a_yes')}</div>
                 </button>
                 <button
-                  className={`onb-tile${empData.usesDispersora === 'no' ? ' active' : ''}`}
-                  onClick={() => setEmpData({ ...empData, usesDispersora: 'no' })}
+                  type="button" className={`onb-tile${empData.usesDispersora === 'no' ? ' active' : ''}`}
+                  onClick={() => setEmpData(prev => ({ ...prev, usesDispersora: 'no' }))}
                 >
                   <div className="onb-tile-val">{t('onb_e_step5a_no')}</div>
                 </button>
