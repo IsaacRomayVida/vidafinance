@@ -1,0 +1,286 @@
+{
+  "date": "2026-04-05T09:07:24.289Z",
+  "summary": {
+    "pass": 42,
+    "fail": 4,
+    "total": 46
+  },
+  "results": [
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /employers",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /employees",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /login",
+      "status": "PASS",
+      "note": "status=200 content=true nav=false footer=false"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /onboarding",
+      "status": "PASS",
+      "note": "status=200 content=true nav=false footer=false"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /about",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /security",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /privacy",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /terms",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /partners",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /investors",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /contact",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase1:Public",
+      "test": "GET /press",
+      "status": "PASS",
+      "note": "status=200 content=true nav=true footer=true"
+    },
+    {
+      "phase": "Phase2:Mobile",
+      "test": "/ overflow",
+      "status": "PASS",
+      "note": "no overflow"
+    },
+    {
+      "phase": "Phase2:Mobile",
+      "test": "/employers overflow",
+      "status": "PASS",
+      "note": "no overflow"
+    },
+    {
+      "phase": "Phase2:Mobile",
+      "test": "/employees overflow",
+      "status": "PASS",
+      "note": "no overflow"
+    },
+    {
+      "phase": "Phase2:Mobile",
+      "test": "/login overflow",
+      "status": "PASS",
+      "note": "no overflow"
+    },
+    {
+      "phase": "Phase2:Mobile",
+      "test": "/about overflow",
+      "status": "PASS",
+      "note": "no overflow"
+    },
+    {
+      "phase": "Phase2:Mobile",
+      "test": "/contact overflow",
+      "status": "PASS",
+      "note": "no overflow"
+    },
+    {
+      "phase": "Phase2:Mobile",
+      "test": "hamburger menu present",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase3:Auth",
+      "test": "login as admin",
+      "status": "PASS",
+      "note": "redirected to https://vida-finance.web.app/ops"
+    },
+    {
+      "phase": "Phase3:Auth",
+      "test": "login as employer",
+      "status": "PASS",
+      "note": "redirected to https://vida-finance.web.app/employer"
+    },
+    {
+      "phase": "Phase3:Auth",
+      "test": "login as employee",
+      "status": "PASS",
+      "note": "redirected to https://vida-finance.web.app/employee"
+    },
+    {
+      "phase": "Phase3:Auth",
+      "test": "guard /employer/dashboard",
+      "status": "FAIL",
+      "note": "ended at https://vida-finance.web.app/"
+    },
+    {
+      "phase": "Phase3:Auth",
+      "test": "guard /employee/dashboard",
+      "status": "FAIL",
+      "note": "ended at https://vida-finance.web.app/employee"
+    },
+    {
+      "phase": "Phase3:Auth",
+      "test": "guard /ops",
+      "status": "FAIL",
+      "note": "ended at https://vida-finance.web.app/"
+    },
+    {
+      "phase": "Phase4:Employee",
+      "test": "dashboard loads",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase4:Employee",
+      "test": "welcome message",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase4:Employee",
+      "test": "available credit",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase4:Employee",
+      "test": "request funds btn",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase4:Employee",
+      "test": "my loans page",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase4:Employee",
+      "test": "loan wizard page",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase5:Employer",
+      "test": "dashboard loads",
+      "status": "FAIL",
+      "note": ""
+    },
+    {
+      "phase": "Phase5:Employer",
+      "test": "employee roster",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase5:Employer",
+      "test": "deduction reports",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase5:Employer",
+      "test": "CURP config",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "phase": "Phase6:Admin",
+      "test": "ops dashboard",
+      "status": "PASS",
+      "note": "url=https://vida-finance.web.app/ops textLen=600"
+    },
+    {
+      "phase": "Phase6:Admin",
+      "test": "review queue",
+      "status": "PASS",
+      "note": "url=https://vida-finance.web.app/ops/review-queue textLen=199"
+    },
+    {
+      "phase": "Phase6:Admin",
+      "test": "portfolio",
+      "status": "PASS",
+      "note": "url=https://vida-finance.web.app/ops/portfolio textLen=197"
+    },
+    {
+      "phase": "Phase6:Admin",
+      "test": "employers mgmt",
+      "status": "PASS",
+      "note": "url=https://vida-finance.web.app/ops/employers textLen=1218"
+    },
+    {
+      "phase": "Phase6:Admin",
+      "test": "alerts",
+      "status": "PASS",
+      "note": "url=https://vida-finance.web.app/ops/alerts textLen=376"
+    },
+    {
+      "phase": "Phase6:Admin",
+      "test": "system health",
+      "status": "PASS",
+      "note": "url=https://vida-finance.web.app/ops/health textLen=356"
+    },
+    {
+      "phase": "Phase7:i18n",
+      "test": "language toggle present",
+      "status": "PASS",
+      "note": "text=\"EN\""
+    },
+    {
+      "phase": "Phase7:i18n",
+      "test": "no raw i18n keys on home",
+      "status": "PASS",
+      "note": "clean"
+    },
+    {
+      "phase": "Phase7:i18n",
+      "test": "default lang attribute",
+      "status": "PASS",
+      "note": "lang=\"es\""
+    },
+    {
+      "phase": "Phase7:i18n",
+      "test": "language toggle works",
+      "status": "PASS",
+      "note": "sample: Employers\nEmployees\nTrust\nHow it works\nES\nLog in\nGet Started\n✕\nEmployers\nEmploye..."
+    }
+  ]
+}
