@@ -509,12 +509,12 @@ table tr:last-child td{border-bottom:none}
 .onb-progress-fill{height:100%;background:var(--brand);border-radius:0 2px 2px 0;transition:width .6s cubic-bezier(.16,1,.3,1)}
 
 .onb-body{flex:1;display:grid;place-items:center;position:relative;z-index:5;overflow-x:hidden;overflow-y:auto;padding:20px}
-.onb-stage{position:absolute;left:0;right:0;top:0;bottom:0;width:100%;display:grid;place-items:center;padding:20px 32px;transform:translateX(100%);opacity:0;pointer-events:none;transition:transform .55s cubic-bezier(.16,1,.3,1),opacity .55s cubic-bezier(.16,1,.3,1);overflow-y:auto;overflow-x:hidden}
+.onb-stage{position:absolute;left:0;right:0;top:0;bottom:0;width:100%;display:flex;justify-content:center;align-items:center;padding:20px 32px;transform:translateX(100%);opacity:0;pointer-events:none;transition:transform .55s cubic-bezier(.16,1,.3,1),opacity .55s cubic-bezier(.16,1,.3,1);overflow-y:auto;overflow-x:hidden}
 .onb-stage.active{transform:translateX(0);opacity:1;pointer-events:auto}
 .onb-stage.left{transform:translateX(-100%);opacity:0;pointer-events:none}
 .onb-stage.right{transform:translateX(100%);opacity:0;pointer-events:none}
 
-.onb-content{max-width:520px;text-align:center;padding:0 24px;box-sizing:border-box}
+.onb-content{flex:0 1 520px;text-align:center;padding:0 24px;box-sizing:border-box}
 .onb-content.wide{max-width:640px}
 
 .onb-back{position:absolute;top:50%;left:32px;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid rgba(25,68,69,0.08);background:transparent;display:grid;place-items:center;color:var(--t3);cursor:pointer;transition:all .3s;z-index:20;font-size:0}
