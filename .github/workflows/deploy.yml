@@ -137,11 +137,20 @@ jobs:
         with:
           credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
 
-      - name: Deploy to Firebase
+      - name: Deploy to Firebase (Staging)
+        if: github.ref == 'refs/heads/develop'
         run: |
           firebase deploy \
             --only hosting,functions,firestore:rules,firestore:indexes,storage \
-            --project ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_PROJECT_ID_PRODUCTION || secrets.FIREBASE_PROJECT_ID_STAGING }} \
+            --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
+            --non-interactive
+
+      - name: Deploy to Firebase (Production)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          firebase deploy \
+            --only hosting,functions,firestore:rules,firestore:indexes,storage \
+            --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
             --non-interactive
 
   # ─────────────────────────────────────────────
