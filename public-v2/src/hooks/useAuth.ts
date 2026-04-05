@@ -21,16 +21,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
+    let mounted = true;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
+      if (!mounted) return;
+
+      if (!user) {
+        setState({ user: null, role: null, loading: false });
+        return;
+      }
+
+      try {
         // 1. Try cached token first
         let tokenResult = await user.getIdTokenResult();
+        if (!mounted) return;
         let role = (tokenResult.claims.role as UserRole) ?? null;
 
         // 2. If no role in cached token, force-refresh to pick up
         //    recently-set custom claims (e.g. admin set role after signup).
         if (!role) {
           tokenResult = await user.getIdTokenResult(true);
+          if (!mounted) return;
           role = (tokenResult.claims.role as UserRole) ?? null;
         }
 
@@ -38,38 +49,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!role) {
           try {
             const employerSnap = await getDoc(doc(db, 'employers', user.uid));
+            if (!mounted) return;
             if (employerSnap.exists()) {
               role = 'employer_admin';
             } else {
-              // Check users collection for role set by admin
               const userSnap = await getDoc(doc(db, 'users', user.uid));
+              if (!mounted) return;
               role = (userSnap.exists() ? (userSnap.data()?.role as UserRole) : null) || 'employee';
             }
           } catch {
-            // Firestore fallback failed — retry silently
+            if (!mounted) return;
+            // Firestore fallback failed — retry once
             try {
               await new Promise(r => setTimeout(r, 500));
+              if (!mounted) return;
               const retrySnap = await getDoc(doc(db, 'employers', user.uid));
+              if (!mounted) return;
               if (retrySnap.exists()) {
                 role = 'employer_admin';
               } else {
                 const retryUserSnap = await getDoc(doc(db, 'users', user.uid));
+                if (!mounted) return;
                 role = (retryUserSnap.exists() ? (retryUserSnap.data()?.role as UserRole) : null) || 'employee';
               }
             } catch {
-              // Retry also failed — default to employee role
+              if (!mounted) return;
               role = 'employee';
             }
           }
         }
 
-        setState({ user, role, loading: false });
-      } else {
-        setState({ user: null, role: null, loading: false });
+        if (mounted) setState({ user, role, loading: false });
+      } catch {
+        // Token resolution failed — treat as unauthenticated so the
+        // RouteGuard redirects to /login instead of spinning forever.
+        if (mounted) setState({ user: null, role: null, loading: false });
       }
     });
 
-    return unsubscribe;
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
   return createElement(AuthContext.Provider, { value: state }, children);
