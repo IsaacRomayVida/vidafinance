@@ -101,6 +101,10 @@ export default function App() {
             </Route>
           </Route>
 
+          {/* Legacy /admin → /ops redirect */}
+          <Route path="/admin" element={<Navigate to="/ops" replace />} />
+          <Route path="/admin/*" element={<Navigate to="/ops" replace />} />
+
           {/* 404 catch-all */}
           <Route path="*" element={<NotFound />} />
         </Routes>
