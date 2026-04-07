@@ -243,7 +243,7 @@ export function Onboarding() {
   };
 
   // -- CURP validation via Cloud Function --
-  const validateCURPRemote = useCallback(async (curp: string, expectedName: string) => {
+  const validateCURPRemote = useCallback(async (curp: string, expectedName: string, email?: string) => {
     if (lastValidatedCurp.current === curp) return;
     lastValidatedCurp.current = curp;
     setCurpStatus('validating');
@@ -254,7 +254,7 @@ export function Onboarding() {
         { curp: string; expectedName?: string },
         { valid: boolean; fullName?: string; dateOfBirth?: string; gender?: 'M' | 'F'; matchesExpectedName?: boolean }
       >(functions, 'validateCURP');
-      const { data } = await validate({ curp, ...(expectedName ? { expectedName } : {}) });
+      const { data } = await validate({ curp, ...(expectedName ? { expectedName } : {}), ...(email ? { email } : {}) });
       if (data.valid) {
         setCurpStatus('valid');
         setMemData((d) => ({
@@ -287,7 +287,7 @@ export function Onboarding() {
     }
     if (curpDebounceRef.current) clearTimeout(curpDebounceRef.current);
     if (CURP_REGEX.test(upper)) {
-      curpDebounceRef.current = setTimeout(() => validateCURPRemote(upper, memData.name), 600);
+      curpDebounceRef.current = setTimeout(() => validateCURPRemote(upper, memData.name, memData.email), 600);
     }
   };
 
