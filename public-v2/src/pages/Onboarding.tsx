@@ -293,6 +293,14 @@ export function Onboarding() {
 
   // -- MetaMap KYC verification --
   const startKYC = () => {
+    // Test-mode bypass: skip MetaMap for @vida-test.com emails
+    if (memData.email.endsWith('@vida-test.com')) {
+      setMetamapVerificationId('test-verification-' + Date.now());
+      setMetamapIdentityId('test-identity-' + Date.now());
+      setKycStatus('approved');
+      goForward(5);
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const metamapWidget = new (window as any).MetamapWidget({
       clientId: '69c5763020d348c911b0a852',
