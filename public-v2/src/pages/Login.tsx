@@ -56,6 +56,15 @@ export function Login() {
       // Reload user to pick up server-side changes (e.g. autoVerifyTestAccounts)
       await cred.user.reload();
 
+      // For test accounts, the Firestore auto-verify trigger may need a few seconds
+      if (!cred.user.emailVerified && cred.user.email?.endsWith('@vida-test.com')) {
+        for (let i = 0; i < 5; i++) {
+          await new Promise(r => setTimeout(r, 2000));
+          await cred.user.reload();
+          if (cred.user.emailVerified) break;
+        }
+      }
+
       // Check email verification
       if (!cred.user.emailVerified) {
         await sendEmailVerification(cred.user);
