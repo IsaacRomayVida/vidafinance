@@ -2,7 +2,7 @@ import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { beforeUserCreated } from 'firebase-functions/v2/identity';
+// import { beforeUserCreated } from 'firebase-functions/v2/identity'; // DISABLED
 import * as admin from 'firebase-admin';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -21,6 +21,8 @@ export { markLoanDisbursed } from './loans/markLoanDisbursed';
 export { generatePaymentLink } from './payments/generatePaymentLink';
 export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
 export { getSystemHealth } from './admin/getSystemHealth';
+export { sendVerificationEmail } from './auth/sendVerificationEmail';
+
 
 initializeApp();
 const db = getFirestore();
@@ -81,13 +83,14 @@ async function callML(path: string, body: Record<string, unknown>): Promise<Reco
 
 // ── autoVerifyTestAccounts — auto-verify @vida-test.com on signup ────────────
 
-export const autoVerifyTestAccounts = beforeUserCreated((event) => {
-  const user = event.data;
-  if (user?.email && user.email.endsWith('@vida-test.com')) {
-    return { emailVerified: true };
-  }
-  return {};
-});
+// DISABLED: requires Identity Platform (GCIP)
+// export const autoVerifyTestAccounts = beforeUserCreated((event) => {
+//   const user = event.data;
+//   if (user?.email && user.email.endsWith('@vida-test.com')) {
+//     return { emailVerified: true };
+//   }
+//   return {};
+// });
 
 // ── api — health endpoint ────────────────────────────────────────────────────
 
@@ -991,6 +994,40 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
   }
 
   return null;
+});
+
+
+// ── Auto-verify test accounts (Firestore triggers) ──────────────────────────
+// Replaces beforeUserCreated which requires Identity Platform.
+
+export const autoVerifyOnEmployerCreate = onDocumentCreated('employers/{uid}', async (event) => {
+  const data = event.data?.data();
+  if (!data?.email) return;
+  if (!data.email.endsWith('@vida-test.com')) return;
+  try {
+    const userRecord = await admin.auth().getUser(event.params.uid);
+    if (!userRecord.emailVerified) {
+      await admin.auth().updateUser(event.params.uid, { emailVerified: true });
+      logger.info('Auto-verified test employer', { uid: event.params.uid, email: data.email });
+    }
+  } catch (err) {
+    logger.warn('Auto-verify failed', { uid: event.params.uid, error: (err as Error).message });
+  }
+});
+
+export const autoVerifyOnEmployeeCreate = onDocumentCreated('employees/{uid}', async (event) => {
+  const data = event.data?.data();
+  if (!data?.email) return;
+  if (!data.email.endsWith('@vida-test.com')) return;
+  try {
+    const userRecord = await admin.auth().getUser(event.params.uid);
+    if (!userRecord.emailVerified) {
+      await admin.auth().updateUser(event.params.uid, { emailVerified: true });
+      logger.info('Auto-verified test employee', { uid: event.params.uid, email: data.email });
+    }
+  } catch (err) {
+    logger.warn('Auto-verify failed', { uid: event.params.uid, error: (err as Error).message });
+  }
 });
 
 // ── Scheduled functions ──────────────────────────────────────────────────────
