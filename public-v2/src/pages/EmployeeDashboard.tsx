@@ -26,6 +26,7 @@ interface EmployeeData {
   bankClabe?: string;
   creditLimit: number;
   availableCredit: number;
+  kycStatus?: string;
 }
 
 const LOAN_PURPOSES = [
@@ -188,6 +189,54 @@ export function EmployeeDashboard() {
           </div>
         </div>
       </div>
+
+      {/* KYC pending banner */}
+      {employee.kycStatus && employee.kycStatus !== 'approved' && (
+        <div style={{
+          margin: '0 auto', maxWidth: 960, padding: '0 20px',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '14px 20px', borderRadius: 12,
+            background: employee.kycStatus === 'rejected' ? '#fef2f2' : '#fffbeb',
+            border: `1px solid ${employee.kycStatus === 'rejected' ? '#fecaca' : '#fde68a'}`,
+            marginBottom: 16,
+          }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: employee.kycStatus === 'rejected' ? '#fee2e2' : '#fef3c7',
+              flexShrink: 0,
+            }}>
+              {employee.kycStatus === 'rejected' ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/>
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                </svg>
+              )}
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: employee.kycStatus === 'rejected' ? '#991b1b' : '#92400e' }}>
+                {employee.kycStatus === 'rejected'
+                  ? t('dash_kyc_rejected', 'Verificación rechazada')
+                  : employee.kycStatus === 'not_started'
+                    ? t('dash_kyc_not_started', 'Verificación de identidad pendiente')
+                    : t('dash_kyc_pending', 'Verificación en proceso')}
+              </div>
+              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
+                {employee.kycStatus === 'rejected'
+                  ? t('dash_kyc_rejected_desc', 'Tu verificación fue rechazada. Contacta soporte para más información.')
+                  : employee.kycStatus === 'not_started'
+                    ? t('dash_kyc_not_started_desc', 'Completa tu verificación de identidad para acceder a tu crédito.')
+                    : t('dash_kyc_pending_desc', 'Estamos revisando tu documentación. Te notificaremos cuando esté lista.')}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="dash-content">

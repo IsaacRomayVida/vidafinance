@@ -387,7 +387,7 @@ export function Onboarding() {
         bankClabe: memData.bankClabe,
         creditLimit,
         availableCredit: creditLimit,
-        kycStatus: kycStatus === 'not_started' ? 'not_started' : 'pending_review',
+        kycStatus: kycStatus,
         ...(metamapVerificationId ? { metamapVerificationId } : {}),
         ...(metamapIdentityId ? { metamapIdentityId } : {}),
         ...(metamapVerificationId ? { kycStartedAt: serverTimestamp() } : {}),
