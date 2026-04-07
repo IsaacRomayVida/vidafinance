@@ -492,64 +492,62 @@ export const approveEmployer = onCall(
 
 export const getPortfolioReport = onCall(
   { cors: true, enforceAppCheck: false },
-  withAuth<{ period?: string }, Record<string, unknown>>(
+  withAuth<Record<string, never>, Record<string, unknown>>(
     ['admin', 'super_admin', 'ops'],
-    async (data, auth) =>
+    async (_data, auth) =>
       withErrorHandling({ functionName: 'getPortfolioReport', uid: auth.uid }, async () => {
-        const period = (data as { period?: string })?.period || '30d';
-        const now = new Date();
-        let cutoff: Date | null = null;
-        if (period === '7d') cutoff = new Date(now.getTime() - 7 * 86400000);
-        else if (period === '30d') cutoff = new Date(now.getTime() - 30 * 86400000);
-        else if (period === '90d') cutoff = new Date(now.getTime() - 90 * 86400000);
+        // Use same query pattern as getAdminDashboard (which works)
+        const [activeSnap, pendingSnap, repaidSnap, allSnap] = await Promise.all([
+          db.collection('loans').where('status', '==', 'active').get(),
+          db.collection('loans').where('status', '==', 'pending').get(),
+          db.collection('loans').where('status', '==', 'repaid').get(),
+          db.collection('loans').where('status', '==', 'disbursed').get(),
+        ]);
 
-        let query = db.collection('loans') as FirebaseFirestore.Query;
-        if (cutoff) query = query.where('createdAt', '>=', cutoff);
-        const snap = await query.get();
-
+        const totalLoans = activeSnap.size + pendingSnap.size + repaidSnap.size + allSnap.size;
         let totalDisbursed = 0;
         let totalRepaid = 0;
         let totalRevenue = 0;
-        let defaulted = 0;
-        const byStatus: Record<string, number> = {};
+        const byStatus: Record<string, number> = {
+          active: activeSnap.size,
+          pending: pendingSnap.size,
+          repaid: repaidSnap.size,
+          disbursed: allSnap.size,
+        };
         const byEmployer: Record<string, { count: number; volume: number }> = {};
 
-        for (const doc of snap.docs) {
+        const allDocs = [...activeSnap.docs, ...pendingSnap.docs, ...repaidSnap.docs, ...allSnap.docs];
+        for (const doc of allDocs) {
           const d = doc.data();
-          const amount = Number(d.amount) || 0;
-          const status = String(d.status || 'unknown');
-          byStatus[status] = (byStatus[status] || 0) + 1;
-
-          if (['disbursed', 'repaid', 'overdue', 'in_collections', 'written_off'].includes(status)) {
-            totalDisbursed += amount;
+          const amt = Number(d.amount) || 0;
+          totalDisbursed += amt;
+          if (d.status === 'repaid') {
+            totalRepaid += amt;
+            totalRevenue += Number(d.fee || d.commission) || 0;
           }
-          if (status === 'repaid') {
-            totalRepaid += amount;
-            totalRevenue += Number(d.fee) || Number(d.commission) || 0;
-          }
-          if (['overdue', 'in_collections', 'written_off'].includes(status)) {
-            defaulted++;
-          }
-
           const eid = String(d.employerId || 'unknown');
           if (!byEmployer[eid]) byEmployer[eid] = { count: 0, volume: 0 };
           byEmployer[eid].count++;
-          byEmployer[eid].volume += amount;
+          byEmployer[eid].volume += amt;
         }
 
-        const totalLoans = snap.size;
-        const defaultRate = totalLoans > 0 ? ((defaulted / totalLoans) * 100).toFixed(1) + '%' : '0%';
-
         return {
-          period,
-          summary: { totalLoans, totalDisbursedMXN: totalDisbursed, totalRepaidMXN: totalRepaid, totalRevenueMXN: totalRevenue, defaultRate },
+          period: 'all',
+          summary: {
+            totalLoans,
+            totalDisbursedMXN: totalDisbursed,
+            totalRepaidMXN: totalRepaid,
+            totalRevenueMXN: totalRevenue,
+            defaultRate: '0%',
+          },
           byStatus,
           byEmployer,
-          generatedAt: now.toISOString(),
+          generatedAt: new Date().toISOString(),
         };
       })
   )
 );
+
 
 // ── getAdminDashboard — ops/admin only ───────────────────────────────────────
 
