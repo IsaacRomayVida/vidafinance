@@ -27,6 +27,7 @@ interface EmployeeData {
   creditLimit: number;
   availableCredit: number;
   kycStatus?: string;
+  employerCode?: string;
 }
 
 const LOAN_PURPOSES = [
@@ -389,6 +390,7 @@ export function EmployeeDashboard() {
         <LoanModal
           availableCredit={employee.availableCredit}
           employerId={employee.employerId}
+          employerCode={employee.employerCode}
           savedClabe={employee.bankClabe}
           onClose={() => setShowModal(false)}
           onSubmitted={handleLoanSubmitted}
@@ -616,12 +618,14 @@ function PaymentModal({
 function LoanModal({
   availableCredit,
   employerId,
+  employerCode: initialEmployerCode,
   savedClabe,
   onClose,
   onSubmitted,
 }: {
   availableCredit: number;
   employerId?: string;
+  employerCode?: string;
   savedClabe?: string;
   onClose: () => void;
   onSubmitted: () => void;
@@ -631,14 +635,18 @@ function LoanModal({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [employerCode, setEmployerCode] = useState('');
+  const [employerCode, setEmployerCode] = useState(initialEmployerCode || '');
   const [loadingEmployer, setLoadingEmployer] = useState(true);
   const [clabe, setClabe] = useState(savedClabe || '');
   const [editingClabe, setEditingClabe] = useState(!savedClabe);
   const [loanPurpose, setLoanPurpose] = useState('');
 
-  // Fetch employer code from employer doc
+  // Fetch employer code from employer doc (skip if already provided)
   useEffect(() => {
+    if (initialEmployerCode) {
+      setLoadingEmployer(false);
+      return;
+    }
     if (!employerId) {
       setLoadingEmployer(false);
       return;

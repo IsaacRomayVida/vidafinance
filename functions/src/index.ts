@@ -1031,6 +1031,11 @@ export const autoVerifyOnEmployerCreate = onDocumentCreated('employers/{uid}', a
       await admin.auth().updateUser(event.params.uid, { emailVerified: true });
       logger.info('Auto-verified test employer', { uid: event.params.uid, email: data.email });
     }
+    // Auto-activate test employers so loan requests work
+    if (data.status !== 'active') {
+      await db.collection('employers').doc(event.params.uid).update({ status: 'active' });
+      logger.info('Auto-activated test employer', { uid: event.params.uid });
+    }
   } catch (err) {
     logger.warn('Auto-verify failed', { uid: event.params.uid, error: (err as Error).message });
   }
