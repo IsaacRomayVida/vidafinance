@@ -342,3 +342,4 @@ async def score_loan_direct(
         "shapTop5": result["shap_top5"],
     }
 
+
