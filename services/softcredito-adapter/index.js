@@ -71,6 +71,15 @@ async function scCall(method, path, body) {
   return d;
 }
 
+
+app.get('/debug-routes', (req, res) => {
+  const routes = [];
+  app._router.stack.forEach(r => {
+    if (r.route) routes.push({ method: Object.keys(r.route.methods)[0], path: r.route.path });
+  });
+  res.json({ routes, ts: new Date().toISOString() });
+});
+
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/health', async (req, res) => {
   const redisOk = await redis.ping().then(() => true).catch(() => false);

@@ -2,7 +2,9 @@ FROM node:22-alpine
 WORKDIR /app
 COPY package*.json .
 RUN npm ci --only=production
+# bust=1775672149
 COPY . .
+RUN ls -la index.js && head -5 index.js && grep -c 'bureau' index.js
 EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3002/health || exit 1
