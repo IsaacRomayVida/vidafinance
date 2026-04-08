@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import {
   doc,
   setDoc,
@@ -293,15 +293,17 @@ export function Onboarding() {
     }
   };
 
-  // -- Email availability check --
+  // -- Email availability check (via Cloud Function) --
   const checkEmailAvailability = useCallback(async (email: string) => {
     if (!EMAIL_REGEX.test(email)) { setEmailStatus('idle'); return; }
     setEmailStatus('checking');
     try {
-      const methods = await fetchSignInMethodsForEmail(auth, email);
-      setEmailStatus(methods.length > 0 ? 'taken' : 'available');
+      const functions = getFunctions();
+      const checkFn = httpsCallable<{ email: string }, { available: boolean }>(functions, 'checkEmailAvailability');
+      const { data } = await checkFn({ email });
+      setEmailStatus(data.available ? 'available' : 'taken');
     } catch {
-      // If check fails (e.g. network), don't block — allow signup attempt
+      // If check fails, don't block — allow signup attempt
       setEmailStatus('available');
     }
   }, []);

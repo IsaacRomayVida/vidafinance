@@ -102,6 +102,28 @@ export const api = onRequest({ cors: true }, async (req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
+// ── checkEmailAvailability — unauthenticated (used during registration) ──────
+
+export const checkEmailAvailability = onCall(
+  { cors: true, enforceAppCheck: false },
+  async (request): Promise<{ available: boolean }> => {
+    const email = (request.data as { email?: string })?.email;
+    if (!email || typeof email !== 'string') {
+      throw new HttpsError('invalid-argument', 'Email required');
+    }
+    try {
+      await admin.auth().getUserByEmail(email);
+      return { available: false };
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'auth/user-not-found') {
+        return { available: true };
+      }
+      // Any other error — don't block registration
+      return { available: true };
+    }
+  }
+);
+
 // ── validateCURP — unauthenticated (used during registration) ────────────────
 
 interface ValidateCURPData {
