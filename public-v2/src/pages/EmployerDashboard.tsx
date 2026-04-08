@@ -629,6 +629,7 @@ export function EmployerDashboard() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [pageState, setPageState] = useState<'loading' | 'pending_verification' | 'dashboard'>('loading');
 
   const needsEmailVerification = user ? !user.emailVerified : false;
@@ -766,6 +767,21 @@ export function EmployerDashboard() {
     { key: 'rejected', label: t('dash_tab_rejected') },
   ];
 
+  // Approve or reject a pending loan
+  const handleLoanAction = async (loanId: string, status: 'approved' | 'rejected') => {
+    setActionLoading(loanId);
+    try {
+      const functions = getFunctions();
+      const updateLoanStatus = httpsCallable(functions, 'updateLoanStatus');
+      await updateLoanStatus({ loanId, status });
+    } catch (e: unknown) {
+      alert('Error: ' + ((e as Error)?.message || 'Unknown error'));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+
   const filteredLoans = (() => {
     if (activeTab === 'all') return loans;
     if (activeTab === 'approved') return loans.filter((l) => l.status === 'approved' || l.status === 'disbursement_queued');
@@ -883,6 +899,7 @@ export function EmployerDashboard() {
                     <th>{t('dash_th_term')}</th>
                     <th>{t('dash_th_status')}</th>
                     <th>{t('dash_th_date')}</th>
+                    <th>{t('dash_th_action', 'Acción')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -898,6 +915,36 @@ export function EmployerDashboard() {
                       </td>
                       <td>
                         {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString() : '—'}
+                      </td>
+                      <td>
+                        {loan.status === 'pending' ? (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              disabled={actionLoading === loan.id}
+                              onClick={() => handleLoanAction(loan.id, 'approved')}
+                              style={{
+                                padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                                background: 'var(--brand, #194445)', color: '#fff',
+                                border: 'none', borderRadius: 8, cursor: 'pointer',
+                                opacity: actionLoading === loan.id ? 0.5 : 1,
+                              }}
+                            >
+                              {actionLoading === loan.id ? '...' : t('dash_approve', 'Aprobar')}
+                            </button>
+                            <button
+                              disabled={actionLoading === loan.id}
+                              onClick={() => handleLoanAction(loan.id, 'rejected')}
+                              style={{
+                                padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                                background: 'transparent', color: '#c1121f',
+                                border: '1px solid #c1121f', borderRadius: 8, cursor: 'pointer',
+                                opacity: actionLoading === loan.id ? 0.5 : 1,
+                              }}
+                            >
+                              {t('dash_reject', 'Rechazar')}
+                            </button>
+                          </div>
+                        ) : '—'}
                       </td>
                     </tr>
                   ))}
