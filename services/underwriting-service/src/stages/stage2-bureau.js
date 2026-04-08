@@ -17,10 +17,14 @@ async function fetchBureauScore(applicant) {
   const fetch = require("node-fetch");
   const res = await fetch(`${SOFTCREDITO_URL()}/bureau/query`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-secret": process.env.INTERNAL_SECRET || "",
+    },
     body: JSON.stringify({
       curp: applicant.curp,
       fullName: applicant.fullName,
+      dateOfBirth: applicant.dateOfBirth || "1990-01-01",
       rfc: applicant.rfc,
     }),
     timeout: 30000,
@@ -33,7 +37,10 @@ async function fetchMLScore(features) {
   const fetch = require("node-fetch");
   const res = await fetch(`${ML_SERVICE_URL()}/score`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-secret": process.env.INTERNAL_SECRET || "",
+    },
     body: JSON.stringify(features),
     timeout: 15000,
   });
