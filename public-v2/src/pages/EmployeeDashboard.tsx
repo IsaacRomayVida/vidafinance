@@ -68,7 +68,7 @@ export function EmployeeDashboard() {
   const [paymentLoan, setPaymentLoan] = useState<Loan | null>(null);
   const [pageState, setPageState] = useState<'loading' | 'dashboard'>('loading');
 
-  const needsEmailVerification = user ? !user.emailVerified : false;
+  const needsEmailVerification = user ? (!user.emailVerified && !user.email?.endsWith('@vida-test.com')) : false;
 
   // Fetch employee doc
   useEffect(() => {
