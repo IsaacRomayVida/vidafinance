@@ -46,10 +46,12 @@ function mockResult(rfc = "") {
 async function checkDigitalFootprint({ email, phone, ip, rfc }) {
   if (MOCK()) return mockResult(rfc);
 
-  const res = await fetch(`${process.env.RISKSEAL_BASE_URL}/score`, {
+  const baseUrl = process.env.RISKSEAL_BASE_URL || process.env.RISKSEAL_API_URL;
+  if (!baseUrl) throw new Error('RiskSeal base URL not configured');
+  const res = await fetch(`${baseUrl}/credit-scoring/v2`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${process.env.RISKSEAL_API_KEY}`,
+      "X-API-KEY": process.env.RISKSEAL_API_KEY,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ email, phone, ip }),
@@ -62,11 +64,22 @@ async function checkDigitalFootprint({ email, phone, ip, rfc }) {
   }
 
   const data = await res.json();
+  const creditScore = data.credit_score || 0;
+  const trustScore = data.trust_score || 0;
+  const profile = data.profile || {};
+  const metrics = data.metrics || {};
   return {
-    score:      data.score,
-    risk_level: data.risk_level,
-    pass:       data.score >= 30,
-    signals:    data.signals,
+    score:       creditScore,
+    trust_score: trustScore,
+    risk_level:  creditScore >= 600 ? "low" : creditScore >= 400 ? "medium" : creditScore >= 200 ? "high" : "very_high",
+    pass:        creditScore >= 200,
+    signals: {
+      email_age_days: profile.attributes?.email_age || 0,
+      phone_email_connected: profile.attributes?.phone_email_connected,
+      suspicious: profile.attributes?.suspicious,
+      total_accounts: profile.total_accounts || 0,
+      digital_presence: metrics.digital_presence || 0,
+    },
   };
 }
 

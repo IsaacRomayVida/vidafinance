@@ -83,8 +83,8 @@ function generateEmployerCode(): string {
   return code;
 }
 
-const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
-const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/;
+// const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/; // Used server-side only
+// const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/; // Extracted from INE via MetaMap
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function validateCLABE(clabe: string): boolean {
@@ -165,19 +165,19 @@ export function Onboarding() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // CURP validation state
-  const [curpStatus, setCurpStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid' | 'error'>('idle');
-  const [curpError, setCurpError] = useState('');
+  const [, setCurpStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid' | 'error'>('idle');
+  const [, setCurpError] = useState('');
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const emailDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const curpDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastValidatedCurp = useRef('');
+  // const curpDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // const lastValidatedCurp = useRef('');
 
   // KYC verification state
   const [kycStatus, setKycStatus] = useState<'not_started' | 'pending_review' | 'approved' | 'rejected'>('not_started');
   const [metamapVerificationId, setMetamapVerificationId] = useState('');
   const [metamapIdentityId, setMetamapIdentityId] = useState('');
 
-  const totalSteps = role === 'employer' ? 7 : role === 'employee' ? 7 : 0;
+  const totalSteps = role === 'employer' ? 7 : role === 'employee' ? 6 : 0;
 
   const goForward = useCallback((toStep: number) => {
     setDirection('right');
@@ -245,6 +245,7 @@ export function Onboarding() {
   };
 
   // -- CURP validation via Cloud Function --
+  /* validateCURPRemote removed — CURP extracted from INE via MetaMap
   const validateCURPRemote = useCallback(async (curp: string, expectedName: string, email?: string) => {
     if (lastValidatedCurp.current === curp) return;
     lastValidatedCurp.current = curp;
@@ -279,19 +280,8 @@ export function Onboarding() {
     }
   }, [t]);
 
-  const handleCurpChange = (val: string) => {
-    const upper = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    setMemData((d) => ({ ...d, curp: upper }));
-    // Reset validation state when CURP changes
-    if (upper !== lastValidatedCurp.current) {
-      setCurpStatus('idle');
-      setCurpError('');
-    }
-    if (curpDebounceRef.current) clearTimeout(curpDebounceRef.current);
-    if (CURP_REGEX.test(upper)) {
-      curpDebounceRef.current = setTimeout(() => validateCURPRemote(upper, memData.name, memData.email), 600);
-    }
-  };
+  */
+  // CURP validation removed — extracted from INE via MetaMap
 
   // -- Email availability check (via Cloud Function) --
   const checkEmailAvailability = useCallback(async (email: string) => {
@@ -333,7 +323,7 @@ export function Onboarding() {
       setMetamapVerificationId('test-verification-' + Date.now());
       setMetamapIdentityId('test-identity-' + Date.now());
       setKycStatus('approved');
-      goForward(5);
+      goForward(4);
       return;
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -355,7 +345,7 @@ export function Onboarding() {
       setMetamapVerificationId(verificationId || '');
       setMetamapIdentityId(identityId || '');
       setKycStatus('pending_review');
-      goForward(5);
+      goForward(4);
     });
 
     metamapWidget.on('metamap:exitedSdk', () => {
@@ -394,7 +384,7 @@ export function Onboarding() {
         activeLoans: 0,
         totalDisbursed: 0,
       });
-      goForward(7);
+      goForward(6);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
     } finally {
@@ -416,9 +406,9 @@ export function Onboarding() {
         email: memData.email,
         phone: memData.phone,
         dateOfBirth: memData.dateOfBirth,
-        curp: memData.curp.toUpperCase(),
+        curp: memData.curp ? memData.curp.toUpperCase() : '',
         gender: memData.gender || null,
-        rfc: memData.rfc.toUpperCase(),
+        rfc: memData.rfc ? memData.rfc.toUpperCase() : '',
         employerId: memData.employerId,
         employerName: memData.employerName,
         employerCode: memData.code.toUpperCase(),
@@ -437,7 +427,7 @@ export function Onboarding() {
       await updateDoc(doc(db, 'employers', memData.employerId), {
         totalEmployees: increment(1),
       });
-      goForward(7);
+      goForward(6);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
     } finally {
@@ -467,10 +457,9 @@ export function Onboarding() {
         const age = getAge(memData.dateOfBirth);
         return age >= 18 && age <= 65;
       }
-      if (step === 3) return curpStatus === 'valid' && RFC_REGEX.test(memData.rfc.trim());
-      if (step === 4) return kycStatus === 'pending_review' || kycStatus === 'approved';
-      if (step === 5) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && validateCLABE(memData.bankClabe);
-      if (step === 6) return memData.password.length >= 6 && memData.terms;
+      if (step === 3) return kycStatus === 'pending_review' || kycStatus === 'approved';
+      if (step === 4) return salaryNum > 0 && memData.payFrequency !== '' && memData.employmentTenure !== '' && validateCLABE(memData.bankClabe);
+      if (step === 5) return memData.password.length >= 6 && memData.terms;
     }
     return false;
   };
@@ -478,7 +467,7 @@ export function Onboarding() {
   const handleNext = () => {
     if (role === 'employer' && step === 6) {
       createEmployerAccount();
-    } else if (role === 'employee' && step === 6) {
+    } else if (role === 'employee' && step === 5) {
       createEmployeeAccount();
     } else {
       goForward(step + 1);
@@ -489,12 +478,12 @@ export function Onboarding() {
   const progressPct = totalSteps > 0 ? ((step) / totalSteps) * 100 : 0;
 
   // Is this a final success step?
-  const isFinalStep = (role === 'employer' && step === 7) || (role === 'employee' && step === 7);
+  const isFinalStep = (role === 'employer' && step === 7) || (role === 'employee' && step === 6);
 
   // Action button config
   const getActionLabel = () => {
     if (role === 'employer' && step === 6) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
-    if (role === 'employee' && step === 6) return creating ? t('onb_m_step5_creating') : t('onb_m_step5_btn');
+    if (role === 'employee' && step === 5) return creating ? t('onb_m_step5_creating') : t('onb_m_step5_btn');
     return t('onb_next');
   };
 
@@ -746,9 +735,9 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 6: Password + terms */}
-      <div className={stageClass(6)}>
-        {step === 6 && (
+      {/* Step 5: Password + terms */}
+      <div className={stageClass(5)}>
+        {step === 5 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step5_sub')}</p>
@@ -893,58 +882,9 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 3: CURP + RFC */}
+      {/* Step 3: KYC verification via MetaMap */}
       <div className={stageClass(3)}>
         {step === 3 && (
-          <div className="onb-content">
-            <h1 className="onb-h"><RichText html={t('onb_m_step3_h')} /></h1>
-            <p className="onb-sub">{t('onb_m_step3_sub')}</p>
-            <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step3_curp')}</label>
-              <input
-                autoFocus
-                className={`onb-input${
-                  curpStatus === 'invalid' || curpStatus === 'error' ? ' invalid'
-                    : curpStatus === 'valid' ? ' valid'
-                    : memData.curp.length > 0 && !CURP_REGEX.test(memData.curp) ? ' invalid'
-                    : ''
-                }`}
-                placeholder={t('onb_m_step3_curp_ph')}
-                maxLength={18}
-                value={memData.curp}
-                onChange={(e) => handleCurpChange(e.target.value)}
-              />
-              {curpStatus === 'validating' && (
-                <div className="onb-input-hint">{t('onb_m_step3_curp_validating')}</div>
-              )}
-              {curpError && (
-                <div className="onb-input-hint error">{curpError}</div>
-              )}
-              {curpStatus === 'valid' && (
-                <div className="onb-input-hint success">{t('onb_m_step3_curp_verified')}</div>
-              )}
-              {curpStatus === 'idle' && !curpError && (
-                <div className="onb-input-hint">{t('onb_m_step3_curp_hint')}</div>
-              )}
-            </div>
-            <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step3_rfc')}</label>
-              <input
-                className={`onb-input${memData.rfc.length > 0 && !RFC_REGEX.test(memData.rfc) ? ' invalid' : RFC_REGEX.test(memData.rfc) ? ' valid' : ''}`}
-                placeholder={t('onb_m_step3_rfc_ph')}
-                maxLength={13}
-                value={memData.rfc}
-                onChange={(e) => setMemData({ ...memData, rfc: e.target.value.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '') })}
-              />
-              <div className="onb-input-hint">{t('onb_m_step3_rfc_hint')}</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Step 4: KYC verification via MetaMap */}
-      <div className={stageClass(4)}>
-        {step === 4 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_kyc_h')} /></h1>
             <p className="onb-sub">{t('onb_m_kyc_sub')}</p>
@@ -1000,9 +940,9 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 5: Salary + pay frequency + tenure + CLABE + credit preview */}
-      <div className={stageClass(5)}>
-        {step === 5 && (
+      {/* Step 4: Salary + pay frequency + tenure + CLABE + credit preview */}
+      <div className={stageClass(4)}>
+        {step === 4 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step4_sub')}</p>
@@ -1086,9 +1026,9 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 6: Password + terms */}
-      <div className={stageClass(6)}>
-        {step === 6 && (
+      {/* Step 5: Password + terms */}
+      <div className={stageClass(5)}>
+        {step === 5 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_m_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step5_sub')}</p>
@@ -1119,8 +1059,8 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 7: Employee success */}
-      <div className={stageClass(7)}>
+      {/* Step 6: Employee success */}
+      <div className={stageClass(6)}>
         <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">
