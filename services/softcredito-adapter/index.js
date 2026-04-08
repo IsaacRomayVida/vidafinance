@@ -238,4 +238,3 @@ app.post('/curp/validate', requireInternal, async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3002, () => log.info({ port: process.env.PORT || 3002 }, 'vida-softcredito-adapter started'));
-# Updated routes Wed Apr  8 18:23:54 UTC 2026

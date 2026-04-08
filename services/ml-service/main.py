@@ -341,4 +341,3 @@ async def score_loan_direct(
         "challengerModel": result["challenger_model"],
         "shapTop5": result["shap_top5"],
     }
-# Updated secrets Wed Apr  8 18:23:54 UTC 2026
