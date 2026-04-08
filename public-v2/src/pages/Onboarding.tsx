@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from 'firebase/auth';
 import {
   doc,
   setDoc,
@@ -167,6 +167,8 @@ export function Onboarding() {
   // CURP validation state
   const [curpStatus, setCurpStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid' | 'error'>('idle');
   const [curpError, setCurpError] = useState('');
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const emailDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const curpDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidatedCurp = useRef('');
 
@@ -288,6 +290,37 @@ export function Onboarding() {
     if (curpDebounceRef.current) clearTimeout(curpDebounceRef.current);
     if (CURP_REGEX.test(upper)) {
       curpDebounceRef.current = setTimeout(() => validateCURPRemote(upper, memData.name, memData.email), 600);
+    }
+  };
+
+  // -- Email availability check --
+  const checkEmailAvailability = useCallback(async (email: string) => {
+    if (!EMAIL_REGEX.test(email)) { setEmailStatus('idle'); return; }
+    setEmailStatus('checking');
+    try {
+      const methods = await fetchSignInMethodsForEmail(auth, email);
+      setEmailStatus(methods.length > 0 ? 'taken' : 'available');
+    } catch {
+      // If check fails (e.g. network), don't block — allow signup attempt
+      setEmailStatus('available');
+    }
+  }, []);
+
+  const handleEmailChange = (email: string) => {
+    if (role === 'employee') {
+      setMemData((d) => ({ ...d, email }));
+      setEmailStatus('idle');
+      if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current);
+      if (EMAIL_REGEX.test(email)) {
+        emailDebounceRef.current = setTimeout(() => checkEmailAvailability(email), 800);
+      }
+    } else {
+      setEmpData((d) => ({ ...d, email }));
+      setEmailStatus('idle');
+      if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current);
+      if (EMAIL_REGEX.test(email)) {
+        emailDebounceRef.current = setTimeout(() => checkEmailAvailability(email), 800);
+      }
     }
   };
 
@@ -418,7 +451,7 @@ export function Onboarding() {
   const canProceed = (): boolean => {
     if (role === 'employer') {
       if (step === 1) return empData.company.trim().length > 0;
-      if (step === 2) return empData.name.trim().length > 0 && EMAIL_REGEX.test(empData.email) && empData.phone.trim().length >= 10;
+      if (step === 2) return empData.name.trim().length > 0 && EMAIL_REGEX.test(empData.email) && empData.phone.trim().length >= 10 && emailStatus !== 'taken' && emailStatus !== 'checking';
       if (step === 3) return empData.rfc.trim().length >= 12 && empData.state !== '' && empData.industry !== '';
       if (step === 4) return empData.employeeCount !== '' && empData.payFrequency !== '' && empData.payrollSystem !== '';
       if (step === 5) return empData.usesDispersora !== '' && validateCLABE(empData.bankClabe);
@@ -428,6 +461,7 @@ export function Onboarding() {
       if (step === 1) return codeStatus === 'found';
       if (step === 2) {
         if (!memData.name.trim() || !EMAIL_REGEX.test(memData.email) || memData.phone.replace(/\D/g, '').length < 10 || !memData.dateOfBirth) return false;
+        if (emailStatus === 'taken' || emailStatus === 'checking') return false;
         const age = getAge(memData.dateOfBirth);
         return age >= 18 && age <= 65;
       }
@@ -553,7 +587,7 @@ export function Onboarding() {
                 className="onb-input"
                 placeholder={t('onb_e_step2_email_ph')}
                 value={empData.email}
-                onChange={(e) => setEmpData({ ...empData, email: e.target.value })}
+                onChange={(e) => handleEmailChange(e.target.value)}
               />
             </div>
             <div className="onb-field">
@@ -816,11 +850,20 @@ export function Onboarding() {
               <label className="onb-label">{t('onb_m_step2_email')}</label>
               <input
                 type="email"
-                className="onb-input"
+                className={`onb-input${emailStatus === 'taken' ? ' invalid' : emailStatus === 'available' ? ' valid' : ''}`}
                 placeholder={t('onb_m_step2_email_ph')}
                 value={memData.email}
-                onChange={(e) => setMemData({ ...memData, email: e.target.value })}
+                onChange={(e) => handleEmailChange(e.target.value)}
               />
+              {emailStatus === 'checking' && (
+                <div className="onb-input-hint">{t('onb_m_step2_email_checking', 'Verificando disponibilidad...')}</div>
+              )}
+              {emailStatus === 'taken' && (
+                <div className="onb-input-hint error">{t('onb_m_step2_email_taken', 'Este correo ya está registrado. ¿Ya tienes cuenta?')} <a href="/login" style={{color:'inherit',textDecoration:'underline'}}>{t('onb_login', 'Inicia sesión')}</a></div>
+              )}
+              {emailStatus === 'available' && (
+                <div className="onb-input-hint success">{t('onb_m_step2_email_available', 'Correo disponible')}</div>
+              )}
             </div>
             <div className="onb-field">
               <label className="onb-label">{t('onb_m_step2_phone')}</label>
