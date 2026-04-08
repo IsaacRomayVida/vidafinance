@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './hooks/useAuth';
 import { MarketingLayout } from './components/layout/MarketingLayout';
 import { RouteGuard } from './components/RouteGuard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { EmployeeLayout } from './components/layouts/EmployeeLayout';
 import { EmployerLayout } from './components/layouts/EmployerLayout';
 import { AdminLayout } from './components/layouts/AdminLayout';
@@ -46,6 +47,7 @@ const PageSpinner = () => (
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
     <BrowserRouter>
       <Routes>
@@ -116,5 +118,6 @@ export default function App() {
       </Routes>
     </BrowserRouter>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
