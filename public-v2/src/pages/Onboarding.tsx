@@ -302,7 +302,7 @@ export function Onboarding() {
       return;
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const metamapWidget = new (window as any).MetamapWidget({
+    const metamapWidget = new (window as any).MetamapVerification({
       clientId: '69c5763020d348c911b0a852',
       flowId: '69d63c07940df362adbef105',
       metadata: {
@@ -313,11 +313,12 @@ export function Onboarding() {
         phone: memData.phone,
       },
     });
-    metamapWidget.mount();
+    metamapWidget.start();
 
-    metamapWidget.on('metamap:userFinishedSdk', ({ identityId, verificationId }: { identityId: string; verificationId: string }) => {
-      setMetamapVerificationId(verificationId);
-      setMetamapIdentityId(identityId);
+    metamapWidget.on('metamap:userFinishedSdk', (event: { detail: { identityId?: string; verificationId?: string } }) => {
+      const { identityId, verificationId } = event.detail || event as any;
+      setMetamapVerificationId(verificationId || '');
+      setMetamapIdentityId(identityId || '');
       setKycStatus('pending_review');
       goForward(5);
     });
