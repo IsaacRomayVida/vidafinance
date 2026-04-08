@@ -25,7 +25,7 @@ SEC = os.environ.get("INTERNAL_SECRET", "")
 AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
 
-VERSION = "1.0.2"
+VERSION = "1.0.0"
 START_TIME = time.time()
 
 # Initialize Firebase if credentials are available
