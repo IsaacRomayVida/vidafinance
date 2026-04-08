@@ -19,7 +19,7 @@ async function fetchBureauScore(applicant) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-internal-secret": process.env.INTERNAL_SECRET || "",
+      "x-internal-secret": process.env.ML_INTERNAL_SECRET || process.env.INTERNAL_SECRET || "",
     },
     body: JSON.stringify({
       curp: applicant.curp,
@@ -39,7 +39,7 @@ async function fetchMLScore(features) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-internal-secret": process.env.INTERNAL_SECRET || "",
+      "x-internal-secret": process.env.ML_INTERNAL_SECRET || process.env.INTERNAL_SECRET || "",
     },
     body: JSON.stringify(features),
     timeout: 15000,

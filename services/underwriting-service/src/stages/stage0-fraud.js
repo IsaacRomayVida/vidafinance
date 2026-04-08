@@ -20,7 +20,7 @@ async function callFraudScore(applicant) {
   const fetch = require("node-fetch");
   const res = await fetch(`${ML_SERVICE_URL()}/underwrite/employee`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_SECRET || "" },
+    headers: { "Content-Type": "application/json", "x-internal-secret": process.env.ML_INTERNAL_SECRET || process.env.INTERNAL_SECRET || "" },
     body: JSON.stringify({
       monthlySalary: applicant.monthlySalary || 0,
       employerTier: applicant.employerTier || 2,
