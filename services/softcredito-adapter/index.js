@@ -3,10 +3,10 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Worker } = require('bullmq');
-const createLogger = require('../shared/logger');
+const pino = require('pino');
 require('dotenv').config();
 
-const log = createLogger('vida-softcredito-adapter');
+const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
