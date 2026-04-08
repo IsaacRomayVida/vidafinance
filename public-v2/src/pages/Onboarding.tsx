@@ -307,6 +307,10 @@ export function Onboarding() {
       flowId: '69d63c07940df362adbef105',
       metadata: {
         curp: memData.curp,
+        email: memData.email,
+        firstName: memData.name.split(' ')[0],
+        lastName: memData.name.split(' ').slice(1).join(' '),
+        phone: memData.phone,
       },
     });
     metamapWidget.mount();
