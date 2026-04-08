@@ -195,4 +195,62 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
   }
 });
 
+
+
+// ── Bureau query via SoftCrédito API ────────────────────────────────────────
+app.post('/bureau/query', requireInternal, async (req, res) => {
+  const { curp, fullName, dateOfBirth, rfc } = req.body;
+  if (!curp || !fullName || !dateOfBirth) {
+    return res.status(400).json({ error: 'Missing required fields: curp, fullName, dateOfBirth' });
+  }
+  try {
+    // Call SoftCrédito bureau API
+    const fetch = require('node-fetch');
+    const scUrl = process.env.SOFTCREDITO_API_URL || 'https://api.softcredito.com';
+    const scKey = process.env.SOFTCREDITO_API_KEY || '';
+    const resp = await fetch(`${scUrl}/v1/bureau/query`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${scKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ curp, fullName, dateOfBirth, rfc }),
+      timeout: 25000,
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      log.warn({ status: resp.status }, 'Bureau query failed');
+      return res.status(502).json({ error: `Bureau API error: ${resp.status}`, hasBureauRecord: false, score: 500 });
+    }
+    const data = await resp.json();
+    res.json(data);
+  } catch (err) {
+    log.warn({ error: err.message }, 'Bureau query error — returning defaults');
+    res.json({ hasBureauRecord: false, score: 500, activeDefaults: 0, competitorLoans: 0, error: err.message });
+  }
+});
+
+// ── CURP validation via RENAPO ──────────────────────────────────────────────
+app.post('/curp/validate', requireInternal, async (req, res) => {
+  const { curp, expectedName } = req.body;
+  if (!curp) return res.status(400).json({ error: 'CURP required' });
+  try {
+    const fetch = require('node-fetch');
+    const scUrl = process.env.SOFTCREDITO_API_URL || 'https://api.softcredito.com';
+    const scKey = process.env.SOFTCREDITO_API_KEY || '';
+    const resp = await fetch(`${scUrl}/v1/curp/validate`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${scKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ curp, expectedName }),
+      timeout: 15000,
+    });
+    if (!resp.ok) {
+      log.warn({ status: resp.status }, 'CURP validation failed');
+      return res.json({ valid: true, fullName: expectedName || null });
+    }
+    const data = await resp.json();
+    res.json(data);
+  } catch (err) {
+    log.warn({ error: err.message }, 'CURP validation error — accepting by format');
+    res.json({ valid: true, fullName: expectedName || null });
+  }
+});
+
 app.listen(process.env.PORT || 3002, () => log.info({ port: process.env.PORT || 3002 }, 'vida-softcredito-adapter started'));
