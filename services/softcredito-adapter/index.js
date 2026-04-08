@@ -82,6 +82,7 @@ app.get('/debug-routes', (req, res) => {
 
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/health', async (req, res) => {
+  // v2 - with bureau+curp routes
   const redisOk = await redis.ping().then(() => true).catch(() => false);
   res.json({ status: redisOk ? 'ok' : 'degraded', service: 'vida-softcredito-adapter', redis: redisOk, ts: new Date().toISOString() });
 });
@@ -207,6 +208,8 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
 
 
 // ── Bureau query via SoftCrédito API ────────────────────────────────────────
+app.get('/routes-check', (req, res) => res.json({routes: ['health','bureau/query','curp/validate','internal/*'], version: 'v2-bureau'}));
+
 app.post('/bureau/query', requireInternal, async (req, res) => {
   const { curp, fullName, dateOfBirth, rfc } = req.body;
   if (!curp || !fullName || !dateOfBirth) {
@@ -235,3 +238,4 @@ app.post('/curp/validate', requireInternal, async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3002, () => log.info({ port: process.env.PORT || 3002 }, 'vida-softcredito-adapter started'));
+# Updated routes Wed Apr  8 18:23:54 UTC 2026
