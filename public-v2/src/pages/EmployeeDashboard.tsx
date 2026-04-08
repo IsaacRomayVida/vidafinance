@@ -693,6 +693,8 @@ function LoanModal({
 
     setSubmitting(true);
     try {
+      // Force token refresh to pick up role claim set by onEmployeeDocCreated trigger
+      if (auth.currentUser) await auth.currentUser.getIdToken(true);
       const functions = getFunctions();
       const requestLoan = httpsCallable(functions, 'requestLoan');
       await requestLoan({
