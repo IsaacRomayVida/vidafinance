@@ -17,23 +17,16 @@ jobs:
           SC_CLIENT_SECRET: ${{ secrets.SOFTCREDITO_CLIENT_SECRET }}
           SC_API_URL: ${{ secrets.SOFTCREDITO_API_URL }}
           SC_BASE_URL: ${{ secrets.SOFTCREDITO_BASE_URL }}
-          SC_TOKEN_URL: ${{ secrets.SOFTCREDITO_TOKEN_URL }}
         run: |
-          echo "SC_CLIENT_ID length: ${#SC_CLIENT_ID}"
-          echo "SC_CLIENT_SECRET length: ${#SC_CLIENT_SECRET}"
-          echo "SC_API_URL: $SC_API_URL"
-          echo "SC_BASE_URL: $SC_BASE_URL"
-          echo "SC_TOKEN_URL: $SC_TOKEN_URL"
-          
           API_URL="${SC_API_URL:-${SC_BASE_URL:-https://ws.softcredito.com.mx/api}}"
-          echo "Using API URL: $API_URL"
+          echo "API URL length: ${#API_URL}"
+          echo "CLIENT_ID length: ${#SC_CLIENT_ID}"
+          echo "CLIENT_SECRET length: ${#SC_CLIENT_SECRET}"
           
-          echo "Setting softcredito-adapter vars..."
+          railway link --project 1ad040b4-6f0b-4530-9f58-0a1ef5e89c75 --environment production --service softcredito-adapter
+          
           railway variables set \
             SOFTCREDITO_CLIENT_ID="$SC_CLIENT_ID" \
             SOFTCREDITO_CLIENT_SECRET="$SC_CLIENT_SECRET" \
-            SOFTCREDITO_API_URL="$API_URL" \
-            --project 1ad040b4-6f0b-4530-9f58-0a1ef5e89c75 \
-            --environment production \
-            --service softcredito-adapter
+            SOFTCREDITO_API_URL="$API_URL"
           echo "Done softcredito-adapter"
