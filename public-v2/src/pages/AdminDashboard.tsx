@@ -88,7 +88,7 @@ export function AdminDashboard() {
     try {
       const functions = getFunctions();
       const fn = httpsCallable(functions, 'approveEmployer');
-      await fn({ employerId, decision, rejectionReason: decision === 'rejected' ? 'Not qualified' : undefined });
+      await fn({ employerUid: employerId, decision, rejectionReason: decision === 'rejected' ? 'Not qualified' : undefined });
       // Refresh stats
       const getAdminDash = httpsCallable<unknown, { stats: DashStats }>(functions, 'getAdminDashboard');
       const result = await getAdminDash({});
