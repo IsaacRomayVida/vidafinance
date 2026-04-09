@@ -42,18 +42,20 @@ let _token = null, _tokenExp = 0;
 async function scToken() {
   if (_token && Date.now() < _tokenExp - 60000) return _token;
   const { default: fetch } = await import('node-fetch');
-  const r = await fetch(process.env.SOFTCREDITO_API_URL + '/auth/token', {
+  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL || (process.env.SOFTCREDITO_API_URL + '/../../oauth2/token');
+  const r = await fetch(tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      clientId: process.env.SOFTCREDITO_CLIENT_ID,
-      clientSecret: process.env.SOFTCREDITO_CLIENT_SECRET
-    })
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=client_credentials&client_id=${encodeURIComponent(process.env.SOFTCREDITO_CLIENT_ID)}&client_secret=${encodeURIComponent(process.env.SOFTCREDITO_CLIENT_SECRET)}`
   });
-  if (!r.ok) throw new Error('SC auth failed: ' + r.status);
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error('SC auth failed: ' + r.status + ' ' + body.slice(0, 200));
+  }
   const d = await r.json();
   _token = d.access_token;
-  _tokenExp = Date.now() + d.expires_in * 1000;
+  _tokenExp = Date.now() + (d.expires_in || 7200) * 1000;
+  log.info({ tokenUrl }, 'SC token acquired');
   return _token;
 }
 
