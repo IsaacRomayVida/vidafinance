@@ -733,9 +733,9 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 5: Password + terms */}
-      <div className={stageClass(5)}>
-        {step === 5 && (
+      {/* Step 6: Password + terms */}
+      <div className={stageClass(6)}>
+        {step === 6 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step5_sub')}</p>
