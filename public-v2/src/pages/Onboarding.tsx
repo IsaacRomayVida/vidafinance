@@ -573,11 +573,20 @@ export function Onboarding() {
               <label className="onb-label">{t('onb_e_step2_email')}</label>
               <input
                 type="email"
-                className="onb-input"
+                className={`onb-input${emailStatus === 'taken' ? ' invalid' : emailStatus === 'available' ? ' valid' : ''}`}
                 placeholder={t('onb_e_step2_email_ph')}
                 value={empData.email}
                 onChange={(e) => handleEmailChange(e.target.value)}
               />
+              {emailStatus === 'checking' && (
+                <div className="onb-input-hint">Verificando disponibilidad...</div>
+              )}
+              {emailStatus === 'taken' && (
+                <div className="onb-input-hint error">Este correo ya está registrado. <a href="/login" style={{color:'inherit',textDecoration:'underline'}}>Inicia sesión</a></div>
+              )}
+              {emailStatus === 'available' && (
+                <div className="onb-input-hint success">✓ Disponible</div>
+              )}
             </div>
             <div className="onb-field">
               <label className="onb-label">{t('onb_e_step2_phone')}</label>
