@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import {
   doc,
   setDoc,
@@ -356,7 +356,16 @@ export function Onboarding() {
     setCreating(true);
     setError('');
     try {
-      const cred = await createUserWithEmailAndPassword(auth, empData.email, empData.password);
+      let cred;
+      try {
+        cred = await createUserWithEmailAndPassword(auth, empData.email, empData.password);
+      } catch (authErr: unknown) {
+        if ((authErr as { code?: string }).code === 'auth/email-already-in-use') {
+          cred = await signInWithEmailAndPassword(auth, empData.email, empData.password);
+        } else {
+          throw authErr;
+        }
+      }
       const uid = cred.user.uid;
       await setDoc(doc(db, 'employers', uid), {
         name: empData.name,
@@ -397,7 +406,16 @@ export function Onboarding() {
     try {
       const salaryNum = parseFloat(memData.salary.replace(/,/g, ''));
       const creditLimit = Math.min(salaryNum * 0.3, 5000);
-      const cred = await createUserWithEmailAndPassword(auth, memData.email, memData.password);
+      let cred;
+      try {
+        cred = await createUserWithEmailAndPassword(auth, memData.email, memData.password);
+      } catch (authErr: unknown) {
+        if ((authErr as { code?: string }).code === 'auth/email-already-in-use') {
+          cred = await signInWithEmailAndPassword(auth, memData.email, memData.password);
+        } else {
+          throw authErr;
+        }
+      }
       const uid = cred.user.uid;
       await setDoc(doc(db, 'employees', uid), {
         name: memData.name,
