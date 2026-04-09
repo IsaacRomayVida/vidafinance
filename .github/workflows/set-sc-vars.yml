@@ -1,0 +1,30 @@
+name: Set SoftCredito Vars
+on:
+  workflow_dispatch:
+
+jobs:
+  set-vars:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install -g @railway/cli
+      - name: Set SC vars on Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SC_CLIENT_ID: ${{ secrets.SOFTCREDITO_CLIENT_ID }}
+          SC_CLIENT_SECRET: ${{ secrets.SOFTCREDITO_CLIENT_SECRET }}
+          SC_API_URL: ${{ secrets.SOFTCREDITO_API_URL }}
+          SC_BASE_URL: ${{ secrets.SOFTCREDITO_BASE_URL }}
+          SC_TOKEN_URL: ${{ secrets.SOFTCREDITO_TOKEN_URL }}
+        run: |
+          echo "Setting softcredito-adapter vars..."
+          railway variables set \
+            SOFTCREDITO_CLIENT_ID="$SC_CLIENT_ID" \
+            SOFTCREDITO_CLIENT_SECRET="$SC_CLIENT_SECRET" \
+            SOFTCREDITO_API_URL="${SC_API_URL:-${SC_BASE_URL:-https://api.softcredito.com.mx/v1}}" \
+            -p 1ad040b4-6f0b-4530-9f58-0a1ef5e89c75 \
+            -e production \
+            -s softcredito-adapter
+          echo "✅ softcredito-adapter done"
