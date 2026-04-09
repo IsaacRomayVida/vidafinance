@@ -35,6 +35,8 @@ interface EmployerData {
   docRFC: string;
   docId: string;
   docAddress: string;
+  dispersoraName: string;
+  employeeCurps: string[];
   password: string;
   terms: boolean;
 }
@@ -152,7 +154,7 @@ export function Onboarding() {
   const [empData, setEmpData] = useState<EmployerData>({
     company: '', name: '', email: '', phone: '', rfc: '', state: '', industry: '',
     employeeCount: '', payFrequency: '', payrollSystem: '', usesDispersora: '', bankClabe: '',
-    docRFC: '', docId: '', docAddress: '', password: '', terms: false,
+    docRFC: '', docId: '', docAddress: '', dispersoraName: '', employeeCurps: ['', '', ''], password: '', terms: false,
   });
   // Employee state
   const [memData, setMemData] = useState<EmployeeData>({
@@ -381,6 +383,8 @@ export function Onboarding() {
         usesDispersora: empData.usesDispersora === 'yes',
         bankClabe: empData.bankClabe,
         employerCode: generateEmployerCode(),
+        employeeCurps: empData.employeeCurps,
+        dispersoraName: empData.usesDispersora === 'yes' ? empData.dispersoraName : null,
         status: 'pending_verification',
         docRFC: null,
         docId: null,
@@ -391,7 +395,7 @@ export function Onboarding() {
         activeLoans: 0,
         totalDisbursed: 0,
       });
-      goForward(7);
+      goForward(9);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
     } finally {
@@ -462,8 +466,10 @@ export function Onboarding() {
       if (step === 2) return empData.name.trim().length > 0 && EMAIL_REGEX.test(empData.email) && empData.phone.trim().length >= 10 && emailStatus !== 'taken' && emailStatus !== 'checking';
       if (step === 3) return empData.rfc.trim().length >= 12 && empData.state !== '' && empData.industry !== '';
       if (step === 4) return empData.employeeCount !== '' && empData.payFrequency !== '' && empData.payrollSystem !== '';
-      if (step === 5) return empData.usesDispersora !== '' && validateCLABE(empData.bankClabe);
-      if (step === 6) return empData.password.length >= 6 && empData.terms;
+      if (step === 5) return empData.usesDispersora !== '' && (empData.usesDispersora === 'no' || empData.dispersoraName.trim().length > 2) && validateCLABE(empData.bankClabe);
+      if (step === 6) return empData.docRFC !== '' && empData.docId !== '' && empData.docAddress !== '';
+      if (step === 7) return empData.employeeCurps.every(curp => /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp));
+      if (step === 8) return empData.password.length >= 6 && empData.terms;
     }
     if (role === 'employee') {
       if (step === 1) return codeStatus === 'found';
@@ -481,7 +487,7 @@ export function Onboarding() {
   };
 
   const handleNext = () => {
-    if (role === 'employer' && step === 6) {
+    if (role === 'employer' && step === 8) {
       createEmployerAccount();
     } else if (role === 'employee' && step === 5) {
       createEmployeeAccount();
@@ -494,11 +500,11 @@ export function Onboarding() {
   const progressPct = totalSteps > 0 ? ((step) / totalSteps) * 100 : 0;
 
   // Is this a final success step?
-  const isFinalStep = (role === 'employer' && step === 7) || (role === 'employee' && step === 6);
+  const isFinalStep = (role === 'employer' && step === 9) || (role === 'employee' && step === 6);
 
   // Action button config
   const getActionLabel = () => {
-    if (role === 'employer' && step === 6) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
+    if (role === 'employer' && step === 8) return creating ? t('onb_e_step5_creating') : t('onb_e_step5_btn');
     if (role === 'employee' && step === 5) return creating ? t('onb_m_step5_creating') : t('onb_m_step5_btn');
     return t('onb_next');
   };
@@ -760,9 +766,66 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 6: Password + terms */}
+
+      {/* Step 6: Document uploads */}
       <div className={stageClass(6)}>
         {step === 6 && (
+          <div className="onb-content">
+            <h1 className="onb-h">Documentos <em>requeridos</em>.</h1>
+            <p className="onb-sub">Sube los documentos de tu empresa para verificación.</p>
+            <div className="onb-field">
+              <label className="onb-label">Constancia de Situación Fiscal (SAT)</label>
+              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => setEmpData({...empData, docRFC: e.target.files?.[0]?.name || ''})} />
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">INE del Representante Legal</label>
+              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => setEmpData({...empData, docId: e.target.files?.[0]?.name || ''})} />
+            </div>
+            <div className="onb-field">
+              <label className="onb-label">Acta Constitutiva</label>
+              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => setEmpData({...empData, docAddress: e.target.files?.[0]?.name || ''})} />
+            </div>
+            {empData.usesDispersora === 'yes' && (
+              <div className="onb-field">
+                <label className="onb-label">Factura de la dispersora ({empData.dispersoraName || 'dispersora'})</label>
+                <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} id="doc-dispersora" />
+                <div className="onb-input-hint">Comprobante de que la dispersora paga nómina de tus empleados</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Step 7: 3 Employee CURPs — mandatory */}
+      <div className={stageClass(7)}>
+        {step === 7 && (
+          <div className="onb-content">
+            <h1 className="onb-h">Verificación de <em>nómina</em>.</h1>
+            <p className="onb-sub">Ingresa el CURP de 3 empleados para verificar tu registro en el IMSS y activar las deducciones de nómina.</p>
+            {[0, 1, 2].map((i) => (
+              <div className="onb-field" key={i}>
+                <label className="onb-label">CURP del Empleado {i + 1}</label>
+                <input
+                  className="onb-input"
+                  placeholder="CURP de 18 caracteres"
+                  maxLength={18}
+                  value={empData.employeeCurps[i]}
+                  onChange={(e) => {
+                    const newCurps = [...empData.employeeCurps];
+                    newCurps[i] = e.target.value.toUpperCase();
+                    setEmpData({...empData, employeeCurps: newCurps});
+                  }}
+                />
+              </div>
+            ))}
+            <div className="onb-input-hint" style={{marginTop: 8}}>Los CURPs serán verificados contra el IMSS para confirmar que son empleados registrados de tu empresa.</div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 8: Password + terms */}
+      <div className={stageClass(8)}>
+        {step === 8 && (
           <div className="onb-content">
             <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step5_sub')}</p>
@@ -793,8 +856,8 @@ export function Onboarding() {
         )}
       </div>
 
-      {/* Step 7: Employer success */}
-      <div className={stageClass(7)}>
+      {/* Step 9: Employer success */}
+      <div className={stageClass(9)}>
         <div className="onb-content">
           <div className="onb-celebration">
             <div className="onb-check-circle">
