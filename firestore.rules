@@ -43,10 +43,7 @@ service cloud.firestore {
       allow list: if true;
       allow get: if isOwner(employerId) || isOps();
       allow create: if isAdmin() || isOwner(employerId);
-      allow update: if isAdmin()
-        || (isOwner(employerId)
-          && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['name', 'email', 'phone', 'contactName', 'contactEmail', 'contactPhone']));
+      allow update: if isAdmin() || isOwner(employerId);
       allow delete: if false;
     }
 
