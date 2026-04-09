@@ -99,7 +99,7 @@ export function EmployerMgmt() {
   const stats = useMemo(() => {
     const pending = employers.filter(e => isPending(e.status)).length;
     const approved = employers.filter(e => e.status === 'active' || e.status === 'approved').length;
-    const totalEmployees = employers.reduce((sum, e) => sum + (e.employeeCount ?? e.totalEmployees ?? 0), 0);
+    const totalEmployees = employers.reduce((sum, e) => sum + (Number(e.employeeCount) || Number(e.totalEmployees) || 0), 0);
     return { total: employers.length, pending, approved, totalEmployees };
   }, [employers]);
 
@@ -278,7 +278,7 @@ export function EmployerMgmt() {
       {filtered.map(emp => {
         const badge = statusBadge(emp.status);
         const pending = isPending(emp.status);
-        const empCount = emp.employeeCount ?? emp.totalEmployees ?? 0;
+        const empCount = Number(emp.employeeCount) || Number(emp.totalEmployees) || 0;
 
         return (
           <div key={emp.id} style={{ ...cardStyle, padding: '24px 28px' }}>

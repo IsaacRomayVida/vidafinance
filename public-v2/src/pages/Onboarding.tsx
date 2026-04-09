@@ -164,9 +164,7 @@ export function Onboarding() {
   const [codeStatus, setCodeStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // CURP validation state
-  const [, setCurpStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid' | 'error'>('idle');
-  const [, setCurpError] = useState('');
+  // CURP validation state removed — extracted from INE via MetaMap
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const emailDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // const curpDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
