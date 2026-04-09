@@ -28,8 +28,8 @@ initializeApp();
 const db = getFirestore();
 
 function getQueue(name: string): Queue {
-  // Pass connection URL directly to avoid IORedis version mismatch with bullmq's bundled ioredis.
   const redisUrl = process.env['REDIS_URL'] ?? '';
+  if (!redisUrl) throw new Error('REDIS_URL not configured — queue unavailable');
   return new Queue(name, {
     connection: {
       url: redisUrl,
@@ -336,7 +336,7 @@ export const requestLoan = onCall(
             employeeEmail: emp['email'],
             employeePhone: emp['phone'] ?? null,
             employerId: emp['employerId'],
-            employerName: emp['employerName'],
+            employerName: emp['employerName'] || emp['companyName'] || employer['companyName'] || '',
             employerCode: employer['employerCode'],
             amount,
             fee,
