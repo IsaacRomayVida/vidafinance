@@ -6,11 +6,7 @@ jobs:
   set-vars:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: npm install -g @railway/cli
-      - name: Set SC vars on Railway
+      - name: Set SC vars via Railway GraphQL API
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           SC_CLIENT_ID: ${{ secrets.SOFTCREDITO_CLIENT_ID }}
@@ -19,14 +15,25 @@ jobs:
           SC_BASE_URL: ${{ secrets.SOFTCREDITO_BASE_URL }}
         run: |
           API_URL="${SC_API_URL:-${SC_BASE_URL:-https://ws.softcredito.com.mx/api}}"
-          echo "API URL length: ${#API_URL}"
           echo "CLIENT_ID length: ${#SC_CLIENT_ID}"
           echo "CLIENT_SECRET length: ${#SC_CLIENT_SECRET}"
+          echo "API_URL length: ${#API_URL}"
           
-          railway link --project 1ad040b4-6f0b-4530-9f58-0a1ef5e89c75 --environment production --service softcredito-adapter
+          PROJECT_ID="1ad040b4-6f0b-4530-9f58-0a1ef5e89c75"
+          ENV_ID="441caff4-8cc1-401f-93e2-30c49fe5d2d9"
+          SERVICE_ID="27176038-ca96-43cf-b58a-28054ac93e91"
           
-          railway variables set \
-            SOFTCREDITO_CLIENT_ID="$SC_CLIENT_ID" \
-            SOFTCREDITO_CLIENT_SECRET="$SC_CLIENT_SECRET" \
-            SOFTCREDITO_API_URL="$API_URL"
-          echo "Done softcredito-adapter"
+          set_var() {
+            local name=$1 value=$2
+            curl -s -X POST https://backboard.railway.app/graphql/v2 \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_TOKEN" \
+              -d "{\"query\":\"mutation { variableUpsert(input: { projectId: \\\"$PROJECT_ID\\\", environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\", name: \\\"$name\\\", value: \\\"$value\\\" }) }\"}"
+            echo " -> set $name"
+          }
+          
+          set_var "SOFTCREDITO_CLIENT_ID" "$SC_CLIENT_ID"
+          set_var "SOFTCREDITO_CLIENT_SECRET" "$SC_CLIENT_SECRET"
+          set_var "SOFTCREDITO_API_URL" "$API_URL"
+          
+          echo "All done"
