@@ -749,6 +749,12 @@ export function Onboarding() {
                   <div className="onb-tile-val">{t('onb_e_step5a_no')}</div>
                 </button>
               </div>
+              {empData.usesDispersora === 'yes' && (
+                <div style={{marginTop: 16}}>
+                  <label className="onb-label">Nombre de la dispersora</label>
+                  <input className="onb-input" placeholder="Ej. Nomipay, Konfío, etc." value={empData.dispersoraName} onChange={(e) => setEmpData(prev => ({...prev, dispersoraName: e.target.value}))} />
+                </div>
+              )}
             </div>
             <div className="onb-field">
               <label className="onb-label">{t('onb_e_step5a_clabe')}</label>
