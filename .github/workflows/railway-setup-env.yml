@@ -67,7 +67,7 @@ jobs:
             SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
             NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
             ML_SERVICE_URL="http://vida-ml-service.railway.internal:3005" \
-            --service vida-payment-server
+            --service payment-server
           echo "✅ vida-payment-server environment variables set"
 
       - name: Set env vars — vida-softcredito
@@ -90,7 +90,7 @@ jobs:
             SOFTCREDITO_CLIENT_ID="$SOFTCREDITO_CLIENT_ID" \
             SOFTCREDITO_CLIENT_SECRET="$SOFTCREDITO_CLIENT_SECRET" \
             PAYMENT_SERVER_URL="http://vida-payment-server.railway.internal:3001" \
-            --service vida-softcredito
+            --service softcredito-adapter
           echo "✅ vida-softcredito environment variables set"
 
       - name: Set env vars — vida-notifications
@@ -116,7 +116,7 @@ jobs:
             SENDGRID_API_KEY="$SENDGRID_API_KEY" \
             SENDGRID_FROM_EMAIL="noreply@vida.finance" \
             SENDGRID_FROM_NAME="VIDA Finance" \
-            --service vida-notifications
+            --service notification-service
           echo "✅ vida-notifications environment variables set"
 
       - name: Set env vars — vida-pdf-generator
@@ -142,7 +142,7 @@ jobs:
             MIFIEL_APP_ID="$MIFIEL_APP_ID" \
             MIFIEL_APP_SECRET="$MIFIEL_APP_SECRET" \
             MIFIEL_ENV="sandbox" \
-            --service vida-pdf-generator
+            --service pdf-generator
           echo "✅ vida-pdf-generator environment variables set"
 
       - name: Set env vars — vida-ml-service
@@ -162,7 +162,7 @@ jobs:
             MODEL_PATH="models/underwriting_v1.joblib" \
             USE_ML_MODELS="false" \
             ML_CACHE_TTL=86400 \
-            --service vida-ml-service
+            --service ml-service
           echo "✅ vida-ml-service environment variables set"
 
       - name: Set env vars — vida-underwriting
@@ -198,7 +198,7 @@ jobs:
             GOOGLE_DOCAI_PROJECT_ID="vida-finance" \
             GOOGLE_DOCAI_LOCATION="us" \
             GOOGLE_DOCAI_PROCESSOR_ID="8d46c79a75eb5406" \
-            --service vida-underwriting
+            --service underwriting-service
           echo "✅ vida-underwriting environment variables set"
 
       - name: Summary
