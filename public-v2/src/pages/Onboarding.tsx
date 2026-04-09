@@ -391,7 +391,7 @@ export function Onboarding() {
         activeLoans: 0,
         totalDisbursed: 0,
       });
-      goForward(6);
+      goForward(7);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
     } finally {
