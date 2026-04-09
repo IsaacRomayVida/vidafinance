@@ -58,10 +58,7 @@ service cloud.firestore {
                   || (isAuthenticated() && resource.data.employerId == request.auth.uid)
                   || isOps();
       allow create: if request.auth != null && request.auth.uid == employeeId;
-      allow update: if isOps()
-        || (isOwner(employeeId)
-          && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['bankClabe', 'bankName', 'phone', 'address']));
+      allow update: if isOps() || isOwner(employeeId);
       allow delete: if false;
     }
 
