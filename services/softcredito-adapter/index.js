@@ -53,7 +53,7 @@ async function scToken() {
     throw new Error('SC auth failed: ' + r.status + ' ' + body.slice(0, 200));
   }
   const d = await r.json();
-  _token = d.access_token;
+  _token = d.access_token || d.token;
   _tokenExp = Date.now() + (d.expires_in || 7200) * 1000;
   log.info({ tokenUrl }, 'SC token acquired');
   return _token;
