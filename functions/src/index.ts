@@ -615,17 +615,34 @@ export const getAdminDashboard = onCall(
     ['admin', 'super_admin', 'ops'],
     async (_data, auth) =>
       withErrorHandling({ functionName: 'getAdminDashboard', uid: auth.uid }, async () => {
-        const [healthDoc, queueDoc, pendingLoans, activeLoans] = await Promise.all([
+        const [healthDoc, queueDoc, pendingLoans, activeLoans, employers, employees, allLoans] = await Promise.all([
           db.collection('system_health').doc('current').get(),
           db.collection('system_health').doc('queues').get(),
           db.collection('loans').where('status', '==', 'pending').get(),
           db.collection('loans').where('status', '==', 'active').get(),
+          db.collection('employers').get(),
+          db.collection('employees').get(),
+          db.collection('loans').get(),
         ]);
+        let totalDisbursed = 0;
+        allLoans.docs.forEach(d => {
+          const s = d.data()['status'];
+          if (s === 'active' || s === 'repaid' || s === 'status_repaid' || s === 'completed') {
+            totalDisbursed += (d.data()['amount'] as number) || 0;
+          }
+        });
         return {
           systemHealth: healthDoc.data() ?? {},
           queues: queueDoc.data() ?? {},
           pendingLoans: pendingLoans.size,
           activeLoans: activeLoans.size,
+          stats: {
+            totalEmployers: employers.size,
+            totalEmployees: employees.size,
+            activeLoans: activeLoans.size,
+            pendingLoans: pendingLoans.size,
+            totalDisbursed,
+          },
         };
       })
   )

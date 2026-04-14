@@ -770,6 +770,10 @@ export function EmployerDashboard() {
 
   // Approve or reject a pending loan
   const handleLoanAction = async (loanId: string, status: 'approved' | 'rejected') => {
+    const msg = status === 'approved'
+      ? '¿Estás seguro de aprobar este préstamo? Se autorizará la deducción de nómina.'
+      : '¿Estás seguro de rechazar este préstamo?';
+    if (!window.confirm(msg)) return;
     setActionLoading(loanId);
     try {
       const functions = getFunctions();

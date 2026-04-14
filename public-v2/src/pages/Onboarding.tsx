@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import {
   doc,
@@ -161,6 +162,7 @@ export function Onboarding() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [, setDirection] = useState<'left' | 'right'>('right');
   const [creating, setCreating] = useState(false);
+  const [docFiles, setDocFiles] = useState<Record<string, File>>({});
   const [error, setError] = useState('');
 
   // Employer state
@@ -382,6 +384,20 @@ export function Onboarding() {
         }
       }
       const uid = cred.user.uid;
+
+      // Upload documents to Firebase Storage
+      const storage = getStorage();
+      const docUrls: Record<string, string> = {};
+      for (const [key, file] of Object.entries(docFiles)) {
+        try {
+          const fileRef = storageRef(storage, 'employers/' + uid + '/docs/' + key + '_' + file.name);
+          await uploadBytes(fileRef, file);
+          docUrls[key] = await getDownloadURL(fileRef);
+        } catch (uploadErr) {
+          console.warn('Doc upload failed for ' + key, uploadErr);
+        }
+      }
+
       await setDoc(doc(db, 'employers', uid), {
         name: empData.name,
         companyName: empData.company,
@@ -399,6 +415,7 @@ export function Onboarding() {
         employeeCurps: empData.employeeCurps,
         dispersoraName: empData.usesDispersora === 'yes' ? empData.dispersoraName : null,
         status: 'pending_verification',
+        docUrls: docUrls || {},
         docRFC: null,
         docId: null,
         docAddress: null,
@@ -794,15 +811,33 @@ export function Onboarding() {
             <p className="onb-sub">Sube los documentos de tu empresa para verificación.</p>
             <div className="onb-field">
               <label className="onb-label">Constancia de Situación Fiscal (SAT)</label>
-              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => setEmpData({...empData, docRFC: e.target.files?.[0]?.name || ''})} />
+              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setEmpData(prev => ({...prev, docRFC: file.name}));
+                  setDocFiles(prev => ({...prev, docRFC: file}));
+                }
+              }} />
             </div>
             <div className="onb-field">
               <label className="onb-label">INE del Representante Legal</label>
-              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => setEmpData({...empData, docId: e.target.files?.[0]?.name || ''})} />
+              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setEmpData(prev => ({...prev, docId: file.name}));
+                  setDocFiles(prev => ({...prev, docId: file}));
+                }
+              }} />
             </div>
             <div className="onb-field">
               <label className="onb-label">Acta Constitutiva</label>
-              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => setEmpData({...empData, docAddress: e.target.files?.[0]?.name || ''})} />
+              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setEmpData(prev => ({...prev, docAddress: file.name}));
+                  setDocFiles(prev => ({...prev, docAddress: file}));
+                }
+              }} />
             </div>
             {empData.usesDispersora === 'yes' && (
               <div className="onb-field">
@@ -1221,6 +1256,11 @@ export function Onboarding() {
       {/* Progress bar */}
       <div className="onb-progress">
         <div className="onb-progress-fill" style={{ width: `${progressPct}%` }} />
+          {role && step >= 1 && !isFinalStep && (
+            <div style={{ textAlign: 'center', fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+              Paso {step} de {totalSteps}
+            </div>
+          )}
       </div>
 
       {/* Body */}

@@ -84,6 +84,10 @@ export function AdminDashboard() {
   }, []);
 
   const approveEmployer = async (employerId: string, decision: 'approved' | 'rejected') => {
+    const msg = decision === 'approved'
+      ? 'Approve this employer?'
+      : 'Reject this employer?';
+    if (!window.confirm(msg)) return;
     setActionLoading(employerId);
     try {
       const functions = getFunctions();
@@ -101,6 +105,7 @@ export function AdminDashboard() {
   };
 
   const reviewLoan = async (loanId: string, decision: 'approved' | 'rejected') => {
+    if (!window.confirm(decision === 'approved' ? 'Approve this loan?' : 'Reject this loan?')) return;
     setActionLoading(loanId);
     try {
       const functions = getFunctions();
