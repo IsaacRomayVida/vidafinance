@@ -44,7 +44,7 @@ service cloud.firestore {
       allow get: if isOwner(employerId) || isOps();
       allow create: if isAdmin() || isOwner(employerId);
       allow update: if isAdmin() || isOwner(employerId);
-      allow delete: if false;
+      allow delete: if isOps();
     }
 
     // =============================================
@@ -59,7 +59,7 @@ service cloud.firestore {
                   || isOps();
       allow create: if request.auth != null && request.auth.uid == employeeId;
       allow update: if isOps() || isOwner(employeeId);
-      allow delete: if false;
+      allow delete: if isOps();
     }
 
     // =============================================
@@ -76,7 +76,7 @@ service cloud.firestore {
       );
       allow create: if false;  // Only Cloud Functions via Admin SDK
       allow update: if false;  // Only Cloud Functions via Admin SDK
-      allow delete: if false;  // Loans are never deleted, only marked
+      allow delete: if isOps();  // Ops can delete test data
     }
 
     // =============================================
