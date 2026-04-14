@@ -837,20 +837,7 @@ export function EmployerDashboard() {
           </div>
         </div>
 
-        {/* Payroll Deduction Setup (Part B) */}
-        {employer?.partBStatus !== 'completed' && (
-          <PayrollDeductionCard
-            uid={user!.uid}
-            employer={employer!}
-            onSubmitted={() => setEmployer(prev => prev ? { ...prev, partBStatus: 'pending' } : prev)}
-          />
-        )}
-
-        {/* CURP Configuration */}
-        <CurpConfigCard
-          employer={employer!}
-          onUpdated={(config) => setEmployer(prev => prev ? { ...prev, curpConfig: config } : prev)}
-        />
+        {/* Payroll + CURP config moved below loans */}
 
         {/* Loans Table */}
         <div className="card">
@@ -958,6 +945,22 @@ export function EmployerDashboard() {
             </div>
           )}
         </div>
+
+        {/* Payroll Deduction Setup (Part B) — below loans for cleaner dashboard */}
+        {employer?.partBStatus !== 'completed' && (
+          <PayrollDeductionCard
+            uid={user!.uid}
+            employer={employer!}
+            onSubmitted={() => setEmployer(prev => prev ? { ...prev, partBStatus: 'pending' } : prev)}
+          />
+        )}
+
+        {/* CURP Configuration — below loans */}
+        <CurpConfigCard
+          employer={employer!}
+          onUpdated={(config) => setEmployer(prev => prev ? { ...prev, curpConfig: config } : prev)}
+        />
+
       </div>
     </div>
   );

@@ -808,5 +808,20 @@
   "wiz_success_back": "Volver al panel",
   "status_status_repaid": "Pagado",
   "status_repaid": "Pagado",
-  "status_completed": "Completado"
+  "status_completed": "Completado",
+  "admin_title": "Panel de Operaciones",
+  "admin_subtitle": "Administra empleadores, revisa solicitudes de préstamos y monitorea la salud de la plataforma.",
+  "admin_employers": "Empleadores",
+  "admin_employees": "Empleados",
+  "admin_active_loans": "Préstamos Activos",
+  "admin_pending": "Revisión Pendiente",
+  "admin_employers_tab": "Empleadores",
+  "admin_loans_tab": "Préstamos",
+  "admin_active_employers": "Empleadores Activos",
+  "admin_pending_approval": "Aprobación Pendiente",
+  "admin_active_loans_section": "Préstamos Activos",
+  "admin_approve": "Aprobar",
+  "admin_reject": "Rechazar",
+  "admin_approve_loan": "Aprobar Préstamo",
+  "dash_settings": "Configuración"
 }

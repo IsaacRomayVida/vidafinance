@@ -776,3 +776,17 @@ table tr:last-child td{border-bottom:none}
 .admin-signout{display:flex;align-items:center;gap:6px;padding:10px 20px;color:rgba(255,255,255,.5);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;margin-top:auto;border:none;background:none;width:100%}
 .admin-signout:hover{color:#fff}
 @media(max-width:768px){.admin-layout{grid-template-columns:1fr}.admin-sidebar{display:none}}
+
+/* ── Mobile responsive tables ── */
+@media (max-width: 768px) {
+  table { font-size: 13px; }
+  table th, table td { padding: 8px 6px; white-space: nowrap; }
+  .dash-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .employer-stats { flex-direction: column; }
+  .employer-stats > div { width: 100% !important; }
+}
+@media (max-width: 480px) {
+  table { font-size: 12px; }
+  table th:nth-child(n+4), table td:nth-child(n+4) { display: none; }
+  .onb-tiles { flex-direction: column; }
+}

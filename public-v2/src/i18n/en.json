@@ -808,5 +808,20 @@
   "wiz_success_back": "Back to dashboard",
   "status_status_repaid": "Repaid",
   "status_repaid": "Repaid",
-  "status_completed": "Completed"
+  "status_completed": "Completed",
+  "admin_title": "Operations Dashboard",
+  "admin_subtitle": "Manage employers, review loan applications, and monitor platform health.",
+  "admin_employers": "Employers",
+  "admin_employees": "Employees",
+  "admin_active_loans": "Active Loans",
+  "admin_pending": "Pending Review",
+  "admin_employers_tab": "Employers",
+  "admin_loans_tab": "Loans",
+  "admin_active_employers": "Active Employers",
+  "admin_pending_approval": "Pending Approval",
+  "admin_active_loans_section": "Active Loans",
+  "admin_approve": "Approve",
+  "admin_reject": "Reject",
+  "admin_approve_loan": "Approve Loan",
+  "dash_settings": "Settings"
 }

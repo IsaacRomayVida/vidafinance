@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
@@ -41,6 +42,7 @@ function fmt(n: number): string {
 
 export function AdminDashboard() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [stats, setStats] = useState<DashStats>({ totalEmployers: 0, totalEmployees: 0, activeLoans: 0, totalDisbursed: 0, pendingLoans: 0 });
   const [employers, setEmployers] = useState<Employer[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -169,7 +171,7 @@ export function AdminDashboard() {
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
         <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-          Operations Dashboard
+          ' + t('admin_title') + '
         </h1>
         <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
           Manage employers, review loan applications, and monitor platform health.
@@ -179,19 +181,19 @@ export function AdminDashboard() {
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
         <div style={cardStyle}>
-          <div style={labelStyle}>Employers</div>
+          <div style={labelStyle}>{t('admin_employers')}</div>
           <div style={valueStyle}>{stats.totalEmployers || employers.length}</div>
         </div>
         <div style={cardStyle}>
-          <div style={labelStyle}>Employees</div>
+          <div style={labelStyle}>{t('admin_employees')}</div>
           <div style={valueStyle}>{stats.totalEmployees}</div>
         </div>
         <div style={cardStyle}>
-          <div style={labelStyle}>Active Loans</div>
+          <div style={labelStyle}>{t('admin_active_loans')}</div>
           <div style={valueStyle}>{stats.activeLoans || activeLoans.length}</div>
         </div>
         <div style={cardStyle}>
-          <div style={labelStyle}>Pending Review</div>
+          <div style={labelStyle}>{t('admin_pending')}</div>
           <div style={valueStyle}>{pendingEmployers.length + pendingLoans.length}</div>
         </div>
       </div>
@@ -280,7 +282,7 @@ export function AdminDashboard() {
         <div>
           {pendingLoans.length > 0 && (
             <div style={{ marginBottom: 32 }}>
-              <div style={{ ...labelStyle, marginBottom: 16 }}>Pending Review</div>
+              <div style={{ ...labelStyle, marginBottom: 16 }}>{t('admin_pending')}</div>
               {pendingLoans.map(loan => (
                 <div key={loan.id} style={{ ...cardStyle, padding: '24px 28px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -314,7 +316,7 @@ export function AdminDashboard() {
 
           {activeLoans.length > 0 && (
             <div>
-              <div style={{ ...labelStyle, marginBottom: 16 }}>Active Loans</div>
+              <div style={{ ...labelStyle, marginBottom: 16 }}>{t('admin_active_loans')}</div>
               {activeLoans.map(loan => (
                 <div key={loan.id} style={{ ...cardStyle, padding: '20px 28px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
