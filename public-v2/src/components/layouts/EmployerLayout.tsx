@@ -16,13 +16,13 @@ export function EmployerLayout() {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f1eb' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg2, #f5f8f7)' }}>
       {/* Navbar */}
       <header style={{ background: '#fff', borderBottom: '1px solid rgba(25,68,69,0.04)' }}>
         <div style={{ maxWidth: 920, margin: '0 auto', padding: '0 24px' }}>
           {/* Top row: logo + actions */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 56 }}>
-            <Link to="/employer" style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 24, fontWeight: 400, color: '#194445', textDecoration: 'none', letterSpacing: '-0.02em' }}>
+            <Link to="/employer" style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 700, color: '#194445', textDecoration: 'none', letterSpacing: '6px', textTransform: 'uppercase' as const }}>
               VIDA
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

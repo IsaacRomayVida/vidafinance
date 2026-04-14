@@ -852,3 +852,78 @@ table tr:last-child td{border-bottom:none}
 
 /* Nav scroll accent line */
 .nav.nav-scrolled::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 10%,rgba(168,213,208,0.15) 30%,rgba(162,134,87,0.1) 70%,transparent 90%);pointer-events:none}
+
+
+/* ═══════════════════════════════════════════
+   MICRO-INTERACTIONS — Premium hover effects
+   ═══════════════════════════════════════════ */
+
+/* Step numbers — fill on hover */
+.step{transition:all 0.3s cubic-bezier(0.22,1,0.36,1);border-radius:12px;margin:0 -12px;padding-left:12px;padding-right:12px}
+.step:hover{background:rgba(168,213,208,0.04)}
+.step-n{transition:all 0.3s cubic-bezier(0.22,1,0.36,1)}
+.step:hover .step-n{background:var(--brand);color:#fff;transform:scale(1.05)}
+
+/* Scenario cards — lift on hover */
+.scenario{transition:all 0.3s cubic-bezier(0.22,1,0.36,1);border-radius:12px}
+@media(min-width:769px){
+  .scenario:hover{background:rgba(168,213,208,0.03);transform:translateY(-2px)}
+}
+
+/* Trust items — subtle glow on hover */
+.trust-item{transition:all 0.3s cubic-bezier(0.22,1,0.36,1);border-radius:12px;padding-left:12px!important;padding-right:12px!important;margin:0 -12px}
+@media(min-width:769px){
+  .trust-item:hover{background:rgba(168,213,208,0.03)}
+  .trust-item:hover .trust-icon{transform:scale(1.08);box-shadow:0 4px 16px rgba(25,68,69,0.06)}
+}
+.trust-icon{transition:all 0.3s cubic-bezier(0.22,1,0.36,1)}
+
+/* Feature cards / emo-cards — hover depth */
+.emo{transition:all 0.35s cubic-bezier(0.22,1,0.36,1);border-radius:16px}
+.emo:hover{background:rgba(168,213,208,0.03);transform:translateY(-2px)}
+.emo-icon{transition:all 0.3s}
+.emo:hover .emo-icon{transform:scale(1.06)}
+
+/* Benefits bar items — subtle hover */
+.ben{transition:all 0.3s cubic-bezier(0.22,1,0.36,1);border-radius:8px}
+.ben:hover .ben-val{color:var(--brand)}
+
+/* Closing section — animated gradient glow */
+.closing-glow{animation:closingPulse 8s ease-in-out infinite}
+@keyframes closingPulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:0.6}50%{transform:translate(-50%,-50%) scale(1.15);opacity:1}}
+
+/* Closing CTA — premium hover */
+.closing-btn{transition:all 0.35s cubic-bezier(0.22,1,0.36,1);position:relative;overflow:hidden}
+.closing-btn:hover{transform:translateY(-3px);box-shadow:0 16px 48px rgba(0,0,0,0.2)}
+
+/* Section links — arrow slide on hover */
+.section-link{transition:gap 0.3s cubic-bezier(0.22,1,0.36,1)}
+.section-link:hover{gap:14px}
+
+/* Hero CTA — subtle shadow pulse */
+.hero-cta{transition:all 0.35s cubic-bezier(0.22,1,0.36,1)}
+.hero-cta:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(25,68,69,0.18)}
+
+/* Smooth reveal for .rv elements — slightly faster */
+.rv{transition:opacity 0.7s cubic-bezier(0.22,1,0.36,1),transform 0.7s cubic-bezier(0.22,1,0.36,1)}
+
+/* Dashboard layouts — gradient background */
+.dash-header h1{font-size:clamp(22px,3.5vw,28px)}
+
+/* Employer/Employee landing page grids — responsive */
+@media(max-width:768px){
+  .lp-grid{gap:28px!important}
+  .metrics{flex-wrap:wrap;gap:16px}
+  .metric{min-width:0}
+  .metric-v{font-size:clamp(28px,5vw,42px)}
+}
+
+/* Calculator section — better mobile */
+@media(max-width:768px){
+  .calc-form{max-width:100%!important}
+  .calc-result-num{word-break:break-all}
+}
+
+/* Footer — subtle top gradient line */
+.footer{position:relative}
+.footer::before{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,rgba(168,213,208,0.15),rgba(162,134,87,0.1),transparent);pointer-events:none}
