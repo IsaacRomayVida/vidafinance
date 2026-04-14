@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { VidaLogo } from '../shared/VidaLogo';
@@ -11,6 +11,14 @@ interface NavbarProps {
 export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
   const { t, i18n } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 40);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const toggleLang = () => {
     const next = i18n.language === 'es' ? 'en' : 'es';
@@ -23,7 +31,7 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
 
   return (
     <>
-      <nav className="nav">
+      <nav className={`nav${scrolled ? " nav-scrolled" : " nav-transparent"}`}>
         <div className="nav-inner">
           <div className="nav-left">
             <div
@@ -49,13 +57,13 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
       </nav>
       <div className={`nav-menu${menuOpen ? ' open' : ''}`}>
         <div className="menu-close" onClick={() => setMenuOpen(false)}>&#x2715;</div>
-        <Link to="/employers" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_employers')}</Link>
-        <Link to="/employees" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_employees')}</Link>
-        <Link to="/#trust" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_trust')}</Link>
-        <Link to="/#how" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_how')}</Link>
-        <Link to="/login" className="menu-link" onClick={() => setMenuOpen(false)}>{t('nav_login')}</Link>
-        <Link to={ctaHref} className="menu-link" onClick={() => setMenuOpen(false)}>{cta}</Link>
-        <button className="menu-link" onClick={() => { toggleLang(); setMenuOpen(false); }}>{t('lang_toggle')}</button>
+        <Link to="/employers" className="menu-link" style={{ animationDelay: '0.05s' }} onClick={() => setMenuOpen(false)}>{t('nav_employers')}</Link>
+        <Link to="/employees" className="menu-link" style={{ animationDelay: '0.1s' }} onClick={() => setMenuOpen(false)}>{t('nav_employees')}</Link>
+        <Link to="/#trust" className="menu-link" style={{ animationDelay: '0.15s' }} onClick={() => setMenuOpen(false)}>{t('nav_trust')}</Link>
+        <Link to="/#how" className="menu-link" style={{ animationDelay: '0.2s' }} onClick={() => setMenuOpen(false)}>{t('nav_how')}</Link>
+        <Link to="/login" className="menu-link" style={{ animationDelay: '0.25s' }} onClick={() => setMenuOpen(false)}>{t('nav_login')}</Link>
+        <Link to={ctaHref} className="menu-link" style={{ animationDelay: '0.3s' }} onClick={() => setMenuOpen(false)}>{cta}</Link>
+        <button className="menu-link" style={{ animationDelay: '0.35s' }} onClick={() => { toggleLang(); setMenuOpen(false); }}>{t('lang_toggle')}</button>
       </div>
     </>
   );

@@ -27,7 +27,9 @@ input,select,textarea{font-family:var(--db)}
 .d1{transition-delay:.1s}.d2{transition-delay:.2s}.d3{transition-delay:.3s}.d4{transition-delay:.4s}.d5{transition-delay:.5s}.d6{transition-delay:.6s}
 
 /* NAV */
-.nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,1);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid rgba(25,68,69,0.04)}
+.nav{position:sticky;top:0;z-index:100;transition:background .4s cubic-bezier(.22,1,.36,1),border-color .4s,box-shadow .4s;border-bottom:1px solid transparent}
+.nav.nav-transparent{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none}
+.nav.nav-scrolled{background:rgba(255,255,255,0.82);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-bottom:1px solid rgba(25,68,69,0.04);box-shadow:0 1px 8px rgba(25,68,69,0.02)}
 .nav-inner{max-width:var(--mx);margin:0 auto;padding:0 64px;display:flex;justify-content:space-between;align-items:center;height:72px}
 .nav-left{display:flex;align-items:center;gap:56px}
 .nav-logo{display:inline-flex;align-items:center}
@@ -932,3 +934,7 @@ table tr:last-child td{border-bottom:none}
 .flag-pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;margin:2px}
 .flag-pill.red{background:#fdf0f0;color:#8b2020}
 .flag-pill.green{background:#edf7f0;color:#1a5e3a}
+
+/* Staggered mobile menu reveal */
+@keyframes menuLinkIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.nav-menu.open .menu-link,.nav-menu.open a,.nav-menu.open button{opacity:0;animation:menuLinkIn .4s cubic-bezier(.22,1,.36,1) forwards}
