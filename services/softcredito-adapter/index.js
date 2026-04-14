@@ -210,6 +210,128 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
 
 
 // ── Bureau query via SoftCrédito API ────────────────────────────────────────
+app.get('/debug-connectivity', async (req, res) => {
+  const { execSync } = require('child_process');
+  const results = {};
+  
+  // 1. Our outbound IP
+  try {
+    const { default: fetch } = await import('node-fetch');
+    const r = await fetch('https://api.ipify.org?format=json');
+    results.outboundIP = (await r.json()).ip;
+  } catch(e) { results.outboundIP = 'ERROR: ' + e.message; }
+  
+  // 2. DNS resolution
+  try {
+    const dns = require('dns').promises;
+    results.dns_softcredito = await dns.resolve4('softcredito.com');
+    results.dns_pr_softcredito = await dns.resolve4('pr.softcredito.com').catch(() => 'NXDOMAIN');
+  } catch(e) { results.dns = 'ERROR: ' + e.message; }
+  
+  // 3. Direct HTTPS to softcredito.com
+  try {
+    const { default: fetch } = await import('node-fetch');
+    const start = Date.now();
+    const r = await fetch('https://softcredito.com/', { 
+      method: 'GET',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10000)
+    });
+    results.https_softcredito = { 
+      status: r.status, 
+      statusText: r.statusText,
+      latencyMs: Date.now() - start,
+      headers: Object.fromEntries([...r.headers.entries()].slice(0, 5))
+    };
+  } catch(e) { results.https_softcredito = 'ERROR: ' + e.message; }
+  
+  // 4. Direct HTTPS to the token endpoint
+  try {
+    const { default: fetch } = await import('node-fetch');
+    const start = Date.now();
+    const r = await fetch('https://softcredito.com/produccion/ALIADOSDECRED/app/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: 'grant_type=client_credentials&client_id=' + encodeURIComponent(process.env.SOFTCREDITO_CLIENT_ID) + '&client_secret=' + encodeURIComponent(process.env.SOFTCREDITO_CLIENT_SECRET),
+      signal: AbortSignal.timeout(15000)
+    });
+    const body = await r.text();
+    results.token_endpoint = {
+      status: r.status,
+      latencyMs: Date.now() - start,
+      isJson: body.trim().startsWith('{'),
+      bodyPreview: body.substring(0, 200),
+      server: r.headers.get('server'),
+      contentType: r.headers.get('content-type'),
+    };
+  } catch(e) { results.token_endpoint = 'ERROR: ' + e.message; }
+
+  // 5. Direct IP connection to their production server
+  try {
+    const { default: fetch } = await import('node-fetch');
+    const start = Date.now();
+    const r = await fetch('https://3.128.113.238/', {
+      method: 'GET',
+      headers: { 'Host': 'softcredito.com' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10000),
+      agent: new (require('https').Agent)({ rejectUnauthorized: false })
+    });
+    results.direct_ip = {
+      status: r.status,
+      latencyMs: Date.now() - start,
+      server: r.headers.get('server'),
+    };
+  } catch(e) { results.direct_ip = 'ERROR: ' + e.message; }
+  
+  res.json(results);
+});
+
+app.get('/debug-sc-token', async (req, res) => {
+  try {
+    const { default: fetch } = await import('node-fetch');
+    const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL;
+    const clientId = process.env.SOFTCREDITO_CLIENT_ID;
+    const clientSecret = process.env.SOFTCREDITO_CLIENT_SECRET;
+    const body = 'grant_type=client_credentials&client_id=' + encodeURIComponent(clientId) + '&client_secret=' + encodeURIComponent(clientSecret);
+    
+    console.log('Testing SC token URL:', tokenUrl);
+    console.log('Body:', body);
+    
+    const r = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body
+    });
+    
+    const rawText = await r.text();
+    const isJson = rawText.trim().startsWith('{');
+    
+    res.json({
+      status: r.status,
+      statusText: r.statusText,
+      headers: Object.fromEntries(r.headers.entries()),
+      isJson,
+      body: rawText.substring(0, 500),
+      tokenUrl,
+      clientIdPrefix: clientId?.substring(0, 8) + '...',
+    });
+  } catch (e) {
+    res.json({ error: e.message, stack: e.stack?.substring(0, 300) });
+  }
+});
+
+app.get('/check-outbound-ip', async (req, res) => {
+  try {
+    const { default: fetch } = await import('node-fetch');
+    const r = await fetch('https://api.ipify.org?format=json');
+    const data = await r.json();
+    res.json({ outboundIP: data.ip, expectedIP: '162.220.232.99', match: data.ip === '162.220.232.99' });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 app.get('/routes-check', (req, res) => res.json({routes: ['health','bureau/query','curp/validate','internal/*'], version: 'v2-bureau'}));
 
 app.post('/bureau/query', requireInternal, async (req, res) => {
