@@ -1,8 +1,10 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 
 export function AdminLayout() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -30,10 +32,10 @@ export function AdminLayout() {
           </div>
           <nav style={{ display: 'flex', gap: 32, borderTop: '1px solid rgba(168,213,208,0.08)', marginTop: -1 }}>
             {[
-              { path: '/ops', label: 'Dashboard' },
-              { path: '/ops/employers', label: 'Employers' },
-              { path: '/ops/loans', label: 'Loans' },
-              { path: '/ops/health', label: 'Health' },
+              { path: '/ops', label: t('admin_tab_dashboard', 'Panel') },
+              { path: '/ops/employers', label: t('admin_tab_employers', 'Empleadores') },
+              { path: '/ops/loans', label: t('admin_tab_loans', 'Préstamos') },
+              { path: '/ops/health', label: t('admin_tab_health', 'Salud') },
             ].map(({ path, label }) => (
               <Link
                 key={path}
