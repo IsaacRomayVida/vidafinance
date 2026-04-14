@@ -938,3 +938,6 @@ table tr:last-child td{border-bottom:none}
 @media(max-width:640px){
   .hero-social > div:first-child { display: none; }
 }
+
+/* Skeleton loading animation */
+@keyframes skeletonPulse{0%,100%{opacity:1}50%{opacity:0.4}}

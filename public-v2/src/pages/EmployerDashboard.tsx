@@ -899,8 +899,23 @@ export function EmployerDashboard() {
           </div>
 
           {loading ? (
-            <div style={{ padding: 40, textAlign: 'center' }}>
-              <span className="spinner" style={{ borderColor: 'rgba(25,68,69,0.1)', borderTopColor: 'var(--brand)' }} />
+            <div style={{ padding: 20 }}>
+              {/* Skeleton loading */}
+              {[1,2,3].map(i => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0',
+                  borderBottom: '1px solid rgba(25,68,69,0.04)',
+                  animation: 'skeletonPulse 1.5s ease-in-out infinite',
+                  animationDelay: i * 0.15 + 's',
+                }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(25,68,69,0.04)' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ width: '60%', height: 12, borderRadius: 6, background: 'rgba(25,68,69,0.04)', marginBottom: 8 }} />
+                    <div style={{ width: '40%', height: 10, borderRadius: 6, background: 'rgba(25,68,69,0.03)' }} />
+                  </div>
+                  <div style={{ width: 60, height: 24, borderRadius: 12, background: 'rgba(25,68,69,0.04)' }} />
+                </div>
+              ))}
             </div>
           ) : filteredLoans.length === 0 ? (
             <div className="empty-state">
