@@ -797,3 +797,55 @@ table tr:last-child td{border-bottom:none}
 @media(max-width:768px){.onb-v2-left{display:none!important}}
 
 @media(max-width:768px){.login-v2-left{display:none!important}}
+
+
+/* ═══════════════════════════════════════════
+   LANDING — World-class mobile responsive
+   ═══════════════════════════════════════════ */
+
+/* Editorial grain texture on hero */
+.hero::after{content:'';position:absolute;inset:0;opacity:0.018;pointer-events:none;z-index:1;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* Benefits bar — 2x2 grid on small screens */
+@media(max-width:640px){
+  .benefits-inner{display:grid!important;grid-template-columns:1fr 1fr!important;gap:0!important;padding:0!important}
+  .ben{padding:20px!important;border-bottom:1px solid rgba(25,68,69,0.04);display:flex;align-items:center;gap:12px!important}
+  .ben:nth-child(odd){border-right:1px solid rgba(25,68,69,0.04)}
+  .ben:nth-last-child(-n+2){border-bottom:none}
+  .ben-sep{display:none!important}
+}
+
+/* Trust + scenarios — overflow prevention */
+@media(max-width:768px){
+  .scenario-grid,.trust-grid,.hiw-grid,.calc-grid,.emp-grid,.statement-inner{max-width:100%;overflow:hidden}
+  .hero,.section,.statement-section,.calc,.benefits,.closing{overflow-x:hidden}
+}
+
+/* iPhone SE / very small screens */
+@media(max-width:375px){
+  .hero-inner{padding:0 16px!important}
+  .wrap{padding:0 16px!important}
+  .statement-inner{padding:0 16px!important}
+  .nav-inner{padding:0 16px!important}
+  .section,.statement-section{padding:48px 0!important}
+  .phone-mock{margin-left:-16px!important;margin-right:-16px!important;padding:28px 16px 32px!important}
+  .closing{padding:56px 16px!important}
+  .footer-inner{padding:28px 16px 24px!important}
+  .ft-top{grid-template-columns:1fr!important;gap:20px!important}
+  .ft-btm-links{flex-wrap:wrap;justify-content:center;gap:10px!important}
+}
+
+/* Touch-friendly CTA buttons */
+@media(max-width:768px){
+  .hero-cta,.hero-cta-2,.closing-btn,.pm-btn,.calc-cta{min-height:52px!important;display:flex!important;align-items:center!important;justify-content:center!important}
+}
+
+/* Full-bleed phone mockup — smooth edges on mobile */
+@media(max-width:768px){
+  .phone-mock{transition:none!important}
+  .phone-mock:hover{transform:none!important;box-shadow:none!important}
+  .hero-widget{margin-bottom:-8px}
+}
+
+/* Closing section — responsive border radius */
+@media(max-width:480px){.closing{border-radius:20px 20px 0 0!important}}
