@@ -941,3 +941,39 @@ table tr:last-child td{border-bottom:none}
 
 /* Skeleton loading animation */
 @keyframes skeletonPulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* Employee dashboard — mobile credit hero */
+@media(max-width:640px){
+  .credit-hero-grid{
+    grid-template-columns:1fr!important;
+    gap:24px!important;
+    text-align:center;
+  }
+  .credit-hero-grid > div:first-child{
+    order:2;
+  }
+  .credit-hero-grid > div:last-child{
+    order:1;
+  }
+  .credit-hero-grid button{
+    width:100%!important;
+    justify-content:center!important;
+  }
+}
+
+/* Employer dashboard — mobile stat grid */
+@media(max-width:640px){
+  .dash-content > div:first-child{
+    grid-template-columns:1fr 1fr!important;
+  }
+}
+@media(max-width:400px){
+  .dash-content > div:first-child{
+    grid-template-columns:1fr!important;
+  }
+}
+
+/* Logos bar mobile */
+@media(max-width:640px){
+  [style*="RESPALDADO"]{ font-size: 9px !important; }
+}

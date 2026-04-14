@@ -243,7 +243,7 @@ export function EmployeeDashboard() {
       {/* Content */}
       <div className="dash-content">
         {/* ── Premium Credit Hero ── */}
-        <div style={{
+        <div className="credit-hero-grid" style={{
           display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 40,
           marginBottom: 48, alignItems: 'center',
         }}>
@@ -384,8 +384,22 @@ export function EmployeeDashboard() {
           <div className="card-title">{t('dash_your_loans')}</div>
 
           {loading ? (
-            <div style={{ padding: 40, textAlign: 'center' }}>
-              <span className="spinner" style={{ borderColor: 'rgba(25,68,69,0.1)', borderTopColor: 'var(--brand)' }} />
+            <div style={{ padding: 16 }}>
+              {[1,2].map(i => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0',
+                  borderBottom: '1px solid rgba(25,68,69,0.04)',
+                  animation: 'skeletonPulse 1.5s ease-in-out infinite',
+                  animationDelay: i * 0.2 + 's',
+                }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(25,68,69,0.04)' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ width: '50%', height: 11, borderRadius: 6, background: 'rgba(25,68,69,0.04)', marginBottom: 6 }} />
+                    <div style={{ width: '30%', height: 9, borderRadius: 6, background: 'rgba(25,68,69,0.03)' }} />
+                  </div>
+                  <div style={{ width: 50, height: 20, borderRadius: 10, background: 'rgba(25,68,69,0.04)' }} />
+                </div>
+              ))}
             </div>
           ) : loans.length === 0 ? (
             <div className="empty-state">
