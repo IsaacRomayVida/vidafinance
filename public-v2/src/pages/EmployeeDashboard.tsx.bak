@@ -242,112 +242,31 @@ export function EmployeeDashboard() {
 
       {/* Content */}
       <div className="dash-content">
-        {/* ── Premium Credit Hero ── */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 40,
-          marginBottom: 48, alignItems: 'center',
-        }}>
-          {/* Left: Credit Ring */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
-            <div style={{ position: 'relative', width: 200, height: 200 }}>
-              <svg width="200" height="200" viewBox="0 0 200 200" style={{ transform: 'rotate(-90deg)' }}>
-                {/* Background ring */}
-                <circle cx="100" cy="100" r="85" fill="none" stroke="rgba(25,68,69,0.04)" strokeWidth="12" />
-                {/* Progress ring */}
-                <circle cx="100" cy="100" r="85" fill="none"
-                  stroke="url(#creditGrad)" strokeWidth="12" strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 85}
-                  strokeDashoffset={2 * Math.PI * 85 * (1 - utilPct / 100)}
-                  style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.16,1,0.3,1)' }}
-                />
-                <defs>
-                  <linearGradient id="creditGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#194445" />
-                    <stop offset="100%" stopColor="#a8d5d0" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              {/* Center text */}
-              <div style={{
-                position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#a28657', marginBottom: 6 }}>
-                  {t('dash_utilization')}
-                </div>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 42, color: '#0c1e1f', lineHeight: 1 }}>
-                  {utilPct}%
-                </div>
-              </div>
-            </div>
-            <div style={{ textAlign: 'center', marginTop: 20 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#93aaa9', marginBottom: 6 }}>
-                {t('dash_credit_limit')}
-              </div>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: '#4a6364' }}>
-                ${fmt(employee.creditLimit)} <span style={{ fontSize: 12, color: '#93aaa9', fontFamily: "'DM Sans'" }}>MXN</span>
-              </div>
-            </div>
+        {/* Stats Grid */}
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_available_credit')}</div>
+            <div className="stat-value">${fmt(employee.availableCredit)}</div>
+            <div className="stat-change">MXN</div>
           </div>
-
-          {/* Right: Amount + CTA */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2.5, textTransform: 'uppercase', color: '#a28657', marginBottom: 12 }}>
-              {t('dash_available_credit')}
-            </div>
-            <div style={{
-              fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 56, color: '#0c1e1f',
-              lineHeight: 1, letterSpacing: '-0.03em', marginBottom: 4,
-            }}>
-              <span style={{ fontSize: 24, color: '#a8d5d0', opacity: 0.6, verticalAlign: 'top', marginRight: 2 }}>$</span>
-              {fmt(employee.availableCredit)}
-            </div>
-            <div style={{ fontSize: 14, color: '#93aaa9', marginBottom: 32 }}>MXN</div>
-
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_credit_limit')}</div>
+            <div className="stat-value">${fmt(employee.creditLimit)}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_utilization')}</div>
+            <div className="stat-value">{utilPct}%</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_quick_action')}</div>
             <button
               onClick={() => { if (hasActiveLoan) { alert("Ya tienes un préstamo activo. Debes completar tu préstamo actual antes de solicitar otro."); return; } setShowModal(true); }}
               disabled={employee.availableCredit < 500}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 10,
-                padding: '18px 36px', borderRadius: 14, border: 'none',
-                background: employee.availableCredit >= 500
-                  ? 'linear-gradient(135deg, #194445 0%, #1d5253 100%)'
-                  : 'rgba(25,68,69,0.08)',
-                color: employee.availableCredit >= 500 ? 'white' : '#93aaa9',
-                fontSize: 16, fontWeight: 700, fontFamily: "'DM Sans', sans-serif",
-                cursor: employee.availableCredit >= 500 ? 'pointer' : 'not-allowed',
-                boxShadow: employee.availableCredit >= 500
-                  ? '0 4px 20px rgba(25,68,69,0.2), inset 0 1px 0 rgba(255,255,255,0.1)'
-                  : 'none',
-                transition: 'all 0.35s cubic-bezier(0.22,1,0.36,1)',
-                letterSpacing: '0.01em',
-              }}
+              className="btn-primary"
+              style={{ marginTop: 8 }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
-              </svg>
               {t('dash_request_funds')}
             </button>
-
-            {/* Quick stats row */}
-            <div style={{ display: 'flex', gap: 32, marginTop: 32, paddingTop: 24, borderTop: '1px solid rgba(25,68,69,0.05)' }}>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#93aaa9', marginBottom: 4 }}>
-                  {t('dash_active_loans', 'Préstamos activos')}
-                </div>
-                <div style={{ fontFamily: "'DM Serif Display'", fontSize: 24, color: '#0c1e1f' }}>
-                  {loans.filter(l => l.status === 'active' || l.status === 'approved').length}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#93aaa9', marginBottom: 4 }}>
-                  {t('dash_total_borrowed', 'Total prestado')}
-                </div>
-                <div style={{ fontFamily: "'DM Serif Display'", fontSize: 24, color: '#0c1e1f' }}>
-                  ${fmt(loans.reduce((s, l) => s + (l.amount || 0), 0))}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
