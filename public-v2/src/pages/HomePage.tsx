@@ -1,5 +1,6 @@
 import { HeroSection } from '../components/marketing/HeroSection';
 import { BenefitsBar } from '../components/marketing/BenefitsBar';
+import { LogosBar } from '../components/marketing/LogosBar';
 import { StatementSection } from '../components/marketing/StatementSection';
 import { HowItWorks } from '../components/marketing/HowItWorks';
 import { ROICalculator } from '../components/marketing/ROICalculator';
@@ -19,6 +20,7 @@ export function HomePage() {
     <>
       <HeroSection />
       <BenefitsBar />
+      <LogosBar />
       <StatementSection />
       <HowItWorks />
       <ROICalculator />

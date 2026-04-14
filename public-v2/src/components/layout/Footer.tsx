@@ -42,7 +42,7 @@ export function Footer() {
           </div>
         </div>
         <div className="ft-btm">
-          <span>&copy; 2025 VIDA</span>
+          <span>&copy; 2026 VIDA</span>
           <div className="ft-btm-links">
             <button onClick={toggleLang} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit' }}>
               {t('lang_toggle')}

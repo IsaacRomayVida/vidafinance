@@ -927,3 +927,14 @@ table tr:last-child td{border-bottom:none}
 /* Footer — subtle top gradient line */
 .footer{position:relative}
 .footer::before{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,rgba(168,213,208,0.15),rgba(162,134,87,0.1),transparent);pointer-events:none}
+
+
+/* Social proof + Logos bar */
+.hero-social { transition: opacity 0.3s; }
+@media(max-width:768px){
+  .hero-social { justify-content: center; text-align: center; }
+  .hero-social > div:last-child { text-align: left; }
+}
+@media(max-width:640px){
+  .hero-social > div:first-child { display: none; }
+}
