@@ -130,52 +130,9 @@ export function Login() {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, display: 'flex', background: '#faf9f7' }}>
-      {/* ── Left branded panel ── */}
-      <div className="login-v2-left" style={{
-        width: '42%', minWidth: 360,
-        background: 'linear-gradient(170deg, #0f2a2b 0%, #194445 55%, #1d5253 100%)',
-        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-        padding: '48px', position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{ position: 'absolute', width: 500, height: 500, top: -150, right: -150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(168,213,208,0.06), transparent 65%)', filter: 'blur(50px)', animation: 'onbMeshDrift 20s ease-in-out infinite', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', width: 300, height: 300, bottom: -100, left: -60, borderRadius: '50%', background: 'radial-gradient(circle, rgba(162,134,87,0.04), transparent 65%)', filter: 'blur(40px)', pointerEvents: 'none' }} />
-
-        <div style={{ position: 'relative', zIndex: 2 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: 7, color: 'rgba(255,255,255,0.5)' }}>
-            VID<span style={{ color: '#a28657' }}>A</span>
-          </div>
-        </div>
-
-        <div style={{ position: 'relative', zIndex: 2 }}>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 36, color: 'white', lineHeight: 1.12, letterSpacing: '-0.025em', marginBottom: 16 }}>
-            Crédito que<br /><span style={{ fontStyle: 'italic', color: '#a8d5d0' }}>transforma</span> vidas.
-          </h2>
-          <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7, maxWidth: 320 }}>
-            Microcréditos inteligentes con respaldo de nómina para los trabajadores de México.
-          </p>
-        </div>
-
-        <div style={{ position: 'relative', zIndex: 2 }}>
-          <div style={{ display: 'flex', gap: 32 }}>
-            {[
-              { val: '24h', label: 'Desembolso' },
-              { val: '<2%', label: 'Mora' },
-              { val: '$5K', label: 'Máximo' },
-            ].map((s, i) => (
-              <div key={i}>
-                <div style={{ fontFamily: "'DM Serif Display'", fontSize: 22, color: 'rgba(255,255,255,0.7)' }}>{s.val}</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2, letterSpacing: 0.5 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Right form panel ── */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '40px' }}>
-      <div className="auth-card" style={{ boxShadow: 'none', border: 'none', maxWidth: 400, width: '100%' }}>
-        <div className="nav-logo" style={{ display: 'none' }}>
+    <div className="auth-container">
+      <div className="auth-card">
+        <div className="nav-logo">
           <Link to="/">
             <VidaLogo />
           </Link>
@@ -318,7 +275,6 @@ export function Login() {
           </a>
         </p>
       </div>
-    </div>
     </div>
   );
 }
