@@ -181,18 +181,30 @@ export function AdminDashboard() {
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
         <div style={cardStyle}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(168,213,208,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22V12h6v10"/><path d="M8 6h.01M16 6h.01M12 6h.01"/></svg>
+          </div>
           <div style={labelStyle}>{t('admin_employers')}</div>
           <div style={valueStyle}>{stats.totalEmployers || employers.length}</div>
         </div>
         <div style={cardStyle}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(168,213,208,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+          </div>
           <div style={labelStyle}>{t('admin_employees')}</div>
           <div style={valueStyle}>{stats.totalEmployees}</div>
         </div>
         <div style={cardStyle}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(36,122,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </div>
           <div style={labelStyle}>{t('admin_active_loans')}</div>
           <div style={valueStyle}>{stats.activeLoans || activeLoans.length}</div>
         </div>
         <div style={cardStyle}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(162,134,87,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
           <div style={labelStyle}>{t('admin_pending')}</div>
           <div style={valueStyle}>{pendingEmployers.length + pendingLoans.length}</div>
         </div>

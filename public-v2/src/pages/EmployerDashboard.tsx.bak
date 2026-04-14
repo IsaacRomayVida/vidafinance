@@ -816,56 +816,25 @@ export function EmployerDashboard() {
 
       {/* Content */}
       <div className="dash-content">
-        {/* ── Premium Employer Stats ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 40 }}>
-          {[
-            {
-              label: t('dash_total_employees'),
-              value: String(totalEmployees),
-              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a8d5d0" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
-              accent: 'rgba(168,213,208,0.1)',
-            },
-            {
-              label: t('dash_active_loans'),
-              value: String(activeCount),
-              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
-              accent: 'rgba(36,122,110,0.06)',
-            },
-            {
-              label: t('dash_pending_requests'),
-              value: String(pendingCount),
-              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
-              accent: 'rgba(162,134,87,0.06)',
-            },
-            {
-              label: t('dash_total_disbursed'),
-              value: '$' + fmt(totalDisbursed),
-              sub: 'MXN',
-              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
-              accent: 'rgba(25,68,69,0.04)',
-            },
-          ].map((stat, i) => (
-            <div key={i} style={{
-              background: '#fff', borderRadius: 20, padding: '24px 24px 20px',
-              border: '1px solid rgba(25,68,69,0.04)',
-              transition: 'all 0.3s cubic-bezier(0.22,1,0.36,1)',
-              position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 12, background: stat.accent,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-              }}>
-                {stat.icon}
-              </div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const, color: '#a28657', marginBottom: 8 }}>
-                {stat.label}
-              </div>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 36, color: '#0c1e1f', letterSpacing: '-0.03em', lineHeight: 1 }}>
-                {stat.value}
-              </div>
-              {stat.sub && <div style={{ fontSize: 11, color: '#93aaa9', marginTop: 4 }}>{stat.sub}</div>}
-            </div>
-          ))}
+        {/* Stats Grid */}
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_total_employees')}</div>
+            <div className="stat-value">{totalEmployees}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_active_loans')}</div>
+            <div className="stat-value">{activeCount}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_pending_requests')}</div>
+            <div className="stat-value">{pendingCount}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{t('dash_total_disbursed')}</div>
+            <div className="stat-value">${fmt(totalDisbursed)}</div>
+            <div className="stat-change">MXN</div>
+          </div>
         </div>
 
         {/* Payroll + CURP config moved below loans */}
