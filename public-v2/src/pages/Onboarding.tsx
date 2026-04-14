@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
@@ -145,7 +145,20 @@ export function Onboarding() {
   const navigate = useNavigate();
 
   const [role, setRole] = useState<Role>(null);
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState(0);
+
+  // Auto-select role from URL param (?role=employer or ?role=employee)
+  useEffect(() => {
+    const urlRole = searchParams.get('role');
+    if (urlRole === 'employer' && !role) {
+      setRole('employer');
+      setStep(1);
+    } else if (urlRole === 'employee' && !role) {
+      setRole('employee');
+      setStep(1);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [, setDirection] = useState<'left' | 'right'>('right');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
