@@ -9,13 +9,11 @@
   "nav_investors": "Inversionistas",
   "nav_contact": "Contacto",
   "lang_toggle": "EN",
-
   "hero_badge": "Crédito respaldado por tu empleador",
   "hero_h1": "Tu respaldo <em>financiero</em> integrado.",
   "hero_sub": "Liquidez de emergencia a través de la nómina de tu empleador. Pre-aprobado. Instantáneo.",
   "hero_cta_employer": "Soy Empleador",
   "hero_cta_employee": "Soy Empleado",
-
   "phone_available": "Crédito Disponible",
   "phone_active": "Activo",
   "phone_currency": "Pesos Mexicanos · Vía nómina",
@@ -27,22 +25,18 @@
   "phone_deduction_val": "Nómina automática",
   "phone_utilization": "Utilización",
   "phone_request": "Solicitar Fondos",
-
   "chip_24hrs": "24 hrs",
   "chip_disbursement": "Desembolso",
   "chip_0fees": "$0 comisiones",
   "chip_transparent": "Transparente",
   "chip_encrypted": "Encriptado",
   "chip_bankgrade": "Grado bancario",
-
   "ben_fees": "Comisiones ocultas",
   "ben_disbursement": "Desembolso",
   "ben_encrypted": "Encriptado",
   "ben_governance": "Gobernanza",
-
   "stmt_h2": "La vida es <em>impredecible.</em>",
   "stmt_p": "VIDA es tu red de seguridad respaldada por tu empleador para cuando más lo necesitas.",
-
   "emo_1_title": "Gastos inesperados",
   "emo_1_desc": "Cuentas que llegan sin aviso",
   "emo_2_title": "Emergencias médicas",
@@ -51,7 +45,6 @@
   "emo_3_desc": "Apoyar a tus seres queridos en momentos difíciles",
   "emo_4_title": "Reparaciones",
   "emo_4_desc": "Auto, hogar o electrodomésticos averiados",
-
   "hiw_tag": "Cómo funciona",
   "hiw_h2": "Accede a crédito de emergencia, ya habilitado por tu empresa.",
   "hiw_p": "Cuatro pasos. Sin papeleo. Sin verificación crediticia.",
@@ -63,7 +56,6 @@
   "step_3_desc": "Recibe fondos en 24 horas. Plazo de 30 días con deducción automática.",
   "step_4_title": "Deducción automática",
   "step_4_desc": "Los pagos se deducen de la nómina. Sin pagos manuales.",
-
   "calc_tag": "Simula",
   "calc_h2": "Descubre cuánto puedes acceder.",
   "calc_p": "Calcula tu línea de crédito en segundos. Ajusta tu salario y monto deseado.",
@@ -76,7 +68,6 @@
   "calc_result_label": "Pago estimado",
   "calc_note": "Fondos disponibles en 24 horas",
   "calc_cta": "Solicitar Acceso",
-
   "emp_tag": "Para Empleadores",
   "emp_h2": "Ofrece estabilidad financiera sin carga.",
   "emp_p": "Cero responsabilidad. Integración simple. Impacto medible en retención.",
@@ -87,7 +78,6 @@
   "emp_integration": "Integración",
   "emp_integration_c": "API de nómina",
   "emp_adoption": "Tasa de adopción",
-
   "scn_tag": "Para Empleados",
   "scn_h2": "Apoyo cuando más lo necesitas.",
   "scn_p": "Sin verificación crediticia. Pre-aprobado. Transparente.",
@@ -99,7 +89,6 @@
   "scn_3_desc": "Plomería, electricidad, electrodomésticos",
   "scn_4_title": "Apoyo familiar",
   "scn_4_desc": "Ayuda en un momento difícil",
-
   "trust_tag": "Confianza",
   "trust_h2": "Construido sobre gobernanza institucional.",
   "trust_p": "Regulado, encriptado, transparente.",
@@ -112,7 +101,6 @@
   "trust_4_title": "Precios Transparentes",
   "trust_4_desc": "Sin comisiones ocultas, estructura de costos clara",
   "trust_link": "Ver Cumplimiento",
-
   "faq_tag": "Preguntas Frecuentes",
   "faq_h2": "Preguntas frecuentes.",
   "faq_p": "Todo lo que necesitas saber sobre VIDA.",
@@ -128,11 +116,9 @@
   "faq_5_a": "Sí. Usamos encriptación de grado bancario, estamos registrados como SOFOM en México y operamos bajo gobernanza financiera suiza. Tus datos están protegidos en cada capa.",
   "faq_6_q": "¿Qué tan rápido es el desembolso?",
   "faq_6_a": "Los fondos se desembolsan dentro de las 24 horas posteriores a la aprobación. La mayoría de los empleados reciben sus fondos el mismo día hábil.",
-
   "close_h2": "Vida financiera. <em>Reinventada.</em>",
   "close_sub": "Únete a cientos de empleadores construyendo resiliencia financiera.",
   "close_cta": "Comenzar",
-
   "ft_tagline": "Crédito de emergencia habilitado por el empleador. Gobernanza suiza. Operación en México.",
   "ft_platform": "Plataforma",
   "ft_company": "Empresa",
@@ -144,7 +130,6 @@
   "ft_press": "Prensa",
   "ft_privacy_policy": "Política de Privacidad",
   "ft_terms_service": "Términos de Servicio",
-
   "lp_e_badge": "Para Empleadores",
   "lp_e_h1": "Bienestar financiero para tu <em>equipo</em>.",
   "lp_e_sub": "Ofrece a tus empleados acceso a crédito de emergencia vía nómina. Sin riesgo para tu empresa. Sin carga operativa. Impacto medible en retención y productividad.",
@@ -183,7 +168,6 @@
   "lp_e_ben_4_d": "Holding suizo. SOFOM registrada en México. Encriptación bancaria. Precios transparentes.",
   "lp_e_close_h": "Empodera a tu equipo <em>hoy</em>.",
   "lp_e_close_sub": "Regístrate en 2 minutos. Sin contratos largos. Sin compromisos.",
-
   "lp_m_badge": "Para Empleados",
   "lp_m_h1": "Tu red de <em>seguridad</em> financiera.",
   "lp_m_sub": "Accede a crédito de emergencia pre-aprobado a través de tu empleador. Sin verificación crediticia. Sin papeleo. Fondos en 24 horas.",
@@ -249,7 +233,6 @@
   "lp_m_close_sub": "Si tu empresa ya tiene VIDA, activa tu crédito en 2 minutos.",
   "lp_m_close_cta": "Activar Mi Crédito",
   "lp_m_close_cta2": "Mi Empresa No Tiene VIDA",
-
   "pg_about_badge": "Nuestra Historia",
   "pg_about_h1": "Construyendo resiliencia <em>financiera</em>.",
   "pg_about_sub": "VIDA nace de una misión simple: nadie debería perder estabilidad por una emergencia financiera inesperada.",
@@ -274,7 +257,6 @@
   "pg_about_val_3_d": "Tu empleador nunca ve tus préstamos individuales. Tu información financiera es tuya.",
   "pg_about_val_4_t": "Impacto medible",
   "pg_about_val_4_d": "Cada decisión de producto se mide por el impacto real en la vida de los empleados.",
-
   "pg_sec_badge": "Seguridad",
   "pg_sec_h1": "Tu seguridad es nuestra <em>prioridad</em>.",
   "pg_sec_sub": "Protegemos tus datos con los mismos estándares que utilizan las instituciones financieras más exigentes del mundo.",
@@ -313,7 +295,6 @@
   "pg_sec_pr_3_d": "Cada servicio interno solo accede a los datos estrictamente necesarios para su función.",
   "pg_sec_pr_4_t": "Auditorías regulares",
   "pg_sec_pr_4_d": "Pruebas de penetración y revisiones de seguridad realizadas por terceros independientes.",
-
   "pg_priv_badge": "Legal",
   "pg_priv_h1": "Política de <em>Privacidad</em>.",
   "pg_priv_updated": "Última actualización: 1 de enero de 2025",
@@ -334,7 +315,6 @@
   "pg_priv_7_p": "Utilizamos cookies esenciales para el funcionamiento de la plataforma, cookies de preferencia para recordar tu idioma y sesión, y herramientas de análisis para mejorar nuestros servicios. No utilizamos cookies de publicidad de terceros.",
   "pg_priv_8_t": "8. Contacto",
   "pg_priv_8_p": "Para preguntas sobre esta política, contacta a nuestro Oficial de Protección de Datos en privacidad@vidacard.mx o escríbenos a VIDA Finance, Ciudad de México, México.",
-
   "pg_terms_badge": "Legal",
   "pg_terms_h1": "Términos de <em>Servicio</em>.",
   "pg_terms_updated": "Última actualización: 1 de enero de 2025",
@@ -355,7 +335,6 @@
   "pg_terms_7_p": "VIDA no será responsable por: interrupciones temporales del servicio, decisiones financieras tomadas por los usuarios, cambios en la situación laboral del Empleado, ni daños indirectos derivados del uso de la Plataforma. VIDA se reserva el derecho de modificar, suspender o descontinuar cualquier aspecto del servicio.",
   "pg_terms_8_t": "8. Ley aplicable",
   "pg_terms_8_p": "Estos Términos se rigen por las leyes de los Estados Unidos Mexicanos. Cualquier disputa será resuelta ante los tribunales competentes de la Ciudad de México. Para consultas legales, contacta a legal@vidacard.mx.",
-
   "pg_part_badge": "Programa de Socios",
   "pg_part_h1": "Crece con <em>VIDA</em>.",
   "pg_part_sub": "Únete a nuestro ecosistema de socios y lleva bienestar financiero a miles de empleados en México.",
@@ -388,7 +367,6 @@
   "pg_part_ben_3_l": "Soporte dedicado para socios",
   "pg_part_ben_4_v": "∞",
   "pg_part_ben_4_l": "Sin límite de referidos",
-
   "pg_inv_badge": "Inversionistas",
   "pg_inv_h1": "La oportunidad del crédito de <em>nómina</em>.",
   "pg_inv_sub": "Un mercado de $23B desatendido en México. Infraestructura regulada. Modelo de negocio probado. Gobernanza suiza.",
@@ -418,7 +396,6 @@
   "pg_inv_gov_p": "VIDA Holding AG en Suiza. VIDA Finance SOFOM en México. Consejo de administración independiente. Auditorías trimestrales. Cumplimiento regulatorio completo.",
   "pg_inv_cta": "Solicitar Deck de Inversionista",
   "pg_inv_cta_email": "investor.relations@vidacard.mx",
-
   "pg_contact_badge": "Contacto",
   "pg_contact_h1": "Hablemos de <em>VIDA</em>.",
   "pg_contact_sub": "Estamos aquí para responder tus preguntas, explorar alianzas o simplemente conversar.",
@@ -452,7 +429,6 @@
   "pg_contact_form_msg_ph": "¿En qué podemos ayudarte?",
   "pg_contact_form_send": "Enviar Mensaje",
   "pg_contact_form_sent": "¡Mensaje enviado! Te responderemos pronto.",
-
   "pg_press_badge": "Prensa",
   "pg_press_h1": "VIDA en los <em>medios</em>.",
   "pg_press_sub": "Recursos, datos y materiales para periodistas e investigadores.",
@@ -477,7 +453,6 @@
   "pg_press_brand_3_d": "Dorado #C9A84C — usado como color de señal, nunca como fondo. Reservado para destacar datos clave.",
   "pg_press_brand_4_t": "Tipografía",
   "pg_press_brand_4_d": "DM Serif Display para titulares. DM Sans para cuerpo de texto. Ambas de Google Fonts.",
-
   "auth_welcome": "Bienvenido de nuevo",
   "auth_signin_sub": "Inicia sesión en tu cuenta VIDA",
   "auth_email": "Correo electrónico",
@@ -488,7 +463,6 @@
   "auth_signin_btn": "Iniciar Sesión",
   "auth_no_account": "¿No tienes cuenta?",
   "auth_signup_link": "Regístrate",
-
   "dash_dashboard": "Panel",
   "dash_welcome": "Bienvenido",
   "dash_available_credit": "Crédito Disponible",
@@ -543,7 +517,6 @@
   "dash_back_to_login": "Volver al inicio",
   "dash_pending_verification": "Tu cuenta está siendo verificada. Nuestro equipo revisará tus documentos en 24–48 horas hábiles.",
   "dash_account_created": "¡Cuenta creada!",
-
   "status_pending": "Pendiente",
   "status_approved": "Aprobado",
   "status_disbursement_queued": "En cola de desembolso",
@@ -551,7 +524,6 @@
   "status_overdue": "Vencido",
   "status_paid": "Pagado",
   "status_rejected": "Rechazado",
-
   "modal_request": "Solicitar Fondos",
   "modal_available": "Disponible",
   "modal_amount": "Monto",
@@ -586,10 +558,8 @@
   "modal_cat_annual": "% anual",
   "modal_cat_note": "El CAT es una medida estandarizada del costo.",
   "modal_cat_condusef": "CONDUSEF",
-
   "toast_loan_submitted": "Solicitud de préstamo enviada exitosamente",
-
-"auth_forgot_password": "¿Olvidaste tu contraseña?",
+  "auth_forgot_password": "¿Olvidaste tu contraseña?",
   "auth_forgot_title": "Restablece tu contraseña",
   "auth_forgot_sub": "Ingresa tu correo y te enviaremos un enlace de restablecimiento",
   "auth_send_reset": "Enviar enlace",
@@ -604,8 +574,7 @@
   "auth_has_account": "¿Ya tienes cuenta?",
   "auth_login_link": "Iniciar sesión",
   "auth_invalid_code": "Código de empleador inválido. Consulta con tu departamento de RH.",
-
-"onb_welcome": "Bienvenido a <em>VIDA</em>",
+  "onb_welcome": "Bienvenido a <em>VIDA</em>",
   "onb_welcome_sub": "Elige cómo quieres comenzar",
   "onb_role_employer_title": "Soy Empleador",
   "onb_role_employer_desc": "Quiero ofrecer VIDA como beneficio a mi equipo",
@@ -614,11 +583,9 @@
   "onb_already_account": "¿Ya tienes cuenta?",
   "onb_login": "Inicia sesión",
   "onb_next": "Continuar",
-
   "onb_e_step1_h": "¿Cómo se llama tu <em>empresa</em>?",
   "onb_e_step1_sub": "Este será el nombre visible para tus empleados.",
   "onb_e_step1_placeholder": "Nombre de tu empresa",
-
   "onb_e_step2_h": "Cuéntanos sobre <em>ti</em>.",
   "onb_e_step2_sub": "Información de contacto del administrador.",
   "onb_e_step2_name": "Nombre completo",
@@ -627,7 +594,6 @@
   "onb_e_step2_email_ph": "tu@empresa.com",
   "onb_e_step2_phone": "Teléfono",
   "onb_e_step2_phone_ph": "+52 55 1234 5678",
-
   "onb_e_step3_h": "Datos de la <em>empresa</em>.",
   "onb_e_step3_sub": "Información fiscal y ubicación.",
   "onb_e_step3_rfc": "RFC",
@@ -637,7 +603,6 @@
   "onb_e_step3_state_ph": "Selecciona tu estado",
   "onb_e_step3_industry": "Industria",
   "onb_e_step3_industry_ph": "Selecciona tu industria",
-
   "onb_e_industry_manufacturing": "Manufactura",
   "onb_e_industry_retail": "Comercio",
   "onb_e_industry_services": "Servicios",
@@ -649,7 +614,6 @@
   "onb_e_industry_agriculture": "Agricultura",
   "onb_e_industry_logistics": "Logística",
   "onb_e_industry_other": "Otro",
-
   "onb_e_step4_h": "Información de <em>nómina</em>.",
   "onb_e_step4_sub": "Ayúdanos a entender tu esquema de nómina.",
   "onb_e_step4_size": "Número de empleados",
@@ -669,7 +633,6 @@
   "onb_e_step4_id": "Identificación Oficial",
   "onb_e_step4_address": "Comprobante de Domicilio",
   "onb_e_step4_error": "Error al subir. Por favor intenta de nuevo.",
-
   "onb_e_step5a_h": "Configuración de <em>pagos</em>.",
   "onb_e_step5a_sub": "Cómo tu empresa dispersa los pagos.",
   "onb_e_step5a_dispersora": "¿Utilizas una dispersora de pagos?",
@@ -678,7 +641,6 @@
   "onb_e_step5a_clabe": "CLABE bancaria",
   "onb_e_step5a_clabe_ph": "CLABE de 18 dígitos",
   "onb_e_step5a_clabe_hint": "Debe tener exactamente 18 dígitos",
-
   "onb_e_step5_h": "Crea tu <em>cuenta</em>.",
   "onb_e_step5_sub": "Un último paso para activar VIDA en tu empresa.",
   "onb_e_step5_pass": "Contraseña",
@@ -687,16 +649,13 @@
   "onb_e_step5_terms_link": "Términos y Condiciones",
   "onb_e_step5_btn": "Crear Mi Cuenta",
   "onb_e_step5_creating": "Creando cuenta...",
-
   "onb_e_step6_h": "¡Cuenta <em>creada</em>!",
   "onb_e_step6_sub": "Nuestro equipo revisará tus documentos en 24–48 horas hábiles.",
   "onb_e_step6_badge": "Verificación en proceso",
   "onb_e_step6_cta": "Ir al inicio",
-
   "dash_doc_banner_h": "Completa tu verificación",
   "dash_doc_banner_sub": "Sube los documentos requeridos para que podamos activar tu cuenta en 24–48 horas.",
   "dash_doc_banner_success": "¡Documentos enviados! Los revisaremos en 24–48 horas.",
-
   "dash_partb_title": "Configuración de Deducción de Nómina",
   "dash_partb_sub": "Ingresa 3 CURPs de empleados de muestra para que podamos verificar tu registro en el IMSS y activar las deducciones de nómina.",
   "dash_partb_curp_label": "CURP del Empleado {{n}}",
@@ -708,7 +667,6 @@
   "dash_partb_success": "¡CURPs enviados! Los verificaremos en breve.",
   "dash_partb_error": "Algo salió mal. Por favor intenta de nuevo.",
   "dash_partb_pending": "Tus CURPs de muestra están siendo verificados. Te notificaremos cuando se complete.",
-
   "curp_config_title": "Configuración de CURP",
   "curp_config_desc": "Define cuáles CURPs de empleados son válidos para tu empresa. Usa modo abierto para aceptar cualquier CURP válido, o modo lista blanca para restringir el registro a prefijos específicos.",
   "curp_config_mode_open": "Abierto",
@@ -725,7 +683,6 @@
   "curp_config_saving": "Guardando…",
   "curp_config_saved": "Configuración Guardada",
   "curp_config_error": "Algo salió mal. Por favor intenta de nuevo.",
-
   "onb_m_step1_h": "Ingresa tu <em>código</em>.",
   "onb_m_step1_sub": "Tu empleador te proporcionó un código de acceso.",
   "onb_m_step1_placeholder": "CÓDIGO",
@@ -733,7 +690,6 @@
   "onb_m_step1_found": "Empresa encontrada",
   "onb_m_step1_not_found": "Código no encontrado",
   "onb_m_step1_searching": "Buscando...",
-
   "onb_m_step2_h": "Cuéntanos sobre <em>ti</em>.",
   "onb_m_step2_sub": "Tu información personal para activar tu crédito.",
   "onb_m_step2_name": "Nombre completo",
@@ -744,7 +700,6 @@
   "onb_m_step2_phone_ph": "55 1234 5678",
   "onb_m_step2_dob": "Fecha de nacimiento",
   "onb_m_step2_dob_age_error": "La edad debe estar entre 18 y 65 años",
-
   "onb_m_step3_h": "Tu <em>identificación</em>.",
   "onb_m_step3_sub": "Necesitamos tu CURP y RFC para verificar tu identidad.",
   "onb_m_step3_curp": "CURP",
@@ -758,7 +713,6 @@
   "onb_m_step3_rfc": "RFC",
   "onb_m_step3_rfc_ph": "13 caracteres alfanuméricos",
   "onb_m_step3_rfc_hint": "Tu Registro Federal de Contribuyentes (13 caracteres)",
-
   "onb_m_kyc_h": "Verifica tu <em>identidad</em>.",
   "onb_m_kyc_sub": "Completa la verificación con foto de tu identificación oficial y una selfie.",
   "onb_m_kyc_btn": "Verificar Identidad",
@@ -767,7 +721,6 @@
   "onb_m_kyc_rejected": "Verificación rechazada. Intenta de nuevo.",
   "onb_m_kyc_retry": "Reintentar Verificación",
   "onb_m_kyc_desc": "Necesitamos verificar tu identidad con una foto de tu INE/pasaporte y una selfie. Este proceso toma menos de 2 minutos.",
-
   "onb_m_step4_h": "Tu crédito <em>pre-aprobado</em>.",
   "onb_m_step4_sub": "Ingresa tu información laboral y bancaria.",
   "onb_m_step4_salary": "Salario mensual",
@@ -788,7 +741,6 @@
   "onb_m_step4_clabe_hint": "Tu cuenta CLABE de 18 dígitos para recibir tu crédito",
   "onb_m_step4_preapproved": "Pre-aprobado",
   "onb_m_step4_credit_label": "CRÉDITO DISPONIBLE",
-
   "onb_m_step5_h": "Crea tu <em>cuenta</em>.",
   "onb_m_step5_sub": "Un último paso para acceder a tu crédito.",
   "onb_m_step5_pass": "Contraseña",
@@ -797,16 +749,13 @@
   "onb_m_step5_terms_link": "Términos y Condiciones",
   "onb_m_step5_btn": "Activar Mi Crédito",
   "onb_m_step5_creating": "Activando...",
-
   "onb_m_step6_h": "¡Crédito <em>aprobado</em>!",
   "onb_m_step6_sub": "Tu línea de crédito está lista para ser utilizada.",
   "onb_m_step6_tag": "PRE-APROBADO",
   "onb_m_step6_cta": "Acceder a Mi Crédito",
-
   "onb_strength_weak": "Débil",
   "onb_strength_medium": "Media",
   "onb_strength_strong": "Fuerte",
-
   "ded_title": "Deducciones de Nómina",
   "ded_subtitle": "Pagos de préstamos deducidos de la nómina del empleado.",
   "ded_total_deductions": "Total de Deducciones",
@@ -816,15 +765,11 @@
   "ded_empty": "No hay reportes de deducciones disponibles.",
   "ded_th_loan_amount": "Monto del Préstamo",
   "ded_th_deduction": "Deducción",
-
   "loan_wizard_redirect": "Redirigiendo a tu panel para solicitar un préstamo...",
-
   "onb_go_back": "Regresar",
-
   "error_404": "404",
   "error_404_message": "Página no encontrada",
   "error_404_home": "Ir al inicio",
-
   "pay_modal_title": "Realizar un Pago",
   "pay_modal_subtitle": "Préstamo",
   "pay_total_owed": "Total Adeudado",
@@ -841,7 +786,6 @@
   "pay_status_processing": "Procesando",
   "pay_status_paid": "Pagado",
   "pay_status_completed": "Pagado",
-
   "wiz_title": "Solicitar Préstamo",
   "wiz_subtitle": "Hola {{name}}, completa los pasos para solicitar tu préstamo.",
   "wiz_step_1_label": "Paso 1 de 4",
@@ -861,5 +805,8 @@
   "wiz_success_title": "¡Solicitud enviada!",
   "wiz_success_desc": "Tu solicitud de préstamo ha sido recibida y está en revisión. Te notificaremos cuando sea aprobada.",
   "wiz_success_ref": "Número de referencia",
-  "wiz_success_back": "Volver al panel"
+  "wiz_success_back": "Volver al panel",
+  "status_status_repaid": "Pagado",
+  "status_repaid": "Pagado",
+  "status_completed": "Completado"
 }

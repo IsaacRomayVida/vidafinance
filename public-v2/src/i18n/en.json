@@ -9,13 +9,11 @@
   "nav_investors": "Investors",
   "nav_contact": "Contact",
   "lang_toggle": "ES",
-
   "hero_badge": "Employer-Enabled Credit",
   "hero_h1": "Your built-in <em>financial</em> backup.",
   "hero_sub": "Emergency liquidity through your employer's payroll. Pre-approved. Instant.",
   "hero_cta_employer": "I'm an Employer",
   "hero_cta_employee": "I'm an Employee",
-
   "phone_available": "Available Credit",
   "phone_active": "Active",
   "phone_currency": "Mexican Pesos · Via payroll",
@@ -27,22 +25,18 @@
   "phone_deduction_val": "Auto payroll",
   "phone_utilization": "Utilization",
   "phone_request": "Request Funds",
-
   "chip_24hrs": "24 hrs",
   "chip_disbursement": "Disbursement",
   "chip_0fees": "$0 fees",
   "chip_transparent": "Transparent",
   "chip_encrypted": "Encrypted",
   "chip_bankgrade": "Bank-grade",
-
   "ben_fees": "Hidden fees",
   "ben_disbursement": "Disbursement",
   "ben_encrypted": "Encrypted",
   "ben_governance": "Governance",
-
   "stmt_h2": "Life is <em>unpredictable.</em>",
   "stmt_p": "VIDA is your employer-backed safety net for when it matters most.",
-
   "emo_1_title": "Unexpected expenses",
   "emo_1_desc": "Bills that arrive without warning",
   "emo_2_title": "Medical emergencies",
@@ -51,7 +45,6 @@
   "emo_3_desc": "Supporting loved ones in tough moments",
   "emo_4_title": "Repair bills",
   "emo_4_desc": "Car, home, or appliance breakdowns",
-
   "hiw_tag": "How it works",
   "hiw_h2": "Access emergency credit, already enabled by your company.",
   "hiw_p": "Four steps. No paperwork. No credit checks.",
@@ -63,7 +56,6 @@
   "step_3_desc": "Receive funds within 24 hours. 30-day term with automatic deduction.",
   "step_4_title": "Automatic deduction",
   "step_4_desc": "Repayments deducted from payroll. No manual payments.",
-
   "calc_tag": "Simulate",
   "calc_h2": "See how much you can access.",
   "calc_p": "Calculate your credit line in seconds. Adjust your salary and desired amount below.",
@@ -76,7 +68,6 @@
   "calc_result_label": "Estimated repayment",
   "calc_note": "Funds available within 24 hours",
   "calc_cta": "Request Access",
-
   "emp_tag": "For Employers",
   "emp_h2": "Offer financial stability without burden.",
   "emp_p": "Zero liability. Simple integration. Measurable retention impact.",
@@ -87,7 +78,6 @@
   "emp_integration": "Integration",
   "emp_integration_c": "Payroll API",
   "emp_adoption": "Adoption rate",
-
   "scn_tag": "For Employees",
   "scn_h2": "Support when it matters most.",
   "scn_p": "No credit checks. Pre-approved. Transparent.",
@@ -99,7 +89,6 @@
   "scn_3_desc": "Plumbing, electrical, appliance",
   "scn_4_title": "Family support",
   "scn_4_desc": "Help through a tough moment",
-
   "trust_tag": "Trust",
   "trust_h2": "Built on institutional governance.",
   "trust_p": "Regulated, encrypted, transparent.",
@@ -112,7 +101,6 @@
   "trust_4_title": "Transparent Pricing",
   "trust_4_desc": "No hidden fees, clear cost structure",
   "trust_link": "View Compliance",
-
   "faq_tag": "FAQ",
   "faq_h2": "Frequently asked questions.",
   "faq_p": "Everything you need to know about VIDA.",
@@ -128,11 +116,9 @@
   "faq_5_a": "Yes. We use bank-grade encryption, are SOFOM-registered in Mexico, and operate under Swiss financial governance. Your data is protected at every layer.",
   "faq_6_q": "How fast is disbursement?",
   "faq_6_a": "Funds are disbursed within 24 hours of approval. Most employees receive their funds the same business day.",
-
   "close_h2": "Financial life. <em>Reinvented.</em>",
   "close_sub": "Join hundreds of employers building financial resilience.",
   "close_cta": "Get Started",
-
   "ft_tagline": "Employer-enabled emergency credit. Swiss-governed. Mexico-operating.",
   "ft_platform": "Platform",
   "ft_company": "Company",
@@ -144,7 +130,6 @@
   "ft_press": "Press",
   "ft_privacy_policy": "Privacy Policy",
   "ft_terms_service": "Terms of Service",
-
   "lp_e_badge": "For Employers",
   "lp_e_h1": "Financial wellness for your <em>team</em>.",
   "lp_e_sub": "Give your employees access to emergency credit via payroll. Zero risk for your company. Zero operational burden. Measurable retention impact.",
@@ -183,7 +168,6 @@
   "lp_e_ben_4_d": "Swiss holding. SOFOM registered in Mexico. Bank-grade encryption. Transparent pricing.",
   "lp_e_close_h": "Empower your team <em>today</em>.",
   "lp_e_close_sub": "Sign up in 2 minutes. No long contracts. No commitments.",
-
   "lp_m_badge": "For Employees",
   "lp_m_h1": "Your financial <em>safety</em> net.",
   "lp_m_sub": "Access pre-approved emergency credit through your employer. No credit checks. No paperwork. Funds within 24 hours.",
@@ -249,7 +233,6 @@
   "lp_m_close_sub": "If your company already has VIDA, activate your credit in 2 minutes.",
   "lp_m_close_cta": "Activate My Credit",
   "lp_m_close_cta2": "My Company Doesn't Have VIDA",
-
   "pg_about_badge": "Our Story",
   "pg_about_h1": "Building financial <em>resilience</em>.",
   "pg_about_sub": "VIDA was born from a simple mission: no one should lose stability due to an unexpected financial emergency.",
@@ -274,7 +257,6 @@
   "pg_about_val_3_d": "Your employer never sees your individual loans. Your financial information is yours.",
   "pg_about_val_4_t": "Measurable impact",
   "pg_about_val_4_d": "Every product decision is measured by its real impact on employees' lives.",
-
   "pg_sec_badge": "Security",
   "pg_sec_h1": "Your security is our <em>priority</em>.",
   "pg_sec_sub": "We protect your data with the same standards used by the world's most demanding financial institutions.",
@@ -313,7 +295,6 @@
   "pg_sec_pr_3_d": "Each internal service only accesses the data strictly necessary for its function.",
   "pg_sec_pr_4_t": "Regular audits",
   "pg_sec_pr_4_d": "Penetration tests and security reviews conducted by independent third parties.",
-
   "pg_priv_badge": "Legal",
   "pg_priv_h1": "Privacy <em>Policy</em>.",
   "pg_priv_updated": "Last updated: January 1, 2025",
@@ -334,7 +315,6 @@
   "pg_priv_7_p": "We use essential cookies for platform operation, preference cookies to remember your language and session, and analytics tools to improve our services. We do not use third-party advertising cookies.",
   "pg_priv_8_t": "8. Contact",
   "pg_priv_8_p": "For questions about this policy, contact our Data Protection Officer at privacidad@vidacard.mx or write to us at VIDA Finance, Mexico City, Mexico.",
-
   "pg_terms_badge": "Legal",
   "pg_terms_h1": "Terms of <em>Service</em>.",
   "pg_terms_updated": "Last updated: January 1, 2025",
@@ -355,7 +335,6 @@
   "pg_terms_7_p": "VIDA shall not be liable for: temporary service interruptions, financial decisions made by users, changes in the Employee's employment status, or indirect damages arising from Platform use. VIDA reserves the right to modify, suspend, or discontinue any aspect of the service.",
   "pg_terms_8_t": "8. Applicable law",
   "pg_terms_8_p": "These Terms are governed by the laws of the United Mexican States. Any dispute shall be resolved before the competent courts of Mexico City. For legal inquiries, contact legal@vidacard.mx.",
-
   "pg_part_badge": "Partner Program",
   "pg_part_h1": "Grow with <em>VIDA</em>.",
   "pg_part_sub": "Join our partner ecosystem and bring financial wellness to thousands of employees in Mexico.",
@@ -388,7 +367,6 @@
   "pg_part_ben_3_l": "Dedicated partner support",
   "pg_part_ben_4_v": "∞",
   "pg_part_ben_4_l": "No referral limit",
-
   "pg_inv_badge": "Investors",
   "pg_inv_h1": "The payroll credit <em>opportunity</em>.",
   "pg_inv_sub": "A $23B underserved market in Mexico. Regulated infrastructure. Proven business model. Swiss governance.",
@@ -418,7 +396,6 @@
   "pg_inv_gov_p": "VIDA Holding AG in Switzerland. VIDA Finance SOFOM in Mexico. Independent board of directors. Quarterly audits. Full regulatory compliance.",
   "pg_inv_cta": "Request Investor Deck",
   "pg_inv_cta_email": "investor.relations@vidacard.mx",
-
   "pg_contact_badge": "Contact",
   "pg_contact_h1": "Let's talk about <em>VIDA</em>.",
   "pg_contact_sub": "We're here to answer your questions, explore partnerships, or simply chat.",
@@ -452,7 +429,6 @@
   "pg_contact_form_msg_ph": "How can we help you?",
   "pg_contact_form_send": "Send Message",
   "pg_contact_form_sent": "Message sent! We'll get back to you soon.",
-
   "pg_press_badge": "Press",
   "pg_press_h1": "VIDA in the <em>media</em>.",
   "pg_press_sub": "Resources, data, and materials for journalists and researchers.",
@@ -477,7 +453,6 @@
   "pg_press_brand_3_d": "Gold #C9A84C — used as a signal color, never as background. Reserved for highlighting key data.",
   "pg_press_brand_4_t": "Typography",
   "pg_press_brand_4_d": "DM Serif Display for headlines. DM Sans for body text. Both from Google Fonts.",
-
   "auth_welcome": "Welcome back",
   "auth_signin_sub": "Sign in to your VIDA account",
   "auth_email": "Email",
@@ -488,7 +463,6 @@
   "auth_signin_btn": "Sign In",
   "auth_no_account": "Don't have an account?",
   "auth_signup_link": "Get started",
-
   "dash_dashboard": "Dashboard",
   "dash_welcome": "Welcome",
   "dash_available_credit": "Available Credit",
@@ -543,7 +517,6 @@
   "dash_back_to_login": "Back to login",
   "dash_pending_verification": "Your account is being verified. Our team will review your documents within 24–48 business hours.",
   "dash_account_created": "Account created!",
-
   "status_pending": "Pending",
   "status_approved": "Approved",
   "status_disbursement_queued": "Disbursement Queued",
@@ -551,7 +524,6 @@
   "status_overdue": "Overdue",
   "status_paid": "Paid",
   "status_rejected": "Rejected",
-
   "modal_request": "Request Funds",
   "modal_available": "Available",
   "modal_amount": "Amount",
@@ -586,10 +558,8 @@
   "modal_cat_annual": "% annual",
   "modal_cat_note": "The CAT is a standardized measure of cost.",
   "modal_cat_condusef": "CONDUSEF",
-
   "toast_loan_submitted": "Loan request submitted successfully",
-
-"auth_forgot_password": "Forgot password?",
+  "auth_forgot_password": "Forgot password?",
   "auth_forgot_title": "Reset your password",
   "auth_forgot_sub": "Enter your email and we'll send you a reset link",
   "auth_send_reset": "Send Reset Link",
@@ -604,8 +574,7 @@
   "auth_has_account": "Already have an account?",
   "auth_login_link": "Sign in",
   "auth_invalid_code": "Invalid employer code. Please check with your HR department.",
-
-"onb_welcome": "Welcome to <em>VIDA</em>",
+  "onb_welcome": "Welcome to <em>VIDA</em>",
   "onb_welcome_sub": "Choose how you want to get started",
   "onb_role_employer_title": "I'm an Employer",
   "onb_role_employer_desc": "I want to offer VIDA as a benefit for my team",
@@ -614,11 +583,9 @@
   "onb_already_account": "Already have an account?",
   "onb_login": "Sign in",
   "onb_next": "Continue",
-
   "onb_e_step1_h": "What's your <em>company</em> name?",
   "onb_e_step1_sub": "This will be visible to your employees.",
   "onb_e_step1_placeholder": "Your company name",
-
   "onb_e_step2_h": "Tell us about <em>you</em>.",
   "onb_e_step2_sub": "Admin contact information.",
   "onb_e_step2_name": "Full name",
@@ -627,7 +594,6 @@
   "onb_e_step2_email_ph": "you@company.com",
   "onb_e_step2_phone": "Phone number",
   "onb_e_step2_phone_ph": "+52 55 1234 5678",
-
   "onb_e_step3_h": "Company <em>details</em>.",
   "onb_e_step3_sub": "Tax and location information.",
   "onb_e_step3_rfc": "RFC (Tax ID)",
@@ -637,7 +603,6 @@
   "onb_e_step3_state_ph": "Select your state",
   "onb_e_step3_industry": "Industry",
   "onb_e_step3_industry_ph": "Select your industry",
-
   "onb_e_industry_manufacturing": "Manufacturing",
   "onb_e_industry_retail": "Retail",
   "onb_e_industry_services": "Services",
@@ -649,7 +614,6 @@
   "onb_e_industry_agriculture": "Agriculture",
   "onb_e_industry_logistics": "Logistics",
   "onb_e_industry_other": "Other",
-
   "onb_e_step4_h": "Payroll <em>information</em>.",
   "onb_e_step4_sub": "Help us understand your payroll setup.",
   "onb_e_step4_size": "Employee count",
@@ -669,7 +633,6 @@
   "onb_e_step4_id": "Official ID",
   "onb_e_step4_address": "Proof of Address",
   "onb_e_step4_error": "Upload failed. Please try again.",
-
   "onb_e_step5a_h": "Payment <em>setup</em>.",
   "onb_e_step5a_sub": "How your company disburses payments.",
   "onb_e_step5a_dispersora": "Do you use a dispersora (payment disbursement service)?",
@@ -678,7 +641,6 @@
   "onb_e_step5a_clabe": "Bank CLABE",
   "onb_e_step5a_clabe_ph": "18-digit CLABE number",
   "onb_e_step5a_clabe_hint": "Must be exactly 18 digits",
-
   "onb_e_step5_h": "Create your <em>account</em>.",
   "onb_e_step5_sub": "One last step to activate VIDA for your company.",
   "onb_e_step5_pass": "Password",
@@ -687,16 +649,13 @@
   "onb_e_step5_terms_link": "Terms and Conditions",
   "onb_e_step5_btn": "Create My Account",
   "onb_e_step5_creating": "Creating account...",
-
   "onb_e_step6_h": "Account <em>created</em>!",
   "onb_e_step6_sub": "Our team will review your documents within 24–48 business hours.",
   "onb_e_step6_badge": "Verification in progress",
   "onb_e_step6_cta": "Go to home",
-
   "dash_doc_banner_h": "Complete Your Verification",
   "dash_doc_banner_sub": "Upload the required documents so we can activate your account within 24–48 hours.",
   "dash_doc_banner_success": "Documents submitted! We'll review them within 24–48 hours.",
-
   "dash_partb_title": "Payroll Deduction Setup",
   "dash_partb_sub": "Enter 3 sample employee CURPs so we can verify your IMSS registration and activate payroll deductions.",
   "dash_partb_curp_label": "Employee CURP {{n}}",
@@ -708,7 +667,6 @@
   "dash_partb_success": "CURPs submitted! We'll verify them shortly.",
   "dash_partb_error": "Something went wrong. Please try again.",
   "dash_partb_pending": "Your sample CURPs are being verified. We'll notify you once complete.",
-
   "curp_config_title": "CURP Configuration",
   "curp_config_desc": "Define which employee CURPs are valid for your company. Use open mode to accept any valid CURP, or allowlist mode to restrict registration to specific CURP prefixes.",
   "curp_config_mode_open": "Open",
@@ -725,7 +683,6 @@
   "curp_config_saving": "Saving…",
   "curp_config_saved": "Configuration Saved",
   "curp_config_error": "Something went wrong. Please try again.",
-
   "onb_m_step1_h": "Enter your <em>code</em>.",
   "onb_m_step1_sub": "Your employer provided you with an access code.",
   "onb_m_step1_placeholder": "CODE",
@@ -733,7 +690,6 @@
   "onb_m_step1_found": "Company found",
   "onb_m_step1_not_found": "Code not found",
   "onb_m_step1_searching": "Searching...",
-
   "onb_m_step2_h": "Tell us about <em>you</em>.",
   "onb_m_step2_sub": "Your personal information to activate your credit.",
   "onb_m_step2_name": "Full name",
@@ -744,7 +700,6 @@
   "onb_m_step2_phone_ph": "55 1234 5678",
   "onb_m_step2_dob": "Date of birth",
   "onb_m_step2_dob_age_error": "Age must be between 18 and 65 years",
-
   "onb_m_step3_h": "Your <em>identification</em>.",
   "onb_m_step3_sub": "We need your CURP and RFC to verify your identity.",
   "onb_m_step3_curp": "CURP",
@@ -758,7 +713,6 @@
   "onb_m_step3_rfc": "RFC",
   "onb_m_step3_rfc_ph": "13 alphanumeric characters",
   "onb_m_step3_rfc_hint": "Your Federal Taxpayer Registry (13 characters)",
-
   "onb_m_kyc_h": "Verify your <em>identity</em>.",
   "onb_m_kyc_sub": "Complete verification with your official ID photo and a selfie.",
   "onb_m_kyc_btn": "Verify Identity",
@@ -767,7 +721,6 @@
   "onb_m_kyc_rejected": "Verification rejected. Please try again.",
   "onb_m_kyc_retry": "Retry Verification",
   "onb_m_kyc_desc": "We need to verify your identity with a photo of your official ID and a selfie. This process takes less than 2 minutes.",
-
   "onb_m_step4_h": "Your <em>pre-approved</em> credit.",
   "onb_m_step4_sub": "Enter your employment and banking details.",
   "onb_m_step4_salary": "Monthly salary",
@@ -788,7 +741,6 @@
   "onb_m_step4_clabe_hint": "Your 18-digit CLABE account to receive your credit",
   "onb_m_step4_preapproved": "Pre-approved",
   "onb_m_step4_credit_label": "AVAILABLE CREDIT",
-
   "onb_m_step5_h": "Create your <em>account</em>.",
   "onb_m_step5_sub": "One last step to access your credit.",
   "onb_m_step5_pass": "Password",
@@ -797,16 +749,13 @@
   "onb_m_step5_terms_link": "Terms and Conditions",
   "onb_m_step5_btn": "Activate My Credit",
   "onb_m_step5_creating": "Activating...",
-
   "onb_m_step6_h": "Credit <em>approved</em>!",
   "onb_m_step6_sub": "Your credit line is ready to use.",
   "onb_m_step6_tag": "PRE-APPROVED",
   "onb_m_step6_cta": "Access My Credit",
-
   "onb_strength_weak": "Weak",
   "onb_strength_medium": "Medium",
   "onb_strength_strong": "Strong",
-
   "ded_title": "Payroll Deductions",
   "ded_subtitle": "Loan repayments deducted from employee payroll.",
   "ded_total_deductions": "Total Deductions",
@@ -816,15 +765,11 @@
   "ded_empty": "No deduction reports available.",
   "ded_th_loan_amount": "Loan Amount",
   "ded_th_deduction": "Deduction",
-
   "loan_wizard_redirect": "Redirecting to your dashboard to apply for a loan...",
-
   "onb_go_back": "Go back",
-
   "error_404": "404",
   "error_404_message": "Page not found",
   "error_404_home": "Go home",
-
   "pay_modal_title": "Make a Payment",
   "pay_modal_subtitle": "Loan",
   "pay_total_owed": "Total Owed",
@@ -841,7 +786,6 @@
   "pay_status_processing": "Processing",
   "pay_status_paid": "Paid",
   "pay_status_completed": "Paid",
-
   "wiz_title": "Request a Loan",
   "wiz_subtitle": "Hi {{name}}, complete the steps to request your loan.",
   "wiz_step_1_label": "Step 1 of 4",
@@ -861,5 +805,8 @@
   "wiz_success_title": "Request submitted!",
   "wiz_success_desc": "Your loan request has been received and is under review. We'll notify you when it's approved.",
   "wiz_success_ref": "Reference number",
-  "wiz_success_back": "Back to dashboard"
+  "wiz_success_back": "Back to dashboard",
+  "status_status_repaid": "Repaid",
+  "status_repaid": "Repaid",
+  "status_completed": "Completed"
 }

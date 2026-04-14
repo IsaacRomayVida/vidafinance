@@ -613,6 +613,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
   );
 }
 
+
 export function EmployerDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();

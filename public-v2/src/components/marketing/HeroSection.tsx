@@ -19,8 +19,8 @@ export function HeroSection() {
           <h1><RichText html={t('hero_h1')} /></h1>
           <p className="hero-sub">{t('hero_sub')}</p>
           <div className="hero-actions">
-            <Link to="/onboarding" className="hero-cta">{t('hero_cta_employer')}</Link>
-            <Link to="/onboarding" className="hero-cta-2">{t('hero_cta_employee')}</Link>
+            <Link to="/onboarding?role=employer" className="hero-cta">{t('hero_cta_employer')}</Link>
+            <Link to="/onboarding?role=employee" className="hero-cta-2">{t('hero_cta_employee')}</Link>
           </div>
         </div>
         <div className="hero-widget">

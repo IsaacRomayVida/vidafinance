@@ -63,6 +63,7 @@ export function EmployeeDashboard() {
 
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const hasActiveLoan = loans.some(l => ['pending', 'approved', 'active', 'disbursement_queued'].includes(l.status));
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -192,7 +193,7 @@ export function EmployeeDashboard() {
       </div>
 
       {/* KYC pending banner */}
-      {employee.kycStatus && employee.kycStatus !== 'approved' && (
+      {employee.kycStatus && employee.kycStatus !== 'approved' && loans.length === 0 && (
         <div style={{
           margin: '0 auto', maxWidth: 960, padding: '0 20px',
         }}>
@@ -259,7 +260,7 @@ export function EmployeeDashboard() {
           <div className="stat-card">
             <div className="stat-label">{t('dash_quick_action')}</div>
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => { if (hasActiveLoan) { alert("Ya tienes un préstamo activo. Debes completar tu préstamo actual antes de solicitar otro."); return; } setShowModal(true); }}
               disabled={employee.availableCredit < 500}
               className="btn-primary"
               style={{ marginTop: 8 }}
