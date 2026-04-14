@@ -87,8 +87,8 @@ export function AdminDashboard() {
 
   const approveEmployer = async (employerId: string, decision: 'approved' | 'rejected') => {
     const msg = decision === 'approved'
-      ? 'Approve this employer?'
-      : 'Reject this employer?';
+      ? t('admin_confirm_approve', '¿Aprobar este empleador?')
+      : t('admin_confirm_reject', '¿Rechazar este empleador?');
     if (!window.confirm(msg)) return;
     setActionLoading(employerId);
     try {
@@ -107,7 +107,7 @@ export function AdminDashboard() {
   };
 
   const reviewLoan = async (loanId: string, decision: 'approved' | 'rejected') => {
-    if (!window.confirm(decision === 'approved' ? 'Approve this loan?' : 'Reject this loan?')) return;
+    if (!window.confirm(decision === 'approved' ? t('admin_confirm_approve_loan', '¿Aprobar este préstamo?') : t('admin_confirm_reject_loan', '¿Rechazar este préstamo?'))) return;
     setActionLoading(loanId);
     try {
       const functions = getFunctions();
@@ -171,10 +171,10 @@ export function AdminDashboard() {
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
         <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-          ' + t('admin_title') + '
+          {t('admin_title')}
         </h1>
         <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
-          Manage employers, review loan applications, and monitor platform health.
+          {t('admin_subtitle')}
         </p>
       </div>
 
@@ -200,20 +200,20 @@ export function AdminDashboard() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 32, borderBottom: '1px solid rgba(25,68,69,0.06)', marginBottom: 24 }}>
-        {(['employers', 'loans'] as const).map(t => (
+        {(['employers', 'loans'] as const).map(tabKey => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tabKey}
+            onClick={() => setTab(tabKey)}
             style={{
-              fontSize: 12, fontWeight: tab === t ? 700 : 500,
-              color: tab === t ? '#194445' : '#93aaa9',
+              fontSize: 12, fontWeight: tab === tabKey ? 700 : 500,
+              color: tab === tabKey ? '#194445' : '#93aaa9',
               textTransform: 'uppercase', letterSpacing: '0.5px',
               padding: '14px 0', background: 'none', border: 'none',
-              borderBottom: tab === t ? '2px solid #a28657' : '2px solid transparent',
+              borderBottom: tab === tabKey ? '2px solid #a28657' : '2px solid transparent',
               cursor: 'pointer', transition: 'all 0.2s',
             }}
           >
-            {t === 'employers' ? `Employers (${pendingEmployers.length} pending)` : `Loans (${pendingLoans.length} pending)`}
+            {tabKey === 'employers' ? `${t('admin_employers')} (${pendingEmployers.length} ${t('admin_pending_short', 'pendientes')})` : `${t('admin_loans_tab', 'Préstamos')} (${pendingLoans.length} ${t('admin_pending_short', 'pendientes')})`}
           </button>
         ))}
       </div>
@@ -237,7 +237,7 @@ export function AdminDashboard() {
                       disabled={!!actionLoading}
                       style={pillBtn('#194445', '#fff')}
                     >
-                      {actionLoading === emp.id ? 'Processing...' : 'Approve'}
+                      {actionLoading === emp.id ? '...' : t('admin_approve', 'Aprobar')}
                     </button>
                     <button
                       onClick={() => approveEmployer(emp.id, 'rejected')}
@@ -262,7 +262,7 @@ export function AdminDashboard() {
                       <div style={{ fontSize: 15, fontWeight: 600, color: '#0c1e1f' }}>{emp.companyName}</div>
                       <div style={{ fontSize: 12, color: '#93aaa9', marginTop: 4 }}>{emp.email}</div>
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#247a6e', background: 'rgba(36,122,110,0.06)', padding: '4px 12px', borderRadius: 20 }}>Active</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#247a6e', background: 'rgba(36,122,110,0.06)', padding: '4px 12px', borderRadius: 20 }}>{t('status_active', 'Activo')}</div>
                   </div>
                 </div>
               ))}
@@ -303,7 +303,7 @@ export function AdminDashboard() {
                   )}
                   <div style={{ display: 'flex', gap: 12 }}>
                     <button onClick={() => reviewLoan(loan.id, 'approved')} disabled={!!actionLoading} style={pillBtn('#194445', '#fff')}>
-                      {actionLoading === loan.id ? 'Processing...' : 'Approve Loan'}
+                      {actionLoading === loan.id ? '...' : t('admin_approve_loan', 'Aprobar Préstamo')}
                     </button>
                     <button onClick={() => reviewLoan(loan.id, 'rejected')} disabled={!!actionLoading} style={pillBtn('rgba(220,80,60,0.08)', '#dc503c')}>
                       Reject
