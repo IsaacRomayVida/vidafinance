@@ -54,6 +54,22 @@ export function HeroSection() {
           </div>
         </div>
         <div className="hero-widget">
+          {/* Worker photo */}
+          <img
+            src="/images/worker.png"
+            alt="Trabajador usando VIDA"
+            className="hero-worker-img"
+            style={{
+              position: 'absolute',
+              left: -60,
+              bottom: 20,
+              width: 220,
+              zIndex: 1,
+              opacity: 0.92,
+              filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.12))',
+              pointerEvents: 'none',
+            }}
+          />
           <div className="phone-ring" />
           <div className="phone-ring-2" />
           <div className="phone-glow" />

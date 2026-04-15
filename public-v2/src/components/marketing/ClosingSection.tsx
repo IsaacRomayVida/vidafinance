@@ -23,11 +23,10 @@ export function ClosingSection() {
           VIDA nos permitió ofrecer un beneficio real a nuestros empleados sin ningún costo ni riesgo. La adopción fue inmediata.
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: '50%', background: 'rgba(162,134,87,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.7)',
-          }}>CR</div>
+          <img src="/images/carlosheadshot.png" alt="Carlos Rodríguez" style={{
+            width: 44, height: 44, borderRadius: '50%', objectFit: 'cover',
+            border: '2px solid rgba(255,255,255,0.15)',
+          }} />
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>Carlos Rodríguez</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Director de RRHH · Manufactura del Norte</div>

@@ -13,10 +13,21 @@ export function StatementSection() {
 
   return (
     <section className="statement-section">
-      <div className="statement-inner">
+      <div className="statement-inner" style={{ alignItems: 'center' }}>
         <div className="statement-text rv">
           <h2><RichText html={t('stmt_h2')} /></h2>
           <p>{t('stmt_p')}</p>
+          {/* Female worker photo */}
+          <div style={{ marginTop: 40, position: 'relative' }}>
+            <img
+              src="/images/workerfemale.png"
+              alt="Empleada usando VIDA"
+              style={{
+                width: 260,
+                filter: 'drop-shadow(0 16px 32px rgba(25,68,69,0.1))',
+              }}
+            />
+          </div>
         </div>
         <div className="emo-col">
           {emotions.map((e, i) => (

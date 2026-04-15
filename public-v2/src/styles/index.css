@@ -977,3 +977,7 @@ table tr:last-child td{border-bottom:none}
 @media(max-width:640px){
   [style*="RESPALDADO"]{ font-size: 9px !important; }
 }
+
+/* Hero worker photo — hide on mobile */
+@media(max-width:768px){.hero-worker-img{display:none!important}}
+@media(max-width:1024px){.hero-worker-img{width:180px!important;left:-30px!important}}
