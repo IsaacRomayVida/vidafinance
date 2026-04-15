@@ -7,26 +7,43 @@ import { Queue } from 'bullmq';
 import { z } from 'zod';
 import fetch from 'node-fetch';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { auditLog } from '../utils/auditLog';
+
+// ─── CLABE Checksum Validation ────────────────────────────────────────────────
+// Mexican CLABE: 18 digits, check digit computed with weights [3,7,1] repeating
+// over the first 17 digits. check = (10 - (sum % 10)) % 10 must equal digit 18.
+
+export function validateClabeChecksum(clabe: string): boolean {
+  if (!/^\d{18}$/.test(clabe)) return false;
+  const weights = [3, 7, 1];
+  let sum = 0;
+  for (let i = 0; i < 17; i++) {
+    sum += parseInt(clabe[i], 10) * weights[i % 3];
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === parseInt(clabe[17], 10);
+}
 
 // ─── Input Schema ─────────────────────────────────────────────────────────────
 
 export const RequestLoanSchema = z.object({
   amount: z
     .number()
-    .positive('Amount must be positive')
-    .max(5000, 'Maximum loan amount is MXN $5,000')
-    .multipleOf(100, 'Amount must be in increments of MXN $100'),
+    .positive('El monto debe ser positivo')
+    .max(5000, 'El monto máximo del préstamo es MXN $5,000')
+    .multipleOf(100, 'El monto debe ser en incrementos de MXN $100'),
   employerCode: z
     .string()
-    .min(6, 'Invalid employer code')
-    .max(12, 'Invalid employer code')
-    .regex(/^[A-Z0-9]+$/, 'Invalid employer code format'),
+    .min(6, 'Código de empleador inválido')
+    .max(12, 'Código de empleador inválido')
+    .regex(/^[A-Z0-9]+$/, 'Formato de código de empleador inválido'),
   bankAccountClabe: z
     .string()
-    .length(18, 'CLABE must be exactly 18 digits')
-    .regex(/^\d{18}$/, 'CLABE must contain only digits'),
+    .length(18, 'La CLABE debe tener exactamente 18 dígitos')
+    .regex(/^\d{18}$/, 'La CLABE solo debe contener dígitos')
+    .refine(validateClabeChecksum, 'CLABE inválida. Verifica el número con tu banco.'),
   termsAccepted: z.literal(true, {
-    error: 'You must accept the terms and conditions',
+    error: 'Debes aceptar los términos y condiciones',
   }),
   loanPurpose: z
     .enum([
@@ -37,8 +54,7 @@ export const RequestLoanSchema = z.object({
       'transportation',
       'debt_consolidation',
       'other',
-    ])
-    .optional(),
+    ], { error: 'Selecciona un motivo válido para el préstamo' }),
 });
 
 export type RequestLoanInput = z.infer<typeof RequestLoanSchema>;
@@ -73,21 +89,6 @@ export const ACTIVE_LOAN_STATUSES: LoanStatus[] = [
   'approved',
   'disbursed',
 ];
-
-// ─── CLABE Checksum Validation ────────────────────────────────────────────────
-// Mexican CLABE: 18 digits, check digit computed with weights [3,7,1] repeating
-// over the first 17 digits. check = (10 - (sum % 10)) % 10 must equal digit 18.
-
-export function validateClabeChecksum(clabe: string): boolean {
-  if (!/^\d{18}$/.test(clabe)) return false;
-  const weights = [3, 7, 1];
-  let sum = 0;
-  for (let i = 0; i < 17; i++) {
-    sum += parseInt(clabe[i], 10) * weights[i % 3];
-  }
-  const checkDigit = (10 - (sum % 10)) % 10;
-  return checkDigit === parseInt(clabe[17], 10);
-}
 
 // ─── Redis Singleton ──────────────────────────────────────────────────────────
 
@@ -162,17 +163,25 @@ export async function handleRequestLoan(request: {
   data: unknown;
 }): Promise<{ loanId: string; status: string; message: string }> {
   const db = getFirestore();
+  const correlationId = randomUUID();
 
   // 1. Authentication check
   if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Authentication required');
+    throw new HttpsError('unauthenticated', 'Se requiere autenticación');
   }
   const uid = request.auth.uid;
 
-  // 2. Input validation via Zod
+  logger.info('Solicitud de préstamo iniciada', {
+    correlationId, userId: uid, service: 'functions',
+  });
+
+  // 2. Input validation via Zod (includes CLABE checksum via .refine())
   const validationResult = RequestLoanSchema.safeParse(request.data);
   if (!validationResult.success) {
     const firstError = validationResult.error.issues[0];
+    logger.warn('Validación de entrada fallida', {
+      correlationId, userId: uid, field: firstError.path.join('.'), service: 'functions',
+    });
     throw new HttpsError('invalid-argument', firstError.message, {
       field: firstError.path.join('.'),
       errors: validationResult.error.issues,
@@ -184,11 +193,16 @@ export async function handleRequestLoan(request: {
   try {
     const allowed = await checkRateLimit(`rl:loan:${uid}`, 3, 86400);
     if (!allowed) {
-      throw new HttpsError('resource-exhausted', 'Too many loan requests today');
+      logger.warn('Límite de solicitudes excedido', {
+        correlationId, userId: uid, service: 'functions',
+      });
+      throw new HttpsError('resource-exhausted', 'Demasiadas solicitudes de préstamo hoy. Intenta mañana.');
     }
   } catch (e: unknown) {
     if (e instanceof HttpsError) throw e;
-    logger.warn('Redis rate limit unavailable', { error: (e as Error).message, service: 'functions' });
+    logger.warn('Redis rate limit unavailable', {
+      error: (e as Error).message, correlationId, userId: uid, service: 'functions',
+    });
   }
 
   // 4. Reject if borrower already has an active loan
@@ -203,7 +217,7 @@ export async function handleRequestLoan(request: {
     const activeLoan = activeLoanQuery.docs[0].data();
     throw new HttpsError(
       'failed-precondition',
-      'You have an active loan. Please repay it before requesting a new one.',
+      'Ya tienes un préstamo activo. Liquídalo antes de solicitar uno nuevo.',
       { activeLoanId: activeLoan['loanId'] as string, status: activeLoan['status'] as string }
     );
   }
@@ -219,7 +233,7 @@ export async function handleRequestLoan(request: {
   if (employerQuery.empty) {
     throw new HttpsError(
       'not-found',
-      'Invalid employer code. Please verify with your HR department.'
+      'Código de empleador inválido. Verifícalo con tu departamento de RH.'
     );
   }
   const employer = employerQuery.docs[0].data();
@@ -227,14 +241,14 @@ export async function handleRequestLoan(request: {
   // 6. Validate borrower profile and KYC status
   const borrowerDoc = await db.collection('users').doc(uid).get();
   if (!borrowerDoc.exists) {
-    throw new HttpsError('not-found', 'User profile not found. Complete onboarding first.');
+    throw new HttpsError('not-found', 'Perfil de usuario no encontrado. Completa tu registro primero.');
   }
   const borrower = borrowerDoc.data()!;
 
   if (borrower['kycStatus'] !== 'verified') {
     throw new HttpsError(
       'failed-precondition',
-      'Identity verification required before requesting a loan.',
+      'Se requiere verificación de identidad antes de solicitar un préstamo.',
       { kycStatus: borrower['kycStatus'] as string }
     );
   }
@@ -242,7 +256,7 @@ export async function handleRequestLoan(request: {
   if (borrower['employerId'] !== employer['employerId']) {
     throw new HttpsError(
       'permission-denied',
-      'Employer code does not match your registered employer.'
+      'El código de empleador no corresponde a tu empleador registrado.'
     );
   }
 
@@ -254,21 +268,12 @@ export async function handleRequestLoan(request: {
   if (input.amount > cappedMax) {
     throw new HttpsError(
       'invalid-argument',
-      `Maximum loan amount is MXN $${cappedMax} (30% of your monthly salary of MXN $${monthlySalary}).`,
+      `El monto máximo es MXN $${cappedMax} (30% de tu salario mensual de MXN $${monthlySalary}).`,
       { maxAmount: cappedMax, requestedAmount: input.amount }
     );
   }
 
-  // 8. CLABE bank account checksum validation
-  if (!validateClabeChecksum(input.bankAccountClabe)) {
-    throw new HttpsError(
-      'invalid-argument',
-      'Invalid CLABE account number. Please verify with your bank.',
-      { field: 'bankAccountClabe' }
-    );
-  }
-
-  // 9. Credit bureau check via SoftCrédito (non-blocking — failure logged, not thrown)
+  // 8. Credit bureau check via SoftCrédito (non-blocking — failure logged, not thrown)
   let bureauResult: BureauResult = { bureauScore: null, bureauDefaults: null, bureauDaysPastDue: null };
   try {
     bureauResult = await fetchBureauScore({
@@ -277,18 +282,18 @@ export async function handleRequestLoan(request: {
       dateOfBirth: borrower['dateOfBirth'] as string,
       rfc: borrower['rfc'] as string,
     });
+    logger.info('Consulta de buró completada', {
+      correlationId, userId: uid, bureauScore: bureauResult.bureauScore, service: 'functions',
+    });
   } catch (e: unknown) {
-    logger.warn('Credit bureau check unavailable — continuing without bureau data', {
-      error: (e as Error).message,
-      userId: uid,
-      service: 'functions',
+    logger.warn('Consulta de buró no disponible — continuando sin datos de buró', {
+      error: (e as Error).message, correlationId, userId: uid, service: 'functions',
     });
   }
 
-  // 10. Write loan document to Firestore
+  // 9. Write loan document to Firestore
   const loanRef = db.collection('loans').doc();
   const loanId = loanRef.id;
-  const correlationId = randomUUID();
   const now = Timestamp.now();
   const feeAmount = Math.round(input.amount * 0.3);
 
@@ -328,12 +333,37 @@ export async function handleRequestLoan(request: {
     bureauDefaults: bureauResult.bureauDefaults,
     bureauDaysPastDue: bureauResult.bureauDaysPastDue,
     bankAccountClabe: input.bankAccountClabe,
-    loanPurpose: input.loanPurpose ?? null,
+    loanPurpose: input.loanPurpose,
     termsVersion: TERMS_VERSION,
     termsAcceptedAt: now,
     requestedAt: now,
     updatedAt: now,
   });
+
+  logger.info('Préstamo creado en Firestore', {
+    correlationId, userId: uid, loanId, principalAmount: input.amount, service: 'functions',
+  });
+
+  // 10. Audit log (non-blocking — failure logged, not thrown)
+  try {
+    await auditLog({
+      action: 'loan.requested',
+      actorUid: uid,
+      actorRole: 'employee',
+      targetId: loanId,
+      after: {
+        principalAmount: input.amount,
+        employerCode: input.employerCode,
+        loanPurpose: input.loanPurpose,
+        status: 'pending',
+      },
+      meta: { correlationId },
+    });
+  } catch (e: unknown) {
+    logger.warn('Audit log write failed', {
+      error: (e as Error).message, correlationId, loanId, service: 'functions',
+    });
+  }
 
   // 11. Dispatch to underwriting queue (non-blocking — failure logged, not thrown)
   try {
@@ -350,14 +380,19 @@ export async function handleRequestLoan(request: {
       bankAccountClabe: input.bankAccountClabe,
       requestedAt: now.toDate().toISOString(),
     });
+    logger.info('Trabajo de underwriting encolado', {
+      correlationId, userId: uid, loanId, service: 'functions',
+    });
   } catch (e: unknown) {
-    logger.warn('Underwriting queue unavailable', { error: (e as Error).message, correlationId, loanId, service: 'functions' });
+    logger.warn('Cola de underwriting no disponible', {
+      error: (e as Error).message, correlationId, loanId, service: 'functions',
+    });
   }
 
   return {
     loanId,
     status: 'pending',
-    message: 'Loan application submitted successfully. You will be notified once reviewed.',
+    message: 'Solicitud de préstamo enviada exitosamente. Te notificaremos cuando sea revisada.',
   };
 }
 

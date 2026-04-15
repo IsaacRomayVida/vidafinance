@@ -24,6 +24,9 @@ jest.mock('firebase-admin/firestore', () => ({
       toMillis: () => 1742083200000,
     }),
   },
+  FieldValue: {
+    serverTimestamp: jest.fn().mockReturnValue({ _type: 'serverTimestamp' }),
+  },
 }));
 
 jest.mock('ioredis', () => {
@@ -52,8 +55,12 @@ jest.mock('node-fetch', () => ({
   default: (...args: unknown[]) => mockFetch(...args),
 }));
 
+const mockAuditLog = jest.fn().mockResolvedValue(undefined);
+jest.mock('../utils/auditLog', () => ({
+  auditLog: (...args: unknown[]) => mockAuditLog(...args),
+}));
+
 import { getFirestore } from 'firebase-admin/firestore';
-import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 import {
   validateClabeChecksum,
@@ -214,7 +221,7 @@ describe('handleRequestLoan', () => {
 
     await expect(handleRequestLoan({ data: validInput })).rejects.toMatchObject({
       code: 'unauthenticated',
-      message: 'Authentication required',
+      message: 'Se requiere autenticación',
     });
   });
 
@@ -276,7 +283,38 @@ describe('handleRequestLoan', () => {
       })
     ).rejects.toMatchObject({
       code: 'invalid-argument',
-      message: 'You must accept the terms and conditions',
+      message: 'Debes aceptar los términos y condiciones',
+    });
+  });
+
+  it('throws invalid-argument when loanPurpose is missing (required)', async () => {
+    const db = buildMockDb();
+    (getFirestore as jest.Mock).mockReturnValue(db);
+
+    const inputWithoutPurpose = {
+      amount: 1000,
+      employerCode: 'TESTCO',
+      bankAccountClabe: VALID_CLABE,
+      termsAccepted: true as const,
+    };
+
+    await expect(
+      handleRequestLoan({ ...authRequest, data: inputWithoutPurpose })
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
+  it('throws invalid-argument for CLABE with invalid checksum at schema level', async () => {
+    const db = buildMockDb();
+    (getFirestore as jest.Mock).mockReturnValue(db);
+
+    await expect(
+      handleRequestLoan({
+        ...authRequest,
+        data: { ...validInput, bankAccountClabe: INVALID_CLABE_CHECKSUM },
+      })
+    ).rejects.toMatchObject({
+      code: 'invalid-argument',
+      message: expect.stringContaining('CLABE'),
     });
   });
 
@@ -313,7 +351,7 @@ describe('handleRequestLoan', () => {
 
     await expect(handleRequestLoan(authRequest)).rejects.toMatchObject({
       code: 'failed-precondition',
-      message: expect.stringContaining('active loan'),
+      message: expect.stringContaining('préstamo activo'),
     });
   });
 
@@ -325,7 +363,7 @@ describe('handleRequestLoan', () => {
 
     await expect(handleRequestLoan(authRequest)).rejects.toMatchObject({
       code: 'not-found',
-      message: expect.stringContaining('employer code'),
+      message: expect.stringContaining('empleador'),
     });
   });
 
@@ -337,7 +375,7 @@ describe('handleRequestLoan', () => {
 
     await expect(handleRequestLoan(authRequest)).rejects.toMatchObject({
       code: 'not-found',
-      message: expect.stringContaining('User profile'),
+      message: expect.stringContaining('Perfil de usuario'),
     });
   });
 
@@ -347,7 +385,7 @@ describe('handleRequestLoan', () => {
 
     await expect(handleRequestLoan(authRequest)).rejects.toMatchObject({
       code: 'failed-precondition',
-      message: expect.stringContaining('Identity verification'),
+      message: expect.stringContaining('verificación de identidad'),
     });
   });
 
@@ -359,7 +397,7 @@ describe('handleRequestLoan', () => {
 
     await expect(handleRequestLoan(authRequest)).rejects.toMatchObject({
       code: 'permission-denied',
-      message: expect.stringContaining('Employer code'),
+      message: expect.stringContaining('código de empleador'),
     });
   });
 
@@ -374,7 +412,7 @@ describe('handleRequestLoan', () => {
       handleRequestLoan({ ...authRequest, data: { ...validInput, amount: 400 } })
     ).rejects.toMatchObject({
       code: 'invalid-argument',
-      message: expect.stringContaining('Maximum loan amount'),
+      message: expect.stringContaining('monto máximo'),
     });
   });
 
@@ -391,24 +429,6 @@ describe('handleRequestLoan', () => {
     expect(result.status).toBe('pending');
   });
 
-  // ── CLABE Checksum ──────────────────────────────────────────────────────────
-
-  it('throws invalid-argument for CLABE with invalid checksum', async () => {
-    const db = buildMockDb();
-    (getFirestore as jest.Mock).mockReturnValue(db);
-
-    // INVALID_CLABE_CHECKSUM passes Zod format validation but fails checksum
-    await expect(
-      handleRequestLoan({
-        ...authRequest,
-        data: { ...validInput, bankAccountClabe: INVALID_CLABE_CHECKSUM },
-      })
-    ).rejects.toMatchObject({
-      code: 'invalid-argument',
-      message: expect.stringContaining('CLABE'),
-    });
-  });
-
   // ── Success Path ────────────────────────────────────────────────────────────
 
   it('creates loan document and returns pending status on success', async () => {
@@ -420,7 +440,7 @@ describe('handleRequestLoan', () => {
     expect(result).toEqual({
       loanId: 'loan-doc-id',
       status: 'pending',
-      message: expect.stringContaining('submitted successfully'),
+      message: expect.stringContaining('exitosamente'),
     });
 
     // Verify Firestore set was called with correct data
@@ -498,27 +518,8 @@ describe('handleRequestLoan', () => {
 
     expect(result.status).toBe('pending');
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      'Underwriting queue unavailable',
+      'Cola de underwriting no disponible',
       expect.objectContaining({ error: expect.any(String) })
-    );
-  });
-
-  it('works without optional loanPurpose field', async () => {
-    const db = buildMockDb();
-    (getFirestore as jest.Mock).mockReturnValue(db);
-
-    const inputWithoutPurpose = {
-      amount: 1000,
-      employerCode: 'TESTCO',
-      bankAccountClabe: VALID_CLABE,
-      termsAccepted: true as const,
-    };
-
-    const result = await handleRequestLoan({ ...authRequest, data: inputWithoutPurpose });
-    expect(result.status).toBe('pending');
-
-    expect(db.loanDocRef.set).toHaveBeenCalledWith(
-      expect.objectContaining({ loanPurpose: null })
     );
   });
 
@@ -532,6 +533,73 @@ describe('handleRequestLoan', () => {
       'rl:loan:user-123',
       3,
       86400
+    );
+  });
+
+  // ── Structured Logging ──────────────────────────────────────────────────────
+
+  it('emits structured logs with correlationId at key lifecycle points', async () => {
+    const db = buildMockDb();
+    (getFirestore as jest.Mock).mockReturnValue(db);
+
+    await handleRequestLoan(authRequest);
+
+    // Should log request start
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'Solicitud de préstamo iniciada',
+      expect.objectContaining({ correlationId: expect.any(String), userId: 'user-123', service: 'functions' })
+    );
+
+    // Should log loan creation
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'Préstamo creado en Firestore',
+      expect.objectContaining({ correlationId: expect.any(String), loanId: 'loan-doc-id', service: 'functions' })
+    );
+
+    // Should log queue dispatch
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'Trabajo de underwriting encolado',
+      expect.objectContaining({ correlationId: expect.any(String), loanId: 'loan-doc-id', service: 'functions' })
+    );
+  });
+
+  // ── Audit Log ──────────────────────────────────────────────────────────────
+
+  it('writes loan.requested audit log entry on success', async () => {
+    const db = buildMockDb();
+    (getFirestore as jest.Mock).mockReturnValue(db);
+
+    await handleRequestLoan(authRequest);
+
+    expect(mockAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'loan.requested',
+        actorUid: 'user-123',
+        actorRole: 'employee',
+        targetId: 'loan-doc-id',
+        after: expect.objectContaining({
+          principalAmount: 1000,
+          employerCode: 'TESTCO',
+          loanPurpose: 'emergency',
+          status: 'pending',
+        }),
+        meta: expect.objectContaining({ correlationId: expect.any(String) }),
+      })
+    );
+  });
+
+  it('still returns success when audit log write fails', async () => {
+    const db = buildMockDb();
+    (getFirestore as jest.Mock).mockReturnValue(db);
+
+    mockAuditLog.mockRejectedValueOnce(new Error('Firestore write failed'));
+
+    const result = await handleRequestLoan(authRequest);
+
+    expect(result.status).toBe('pending');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Audit log write failed',
+      expect.objectContaining({ error: 'Firestore write failed' })
     );
   });
 
@@ -581,7 +649,7 @@ describe('handleRequestLoan', () => {
 
     expect(result.status).toBe('pending');
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      'Credit bureau check unavailable — continuing without bureau data',
+      'Consulta de buró no disponible — continuando sin datos de buró',
       expect.objectContaining({ error: 'ECONNREFUSED', userId: 'user-123' })
     );
     expect(db.loanDocRef.set).toHaveBeenCalledWith(
@@ -603,7 +671,7 @@ describe('handleRequestLoan', () => {
 
     expect(result.status).toBe('pending');
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      'Credit bureau check unavailable — continuing without bureau data',
+      'Consulta de buró no disponible — continuando sin datos de buró',
       expect.objectContaining({ error: 'Bureau query failed with status 503' })
     );
   });
