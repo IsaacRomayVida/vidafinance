@@ -5,7 +5,7 @@ export function LogosBar() {
       borderBottom: '1px solid rgba(25,68,69,0.04)',
       padding: '24px 0',
     }}>
-      <div style={{
+      <div className="logos-bar-inner" style={{
         maxWidth: 'var(--mx, 1200px)', margin: '0 auto', padding: '0 64px',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40,
         flexWrap: 'wrap',

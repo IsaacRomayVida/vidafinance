@@ -27,7 +27,7 @@ export function StatementSection() {
             filter: 'blur(24px)', pointerEvents: 'none',
           }} />
           <img loading="lazy" src="/images/workerfemale.png" alt="Empleada usando VIDA"
-            style={{ width: 400, position: 'relative', filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.1))' }}
+            style={{ width: 400, maxWidth: '100%', position: 'relative', filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.1))' }}
           />
         </div>
       </div>

@@ -60,7 +60,7 @@ export function ClosingSection() {
         maxWidth: 600, margin: '0 auto 48px',
         position: 'relative', zIndex: 2,
       }}>
-        <div style={{
+        <div className="testimonial-card" style={{
           padding: '36px 44px',
           background: 'rgba(255,255,255,0.06)', borderRadius: 20,
           backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',

@@ -25,7 +25,7 @@ export function EmployerPage() {
             <div className="hero-badge" style={{ justifyContent: 'center' }}>
               <span className="badge-dot" /><span className="badge-text">{t('lp_e_badge')}</span>
             </div>
-            <h1 style={{ fontFamily: 'var(--df)', fontSize: 72, color: 'var(--t1)', lineHeight: '.96', letterSpacing: '-.045em', marginBottom: 24, opacity: 0, animation: 'fu .9s ease .3s forwards' }}>
+            <h1 style={{ fontFamily: 'var(--df)', fontSize: 'clamp(40px, 8vw, 72px)', color: 'var(--t1)', lineHeight: '.96', letterSpacing: '-.045em', marginBottom: 24, opacity: 0, animation: 'fu .9s ease .3s forwards' }}>
               <RichText html={t('lp_e_h1')} />
             </h1>
             <p className="hero-sub" style={{ maxWidth: 520, margin: '0 auto 44px', opacity: 0, animation: 'fu .9s ease .45s forwards' }}>{t('lp_e_sub')}</p>

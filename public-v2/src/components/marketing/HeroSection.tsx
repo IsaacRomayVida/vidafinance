@@ -69,7 +69,7 @@ export function HeroSection() {
             }} />
             <img src="/images/worker.png" alt="Trabajador usando VIDA"
               style={{
-                width: 340, position: 'relative',
+                width: 340, maxWidth: '100%', position: 'relative',
                 filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.12))',
               }}
             />
