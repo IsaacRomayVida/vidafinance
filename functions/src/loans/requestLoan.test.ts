@@ -60,6 +60,7 @@ import {
   handleRequestLoan,
   _resetRedisForTesting,
   TERMS_VERSION,
+  FLAT_FEE_RATE,
   fetchBureauScore,
 } from './requestLoan';
 
@@ -431,8 +432,8 @@ describe('handleRequestLoan', () => {
         employerId: 'employer-abc',
         employerCode: 'TESTCO',
         principalAmount: 1000,
-        feeAmount: 300,
-        totalRepaymentAmount: 1300,
+        feeAmount: Math.round(1000 * FLAT_FEE_RATE),
+        totalRepaymentAmount: 1000 + Math.round(1000 * FLAT_FEE_RATE),
         disbursementAmount: 1000,
         currency: 'MXN',
         status: 'pending',
