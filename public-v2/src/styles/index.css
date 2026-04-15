@@ -159,7 +159,7 @@ input,select,textarea{font-family:var(--db)}
 
 /* BENEFITS */
 .benefits{border-bottom:1px solid rgba(25,68,69,0.04)}
-.benefits-inner{max-width:var(--mx);margin:0 auto;padding:40px 64px;display:grid;place-items:center;gap:0}
+/* benefits-inner: defined in legacy.css */
 .ben{text-align:center;padding:0 48px}
 .ben-icon{display:block;margin:0 auto 10px}
 .ben-val{font-family:var(--df);font-size:28px;color:var(--t1);line-height:1.1}
@@ -809,6 +809,7 @@ table tr:last-child td{border-bottom:none}
 /* Benefits bar — 2x2 grid on small screens */
 @media(max-width:640px){
   .benefits-inner{display:grid!important;grid-template-columns:1fr 1fr!important;gap:0!important;padding:0!important}
+  .ben{padding:20px!important}
   .ben{padding:20px!important;border-bottom:1px solid rgba(25,68,69,0.04);display:flex;align-items:center;gap:12px!important}
   .ben:nth-child(odd){border-right:1px solid rgba(25,68,69,0.04)}
   .ben:nth-last-child(-n+2){border-bottom:none}
