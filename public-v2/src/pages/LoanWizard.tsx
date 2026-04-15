@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { StepPreview } from '../components/wizard/StepPreview';
 
 const LOAN_PURPOSES = [
   'emergency',
@@ -293,115 +294,17 @@ export function LoanWizard() {
           </div>
         )}
 
-        {/* ─── Step 2: Loan Terms ─── */}
+        {/* ─── Step 2: Repayment Preview ─── */}
         {step === 2 && (
-          <div>
-            <div style={{
-              fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 8,
-            }}>
-              {t('wiz_step_2_label')}
-            </div>
-            <h3 style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)', margin: '0 0 24px' }}>
-              {t('wiz_step_2_title')}
-            </h3>
-
-            {/* Term details */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24,
-            }}>
-              <div style={{
-                background: 'var(--bg2)', borderRadius: 12, padding: '16px 14px',
-                border: '1px solid rgba(25,68,69,0.04)',
-              }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 6 }}>
-                  {t('modal_term')}
-                </div>
-                <div style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>
-                  {TERM_DAYS} {t('calc_days')}
-                </div>
-              </div>
-              <div style={{
-                background: 'var(--bg2)', borderRadius: 12, padding: '16px 14px',
-                border: '1px solid rgba(25,68,69,0.04)',
-              }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 6 }}>
-                  {t('wiz_monthly_fee')}
-                </div>
-                <div style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>
-                  30%
-                </div>
-              </div>
-            </div>
-
-            {/* Breakdown */}
-            <div style={{
-              borderTop: '1px solid rgba(25,68,69,0.06)',
-              borderBottom: '1px solid rgba(25,68,69,0.06)',
-              padding: '16px 0', marginBottom: 20,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_loan_amount')}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>${fmt(amount)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_fee')}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>${fmt(fee)}</span>
-              </div>
-              <div style={{ height: 1, background: 'rgba(25,68,69,0.06)', margin: '4px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-                <span style={{ fontFamily: 'var(--df)', fontSize: 15, color: 'var(--t1)' }}>{t('modal_total')}</span>
-                <span style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>${fmt(total)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('wiz_payroll_deduction')}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>${fmt(payrollDeduction)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_due_date')}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>{dueDate.toLocaleDateString()}</span>
-              </div>
-            </div>
-
-            {/* CAT disclosure */}
-            <div style={{
-              background: 'var(--bg2)', borderRadius: 12, padding: '14px 16px',
-              border: '1px solid rgba(25,68,69,0.04)', marginBottom: 24,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_cat_label')}</span>
-                <span className="cat-highlight">{cat}{t('modal_cat_annual')}</span>
-              </div>
-              <p style={{ fontSize: 11, color: 'var(--t3)', margin: 0, lineHeight: 1.5 }}>
-                {t('modal_cat_note')}{' '}
-                <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand)' }}>
-                  {t('modal_cat_condusef')}
-                </a>
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setStep(1)}
-                type="button"
-                style={{
-                  flex: '0 0 auto', padding: '14px 20px', borderRadius: 12,
-                  border: '1.5px solid rgba(25,68,69,0.08)', background: 'transparent',
-                  color: 'var(--t2)', fontSize: 14, fontWeight: 600, fontFamily: 'var(--db)',
-                  cursor: 'pointer',
-                }}
-              >
-                {t('wiz_back')}
-              </button>
-              <button
-                onClick={() => setStep(3)}
-                className="btn-primary"
-                style={{ flex: 1 }}
-              >
-                {t('wiz_next')}
-              </button>
-            </div>
-          </div>
+          <StepPreview
+            amount={amount}
+            fee={fee}
+            total={total}
+            dueDate={dueDate}
+            cat={cat}
+            onBack={() => setStep(1)}
+            onNext={() => setStep(3)}
+          />
         )}
 
         {/* ─── Step 3: Purpose ─── */}
