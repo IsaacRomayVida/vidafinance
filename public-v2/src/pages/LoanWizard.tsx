@@ -21,9 +21,98 @@ const MAX_AMOUNT = 5000;
 const STEP = 500;
 const MONTHLY_FEE = 0.30;
 const TERM_DAYS = 30;
+const TOTAL_STEPS = 5;
 
 function fmt(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+// ─── CLABE Checksum Validation ────────────────────────────────────────────────
+function validateClabeChecksum(clabe: string): boolean {
+  if (!/^\d{18}$/.test(clabe)) return false;
+  const weights = [3, 7, 1];
+  let sum = 0;
+  for (let i = 0; i < 17; i++) {
+    sum += parseInt(clabe[i], 10) * weights[i % 3];
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === parseInt(clabe[17], 10);
+}
+
+// ─── Bank Name from CLABE Prefix ──────────────────────────────────────────────
+const CLABE_BANK_MAP: Record<string, string> = {
+  '002': 'Banamex',
+  '006': 'Bancomext',
+  '009': 'Banobras',
+  '012': 'BBVA México',
+  '014': 'Santander',
+  '019': 'Banjército',
+  '021': 'HSBC',
+  '030': 'Bajío',
+  '032': 'IXE',
+  '036': 'Inbursa',
+  '037': 'Interacciones',
+  '042': 'Mifel',
+  '044': 'Scotiabank',
+  '058': 'Banregio',
+  '059': 'Invex',
+  '060': 'Bansi',
+  '062': 'Afirme',
+  '072': 'Banorte',
+  '102': 'The Royal Bank',
+  '103': 'American Express',
+  '106': 'Bank of America',
+  '108': 'Bank of Tokyo',
+  '110': 'JP Morgan',
+  '112': 'Bmonex',
+  '113': 'Ve por Más',
+  '116': 'ING',
+  '124': 'Deutsche',
+  '126': 'Credit Suisse',
+  '127': 'Azteca',
+  '128': 'Autofin',
+  '130': 'Compartamos',
+  '131': 'Banco Famsa',
+  '132': 'Multiva',
+  '133': 'Actinver',
+  '134': 'Wal-Mart',
+  '136': 'Interbanco',
+  '137': 'Bancoppel',
+  '138': 'ABC Capital',
+  '140': 'Consubanco',
+  '141': 'Volkswagen',
+  '143': 'CiBanco',
+  '145': 'Bbase',
+  '147': 'Bankaool',
+  '148': 'PagaTodo',
+  '150': 'Inmobiliario',
+  '156': 'ICBC',
+  '166': 'BanBajío',
+  '168': 'Hipotecaria Federal',
+  '600': 'GBM',
+  '602': 'Masari',
+  '605': 'Value',
+  '606': 'Estructuradores',
+  '607': 'Tiber',
+  '608': 'Vector',
+  '610': 'B&B',
+  '614': 'Accival',
+  '616': 'Finamex',
+  '617': 'Valmex',
+  '620': 'Profuturo',
+  '629': 'STP',
+  '630': 'Intercam',
+  '646': 'STP',
+  '648': 'Evercore',
+  '653': 'Kuspit',
+  '670': 'Libertad',
+  '901': 'CLS',
+  '902': 'INDEVAL',
+};
+
+function getBankNameFromClabe(clabe: string): string | null {
+  if (clabe.length < 3) return null;
+  return CLABE_BANK_MAP[clabe.substring(0, 3)] ?? null;
 }
 
 export function LoanWizard() {
@@ -34,6 +123,9 @@ export function LoanWizard() {
   const [step, setStep] = useState(1);
   const [amount, setAmount] = useState(1000);
   const [purpose, setPurpose] = useState('');
+  const [clabe, setClabe] = useState('');
+  const [clabeError, setClabeError] = useState('');
+  const [bankName, setBankName] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -41,7 +133,7 @@ export function LoanWizard() {
   const [loading, setLoading] = useState(true);
   const [employeeName, setEmployeeName] = useState('');
 
-  // Fetch employee data
+  // Fetch employee data (including pre-fill CLABE)
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -53,6 +145,11 @@ export function LoanWizard() {
         }
         const data = empDoc.data();
         setEmployeeName(data.name || user.displayName || '');
+        if (data.bankClabe && /^\d{18}$/.test(data.bankClabe)) {
+          setClabe(data.bankClabe);
+          const detected = getBankNameFromClabe(data.bankClabe);
+          if (detected) setBankName(detected);
+        }
       } catch {
         // proceed without name
       } finally {
@@ -60,6 +157,28 @@ export function LoanWizard() {
       }
     })();
   }, [user, navigate]);
+
+  // Auto-detect bank name when CLABE changes
+  const handleClabeChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 18);
+    setClabe(digits);
+    setClabeError('');
+    const detected = getBankNameFromClabe(digits);
+    setBankName(detected ?? '');
+  };
+
+  const validateClabe = (): boolean => {
+    if (clabe.length !== 18) {
+      setClabeError(t('wiz_clabe_error_length'));
+      return false;
+    }
+    if (!validateClabeChecksum(clabe)) {
+      setClabeError(t('wiz_clabe_error_checksum'));
+      return false;
+    }
+    setClabeError('');
+    return true;
+  };
 
   // Calculations
   const fee = Math.round(amount * MONTHLY_FEE);
@@ -75,13 +194,14 @@ export function LoanWizard() {
     try {
       const functions = getFunctions();
       const requestLoan = httpsCallable<
-        { amount: number; purpose: string; termDays: number },
+        { amount: number; purpose: string; termDays: number; bankAccountClabe: string },
         { loanId: string; loanRef?: string }
       >(functions, 'requestLoan');
       const result = await requestLoan({
         amount,
         purpose,
         termDays: TERM_DAYS,
+        bankAccountClabe: clabe,
       });
       setSuccess({ loanRef: result.data.loanRef || result.data.loanId });
     } catch (err) {
@@ -192,7 +312,7 @@ export function LoanWizard() {
 
       {/* Step indicator */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
-        {[1, 2, 3, 4].map((s) => (
+        {[1, 2, 3, 4, 5].map((s) => (
           <div
             key={s}
             style={{
@@ -404,7 +524,7 @@ export function LoanWizard() {
           </div>
         )}
 
-        {/* ─── Step 3: Purpose ─── */}
+        {/* ─── Step 3: Bank Account (CLABE) + Terms ─── */}
         {step === 3 && (
           <div>
             <div style={{
@@ -418,6 +538,143 @@ export function LoanWizard() {
             </h3>
             <p style={{ fontSize: 13, color: 'var(--t3)', margin: '0 0 24px' }}>
               {t('wiz_step_3_desc')}
+            </p>
+
+            {/* CLABE input */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{
+                display: 'block', fontSize: 12, fontWeight: 600,
+                color: 'var(--t2)', marginBottom: 8, textTransform: 'uppercase',
+                letterSpacing: 1.5,
+              }}>
+                {t('wiz_clabe_label')}
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={clabe}
+                onChange={(e) => handleClabeChange(e.target.value)}
+                placeholder={t('wiz_clabe_placeholder')}
+                maxLength={18}
+                style={{
+                  width: '100%', padding: '14px 16px', borderRadius: 12,
+                  border: clabeError
+                    ? '1.5px solid #e53935'
+                    : '1.5px solid rgba(25,68,69,0.08)',
+                  background: 'transparent', fontSize: 16, fontFamily: 'var(--db)',
+                  color: 'var(--t1)', letterSpacing: 1.5,
+                  outline: 'none', transition: 'border 0.2s ease',
+                  boxSizing: 'border-box',
+                }}
+                onFocus={(e) => {
+                  if (!clabeError) e.currentTarget.style.border = '1.5px solid var(--brand)';
+                }}
+                onBlur={(e) => {
+                  if (!clabeError) e.currentTarget.style.border = '1.5px solid rgba(25,68,69,0.08)';
+                }}
+              />
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', marginTop: 6, minHeight: 20,
+              }}>
+                {clabeError ? (
+                  <span style={{ fontSize: 12, color: '#e53935' }}>{clabeError}</span>
+                ) : (
+                  <span style={{ fontSize: 12, color: 'var(--t3)' }}>
+                    {clabe.length}/18 {t('wiz_clabe_digits')}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Bank name auto-detect */}
+            {bankName && (
+              <div style={{
+                background: 'var(--bg2)', borderRadius: 12, padding: '14px 16px',
+                border: '1px solid rgba(25,68,69,0.04)', marginBottom: 20,
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 21h18" /><path d="M3 10h18" /><path d="M5 6l7-3 7 3" />
+                  <path d="M4 10v11" /><path d="M20 10v11" /><path d="M8 14v3" /><path d="M12 14v3" /><path d="M16 14v3" />
+                </svg>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 2 }}>
+                    {t('wiz_bank_detected')}
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>
+                    {bankName}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Terms checkbox */}
+            <label style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 12,
+              cursor: 'pointer', fontSize: 13, color: 'var(--t2)', lineHeight: 1.5,
+            }}>
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                style={{ marginTop: 2, flexShrink: 0 }}
+              />
+              <span>
+                {t('wiz_accept_terms')}{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand)', textDecoration: 'underline' }}>
+                  {t('wiz_terms_link')}
+                </a>
+              </span>
+            </label>
+
+            {/* Privacy notice */}
+            <p style={{ fontSize: 11, color: 'var(--t3)', margin: '0 0 24px', lineHeight: 1.5 }}>
+              {t('wiz_privacy_notice')}{' '}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand)' }}>
+                {t('wiz_privacy_link')}
+              </a>
+            </p>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setStep(2)}
+                type="button"
+                style={{
+                  flex: '0 0 auto', padding: '14px 20px', borderRadius: 12,
+                  border: '1.5px solid rgba(25,68,69,0.08)', background: 'transparent',
+                  color: 'var(--t2)', fontSize: 14, fontWeight: 600, fontFamily: 'var(--db)',
+                  cursor: 'pointer',
+                }}
+              >
+                {t('wiz_back')}
+              </button>
+              <button
+                onClick={() => { if (validateClabe()) setStep(4); }}
+                disabled={clabe.length !== 18 || !termsAccepted}
+                className="btn-primary"
+                style={{ flex: 1 }}
+              >
+                {t('wiz_next')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Step 4: Purpose ─── */}
+        {step === 4 && (
+          <div>
+            <div style={{
+              fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 8,
+            }}>
+              {t('wiz_step_4_label')}
+            </div>
+            <h3 style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)', margin: '0 0 8px' }}>
+              {t('wiz_step_4_title')}
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--t3)', margin: '0 0 24px' }}>
+              {t('wiz_step_4_desc')}
             </p>
 
             {/* Purpose options */}
@@ -453,7 +710,7 @@ export function LoanWizard() {
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button
-                onClick={() => setStep(2)}
+                onClick={() => setStep(3)}
                 type="button"
                 style={{
                   flex: '0 0 auto', padding: '14px 20px', borderRadius: 12,
@@ -465,7 +722,7 @@ export function LoanWizard() {
                 {t('wiz_back')}
               </button>
               <button
-                onClick={() => setStep(4)}
+                onClick={() => setStep(5)}
                 disabled={!purpose}
                 className="btn-primary"
                 style={{ flex: 1 }}
@@ -476,17 +733,17 @@ export function LoanWizard() {
           </div>
         )}
 
-        {/* ─── Step 4: Review & Confirm ─── */}
-        {step === 4 && (
+        {/* ─── Step 5: Review & Confirm ─── */}
+        {step === 5 && (
           <div>
             <div style={{
               fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
               letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 8,
             }}>
-              {t('wiz_step_4_label')}
+              {t('wiz_step_5_label')}
             </div>
             <h3 style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)', margin: '0 0 24px' }}>
-              {t('wiz_step_4_title')}
+              {t('wiz_step_5_title')}
             </h3>
 
             {/* Review summary */}
@@ -521,6 +778,12 @@ export function LoanWizard() {
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>{dueDate.toLocaleDateString()}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+                <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_clabe_label')}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)', fontFamily: 'var(--mono, monospace)', letterSpacing: 0.5 }}>
+                  {clabe}{bankName ? ` (${bankName})` : ''}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_purpose_label')}</span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>{t(`modal_purpose_${purpose}`)}</span>
               </div>
@@ -530,20 +793,6 @@ export function LoanWizard() {
               </div>
             </div>
 
-            {/* Terms checkbox */}
-            <label style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20,
-              cursor: 'pointer', fontSize: 13, color: 'var(--t2)', lineHeight: 1.5,
-            }}>
-              <input
-                type="checkbox"
-                checked={termsAccepted}
-                onChange={(e) => setTermsAccepted(e.target.checked)}
-                style={{ marginTop: 2, flexShrink: 0 }}
-              />
-              <span>{t('modal_accept_terms')}</span>
-            </label>
-
             {/* Error */}
             {error && (
               <div className="auth-error show" style={{ marginBottom: 12 }}>{error}</div>
@@ -551,7 +800,7 @@ export function LoanWizard() {
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button
-                onClick={() => setStep(3)}
+                onClick={() => setStep(4)}
                 type="button"
                 style={{
                   flex: '0 0 auto', padding: '14px 20px', borderRadius: 12,
@@ -564,7 +813,7 @@ export function LoanWizard() {
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={!termsAccepted || submitting}
+                disabled={submitting}
                 className="btn-primary"
                 style={{ flex: 1 }}
               >
@@ -582,7 +831,7 @@ export function LoanWizard() {
       {/* Step description under card */}
       <div style={{ textAlign: 'center', marginTop: 20 }}>
         <span style={{ fontSize: 12, color: 'var(--t3)' }}>
-          {t('wiz_step_indicator', { current: step, total: 4 })}
+          {t('wiz_step_indicator', { current: step, total: TOTAL_STEPS })}
         </span>
       </div>
     </div>
