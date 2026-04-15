@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
@@ -60,6 +60,23 @@ export function EmployeeDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [toast, setToast] = useState(() => {
+    const state = location.state as { toast?: string } | null;
+    if (state?.toast) {
+      // Clear state so toast doesn't reappear on refresh
+      window.history.replaceState({}, '');
+      return state.toast;
+    }
+    return '';
+  });
+
+  // Auto-dismiss toast after 4 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(''), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -179,6 +196,23 @@ export function EmployeeDashboard() {
 
   return (
     <div>
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--brand)', color: '#fff', padding: '12px 24px',
+          borderRadius: 12, fontSize: 14, fontWeight: 600, zIndex: 9999,
+          boxShadow: '0 4px 16px rgba(25,68,69,0.18)',
+          display: 'flex', alignItems: 'center', gap: 8,
+          animation: 'fadeInDown 0.3s ease',
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          {toast}
+        </div>
+      )}
+
       {/* Header */}
       <div className="dash-header">
         <h1>

@@ -823,5 +823,10 @@
   "admin_approve": "Aprobar",
   "admin_reject": "Rechazar",
   "admin_approve_loan": "Aprobar Préstamo",
-  "dash_settings": "Configuración"
+  "dash_settings": "Configuración",
+  "wiz_err_rate_limit": "Demasiadas solicitudes. Inténtalo más tarde.",
+  "wiz_err_active_loan": "Ya tienes un préstamo activo. Págalo antes de solicitar uno nuevo.",
+  "wiz_err_amount_exceeds": "El monto solicitado excede tu crédito disponible.",
+  "wiz_err_employer_not_approved": "Tu empleador aún no está aprobado. Contacta a tu departamento de RH.",
+  "wiz_err_generic": "Algo salió mal. Inténtalo de nuevo."
 }

@@ -823,5 +823,10 @@
   "admin_approve": "Approve",
   "admin_reject": "Reject",
   "admin_approve_loan": "Approve Loan",
-  "dash_settings": "Settings"
+  "dash_settings": "Settings",
+  "wiz_err_rate_limit": "Too many requests. Please try again later.",
+  "wiz_err_active_loan": "You already have an active loan. Please repay it before requesting a new one.",
+  "wiz_err_amount_exceeds": "The requested amount exceeds your available credit.",
+  "wiz_err_employer_not_approved": "Your employer is not yet approved. Contact your HR department.",
+  "wiz_err_generic": "Something went wrong. Please try again."
 }

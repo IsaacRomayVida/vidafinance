@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import confetti from 'canvas-confetti';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 
@@ -69,6 +70,33 @@ export function LoanWizard() {
   const cat = amount > 0 ? ((Math.pow(1 + fee / amount, 365 / TERM_DAYS) - 1) * 100).toFixed(0) : '0';
   const sliderPct = ((amount - MIN_AMOUNT) / (MAX_AMOUNT - MIN_AMOUNT)) * 100;
 
+  const mapCfError = useCallback((err: unknown): string => {
+    const code = (err as { code?: string }).code ?? '';
+    const message = (err as { message?: string }).message ?? '';
+    const details = (err as { details?: { maxAmount?: number } }).details;
+
+    if (code.includes('resource-exhausted')) return t('wiz_err_rate_limit');
+    if (code.includes('failed-precondition') && message.toLowerCase().includes('active loan'))
+      return t('wiz_err_active_loan');
+    if (code.includes('not-found') || code.includes('permission-denied'))
+      return t('wiz_err_employer_not_approved');
+    if (code.includes('invalid-argument') && details?.maxAmount != null)
+      return t('wiz_err_amount_exceeds');
+    if (code.includes('invalid-argument')) return message;
+
+    return t('wiz_err_generic');
+  }, [t]);
+
+  const fireConfetti = useCallback(() => {
+    const end = Date.now() + 1500;
+    const tick = () => {
+      confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0, y: 0.7 } });
+      confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1, y: 0.7 } });
+      if (Date.now() < end) requestAnimationFrame(tick);
+    };
+    tick();
+  }, []);
+
   const handleConfirm = async () => {
     setError('');
     setSubmitting(true);
@@ -84,8 +112,9 @@ export function LoanWizard() {
         termDays: TERM_DAYS,
       });
       setSuccess({ loanRef: result.data.loanRef || result.data.loanId });
+      fireConfetti();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(mapCfError(err));
       setSubmitting(false);
     }
   };
@@ -166,7 +195,7 @@ export function LoanWizard() {
           </div>
 
           <button
-            onClick={() => navigate('/employee', { replace: true })}
+            onClick={() => navigate('/employee', { replace: true, state: { toast: t('toast_loan_submitted') } })}
             className="btn-primary"
           >
             {t('wiz_success_back')}
