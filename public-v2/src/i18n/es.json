@@ -823,5 +823,21 @@
   "admin_approve": "Aprobar",
   "admin_reject": "Rechazar",
   "admin_approve_loan": "Aprobar Préstamo",
-  "dash_settings": "Configuración"
+  "dash_settings": "Configuración",
+  "tl_loan_progress": "Progreso del Préstamo",
+  "tl_clear_selection": "Limpiar",
+  "tl_step_pending": "Pendiente",
+  "tl_step_approved": "Aprobado",
+  "tl_step_signing": "Firma",
+  "tl_step_disbursing": "Desembolso",
+  "tl_step_active": "Activo",
+  "tl_step_paid": "Pagado",
+  "tl_download_contract": "Contrato PDF",
+  "tl_download_receipt": "Recibo PDF",
+  "tl_next_deduction": "Próxima deducción",
+  "status_under_review": "En revisión",
+  "status_disbursed": "Desembolsado",
+  "status_cancelled": "Cancelado",
+  "status_in_collections": "En cobranza",
+  "status_written_off": "Condonado"
 }

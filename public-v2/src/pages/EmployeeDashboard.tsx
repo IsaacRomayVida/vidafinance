@@ -40,6 +40,14 @@ const LOAN_PURPOSES = [
   'other',
 ] as const;
 
+interface StatusChange {
+  from: string;
+  to: string;
+  at: { seconds: number };
+  by: string;
+  reason?: string;
+}
+
 interface Loan {
   id: string;
   amount: number;
@@ -49,6 +57,11 @@ interface Loan {
   status: string;
   createdAt?: { seconds: number };
   dueDate?: { seconds: number };
+  disbursedAt?: { seconds: number };
+  contractUrl?: string;
+  receiptUrl?: string;
+  statusHistory?: StatusChange[];
+  nextPayrollDate?: { seconds: number };
   [key: string]: unknown;
 }
 
@@ -68,6 +81,7 @@ export function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [paymentLoan, setPaymentLoan] = useState<Loan | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [pageState, setPageState] = useState<'loading' | 'dashboard'>('loading');
 
   const needsEmailVerification = user ? (!user.emailVerified && !user.email?.endsWith('@vida-test.com')) : false;
@@ -379,6 +393,91 @@ export function EmployeeDashboard() {
           </div>
         )}
 
+        {/* Loan Status Timeline (for selected or most recent active loan) */}
+        {(() => {
+          const timelineLoan = selectedLoan || loans.find(l =>
+            ['pending', 'under_review', 'approved', 'disbursement_queued', 'active', 'disbursed'].includes(l.status)
+          );
+          if (!timelineLoan) return null;
+          return (
+            <div className="card" style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div className="card-title" style={{ marginBottom: 0 }}>{t('tl_loan_progress', 'Loan Progress')}</div>
+                {selectedLoan && (
+                  <button
+                    onClick={() => setSelectedLoan(null)}
+                    style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--t3)', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    {t('tl_clear_selection', 'Clear')}
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--t3)', marginBottom: 20 }}>
+                ${fmt(timelineLoan.amount)} MXN · {timelineLoan.createdAt
+                  ? new Date(timelineLoan.createdAt.seconds * 1000).toLocaleDateString()
+                  : ''}
+              </div>
+              <LoanStatusTimeline loan={timelineLoan} t={t} />
+
+              {/* Loan detail: documents + next payroll */}
+              <div style={{
+                display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 24,
+                paddingTop: 20, borderTop: '1px solid rgba(25,68,69,0.06)',
+              }}>
+                {/* Contract PDF */}
+                {timelineLoan.contractUrl && (
+                  <a
+                    href={timelineLoan.contractUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="doc-link"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    {t('tl_download_contract', 'Contract PDF')}
+                  </a>
+                )}
+                {/* Receipt PDF */}
+                {timelineLoan.receiptUrl && (
+                  <a
+                    href={timelineLoan.receiptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="doc-link"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M16 8h-6a2 2 0 100 4h4a2 2 0 110 4H8"/>
+                    </svg>
+                    {t('tl_download_receipt', 'Receipt PDF')}
+                  </a>
+                )}
+                {/* Next payroll deduction date */}
+                {(timelineLoan.dueDate || timelineLoan.nextPayrollDate) &&
+                  ['active', 'disbursed', 'overdue'].includes(timelineLoan.status) && (
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', background: 'var(--bg2)', borderRadius: 6,
+                    border: '1px solid rgba(25,68,69,0.08)', fontSize: 12, fontWeight: 600, color: 'var(--t2)',
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    {t('tl_next_deduction', 'Next deduction')}:{' '}
+                    <span style={{ color: 'var(--t1)' }}>
+                      {new Date(
+                        ((timelineLoan.nextPayrollDate || timelineLoan.dueDate)!.seconds) * 1000
+                      ).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Loans Table */}
         <div className="card">
           <div className="card-title">{t('dash_your_loans')}</div>
@@ -432,7 +531,14 @@ export function EmployeeDashboard() {
                       .reduce((sum, r) => sum + (r.amount || 0), 0);
 
                     return (
-                      <tr key={loan.id}>
+                      <tr
+                        key={loan.id}
+                        onClick={() => setSelectedLoan(loan)}
+                        style={{
+                          cursor: 'pointer',
+                          background: selectedLoan?.id === loan.id ? 'rgba(25,68,69,0.03)' : undefined,
+                        }}
+                      >
                         <td style={{ fontWeight: 500 }}>${fmt(loan.amount)}</td>
                         <td>{loan.termDays ?? 30} {t('dash_days')}</td>
                         <td>${fmt(loan.repaymentAmount || loan.total || 0)}</td>
@@ -500,6 +606,130 @@ export function EmployeeDashboard() {
           repayments={repaymentsByLoan[paymentLoan.id] || []}
           onClose={() => setPaymentLoan(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── Timeline Steps ─────────────────────────────────────────────────────────
+const TIMELINE_STEPS = [
+  { key: 'pending', statuses: ['pending', 'under_review'] },
+  { key: 'approved', statuses: ['approved'] },
+  { key: 'signing', statuses: [] }, // implied: contractUrl exists
+  { key: 'disbursing', statuses: ['disbursement_queued'] },
+  { key: 'active', statuses: ['active', 'disbursed'] },
+  { key: 'paid', statuses: ['repaid', 'paid'] },
+];
+
+function getTimelineState(loan: Loan) {
+  const status = loan.status;
+
+  // Determine which step index the loan is currently at
+  let activeIdx = 0;
+  for (let i = TIMELINE_STEPS.length - 1; i >= 0; i--) {
+    const step = TIMELINE_STEPS[i];
+    if (step.statuses.includes(status)) {
+      activeIdx = i;
+      break;
+    }
+  }
+
+  // Special case: signing step is active if approved AND contractUrl exists
+  if (status === 'approved' && loan.contractUrl) {
+    activeIdx = 2; // signing
+  }
+
+  // Rejected / cancelled are terminal
+  const isTerminal = ['rejected', 'cancelled', 'written_off', 'in_collections', 'overdue'].includes(status);
+
+  return { activeIdx, isTerminal };
+}
+
+function getStepTimestamp(loan: Loan, stepKey: string): string | null {
+  if (!loan.statusHistory || loan.statusHistory.length === 0) return null;
+
+  const statusMap: Record<string, string[]> = {
+    pending: ['pending', 'under_review'],
+    approved: ['approved'],
+    signing: ['approved'], // uses approved time if contractUrl exists
+    disbursing: ['disbursement_queued'],
+    active: ['active', 'disbursed'],
+    paid: ['repaid', 'paid'],
+  };
+
+  const targetStatuses = statusMap[stepKey] || [];
+  // Find the first transition TO one of these statuses
+  for (const change of loan.statusHistory) {
+    if (targetStatuses.includes(change.to)) {
+      return new Date(change.at.seconds * 1000).toLocaleDateString();
+    }
+  }
+
+  // Fallback for pending: use createdAt
+  if (stepKey === 'pending' && loan.createdAt) {
+    return new Date(loan.createdAt.seconds * 1000).toLocaleDateString();
+  }
+  // Fallback for active/disbursed: use disbursedAt
+  if (stepKey === 'active' && loan.disbursedAt) {
+    return new Date(loan.disbursedAt.seconds * 1000).toLocaleDateString();
+  }
+
+  return null;
+}
+
+function LoanStatusTimeline({ loan, t }: { loan: Loan; t: ReturnType<typeof useTranslation>['t'] }) {
+  const { activeIdx, isTerminal } = getTimelineState(loan);
+
+  return (
+    <div className="loan-timeline">
+      {TIMELINE_STEPS.map((step, i) => {
+        const isCompleted = i < activeIdx || (i === activeIdx && step.key === 'paid');
+        const isCurrent = i === activeIdx && step.key !== 'paid';
+        const timestamp = getStepTimestamp(loan, step.key);
+
+        let stepClass = 'tl-step';
+        if (isCompleted) stepClass += ' tl-completed';
+        else if (isCurrent && !isTerminal) stepClass += ' tl-active';
+        else if (isCurrent && isTerminal) stepClass += ' tl-error';
+
+        return (
+          <div key={step.key} className={stepClass}>
+            {/* Connector line (not on first) */}
+            {i > 0 && (
+              <div className={`tl-connector${isCompleted || isCurrent ? ' tl-connector-filled' : ''}`} />
+            )}
+            {/* Circle */}
+            <div className="tl-circle">
+              {isCompleted ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              ) : isCurrent && !isTerminal ? (
+                <div className="tl-pulse" />
+              ) : isCurrent && isTerminal ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              ) : null}
+            </div>
+            {/* Label */}
+            <div className="tl-label">
+              {t(`tl_step_${step.key}`, step.key)}
+            </div>
+            {/* Timestamp */}
+            {timestamp && (isCompleted || isCurrent) && (
+              <div className="tl-date">{timestamp}</div>
+            )}
+          </div>
+        );
+      })}
+      {/* Terminal status badge */}
+      {isTerminal && (
+        <div style={{ marginLeft: 12 }}>
+          <span className={`badge badge-${loan.status}`}>
+            {t(`status_${loan.status}`, loan.status)}
+          </span>
+        </div>
       )}
     </div>
   );

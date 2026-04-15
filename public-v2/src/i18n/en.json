@@ -823,5 +823,21 @@
   "admin_approve": "Approve",
   "admin_reject": "Reject",
   "admin_approve_loan": "Approve Loan",
-  "dash_settings": "Settings"
+  "dash_settings": "Settings",
+  "tl_loan_progress": "Loan Progress",
+  "tl_clear_selection": "Clear",
+  "tl_step_pending": "Pending",
+  "tl_step_approved": "Approved",
+  "tl_step_signing": "Signing",
+  "tl_step_disbursing": "Disbursing",
+  "tl_step_active": "Active",
+  "tl_step_paid": "Paid",
+  "tl_download_contract": "Contract PDF",
+  "tl_download_receipt": "Receipt PDF",
+  "tl_next_deduction": "Next deduction",
+  "status_under_review": "Under Review",
+  "status_disbursed": "Disbursed",
+  "status_cancelled": "Cancelled",
+  "status_in_collections": "In Collections",
+  "status_written_off": "Written Off"
 }
