@@ -32,6 +32,7 @@ const OnboardingWizard = React.lazy(() => import('./pages/OnboardingWizard').the
 const AnalyticsPage = React.lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 const ReviewQueue = React.lazy(() => import('./pages/ReviewQueue').then(m => ({ default: m.ReviewQueue })));
+const OpsReviewQueue = React.lazy(() => import('./pages/OpsReviewQueue').then(m => ({ default: m.OpsReviewQueue })));
 const PortfolioPage = React.lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
 const EmployerMgmt = React.lazy(() => import('./pages/EmployerMgmt').then(m => ({ default: m.EmployerMgmt })));
 const AlertsPage = React.lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
@@ -101,7 +102,8 @@ export default function App() {
         <Route element={<RouteGuard allowedRoles={['ops', 'admin', 'super_admin']} />}>
           <Route element={<AdminLayout />}>
             <Route path="/ops" element={<Suspense fallback={<PageSpinner />}><AdminDashboard /></Suspense>} />
-            <Route path="/ops/review-queue" element={<Suspense fallback={<PageSpinner />}><ReviewQueue /></Suspense>} />
+            <Route path="/ops/review-queue" element={<Suspense fallback={<PageSpinner />}><OpsReviewQueue /></Suspense>} />
+            <Route path="/ops/review-queue-legacy" element={<Suspense fallback={<PageSpinner />}><ReviewQueue /></Suspense>} />
             <Route path="/ops/portfolio" element={<Suspense fallback={<PageSpinner />}><PortfolioPage /></Suspense>} />
             <Route path="/ops/employers" element={<Suspense fallback={<PageSpinner />}><EmployerMgmt /></Suspense>} />
             <Route path="/ops/alerts" element={<Suspense fallback={<PageSpinner />}><AlertsPage /></Suspense>} />

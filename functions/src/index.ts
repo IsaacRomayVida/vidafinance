@@ -679,7 +679,7 @@ export const getEmployerDashboard = onCall(
 
 interface SubmitReviewDecisionData {
   reviewId: string;
-  decision: 'approved' | 'rejected' | 'request_info';
+  decision: 'approved' | 'rejected' | 'escalated' | 'request_info';
   notes?: string;
 }
 
@@ -691,8 +691,8 @@ export const submitReviewDecision = onCall(
       withErrorHandling({ functionName: 'submitReviewDecision', uid: auth.uid }, async () => {
         const { reviewId, decision, notes } = data;
         if (!reviewId || !decision) throw new HttpsError('invalid-argument', 'reviewId and decision are required');
-        if (!['approved', 'rejected', 'request_info'].includes(decision))
-          throw new HttpsError('invalid-argument', 'Invalid decision. Must be approved, rejected, or request_info');
+        if (!['approved', 'rejected', 'escalated', 'request_info'].includes(decision))
+          throw new HttpsError('invalid-argument', 'Invalid decision. Must be approved, rejected, escalated, or request_info');
 
         const reviewSnap = await db.collection('review_queue').doc(reviewId).get();
         if (!reviewSnap.exists) throw new HttpsError('not-found', 'Review not found');
@@ -703,20 +703,34 @@ export const submitReviewDecision = onCall(
 
         const now = FieldValue.serverTimestamp();
 
+        const statusMap: Record<string, string> = {
+          approved: 'approved',
+          rejected: 'rejected',
+          escalated: 'escalated',
+          request_info: 'info_requested',
+        };
+
         await db.collection('review_queue').doc(reviewId).update({
-          status: decision === 'request_info' ? 'info_requested' : decision,
+          status: statusMap[decision],
           reviewedBy: auth.uid,
           reviewedAt: now,
           reviewNotes: notes || null,
         });
 
-        // If the review is tied to a loan, update the loan status
-        if (review['loanId'] && decision !== 'request_info') {
-          const loanStatus = decision === 'approved' ? 'approved' : 'rejected';
+        // If the review is tied to a loan, update the loan status (skip for escalate/request_info)
+        if (review['loanId'] && (decision === 'approved' || decision === 'rejected')) {
           await db.collection('loans').doc(review['loanId'] as string).update({
-            status: loanStatus,
+            status: decision,
             statusNote: notes || null,
           });
+        }
+
+        // For escalations, send a Slack alert so senior ops are notified
+        if (decision === 'escalated') {
+          sendSlackAlert(
+            `Review ${reviewId} escalated by ${auth.email}: ${notes || 'No notes'}`,
+            'warning',
+          ).catch(() => {});
         }
 
         await auditLog(db, {
@@ -725,11 +739,55 @@ export const submitReviewDecision = onCall(
           actorRole: auth.role,
           targetId: reviewId,
           before: { status: 'pending_review' },
-          after: { status: decision === 'request_info' ? 'info_requested' : decision },
+          after: { status: statusMap[decision] },
           meta: { notes: notes || null, loanId: review['loanId'] || null },
         });
 
         return { success: true, reviewId, decision };
+      })
+  )
+);
+
+// ── claimReview — ops/admin claim a review queue item ────────────────────────
+
+interface ClaimReviewData {
+  reviewId: string;
+}
+
+export const claimReview = onCall(
+  { cors: true, enforceAppCheck: false },
+  withAuth<ClaimReviewData, { success: boolean; reviewId: string }>(
+    ['ops', 'admin', 'super_admin'],
+    async (data, auth) =>
+      withErrorHandling({ functionName: 'claimReview', uid: auth.uid }, async () => {
+        const { reviewId } = data;
+        if (!reviewId) throw new HttpsError('invalid-argument', 'reviewId is required');
+
+        const reviewSnap = await db.collection('review_queue').doc(reviewId).get();
+        if (!reviewSnap.exists) throw new HttpsError('not-found', 'Review not found');
+        const review = reviewSnap.data()!;
+
+        if (review['status'] !== 'pending') {
+          throw new HttpsError('failed-precondition', 'Review is not in pending status — it may already be claimed');
+        }
+
+        await db.collection('review_queue').doc(reviewId).update({
+          status: 'pending_review',
+          claimedBy: auth.uid,
+          claimedByEmail: auth.email,
+          claimedAt: FieldValue.serverTimestamp(),
+        });
+
+        await auditLog(db, {
+          action: 'review.claimed',
+          actorUid: auth.uid,
+          actorRole: auth.role,
+          targetId: reviewId,
+          before: { status: 'pending' },
+          after: { status: 'pending_review', claimedBy: auth.uid },
+        });
+
+        return { success: true, reviewId };
       })
   )
 );
