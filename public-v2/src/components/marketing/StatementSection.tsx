@@ -20,10 +20,10 @@ export function StatementSection() {
           {/* Female worker photo */}
           <div style={{ marginTop: 40, position: 'relative' }}>
             <img
-              src="/images/workerfemale.png"
+              loading="lazy" src="/images/workerfemale.png"
               alt="Empleada usando VIDA"
               style={{
-                width: 260,
+                width: 360,
                 filter: 'drop-shadow(0 16px 32px rgba(25,68,69,0.1))',
               }}
             />

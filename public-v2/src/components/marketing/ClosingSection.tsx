@@ -10,7 +10,7 @@ export function ClosingSection() {
       <div className="closing-glow" />
       {/* Testimonial */}
       <div className="rv" style={{
-        maxWidth: 540, margin: '0 auto 48px', padding: '32px 40px',
+        maxWidth: 640, margin: '0 auto 48px', padding: '32px 40px',
         background: 'rgba(255,255,255,0.06)', borderRadius: 20,
         backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         border: '1px solid rgba(255,255,255,0.06)',
@@ -30,6 +30,30 @@ export function ClosingSection() {
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>Carlos Rodríguez</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Director de RRHH · Manufactura del Norte</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Employee testimonial */}
+      <div className="rv d1" style={{
+        maxWidth: 640, margin: '0 auto 48px', padding: '28px 36px',
+        background: 'rgba(255,255,255,0.04)', borderRadius: 20,
+        backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        border: '1px solid rgba(255,255,255,0.04)',
+        position: 'relative', zIndex: 2,
+      }}>
+        <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 16, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5, fontStyle: 'italic', marginBottom: 14 }}>
+          Cuando mi hijo se enfermó, VIDA me salvó. Sin este beneficio, habría tenido que pedir un préstamo con intereses altísimos. Recibí el dinero en 24 horas.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: '50%', background: 'rgba(168,213,208,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)',
+          }}>AM</div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Ana Martínez</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Operadora · Manufactura del Norte</div>
           </div>
         </div>
       </div>

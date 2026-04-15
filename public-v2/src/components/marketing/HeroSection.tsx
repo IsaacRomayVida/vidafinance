@@ -45,7 +45,7 @@ export function HeroSection() {
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)', lineHeight: 1.3 }}>
-                Empresas ya confían en VIDA
+                12+ empresas ya confían en VIDA
               </div>
               <div style={{ fontSize: 11, color: 'var(--t3)' }}>
                 Manufactura, retail y servicios en México
@@ -56,17 +56,17 @@ export function HeroSection() {
         <div className="hero-widget">
           {/* Worker photo */}
           <img
-            src="/images/worker.png"
+            loading="lazy" src="/images/worker.png"
             alt="Trabajador usando VIDA"
             className="hero-worker-img"
             style={{
               position: 'absolute',
-              left: -60,
-              bottom: 20,
-              width: 220,
+              left: -100,
+              bottom: -20,
+              width: 360,
               zIndex: 1,
-              opacity: 0.92,
-              filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.12))',
+              opacity: 0.95,
+              filter: 'drop-shadow(0 24px 48px rgba(25,68,69,0.15))',
               pointerEvents: 'none',
             }}
           />
