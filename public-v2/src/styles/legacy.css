@@ -71,7 +71,7 @@ input,select,textarea{font-family:var(--db)}
 .badge-text{font-size:10.5px;font-weight:700;letter-spacing:2.2px;text-transform:uppercase;color:var(--brand);opacity:.5}
 
 .hero h1{font-family:var(--df);font-size:clamp(40px,7vw,72px);font-weight:400;color:var(--t1);line-height:.96;letter-spacing:-.045em;margin-bottom:24px;opacity:0;animation:fu .9s ease .3s forwards;overflow:visible}
-.hero h1 em{font-style:italic;background:linear-gradient(135deg,var(--brand-light) 0%,var(--gold) 40%,var(--gold) 60%,var(--brand-light) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;padding-right:0.05em}
+.hero h1 em{font-style:italic;background:linear-gradient(135deg,var(--brand-light) 0%,var(--gold) 40%,var(--gold) 60%,var(--brand-light) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;padding-right:0.12em}
 .hero-sub{font-size:18px;color:var(--t2);line-height:1.6;margin-bottom:44px;max-width:380px;opacity:0;animation:fu .9s ease .45s forwards}
 
 .hero-actions{display:flex;gap:14px;opacity:0;animation:fu .9s ease .55s forwards}
@@ -84,7 +84,7 @@ input,select,textarea{font-family:var(--db)}
 .hero-widget{opacity:0;animation:prodUp 1.3s cubic-bezier(.16,1,.3,1) .7s forwards;position:relative;display:grid;place-items:center;min-height:560px}
 @keyframes prodUp{from{opacity:0;transform:translateY(50px)}to{opacity:1;transform:translateY(0)}}
 
-.phone-mock{width:280px;border-radius:40px;background:linear-gradient(175deg,#e8efee 0%,#f0f5f4 45%,#f7faf9 100%);padding:24px 20px 28px;position:relative;z-index:2;box-shadow:0 40px 80px rgba(25,68,69,0.1),0 0 0 1px rgba(25,68,69,0.06)}
+.phone-mock{width:280px;border-radius:40px;background:linear-gradient(175deg,rgba(232,239,238,0.82) 0%,rgba(240,245,244,0.85) 45%,rgba(247,250,249,0.88) 100%);backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%);padding:24px 20px 28px;position:relative;z-index:2;box-shadow:0 40px 80px rgba(25,68,69,0.08),0 0 0 1px rgba(25,68,69,0.04)}
 .phone-mock::before{content:'';position:absolute;top:10px;left:50%;transform:translateX(-50%);width:80px;height:4px;border-radius:4px;background:rgba(25,68,69,0.06)}
 .phone-mock{transition:transform 0.4s cubic-bezier(0.22,1,0.36,1),box-shadow 0.4s}
 .phone-mock:hover{transform:translateY(-4px);box-shadow:0 48px 96px rgba(25,68,69,0.14),0 0 0 1px rgba(25,68,69,0.04)}
