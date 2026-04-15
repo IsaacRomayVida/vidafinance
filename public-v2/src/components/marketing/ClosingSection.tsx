@@ -81,11 +81,17 @@ export function ClosingSection() {
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {curr.img ? (
-              <img src={curr.img} alt={curr.name} style={{
-                width: 72, height: 72, borderRadius: '50%', objectFit: 'cover',
-                objectPosition: 'center 15%',
-                border: '2px solid rgba(255,255,255,0.15)',
-              }} />
+              <picture>
+                <source srcSet={curr.img.replace('.png', '.webp')} type="image/webp" />
+                <img loading="lazy" src={curr.img} alt={curr.name}
+                  width={72} height={72}
+                  style={{
+                    width: 72, height: 72, borderRadius: '50%', objectFit: 'cover',
+                    objectPosition: 'center 15%',
+                    border: '2px solid rgba(255,255,255,0.15)',
+                  }}
+                />
+              </picture>
             ) : (
               <div style={{
                 width: 72, height: 72, borderRadius: '50%',

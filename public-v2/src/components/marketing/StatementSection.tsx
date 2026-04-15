@@ -26,9 +26,13 @@ export function StatementSection() {
             background: 'radial-gradient(circle, rgba(168,213,208,0.1) 0%, rgba(162,134,87,0.04) 40%, transparent 65%)',
             filter: 'blur(24px)', pointerEvents: 'none',
           }} />
-          <img loading="lazy" src="/images/workerfemale.png" alt="Empleada usando VIDA"
-            style={{ width: 400, position: 'relative', filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.1))' }}
-          />
+          <picture>
+            <source srcSet="/images/workerfemale.webp" type="image/webp" />
+            <img loading="lazy" src="/images/workerfemale.png" alt="Empleada usando VIDA"
+              width={500} height={653}
+              style={{ width: 400, height: 'auto', position: 'relative', filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.1))' }}
+            />
+          </picture>
         </div>
       </div>
       {/* Emotions row — full width below */}

@@ -47,10 +47,16 @@ export function ROICalculator() {
                 background: 'radial-gradient(circle, rgba(162,134,87,0.06) 0%, transparent 65%)',
                 filter: 'blur(12px)', pointerEvents: 'none',
               }} />
-              <img loading="lazy" src="/images/calculator-person.png" alt="Empleada calculando" style={{
-                width: 380, position: 'relative',
-                filter: 'drop-shadow(0 20px 44px rgba(25,68,69,0.12))',
-              }} />
+              <picture>
+                <source srcSet="/images/calculator-person.webp" type="image/webp" />
+                <img loading="lazy" src="/images/calculator-person.png" alt="Empleada calculando"
+                  width={500} height={626}
+                  style={{
+                    width: 380, height: 'auto', position: 'relative',
+                    filter: 'drop-shadow(0 20px 44px rgba(25,68,69,0.12))',
+                  }}
+                />
+              </picture>
             </div>
             <div className="tag rv">{t('calc_tag')}</div>
             <h2 className="sh rv d1">{t('calc_h2')}</h2>
