@@ -153,7 +153,7 @@ async function runBelvoCashFlow(bankConnection, applicant) {
     client = new BelvoClient(
       process.env.BELVO_SECRET_ID,
       process.env.BELVO_SECRET_PASSWORD,
-      process.env.BELVO_BASE_URL
+      process.env.BELVO_BASE_URL || "https://sandbox.belvo.com"
     );
     await client.connect();
   } catch (err) {

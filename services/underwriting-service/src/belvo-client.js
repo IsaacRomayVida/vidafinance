@@ -16,6 +16,8 @@
  */
 const BelvoClient = require("belvo").default;
 
+const BELVO_SANDBOX_URL = "https://sandbox.belvo.com";
+
 let _client = null;
 
 async function getClient() {
@@ -23,7 +25,7 @@ async function getClient() {
   _client = new BelvoClient(
     process.env.BELVO_SECRET_ID,
     process.env.BELVO_SECRET_PASSWORD,
-    process.env.BELVO_BASE_URL
+    process.env.BELVO_BASE_URL || BELVO_SANDBOX_URL
   );
   await _client.connect();
   return _client;
