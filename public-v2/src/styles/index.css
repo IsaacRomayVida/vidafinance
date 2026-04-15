@@ -982,3 +982,5 @@ table tr:last-child td{border-bottom:none}
 /* Hero worker photo — hide on mobile */
 @media(max-width:768px){.hero-worker-img{display:none!important}}
 @media(max-width:1024px){.hero-worker-img{width:260px!important;left:-40px!important;bottom:0!important}}
+
+@media(max-width:768px){.calc-person-img{display:none!important}}

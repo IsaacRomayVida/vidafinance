@@ -15,14 +15,14 @@ const testimonials = [
     quote: 'Cuando mi hijo se enfermó, VIDA me salvó. Sin este beneficio, habría tenido que pedir un préstamo con intereses altísimos. Recibí el dinero en 24 horas.',
     name: 'Ana Martínez',
     role: 'Operadora · Manufactura del Norte',
-    img: null,
+    img: '/images/ana.png',
     initials: 'AM',
   },
   {
     quote: 'La integración fue increíblemente simple. En dos días teníamos VIDA funcionando con nuestra nómina. Nuestros empleados lo usan cada mes.',
     name: 'Roberto Méndez',
     role: 'Gerente de Operaciones · Logística Express',
-    img: null,
+    img: '/images/roberto.png',
     initials: 'RM',
   },
 ];

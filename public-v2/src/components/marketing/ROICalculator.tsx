@@ -29,6 +29,11 @@ export function ROICalculator() {
       <div className="wrap">
         <div className="calc-grid">
           <div className="calc-text">
+            {/* Calculator person photo */}
+            <img loading="lazy" src="/images/calculator-person.png" alt="Empleada calculando" style={{
+              width: 280, marginTop: 32,
+              filter: 'drop-shadow(0 16px 32px rgba(25,68,69,0.1))',
+            }} className="calc-person-img" />
             <div className="tag rv">{t('calc_tag')}</div>
             <h2 className="sh rv d1">{t('calc_h2')}</h2>
             <p className="sp rv d2">{t('calc_p')}</p>
