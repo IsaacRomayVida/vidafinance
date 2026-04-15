@@ -31,15 +31,25 @@ export function ROICalculator() {
           <div className="calc-text">
             {/* Calculator person photo */}
             <div className="calc-person-img" style={{
-              marginTop: 36, position: 'relative',
-              width: 340, height: 400,
-              borderRadius: 24, overflow: 'hidden',
-              background: 'linear-gradient(170deg, rgba(168,213,208,0.08) 0%, rgba(25,68,69,0.03) 100%)',
-              boxShadow: '0 12px 40px rgba(25,68,69,0.06)',
+              marginTop: 36, position: 'relative', display: 'inline-block',
             }}>
+              {/* Decorative teal circle */}
+              <div style={{
+                position: 'absolute', bottom: 0, right: -20,
+                width: 200, height: 200, borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(168,213,208,0.1) 0%, transparent 65%)',
+                filter: 'blur(24px)', pointerEvents: 'none',
+              }} />
+              {/* Decorative gold accent dot */}
+              <div style={{
+                position: 'absolute', top: 20, left: -10,
+                width: 80, height: 80, borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(162,134,87,0.06) 0%, transparent 65%)',
+                filter: 'blur(12px)', pointerEvents: 'none',
+              }} />
               <img loading="lazy" src="/images/calculator-person.png" alt="Empleada calculando" style={{
-                width: '100%', height: '100%', objectFit: 'cover',
-                objectPosition: 'center top',
+                width: 300, position: 'relative',
+                filter: 'drop-shadow(0 16px 36px rgba(25,68,69,0.1))',
               }} />
             </div>
             <div className="tag rv">{t('calc_tag')}</div>

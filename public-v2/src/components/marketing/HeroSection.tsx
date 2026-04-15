@@ -54,17 +54,24 @@ export function HeroSection() {
           </div>
         </div>
         <div className="hero-widget">
-          {/* Worker photo */}
+          {/* Worker photo with decorative gradient */}
           <div className="hero-worker-img" style={{
             position: 'absolute', left: -80, bottom: 0,
-            width: 320, height: 420,
-            borderRadius: 24, overflow: 'hidden',
-            background: 'linear-gradient(170deg, rgba(168,213,208,0.06) 0%, rgba(25,68,69,0.02) 100%)',
-            boxShadow: '0 20px 48px rgba(25,68,69,0.08)',
             zIndex: 1, pointerEvents: 'none',
           }}>
+            {/* Decorative gradient circle behind person */}
+            <div style={{
+              position: 'absolute', bottom: -30, left: '50%', transform: 'translateX(-50%)',
+              width: 300, height: 300, borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(168,213,208,0.12) 0%, rgba(168,213,208,0.03) 50%, transparent 70%)',
+              filter: 'blur(20px)',
+              pointerEvents: 'none',
+            }} />
             <img src="/images/worker.png" alt="Trabajador usando VIDA"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }}
+              style={{
+                width: 340, position: 'relative',
+                filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.12))',
+              }}
             />
           </div>
           <div className="phone-ring" />

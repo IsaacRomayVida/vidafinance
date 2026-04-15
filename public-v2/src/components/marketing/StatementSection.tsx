@@ -18,13 +18,18 @@ export function StatementSection() {
           <h2><RichText html={t('stmt_h2')} /></h2>
           <p>{t('stmt_p')}</p>
           {/* Female worker photo */}
-          <div style={{ marginTop: 40, position: 'relative' }}>
-            <img
-              loading="lazy" src="/images/workerfemale.png"
-              alt="Empleada usando VIDA"
+          <div style={{ marginTop: 40, position: 'relative', display: 'inline-block' }}>
+            {/* Decorative gradient arc */}
+            <div style={{
+              position: 'absolute', bottom: -20, left: '50%', transform: 'translateX(-50%)',
+              width: 320, height: 320, borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(162,134,87,0.06) 0%, rgba(168,213,208,0.04) 40%, transparent 65%)',
+              filter: 'blur(16px)', pointerEvents: 'none',
+            }} />
+            <img loading="lazy" src="/images/workerfemale.png" alt="Empleada usando VIDA"
               style={{
-                width: 380, height: 440, borderRadius: 24, overflow: 'hidden', objectFit: 'cover' as any, objectPosition: 'center top' as any,
-                filter: 'drop-shadow(0 16px 32px rgba(25,68,69,0.1))',
+                width: 360, position: 'relative',
+                filter: 'drop-shadow(0 16px 36px rgba(25,68,69,0.1))',
               }}
             />
           </div>
