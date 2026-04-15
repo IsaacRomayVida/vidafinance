@@ -43,7 +43,7 @@ Most failures stem from **import/export mismatches** in underwriting-service tes
 |-------|-------|------|------|------------|
 | `tests/decision-engine.test.js` | 5 | 5 | 0 | ✅ |
 | `tests/metamap-client.test.js` | 3 | 3 | 0 | ✅ |
-| `src/decision-engine.test.js` | — | 0 | suite | `jest.mock()` references out-of-scope variables (`incodeResult`, `sardineResult`) |
+| `src/decision-engine.test.js` | — | 0 | suite | `jest.mock()` references out-of-scope variables (`kycResult`, `deviceResult`) |
 | `src/stages/__tests__/employer-a.test.js` | — | 0 | suite | `Cannot find module '../employer-a'` — wrong relative path |
 | `src/stages/__tests__/employer-b.test.js` | 38 | 0 | 38 | Imports unexported helpers (`scoreSATAge`, `scoreDENUE`, `assignTier`, etc.) |
 | `src/stages/__tests__/stage2-bureau.test.js` | 15 | 0 | 15 | Imports wrong names: `runStage2` (actual: `runBureauAndEmployment`), `calculateLTI` (actual: `computeLTI`) |
