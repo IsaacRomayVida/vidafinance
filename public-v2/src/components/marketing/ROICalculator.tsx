@@ -30,10 +30,18 @@ export function ROICalculator() {
         <div className="calc-grid">
           <div className="calc-text">
             {/* Calculator person photo */}
-            <img loading="lazy" src="/images/calculator-person.png" alt="Empleada calculando" style={{
-              width: 280, marginTop: 32,
-              filter: 'drop-shadow(0 16px 32px rgba(25,68,69,0.1))',
-            }} className="calc-person-img" />
+            <div className="calc-person-img" style={{
+              marginTop: 36, position: 'relative',
+              width: 340, height: 400,
+              borderRadius: 24, overflow: 'hidden',
+              background: 'linear-gradient(170deg, rgba(168,213,208,0.08) 0%, rgba(25,68,69,0.03) 100%)',
+              boxShadow: '0 12px 40px rgba(25,68,69,0.06)',
+            }}>
+              <img loading="lazy" src="/images/calculator-person.png" alt="Empleada calculando" style={{
+                width: '100%', height: '100%', objectFit: 'cover',
+                objectPosition: 'center top',
+              }} />
+            </div>
             <div className="tag rv">{t('calc_tag')}</div>
             <h2 className="sh rv d1">{t('calc_h2')}</h2>
             <p className="sp rv d2">{t('calc_p')}</p>

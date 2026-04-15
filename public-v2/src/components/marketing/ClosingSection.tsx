@@ -68,13 +68,13 @@ export function ClosingSection() {
           opacity: fade ? 1 : 0,
           transform: fade ? 'translateY(0)' : 'translateY(8px)',
           transition: 'all 0.3s ease',
-          minHeight: 180,
+          minHeight: 200,
         }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 14, opacity: 0.15 }}>
             <path d="M10 11H6C6 7.5 7 5 10 4V6.5C8.5 7 8 8.5 8 10H10V14H6V11M18 11H14C14 7.5 15 5 18 4V6.5C16.5 7 16 8.5 16 10H18V14H14V11" fill="white"/>
           </svg>
           <p style={{
-            fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18,
+            fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20,
             color: 'rgba(255,255,255,0.85)', lineHeight: 1.55, fontStyle: 'italic', marginBottom: 20,
           }}>
             {curr.quote}
@@ -82,22 +82,22 @@ export function ClosingSection() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {curr.img ? (
               <img src={curr.img} alt={curr.name} style={{
-                width: 44, height: 44, borderRadius: '50%', objectFit: 'cover',
+                width: 72, height: 72, borderRadius: '50%', objectFit: 'cover',
                 objectPosition: 'center 15%',
                 border: '2px solid rgba(255,255,255,0.15)',
               }} />
             ) : (
               <div style={{
-                width: 44, height: 44, borderRadius: '50%',
+                width: 72, height: 72, borderRadius: '50%',
                 background: 'rgba(168,213,208,0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.5)',
+                fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.5)',
                 border: '2px solid rgba(255,255,255,0.08)',
               }}>{curr.initials}</div>
             )}
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{curr.name}</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{curr.role}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{curr.name}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{curr.role}</div>
             </div>
           </div>
         </div>

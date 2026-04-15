@@ -55,21 +55,18 @@ export function HeroSection() {
         </div>
         <div className="hero-widget">
           {/* Worker photo */}
-          <img
-            loading="lazy" src="/images/worker.png"
-            alt="Trabajador usando VIDA"
-            className="hero-worker-img"
-            style={{
-              position: 'absolute',
-              left: -100,
-              bottom: -20,
-              width: 360,
-              zIndex: 1,
-              opacity: 0.95,
-              filter: 'drop-shadow(0 24px 48px rgba(25,68,69,0.15))',
-              pointerEvents: 'none',
-            }}
-          />
+          <div className="hero-worker-img" style={{
+            position: 'absolute', left: -80, bottom: 0,
+            width: 320, height: 420,
+            borderRadius: 24, overflow: 'hidden',
+            background: 'linear-gradient(170deg, rgba(168,213,208,0.06) 0%, rgba(25,68,69,0.02) 100%)',
+            boxShadow: '0 20px 48px rgba(25,68,69,0.08)',
+            zIndex: 1, pointerEvents: 'none',
+          }}>
+            <img src="/images/worker.png" alt="Trabajador usando VIDA"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }}
+            />
+          </div>
           <div className="phone-ring" />
           <div className="phone-ring-2" />
           <div className="phone-glow" />

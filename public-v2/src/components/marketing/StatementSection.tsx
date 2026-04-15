@@ -23,7 +23,7 @@ export function StatementSection() {
               loading="lazy" src="/images/workerfemale.png"
               alt="Empleada usando VIDA"
               style={{
-                width: 360,
+                width: 380, height: 440, borderRadius: 24, overflow: 'hidden', objectFit: 'cover' as any, objectPosition: 'center top' as any,
                 filter: 'drop-shadow(0 16px 32px rgba(25,68,69,0.1))',
               }}
             />
