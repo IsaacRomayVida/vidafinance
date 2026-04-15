@@ -1,30 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
-
-const LOAN_PURPOSES = [
-  'emergency',
-  'medical',
-  'education',
-  'home_repair',
-  'transportation',
-  'debt_consolidation',
-  'other',
-] as const;
-
-const MIN_AMOUNT = 500;
-const MAX_AMOUNT = 5000;
-const STEP = 500;
-const MONTHLY_FEE = 0.30;
-const TERM_DAYS = 30;
-
-function fmt(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
+import { StepAmount } from '../components/loan/StepAmount';
+import {
+  MIN_AMOUNT,
+  MAX_AMOUNT,
+  STEP_INCREMENT,
+  MONTHLY_FEE,
+  TERM_DAYS,
+  fmt,
+} from '../components/loan/LoanWizard';
+import type { LoanPurpose } from '../components/loan/LoanWizard';
 
 export function LoanWizard() {
   const { t } = useTranslation();
@@ -33,13 +23,15 @@ export function LoanWizard() {
 
   const [step, setStep] = useState(1);
   const [amount, setAmount] = useState(1000);
-  const [purpose, setPurpose] = useState('');
+  const [purpose, setPurpose] = useState<LoanPurpose | ''>('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState<{ loanRef: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [employeeName, setEmployeeName] = useState('');
+  const [salary, setSalary] = useState<number | undefined>(undefined);
+  const [availableCredit, setAvailableCredit] = useState<number | undefined>(undefined);
 
   // Fetch employee data
   useEffect(() => {
@@ -53,6 +45,8 @@ export function LoanWizard() {
         }
         const data = empDoc.data();
         setEmployeeName(data.name || user.displayName || '');
+        if (data.salary) setSalary(Number(data.salary));
+        if (data.availableCredit != null) setAvailableCredit(Number(data.availableCredit));
       } catch {
         // proceed without name
       } finally {
@@ -61,13 +55,21 @@ export function LoanWizard() {
     })();
   }, [user, navigate]);
 
+  // Derived max = min(availableCredit, salary*0.3, 5000)
+  const effectiveMax = useMemo(() => {
+    const caps = [MAX_AMOUNT];
+    if (availableCredit != null && availableCredit > 0) caps.push(availableCredit);
+    if (salary != null && salary > 0) caps.push(Math.floor(salary * 0.3));
+    const raw = Math.min(...caps);
+    return Math.max(MIN_AMOUNT, Math.floor(raw / STEP_INCREMENT) * STEP_INCREMENT);
+  }, [availableCredit, salary]);
+
   // Calculations
   const fee = Math.round(amount * MONTHLY_FEE);
   const total = amount + fee;
   const payrollDeduction = total; // single deduction at end of month
   const dueDate = new Date(Date.now() + TERM_DAYS * 24 * 60 * 60 * 1000);
   const cat = amount > 0 ? ((Math.pow(1 + fee / amount, 365 / TERM_DAYS) - 1) * 100).toFixed(0) : '0';
-  const sliderPct = ((amount - MIN_AMOUNT) / (MAX_AMOUNT - MIN_AMOUNT)) * 100;
 
   const handleConfirm = async () => {
     setError('');
@@ -192,7 +194,7 @@ export function LoanWizard() {
 
       {/* Step indicator */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
-        {[1, 2, 3, 4].map((s) => (
+        {[1, 2, 3].map((s) => (
           <div
             key={s}
             style={{
@@ -213,84 +215,21 @@ export function LoanWizard() {
         border: '1px solid rgba(25,68,69,0.04)',
       }}>
 
-        {/* ─── Step 1: Amount ─── */}
+        {/* ─── Step 1: Amount + Purpose ─── */}
         {step === 1 && (
-          <div>
-            <div style={{
-              fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 8,
-            }}>
-              {t('wiz_step_1_label')}
-            </div>
-            <h3 style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)', margin: '0 0 24px' }}>
-              {t('wiz_step_1_title')}
-            </h3>
-
-            {/* Amount display */}
-            <div style={{ textAlign: 'center', marginBottom: 28 }}>
-              <div style={{
-                fontFamily: 'var(--df)', fontSize: 48, color: 'var(--t1)',
-                lineHeight: 1, marginBottom: 4,
-              }}>
-                ${fmt(amount)}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--t3)' }}>MXN</div>
-            </div>
-
-            {/* Slider */}
-            <div className="slider-wrap">
-              <div className="sw">
-                <div className="sw-fill" style={{ width: `${sliderPct}%` }} />
-              </div>
-              <input
-                type="range"
-                min={MIN_AMOUNT}
-                max={MAX_AMOUNT}
-                step={STEP}
-                value={amount}
-                onChange={(e) => setAmount(parseInt(e.target.value))}
-              />
-              <div className="sw-labels">
-                <span>${fmt(MIN_AMOUNT)}</span>
-                <span>${fmt(MAX_AMOUNT)}</span>
-              </div>
-            </div>
-
-            {/* Quick amount buttons */}
-            <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-              {[500, 1000, 2000, 3000, 5000].map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setAmount(v)}
-                  style={{
-                    flex: '1 1 auto',
-                    padding: '10px 0',
-                    borderRadius: 10,
-                    border: amount === v ? '1.5px solid var(--brand)' : '1.5px solid rgba(25,68,69,0.08)',
-                    background: amount === v ? 'var(--brand)' : 'transparent',
-                    color: amount === v ? '#fff' : 'var(--t2)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'var(--db)',
-                    cursor: 'pointer',
-                    transition: 'all 0.25s ease',
-                    minWidth: 60,
-                  }}
-                >
-                  ${fmt(v)}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setStep(2)}
-              className="btn-primary"
-              style={{ marginTop: 28 }}
-            >
-              {t('wiz_next')}
-            </button>
-          </div>
+          <StepAmount
+            amount={amount}
+            onAmountChange={setAmount}
+            purpose={purpose}
+            onPurposeChange={setPurpose}
+            min={MIN_AMOUNT}
+            max={effectiveMax}
+            step={STEP_INCREMENT}
+            fee={fee}
+            total={total}
+            cat={cat}
+            onNext={() => setStep(2)}
+          />
         )}
 
         {/* ─── Step 2: Loan Terms ─── */}
@@ -394,78 +333,7 @@ export function LoanWizard() {
                 {t('wiz_back')}
               </button>
               <button
-                onClick={() => setStep(3)}
-                className="btn-primary"
-                style={{ flex: 1 }}
-              >
-                {t('wiz_next')}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ─── Step 3: Purpose ─── */}
-        {step === 3 && (
-          <div>
-            <div style={{
-              fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 8,
-            }}>
-              {t('wiz_step_3_label')}
-            </div>
-            <h3 style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)', margin: '0 0 8px' }}>
-              {t('wiz_step_3_title')}
-            </h3>
-            <p style={{ fontSize: 13, color: 'var(--t3)', margin: '0 0 24px' }}>
-              {t('wiz_step_3_desc')}
-            </p>
-
-            {/* Purpose options */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 28 }}>
-              {LOAN_PURPOSES.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPurpose(p)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '14px 16px', borderRadius: 12,
-                    border: purpose === p ? '1.5px solid var(--brand)' : '1.5px solid rgba(25,68,69,0.08)',
-                    background: purpose === p ? 'rgba(25,68,69,0.03)' : 'transparent',
-                    cursor: 'pointer', transition: 'all 0.25s ease',
-                    textAlign: 'left', fontFamily: 'var(--db)',
-                  }}
-                >
-                  <div style={{
-                    width: 20, height: 20, borderRadius: '50%',
-                    border: purpose === p ? '6px solid var(--brand)' : '2px solid rgba(25,68,69,0.15)',
-                    flexShrink: 0, transition: 'border 0.2s ease',
-                  }} />
-                  <span style={{
-                    fontSize: 14, fontWeight: 500,
-                    color: purpose === p ? 'var(--t1)' : 'var(--t2)',
-                  }}>
-                    {t(`modal_purpose_${p}`)}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setStep(2)}
-                type="button"
-                style={{
-                  flex: '0 0 auto', padding: '14px 20px', borderRadius: 12,
-                  border: '1.5px solid rgba(25,68,69,0.08)', background: 'transparent',
-                  color: 'var(--t2)', fontSize: 14, fontWeight: 600, fontFamily: 'var(--db)',
-                  cursor: 'pointer',
-                }}
-              >
-                {t('wiz_back')}
-              </button>
-              <button
-                onClick={() => setStep(4)}
+                onClick={() => { if (purpose) setStep(3); }}
                 disabled={!purpose}
                 className="btn-primary"
                 style={{ flex: 1 }}
@@ -476,8 +344,8 @@ export function LoanWizard() {
           </div>
         )}
 
-        {/* ─── Step 4: Review & Confirm ─── */}
-        {step === 4 && (
+        {/* ─── Step 3: Review & Confirm ─── */}
+        {step === 3 && (
           <div>
             <div style={{
               fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
@@ -551,7 +419,7 @@ export function LoanWizard() {
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button
-                onClick={() => setStep(3)}
+                onClick={() => setStep(2)}
                 type="button"
                 style={{
                   flex: '0 0 auto', padding: '14px 20px', borderRadius: 12,
@@ -582,7 +450,7 @@ export function LoanWizard() {
       {/* Step description under card */}
       <div style={{ textAlign: 'center', marginTop: 20 }}>
         <span style={{ fontSize: 12, color: 'var(--t3)' }}>
-          {t('wiz_step_indicator', { current: step, total: 4 })}
+          {t('wiz_step_indicator', { current: step, total: 3 })}
         </span>
       </div>
     </div>
