@@ -126,12 +126,48 @@
    - Restart Redis service if unresponsive
 4. All BullMQ queues depend on Redis — a Redis outage is SEV-1
 
-## Escalation Path
+## PagerDuty Escalation Policy
+
+Incidents are automatically routed to PagerDuty for SEV-1 and SEV-2. The escalation
+policy triggers progressively if the incident is not acknowledged:
+
+| Tier | Target | Escalation Delay | Notification |
+|------|--------|-----------------|--------------|
+| 1 | **On-call engineer** (weekly rotation) | 10 min | Phone call + push |
+| 2 | **Engineering lead** | 10 min | Phone call + push |
+| 3 | **CTO** | 10 min | Phone call + push |
+
+- **SEV-1** and **SEV-2** trigger PagerDuty (phone call + push notification)
+- **SEV-3** and **SEV-4** go to Slack only (no page)
+- Policy loops 2× before stopping — total escalation window: 60 min
+
+### SEV-1 Auto-Detection (PagerDuty Critical)
+
+| Condition | Detection | Dedup Key Pattern |
+|-----------|-----------|-------------------|
+| All services down | Health monitor: all endpoints unreachable | `vida-vida-infrastructure-all-services-all_services_down` |
+| Multiple services down (≥2) | Health monitor: ≥2 endpoints unreachable | `vida-vida-infrastructure-multi-service-multiple_services_down` |
+| Redis OOM | Health endpoint reports `redis_status: oom` | `vida-vida-redis-memory-redis_oom` |
+| Redis connection refused | Health endpoint reports ECONNREFUSED | `vida-vida-redis-connectivity-redis_connection_refused` |
+| Disbursement stalled | 0 completions + jobs waiting for >10 min | `vida-vida-payment-server-disbursements-disbursement_stalled` |
+
+### SEV-2 Auto-Detection (PagerDuty Error)
+
+| Condition | Detection | Dedup Key Pattern |
+|-----------|-----------|-------------------|
+| Single service down >5 min | Health monitor: one endpoint unreachable >5 min | `vida-{service}-health-check-single_service_down_extended` |
+| Error rate >5% | Queue stats: failed/total >5% | `vida-{service}-{component}-error_rate_high` |
+| MetaMap outage | Health endpoint reports `metamap_status: down` | `vida-vida-underwriting-service-kyc-metamap_outage` |
+| Disbursement failure rate >5% | Queue stats: disbursement failed/total >5% | `vida-vida-payment-server-disbursements-disbursement_failure_rate_high` |
+| Model drift PSI >0.25 | Drift monitor: PSI score exceeds threshold | `vida-vida-ml-service-model-drift-error_rate_high` |
+
+### Escalation Path
 
 1. **On-call engineer** — first responder, triages and fixes or escalates
 2. **Engineering lead** — SEV-1 and SEV-2 escalation
-3. **Product owner** — customer communication decisions
-4. **Compliance officer** — if incident affects loan data or regulatory compliance
+3. **CTO** — final escalation for unacknowledged incidents
+4. **Product owner** — customer communication decisions
+5. **Compliance officer** — if incident affects loan data or regulatory compliance
 
 ## Post-Incident
 

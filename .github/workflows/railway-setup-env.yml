@@ -54,6 +54,8 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
           CONEKTA_WEBHOOK_SECRET:       ${{ secrets.CONEKTA_WEBHOOK_SECRET }}
           INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+          PAGERDUTY_ROUTING_KEY:        ${{ secrets.PAGERDUTY_ROUTING_KEY }}
+          SLACK_WEBHOOK_URL:            ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           railway variables set \
             NODE_ENV=staging \
@@ -63,6 +65,8 @@ jobs:
             FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
             CONEKTA_WEBHOOK_SECRET="$CONEKTA_WEBHOOK_SECRET" \
             INTERNAL_SECRET="$INTERNAL_SECRET" \
+            PAGERDUTY_ROUTING_KEY="$PAGERDUTY_ROUTING_KEY" \
+            SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
             ALLOWED_ORIGINS="https://vida-staging.web.app,https://admin-staging.vida.com" \
             SOFTCREDITO_ADAPTER_URL="http://vida-softcredito.railway.internal:3002" \
             NOTIFICATION_SERVICE_URL="http://vida-notifications.railway.internal:3003" \
@@ -77,6 +81,8 @@ jobs:
           SOFTCREDITO_CLIENT_ID:         ${{ secrets.SOFTCREDITO_CLIENT_ID }}
           SOFTCREDITO_CLIENT_SECRET:     ${{ secrets.SOFTCREDITO_CLIENT_SECRET }}
           INTERNAL_SECRET:               ${{ secrets.INTERNAL_SECRET }}
+          PAGERDUTY_ROUTING_KEY:         ${{ secrets.PAGERDUTY_ROUTING_KEY }}
+          SLACK_WEBHOOK_URL:             ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           railway variables set \
             NODE_ENV=staging \
@@ -86,6 +92,8 @@ jobs:
             FIREBASE_PROJECT_ID="vida-finance-staging" \
             FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
             INTERNAL_SECRET="$INTERNAL_SECRET" \
+            PAGERDUTY_ROUTING_KEY="$PAGERDUTY_ROUTING_KEY" \
+            SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
             SOFTCREDITO_API_URL="https://api.softcredito.com.mx/v1" \
             SOFTCREDITO_CLIENT_ID="$SOFTCREDITO_CLIENT_ID" \
             SOFTCREDITO_CLIENT_SECRET="$SOFTCREDITO_CLIENT_SECRET" \
@@ -101,6 +109,8 @@ jobs:
           TWILIO_AUTH_TOKEN:            ${{ secrets.TWILIO_AUTH_TOKEN }}
           SENDGRID_API_KEY:             ${{ secrets.SENDGRID_API_KEY }}
           INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+          PAGERDUTY_ROUTING_KEY:        ${{ secrets.PAGERDUTY_ROUTING_KEY }}
+          SLACK_WEBHOOK_URL:            ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           railway variables set \
             NODE_ENV=staging \
@@ -109,6 +119,8 @@ jobs:
             FIREBASE_PROJECT_ID="vida-finance-staging" \
             FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
             INTERNAL_SECRET="$INTERNAL_SECRET" \
+            PAGERDUTY_ROUTING_KEY="$PAGERDUTY_ROUTING_KEY" \
+            SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
             TWILIO_ACCOUNT_SID="$TWILIO_ACCOUNT_SID" \
             TWILIO_AUTH_TOKEN="$TWILIO_AUTH_TOKEN" \
             TWILIO_WHATSAPP_FROM="+14155238886" \
@@ -126,6 +138,8 @@ jobs:
           MIFIEL_APP_ID:                ${{ secrets.MIFIEL_APP_ID }}
           MIFIEL_APP_SECRET:            ${{ secrets.MIFIEL_APP_SECRET }}
           INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+          PAGERDUTY_ROUTING_KEY:        ${{ secrets.PAGERDUTY_ROUTING_KEY }}
+          SLACK_WEBHOOK_URL:            ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           railway variables set \
             NODE_ENV=staging \
@@ -135,6 +149,8 @@ jobs:
             FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
             FIREBASE_STORAGE_BUCKET="vida-finance-staging.appspot.com" \
             INTERNAL_SECRET="$INTERNAL_SECRET" \
+            PAGERDUTY_ROUTING_KEY="$PAGERDUTY_ROUTING_KEY" \
+            SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
             PDF_STORAGE_PATH="documents/" \
             MAX_CONCURRENT_PDF_JOBS=3 \
             SOFOM_RFC="VIDA240101XXX" \
@@ -151,6 +167,8 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
           ANTHROPIC_API_KEY:            ${{ secrets.ANTHROPIC_API_KEY }}
           INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+          PAGERDUTY_ROUTING_KEY:        ${{ secrets.PAGERDUTY_ROUTING_KEY }}
+          SLACK_WEBHOOK_URL:            ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           railway variables set \
             PORT=3005 \
@@ -158,6 +176,8 @@ jobs:
             FIREBASE_PROJECT_ID="vida-finance-staging" \
             FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
             INTERNAL_SECRET="$INTERNAL_SECRET" \
+            PAGERDUTY_ROUTING_KEY="$PAGERDUTY_ROUTING_KEY" \
+            SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
             ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
             MODEL_PATH="models/underwriting_v1.joblib" \
             USE_ML_MODELS="false" \
@@ -170,6 +190,8 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
           INTERNAL_SECRET:              ${{ secrets.INTERNAL_SECRET }}
+          PAGERDUTY_ROUTING_KEY:        ${{ secrets.PAGERDUTY_ROUTING_KEY }}
+          SLACK_WEBHOOK_URL:            ${{ secrets.SLACK_WEBHOOK_URL }}
           VERIFIK_API_KEY:              ${{ secrets.VERIFIK_API_KEY }}
           SW_USER:                      ${{ secrets.SW_USER }}
           SW_PASSWORD:                  ${{ secrets.SW_PASSWORD }}
@@ -183,6 +205,8 @@ jobs:
             REDIS_URL="$REDIS_URL" \
             FIREBASE_SERVICE_ACCOUNT_B64="$FIREBASE_SERVICE_ACCOUNT_B64" \
             INTERNAL_SECRET="$INTERNAL_SECRET" \
+            PAGERDUTY_ROUTING_KEY="$PAGERDUTY_ROUTING_KEY" \
+            SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
             ALLOWED_ORIGINS="https://vida-staging.web.app,https://admin-staging.vida.com" \
             VERIFIK_API_KEY="$VERIFIK_API_KEY" \
             VERIFIK_BASE_URL="https://api.verifik.co" \

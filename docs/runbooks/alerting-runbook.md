@@ -215,18 +215,55 @@ Open `services/shared/dashboard.html` in a browser and configure the base URL to
 
 ## Alert Channels
 
-| Channel | Purpose |
-|---------|---------|
-| Slack `#vida-alerts` | All warnings and critical alerts |
-| PagerDuty | Critical alerts → oncall engineer |
-| Firestore `incident_log` | Persistent audit trail |
-| Firestore `ml_drift_reports` | Drift monitoring history |
+| Channel | Severities | Purpose |
+|---------|-----------|---------|
+| Slack `#vida-alerts` | SEV-1 through SEV-4 | All warnings and critical alerts |
+| PagerDuty | SEV-1 (critical), SEV-2 (error) | Pages on-call engineer via phone + push |
+| Firestore `incident_log` | All | Persistent audit trail |
+| Firestore `ml_drift_reports` | ML-specific | Drift monitoring history |
+
+## PagerDuty Integration
+
+**Service:** VIDA Finance Production
+**Events API:** v2 (`https://events.pagerduty.com/v2/enqueue`)
+**Routing Key:** Stored in `PAGERDUTY_ROUTING_KEY` (set on all services via Railway)
+
+### Escalation Policy
+
+| Tier | Target | Delay |
+|------|--------|-------|
+| 1 | On-call engineer (weekly rotation) | 10 min |
+| 2 | Engineering Lead | 10 min |
+| 3 | CTO | 10 min |
+
+### Deduplication
+
+Alerts include a `dedup_key` to prevent duplicate PagerDuty incidents for the same root cause.
+Format: `vida-{source}-{component}-{condition}`
+
+Same dedup key → PagerDuty groups into existing incident instead of creating a new one.
+
+### Auto-Resolve
+
+When a condition clears (e.g., service recovers), the health monitor sends a `resolve` event
+with the same dedup key, automatically closing the PagerDuty incident.
 
 ## Environment Variables for Alerting
 
-| Variable | Description |
-|----------|-------------|
-| `SLACK_WEBHOOK_URL` | Slack incoming webhook for alert channel |
-| `PAGERDUTY_ROUTING_KEY` | PagerDuty Events API v2 routing key |
-| `POLL_INTERVAL_MS` | Health monitor poll interval (default: 60000) |
-| `DRIFT_CHECK_INTERVAL_SECONDS` | Drift check interval (default: 604800 = 7 days) |
+| Variable | Description | Required On |
+|----------|-------------|-------------|
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook for `#vida-alerts` | All services |
+| `PAGERDUTY_ROUTING_KEY` | PagerDuty Events API v2 routing key | All services |
+| `POLL_INTERVAL_MS` | Health monitor poll interval (default: 60000) | Health monitor |
+| `DRIFT_CHECK_INTERVAL_SECONDS` | Drift check interval (default: 604800 = 7 days) | ML service |
+| `INTERNAL_SECRET` | Inter-service auth token for queue stats | Health monitor |
+
+### Adding PAGERDUTY_ROUTING_KEY to Services
+
+The routing key is configured via the `railway-setup-env.yml` GitHub Actions workflow.
+To add or rotate the key:
+
+1. Create a GitHub Secret `PAGERDUTY_ROUTING_KEY` with the Events API v2 integration key
+2. Create a GitHub Secret `SLACK_WEBHOOK_URL` with the Slack webhook URL
+3. Run the workflow: Actions → Setup Railway Environment Variables → Run workflow → service: all
+4. Trigger a deployment to pick up the new variables
