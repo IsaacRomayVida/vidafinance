@@ -19,7 +19,10 @@ export function TrustSection() {
         <p className="sp rv d2" style={{ marginBottom: 56 }}>{t('trust_p')}</p>
         {/* Worker group photo */}
         <div className="rv d3" style={{ marginBottom: 48, maxWidth: 1100, margin: '0 auto 48px', position: 'relative', overflow: 'hidden', borderRadius: 28 }}>
-          <img loading="lazy" src="/images/worker-group.png" alt="Empleados usando VIDA" style={{ width: '100%', display: 'block', filter: 'drop-shadow(0 12px 32px rgba(25,68,69,0.08))' }} />
+          <picture>
+            <source srcSet="/images/worker-group.webp" type="image/webp" />
+            <img loading="lazy" src="/images/worker-group.png" alt="Empleados usando VIDA" style={{ width: '100%', display: 'block', filter: 'drop-shadow(0 12px 32px rgba(25,68,69,0.08))' }} />
+          </picture>
         </div>
         <div className="trust-grid rv d4">
           {items.map((item) => (
