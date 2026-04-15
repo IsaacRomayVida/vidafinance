@@ -48,8 +48,8 @@ export function ROICalculator() {
                 filter: 'blur(12px)', pointerEvents: 'none',
               }} />
               <img loading="lazy" src="/images/calculator-person.png" alt="Empleada calculando" style={{
-                width: 300, position: 'relative',
-                filter: 'drop-shadow(0 16px 36px rgba(25,68,69,0.1))',
+                width: 380, position: 'relative',
+                filter: 'drop-shadow(0 20px 44px rgba(25,68,69,0.12))',
               }} />
             </div>
             <div className="tag rv">{t('calc_tag')}</div>

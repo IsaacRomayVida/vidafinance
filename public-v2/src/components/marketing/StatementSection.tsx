@@ -12,29 +12,28 @@ export function StatementSection() {
   ];
 
   return (
-    <section className="statement-section">
+    <section className="statement-section" style={{ background: 'linear-gradient(180deg, #fff 0%, #f8fafa 40%, #f5f8f7 100%)' }}>
       <div className="statement-inner" style={{ alignItems: 'center' }}>
         <div className="statement-text rv">
           <h2><RichText html={t('stmt_h2')} /></h2>
           <p>{t('stmt_p')}</p>
-          {/* Female worker photo */}
-          <div style={{ marginTop: 40, position: 'relative', display: 'inline-block' }}>
-            {/* Decorative gradient arc */}
-            <div style={{
-              position: 'absolute', bottom: -20, left: '50%', transform: 'translateX(-50%)',
-              width: 320, height: 320, borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(162,134,87,0.06) 0%, rgba(168,213,208,0.04) 40%, transparent 65%)',
-              filter: 'blur(16px)', pointerEvents: 'none',
-            }} />
-            <img loading="lazy" src="/images/workerfemale.png" alt="Empleada usando VIDA"
-              style={{
-                width: 360, position: 'relative',
-                filter: 'drop-shadow(0 16px 36px rgba(25,68,69,0.1))',
-              }}
-            />
-          </div>
         </div>
-        <div className="emo-col">
+        {/* Female worker photo — full column */}
+        <div className="rv d1 stmt-photo-col" style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+          <div style={{
+            position: 'absolute', bottom: -30, left: '50%', transform: 'translateX(-50%)',
+            width: 350, height: 350, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(168,213,208,0.1) 0%, rgba(162,134,87,0.04) 40%, transparent 65%)',
+            filter: 'blur(24px)', pointerEvents: 'none',
+          }} />
+          <img loading="lazy" src="/images/workerfemale.png" alt="Empleada usando VIDA"
+            style={{ width: 400, position: 'relative', filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.1))' }}
+          />
+        </div>
+      </div>
+      {/* Emotions row — full width below */}
+      <div className="wrap" style={{ marginTop: 64 }}>
+        <div className="emo-col rv d2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
           {emotions.map((e, i) => (
             <div key={e.key} className={`emo-row rv d${i + 1}`}>
               <div className={`emo-icon ${e.color}`}>
