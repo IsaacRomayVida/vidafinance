@@ -26,6 +26,7 @@ from models.isolation_forest import FraudPreScreen
 from models.active_learner import HumanReviewRouter
 from services.firestore_client import FirestoreClient
 from services.softcredito_client import SoftcreditoClient
+from monitoring.alerts import alert_model_fallback, alert_rate_limit
 
 logger = logging.getLogger("underwriting_worker")
 
@@ -225,6 +226,8 @@ async def process_underwrite_loan(job, job_token=None):
             "[underwriting] Bureau lookup failed for loan %s (%s) — using defaults",
             loan_id, e,
         )
+        if "429" in str(e) or "rate limit" in str(e).lower():
+            await alert_rate_limit("SoftCredito")
 
     # ── 2. Build feature vector ───────────────────────────────────────────────
     features = build_model_features(borrower, principal, monthly_salary, bureau)
@@ -237,6 +240,14 @@ async def process_underwrite_loan(job, job_token=None):
     champion_score = result["champion_score"]
     challenger_score = result["challenger_score"]
     shap_top5 = result["shap_top5"]
+
+    # Check if challenger outperforms champion (model fallback signal)
+    challenger_alert = router.check_challenger_alert()
+    if challenger_alert:
+        await alert_model_fallback(
+            f"Challenger outperforms champion: Gini delta={challenger_alert['delta']:.4f} "
+            f"(n={challenger_alert['sample_size']})"
+        )
 
     rejection_reason = None if decision == "approved" else get_rejection_reason(champion_score, features)
 

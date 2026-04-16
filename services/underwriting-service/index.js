@@ -2,6 +2,7 @@ const express = require('express');
 const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
+const { alert5xx, alertRateLimit, alertFraudScore, alertFirestoreFailure, alertRedisLost } = require('../shared/alerting');
 require('dotenv').config();
 
 const metamapClient = require('./src/metamap-client');
@@ -18,6 +19,37 @@ const redis = new IORedis(process.env.REDIS_URL, {
   tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
 
+const SERVICE_NAME = 'vida-underwriting-service';
+redis.on('error', (err) => {
+  if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.message?.includes('ECONNRESET')) {
+    alertRedisLost(SERVICE_NAME);
+  }
+});
+
+// Firestore write failure tracking
+let _fsWrites = 0, _fsFails = 0;
+const _origCollection = db.collection.bind(db);
+db.collection = function (...args) {
+  const ref = _origCollection(...args);
+  const origAdd = ref.add.bind(ref);
+  ref.add = async function (data) {
+    _fsWrites++;
+    try { return await origAdd(data); }
+    catch (err) { _fsFails++; throw err; }
+  };
+  return ref;
+};
+
+// Check Firestore failure rate every 60s
+setInterval(() => {
+  if (_fsWrites >= 20) {
+    const rate = _fsFails / _fsWrites;
+    if (rate > 0.05) alertFirestoreFailure(SERVICE_NAME, rate);
+  }
+  _fsWrites = 0;
+  _fsFails = 0;
+}, 60_000);
+
 const cors = require('cors');
 const ALLOWED = (process.env.ALLOWED_ORIGINS || 'https://vida-finance.web.app').split(',').map(s => s.trim());
 const app = express();
@@ -30,6 +62,16 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '100kb' }));
+
+// 5xx alert interceptor
+app.use((req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = function (body) {
+    if (res.statusCode >= 500) alert5xx(SERVICE_NAME, res.statusCode, req.path);
+    return origJson(body);
+  };
+  next();
+});
 
 const requireInternal = (req, res, next) => {
   if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
@@ -110,6 +152,12 @@ app.post('/underwrite', requireInternal, async (req, res) => {
       { logger: console, db, correlationId: req.body.correlationId }
     );
 
+    // Alert on high fraud score at Stage 0
+    const stage0 = result.stages?.stage0;
+    if (stage0?.data?.mlFraud?.fraud?.score > 85) {
+      alertFraudScore(SERVICE_NAME, stage0.data.mlFraud.fraud.score, applicant.employeeId || applicant.curp || 'unknown');
+    }
+
     res.json({
       decision: result.decision,
       reason: result.reason,
@@ -123,6 +171,11 @@ app.post('/underwrite', requireInternal, async (req, res) => {
     });
   } catch (err) {
     console.error('Underwriting pipeline error:', err.message);
+    // Detect rate limit errors from external APIs
+    if (err.message?.includes('429') || err.message?.toLowerCase().includes('rate limit')) {
+      if (err.message?.includes('MetaMap')) alertRateLimit(SERVICE_NAME, 'MetaMap');
+      if (err.message?.includes('Belvo') || err.message?.includes('belvo')) alertRateLimit(SERVICE_NAME, 'Belvo');
+    }
     res.status(500).json({ error: 'Pipeline error', message: err.message });
   }
 });
