@@ -679,7 +679,7 @@ export const getEmployerDashboard = onCall(
 
 interface SubmitReviewDecisionData {
   reviewId: string;
-  decision: 'approved' | 'rejected' | 'request_info';
+  decision: 'approved' | 'rejected' | 'request_info' | 'escalate';
   notes?: string;
 }
 
@@ -691,30 +691,37 @@ export const submitReviewDecision = onCall(
       withErrorHandling({ functionName: 'submitReviewDecision', uid: auth.uid }, async () => {
         const { reviewId, decision, notes } = data;
         if (!reviewId || !decision) throw new HttpsError('invalid-argument', 'reviewId and decision are required');
-        if (!['approved', 'rejected', 'request_info'].includes(decision))
-          throw new HttpsError('invalid-argument', 'Invalid decision. Must be approved, rejected, or request_info');
+        if (!['approved', 'rejected', 'request_info', 'escalate'].includes(decision))
+          throw new HttpsError('invalid-argument', 'Invalid decision. Must be approved, rejected, request_info, or escalate');
 
         const reviewSnap = await db.collection('review_queue').doc(reviewId).get();
         if (!reviewSnap.exists) throw new HttpsError('not-found', 'Review not found');
         const review = reviewSnap.data()!;
 
-        if (review['status'] !== 'pending_review')
+        if (!['pending', 'pending_review'].includes(review['status'] as string))
           throw new HttpsError('failed-precondition', 'Review is not in pending status');
 
         const now = FieldValue.serverTimestamp();
 
+        const statusMap: Record<string, string> = {
+          approved: 'approved',
+          rejected: 'rejected',
+          request_info: 'info_requested',
+          escalate: 'escalated',
+        };
+
         await db.collection('review_queue').doc(reviewId).update({
-          status: decision === 'request_info' ? 'info_requested' : decision,
+          status: statusMap[decision],
           reviewedBy: auth.uid,
           reviewedAt: now,
           reviewNotes: notes || null,
+          ...(decision === 'escalate' ? { escalatedAt: now, escalatedBy: auth.uid } : {}),
         });
 
-        // If the review is tied to a loan, update the loan status
-        if (review['loanId'] && decision !== 'request_info') {
-          const loanStatus = decision === 'approved' ? 'approved' : 'rejected';
+        // If the review is tied to a loan, update the loan status (only for approve/reject)
+        if (review['loanId'] && (decision === 'approved' || decision === 'rejected')) {
           await db.collection('loans').doc(review['loanId'] as string).update({
-            status: loanStatus,
+            status: decision,
             statusNote: notes || null,
           });
         }
@@ -724,12 +731,75 @@ export const submitReviewDecision = onCall(
           actorUid: auth.uid,
           actorRole: auth.role,
           targetId: reviewId,
-          before: { status: 'pending_review' },
-          after: { status: decision === 'request_info' ? 'info_requested' : decision },
+          before: { status: review['status'] },
+          after: { status: statusMap[decision] },
           meta: { notes: notes || null, loanId: review['loanId'] || null },
         });
 
         return { success: true, reviewId, decision };
+      })
+  )
+);
+
+// ── getReviewDetail — fetch enriched review data for ops detail view ──────────
+
+interface GetReviewDetailData {
+  reviewId: string;
+}
+
+interface ReviewDetailResult {
+  review: Record<string, unknown>;
+  loan: Record<string, unknown> | null;
+  employee: Record<string, unknown> | null;
+  employer: Record<string, unknown> | null;
+  mlDecision: Record<string, unknown> | null;
+  auditHistory: Record<string, unknown>[];
+}
+
+export const getReviewDetail = onCall(
+  { cors: true, enforceAppCheck: false },
+  withAuth<GetReviewDetailData, ReviewDetailResult>(
+    ['ops', 'admin', 'super_admin'],
+    async (data, _auth) =>
+      withErrorHandling({ functionName: 'getReviewDetail', uid: _auth.uid }, async () => {
+        const { reviewId } = data;
+        if (!reviewId) throw new HttpsError('invalid-argument', 'reviewId is required');
+
+        const reviewSnap = await db.collection('review_queue').doc(reviewId).get();
+        if (!reviewSnap.exists) throw new HttpsError('not-found', 'Review not found');
+        const reviewData = reviewSnap.data()!;
+        const review: Record<string, unknown> = { id: reviewSnap.id, ...reviewData };
+
+        // Fetch associated loan, employee, employer, ML decision in parallel
+        const loanId = reviewData['loanId'] as string | undefined;
+        const [loanSnap, mlSnap, auditSnap] = await Promise.all([
+          loanId ? db.collection('loans').doc(loanId).get() : Promise.resolve(null),
+          loanId
+            ? db.collection('ml_decisions').where('loanId', '==', loanId).orderBy('decidedAt', 'desc').limit(1).get()
+            : Promise.resolve(null),
+          db.collection('audit_log').where('targetId', '==', reviewId).orderBy('timestamp', 'desc').limit(20).get(),
+        ]);
+
+        const loanData = loanSnap?.exists ? loanSnap.data()! : null;
+        const loan: Record<string, unknown> | null = loanData ? { id: loanSnap!.id, ...loanData } : null;
+
+        // Fetch employee and employer based on loan data
+        const employeeId = (loanData?.['employeeId'] as string) || null;
+        const employerId = (loanData?.['employerId'] as string) || null;
+
+        const [employeeSnap, employerSnap] = await Promise.all([
+          employeeId ? db.collection('employees').doc(employeeId).get() : Promise.resolve(null),
+          employerId ? db.collection('employers').doc(employerId).get() : Promise.resolve(null),
+        ]);
+
+        const employee = employeeSnap?.exists ? { id: employeeSnap.id, ...employeeSnap.data()! } : null;
+        const employer = employerSnap?.exists ? { id: employerSnap.id, ...employerSnap.data()! } : null;
+        const mlDecision = mlSnap && !mlSnap.empty
+          ? { id: mlSnap.docs[0].id, ...mlSnap.docs[0].data() }
+          : null;
+        const auditHistory = auditSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        return { review, loan, employee, employer, mlDecision, auditHistory };
       })
   )
 );

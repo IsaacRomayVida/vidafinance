@@ -48,11 +48,14 @@ async function checkCFDI({ uuid, emisorRfc, receptorRfc, total }) {
 
 // ── 2. INEGI DENUE — business registry ───────────────────────────────
 async function checkDENUE(companyName, stateCode) {
+  const baseUrl = process.env.DENUE_API_URL;
+  if (!baseUrl) throw new Error("DENUE_API_URL env var is not configured");
+
   const cacheKey = `denue:${companyName}:${stateCode}`;
   const cached = await redis.get(cacheKey).catch(() => null);
   if (cached) return JSON.parse(cached);
 
-  const url = `${process.env.DENUE_API_URL}?keyword=${encodeURIComponent(companyName)}&entidad=${stateCode}&pageSize=5`;
+  const url = `${baseUrl}?keyword=${encodeURIComponent(companyName)}&entidad=${stateCode}&pageSize=5`;
   const res  = await fetch(url, { timeout: 10000 });
   const data = await res.json();
 
@@ -75,11 +78,14 @@ async function checkDENUE(companyName, stateCode) {
 
 // ── 3. STPS REPSE — subcontracting registration ───────────────────────
 async function checkREPSE(rfc) {
+  const baseUrl = process.env.REPSE_URL;
+  if (!baseUrl) throw new Error("REPSE_URL env var is not configured");
+
   const cacheKey = `repse:${rfc}`;
   const cached = await redis.get(cacheKey).catch(() => null);
   if (cached) return JSON.parse(cached);
 
-  const res  = await fetch(`${process.env.REPSE_URL}?rfc=${rfc}`, { timeout: 10000 });
+  const res  = await fetch(`${baseUrl}?rfc=${rfc}`, { timeout: 10000 });
   const data = await res.json().catch(() => ({ valido: false, vigente: false }));
 
   const result = {
@@ -140,7 +146,7 @@ async function checkCedula(nombre, apellidoPaterno, apellidoMaterno) {
     await redis.set(cacheKey, JSON.stringify(result), "EX", CACHE_TTL * 7);
     return result;
   } catch (e) {
-    return { found: null, error: e.message, pass: true, skipped: true };
+    return { found: null, error: e.message, pass: false, skipped: true };
   }
 }
 
@@ -174,7 +180,7 @@ async function checkREPUVE(placa) {
     await redis.set(cacheKey, JSON.stringify(result), "EX", CACHE_TTL);
     return result;
   } catch (e) {
-    return { found: null, error: e.message, pass: true, skipped: true };
+    return { found: null, error: e.message, pass: false, skipped: true };
   }
 }
 
@@ -201,7 +207,7 @@ async function checkCONDUSEF(rfc) {
     await redis.set(cacheKey, JSON.stringify(result), "EX", CACHE_TTL);
     return result;
   } catch (e) {
-    return { count: 0, error: e.message, pass: true, skipped: true };
+    return { count: 0, error: e.message, pass: false, skipped: true };
   }
 }
 

@@ -6,55 +6,27 @@ jest.mock("../../belvo-client", () => ({
   getAFORE: jest.fn(),
 }));
 
-jest.mock("../../../../softcredito-adapter/src/underwrite", () => ({
-  callUnderwrite: jest.fn(),
-  parseBureauDecision: jest.fn(),
-  parsePLD: jest.fn(),
-}));
-
 jest.mock("node-fetch", () => jest.fn());
 
 const { getIMSSEmployment, getAFORE } = require("../../belvo-client");
-const { callUnderwrite, parseBureauDecision, parsePLD } = require("../../../../softcredito-adapter/src/underwrite");
 const fetch = require("node-fetch");
 
 const {
-  runStage2,
-  parseIMSSEmployment,
-  parseAFOREContributions,
-  calculateLTI,
+  runBureauAndEmployment,
+  computeLTI,
 } = require("../stage2-bureau");
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
-const BASE_PARAMS = {
+const BASE_APPLICANT = {
   curp: "ROML900101HDFRRS01",
   rfc: "ROML900101XXX",
-  nombre: "LUIS",
-  apellidoPaterno: "ROMERO",
-  apellidoMaterno: "MARTINEZ",
-  fechaNacimiento: "1990-01-01",
-  employerRfc: "EMP120101AAA",
-  loanAmount: 3000,
-  monthlyNetIncome: 15000,
-};
-
-const CLEAN_BUREAU = {
-  score: 650,
-  diasAtraso: 0,
-  carteraVencida: false,
-  cuentasActivas: 2,
-  escalateToStage: 3,
-  reason: null,
-  pass: true,
-};
-
-const CLEAN_PLD = {
-  bloqueoListaSat: false,
-  bloqueado: false,
-  pass: true,
-  hardReject: false,
-  reason: null,
+  fullName: "LUIS ROMERO MARTINEZ",
+  dateOfBirth: "1990-01-01",
+  principalAmount: 3000,
+  monthlySalary: 15000,
+  payFrequency: "biweekly",
+  industryCode: 1,
 };
 
 const IMSS_ACTIVE = [
@@ -66,192 +38,163 @@ const IMSS_ACTIVE = [
   },
 ];
 
-const AFORE_DATA = [{ total_balance: 85000 }];
+const AFORE_DATA = [{ balance: 85000 }];
 
-function mockMLFetch() {
+function mockMLFetch(ok = true) {
+  fetch.mockImplementation(() =>
+    ok
+      ? Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ pDefault: 0.05, model: "woe_scorecard" }),
+        })
+      : Promise.reject(new Error("ML service down"))
+  );
+}
+
+function mockBureauFetch(ok = true) {
+  // node-fetch is used for both bureau and ML calls in stage2
+  // We mock a single implementation that serves both
   fetch.mockImplementation((url) => {
+    if (!ok) return Promise.reject(new Error("Bureau service down"));
     return Promise.resolve({
       ok: true,
-      json: () => Promise.resolve({
-        pDefault: url.includes("challenger") ? 0.08 : 0.05,
-        model: url.includes("challenger") ? "xgboost" : "woe_scorecard",
-      }),
-      text: () => Promise.resolve(""),
+      json: () =>
+        Promise.resolve(
+          url.includes("bureau")
+            ? { bureau_score: 650, has_bureau_record: true, active_defaults: 0, competitor_loans: 0 }
+            : { pDefault: 0.05, model: "woe_scorecard" }
+        ),
     });
   });
 }
 
-// ── parseIMSSEmployment ─────────────────────────────────────────────────────
+// ── computeLTI ──────────────────────────────────────────────────────────────
 
-describe("parseIMSSEmployment", () => {
-  it("rejects when no records found", () => {
-    expect(parseIMSSEmployment(null, "RFC")).toEqual({
-      found: false, active: false, pass: false, reason: "no_imss_record",
-    });
-    expect(parseIMSSEmployment([], "RFC")).toEqual({
-      found: false, active: false, pass: false, reason: "no_imss_record",
-    });
+describe("computeLTI", () => {
+  it("calculates LTI as percentage", () => {
+    expect(computeLTI(3000, 15000)).toBeCloseTo(20);
+    expect(computeLTI(5000, 20000)).toBeCloseTo(25);
   });
 
-  it("passes with active IMSS record and employer match", () => {
-    const result = parseIMSSEmployment(IMSS_ACTIVE, "EMP120101AAA");
-    expect(result.found).toBe(true);
-    expect(result.active).toBe(true);
-    expect(result.employerMatch).toBe(true);
-    expect(result.tenureMonths).toBe(24);
-    expect(result.pass).toBe(true);
+  it("returns 100 when net income is 0 or negative", () => {
+    expect(computeLTI(3000, 0)).toBe(100);
+    expect(computeLTI(3000, -1000, 500)).toBe(100);
   });
 
-  it("flags employer mismatch but still passes if active", () => {
-    const result = parseIMSSEmployment(IMSS_ACTIVE, "DIFFERENT_RFC");
-    expect(result.active).toBe(true);
-    expect(result.employerMatch).toBe(false);
-    expect(result.pass).toBe(true);
-  });
-
-  it("fails when status is inactivo", () => {
-    const inactive = [{ ...IMSS_ACTIVE[0], status: "inactivo" }];
-    const result = parseIMSSEmployment(inactive, "EMP120101AAA");
-    expect(result.active).toBe(false);
-    expect(result.pass).toBe(false);
-    expect(result.reason).toBe("imss_inactive");
+  it("handles deductions", () => {
+    // net = 15000 - 5000 = 10000, LTI = 3000/10000 * 100 = 30
+    expect(computeLTI(3000, 15000, 5000)).toBeCloseTo(30);
   });
 });
 
-// ── parseAFOREContributions ─────────────────────────────────────────────────
+// ── runBureauAndEmployment ──────────────────────────────────────────────────
 
-describe("parseAFOREContributions", () => {
-  it("returns irregular with zero balance when no data", () => {
-    expect(parseAFOREContributions(null)).toEqual({ regular: false, balance: 0 });
-    expect(parseAFOREContributions([])).toEqual({ regular: false, balance: 0 });
-  });
+describe("runBureauAndEmployment", () => {
+  const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
-  it("returns regular with balance when data present", () => {
-    const result = parseAFOREContributions(AFORE_DATA);
-    expect(result.regular).toBe(true);
-    expect(result.balance).toBe(85000);
-  });
-});
-
-// ── calculateLTI ────────────────────────────────────────────────────────────
-
-describe("calculateLTI", () => {
-  it("calculates LTI correctly", () => {
-    expect(calculateLTI(3000, 15000)).toBeCloseTo(0.2);
-    expect(calculateLTI(5000, 20000)).toBeCloseTo(0.25);
-  });
-
-  it("returns Infinity when income is 0 or negative", () => {
-    expect(calculateLTI(3000, 0)).toBe(Infinity);
-    expect(calculateLTI(3000, -1000)).toBe(Infinity);
-  });
-
-  it("returns 0 when loan amount is 0", () => {
-    expect(calculateLTI(0, 15000)).toBe(0);
-  });
-});
-
-// ── runStage2 ───────────────────────────────────────────────────────────────
-
-describe("runStage2", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getIMSSEmployment.mockResolvedValue(IMSS_ACTIVE);
     getAFORE.mockResolvedValue(AFORE_DATA);
-    callUnderwrite.mockResolvedValue({ cdc: { score: 650, diasAtraso: 0, carteraVencida: false, cuentasActivas: 2 } });
-    parseBureauDecision.mockReturnValue(CLEAN_BUREAU);
-    parsePLD.mockReturnValue(CLEAN_PLD);
-    mockMLFetch();
+    mockBureauFetch();
   });
 
-  it("rejects when no IMSS record found", async () => {
-    getIMSSEmployment.mockResolvedValue(null);
-    const result = await runStage2(BASE_PARAMS);
-    expect(result.decision).toBe("rejected");
-    expect(result.reason).toBe("no_imss_record");
-    expect(result.bureau).toBeNull();
+  it("returns IMSS data on success", async () => {
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.pass).toBe(true);
+    expect(result.data.imss.active).toBe(true);
+    expect(result.data.imss.sbc).toBe(450);
+    expect(result.data.imss.tenureMonths).toBe(24);
+    expect(result.data.imss.employerRfc).toBe("EMP120101AAA");
   });
 
-  it("rejects on PLD hard reject", async () => {
-    parsePLD.mockReturnValue({
-      ...CLEAN_PLD,
-      pass: false,
-      hardReject: true,
-      reason: "pld_sat_blacklist",
-    });
-    const result = await runStage2(BASE_PARAMS);
-    expect(result.decision).toBe("rejected");
-    expect(result.reason).toBe("pld_sat_blacklist");
+  it("returns AFORE data on success", async () => {
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.afore.balance).toBe(85000);
+    expect(result.data.afore.regular).toBe(true);
   });
 
-  it("continues to stage 3 with clean bureau", async () => {
-    const result = await runStage2(BASE_PARAMS);
-    expect(result.decision).toBe("continue");
-    expect(result.escalateToStage).toBe(3);
-    expect(result.employment.active).toBe(true);
-    expect(result.bureau.score).toBe(650);
-    expect(result.lti).toBeCloseTo(0.2);
+  it("handles IMSS error gracefully with belvoDetail", async () => {
+    const belvoError = new Error("getIMSSEmployment — status=400 — institution not available in sandbox");
+    belvoError.belvoDetail = {
+      context: "getIMSSEmployment",
+      message: "institution not available in sandbox",
+      code: 400,
+      detail: "imss_mx_employment connector is not enabled for sandbox",
+      body: { code: "institution_not_available", message: "institution not available in sandbox" },
+      stack: belvoError.stack,
+      summary: "getIMSSEmployment — status=400 — institution not available in sandbox",
+    };
+    getIMSSEmployment.mockRejectedValue(belvoError);
+
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.imss.skipped).toBe(true);
+    expect(result.data.imss.belvoDetail).toBeTruthy();
+    expect(result.data.imss.belvoDetail.code).toBe(400);
+    expect(result.data.imss.belvoDetail.context).toBe("getIMSSEmployment");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: "stage2",
+        belvoDetail: expect.objectContaining({ context: "getIMSSEmployment" }),
+      }),
+      expect.stringContaining("IMSS check failed")
+    );
   });
 
-  it("escalates to stage 4 with score 400-599", async () => {
-    parseBureauDecision.mockReturnValue({
-      ...CLEAN_BUREAU,
-      score: 500,
-      escalateToStage: 4,
-      reason: "score_400_599",
-      pass: false,
-    });
-    const result = await runStage2(BASE_PARAMS);
-    expect(result.decision).toBe("escalate");
-    expect(result.escalateToStage).toBe(4);
+  it("handles AFORE error gracefully with belvoDetail", async () => {
+    const belvoError = new Error("getAFORE — status=400 — connector not enabled");
+    belvoError.belvoDetail = {
+      context: "getAFORE",
+      message: "connector not enabled",
+      code: 400,
+      detail: null,
+      body: null,
+      stack: belvoError.stack,
+      summary: "getAFORE — status=400 — connector not enabled",
+    };
+    getAFORE.mockRejectedValue(belvoError);
+
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.afore.skipped).toBe(true);
+    expect(result.data.afore.belvoDetail).toBeTruthy();
+    expect(result.data.afore.belvoDetail.context).toBe("getAFORE");
+    expect(result.data.afore.balance).toBe(0);
   });
 
-  it("escalates to stage 5 with carteraVencida", async () => {
-    parseBureauDecision.mockReturnValue({
-      ...CLEAN_BUREAU,
-      carteraVencida: true,
-      escalateToStage: 5,
-      reason: "active_default",
-      pass: false,
-    });
-    const result = await runStage2(BASE_PARAMS);
-    expect(result.decision).toBe("escalate");
-    expect(result.escalateToStage).toBe(5);
+  it("captures empty-message errors with fallback text", async () => {
+    const emptyErr = new Error("");
+    emptyErr.belvoDetail = {
+      context: "getIMSSEmployment",
+      message: "(empty message)",
+      code: null,
+      detail: null,
+      body: null,
+      stack: emptyErr.stack,
+      summary: "getIMSSEmployment — (empty message)",
+    };
+    getIMSSEmployment.mockRejectedValue(emptyErr);
+
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.imss.error).toBe("(empty message)");
+    expect(result.data.imss.belvoDetail).toBeTruthy();
   });
 
-  it("calls both ML models in parallel", async () => {
-    await runStage2(BASE_PARAMS);
-    expect(fetch).toHaveBeenCalledTimes(2);
-    const calls = fetch.mock.calls;
-    const urls = calls.map(c => c[0]);
-    expect(urls.every(u => u.includes("/score/credit"))).toBe(true);
+  it("always passes (decision is in Stage 3)", async () => {
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.pass).toBe(true);
   });
 
-  it("returns ML scores with champion and challenger", async () => {
-    const result = await runStage2(BASE_PARAMS);
-    expect(result.ml.champion.model).toBe("woe_scorecard");
-    expect(result.ml.challenger.model).toBe("xgboost");
-    expect(result.ml.challenger.shadow).toBe(true);
+  it("tracks cost items", async () => {
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    const apis = result.cost.map(c => c.api);
+    expect(apis).toContain("belvo-imss-employment");
+    expect(apis).toContain("belvo-afore");
   });
 
-  it("handles Belvo IMSS error gracefully (rejects)", async () => {
-    getIMSSEmployment.mockRejectedValue(new Error("Belvo timeout"));
-    const result = await runStage2(BASE_PARAMS);
-    expect(result.decision).toBe("rejected");
-    expect(result.reason).toBe("no_imss_record");
-  });
-
-  it("handles ML model errors gracefully", async () => {
+  it("handles ML scoring errors gracefully", async () => {
     fetch.mockRejectedValue(new Error("ML service down"));
-    const result = await runStage2(BASE_PARAMS);
-    expect(result.ml.champion.error).toBeTruthy();
-    expect(result.ml.challenger.error).toBeTruthy();
-    // Stage 2 still completes — ML errors don't block
-    expect(result.decision).toBe("continue");
-  });
-
-  it("calculates LTI from params", async () => {
-    const result = await runStage2({ ...BASE_PARAMS, loanAmount: 5000, monthlyNetIncome: 20000 });
-    expect(result.lti).toBeCloseTo(0.25);
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.pass).toBe(true);
+    expect(result.data.mlScore.skipped).toBe(true);
   });
 });
