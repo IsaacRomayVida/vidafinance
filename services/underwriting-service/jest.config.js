@@ -4,4 +4,8 @@ module.exports = {
   testTimeout: 30000,
   roots: ["<rootDir>/src"],
   testMatch: ["**/*.test.js"],
+  moduleNameMapper: {
+    "^belvo$": "<rootDir>/__mocks__/belvo.js",
+    "^node-fetch$": "<rootDir>/__mocks__/node-fetch.js",
+  },
 };

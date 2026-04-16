@@ -76,8 +76,22 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
       raw: latest,
     };
   } catch (err) {
-    log.warn({ stage: "stage2", err: err.message }, "IMSS check failed");
-    data.imss = { active: false, skipped: true, error: err.message };
+    const belvoDetail = err.belvoDetail || null;
+    log.warn(
+      {
+        stage: "stage2",
+        err: err.message || "(empty message)",
+        belvoDetail,
+        stack: err.stack,
+      },
+      "IMSS check failed — full error captured"
+    );
+    data.imss = {
+      active: false,
+      skipped: true,
+      error: err.message || "(empty message)",
+      belvoDetail,
+    };
   }
 
   // 2. AFORE regularity
@@ -93,8 +107,23 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
       raw: records[0],
     };
   } catch (err) {
-    log.warn({ stage: "stage2", err: err.message }, "AFORE check failed");
-    data.afore = { balance: 0, regular: false, skipped: true, error: err.message };
+    const belvoDetail = err.belvoDetail || null;
+    log.warn(
+      {
+        stage: "stage2",
+        err: err.message || "(empty message)",
+        belvoDetail,
+        stack: err.stack,
+      },
+      "AFORE check failed — full error captured"
+    );
+    data.afore = {
+      balance: 0,
+      regular: false,
+      skipped: true,
+      error: err.message || "(empty message)",
+      belvoDetail,
+    };
   }
 
   // 3. Bureau score (SoftCrédito CDC + BDC)
