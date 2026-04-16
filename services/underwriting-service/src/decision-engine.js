@@ -68,6 +68,10 @@ async function runPipeline({ applicant, employer }, options = {}) {
     results.employerA = { pass: false, reason: "STAGE_ERROR", error: err.message, cost: [] };
   }
 
+  if (!results.employerA.pass && results.employerA.escalateToStage === 5) {
+    // Provider errors — skip to manual review
+    return await runStage5AndFinalize(applicant, results, stageOpts, correlationId, startTime);
+  }
   if (!results.employerA.pass && !results.employerA.escalateToStage) {
     return buildResult("rejected", results.employerA.reason, results, correlationId, startTime);
   }

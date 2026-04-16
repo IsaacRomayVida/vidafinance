@@ -92,7 +92,7 @@ async function runIdentityValidation(applicant, priorResults, { logger, db } = {
     costItems.push({ api: "verifik-sat", mxn: 1.5 });
   } catch (err) {
     log.warn({ stage: "stage1", err: err.message }, "SAT check failed");
-    satResult = { pass: true, skipped: true, error: err.message };
+    satResult = { pass: false, skipped: true, error: err.message };
   }
   data.sat = satResult;
 
@@ -106,13 +106,25 @@ async function runIdentityValidation(applicant, priorResults, { logger, db } = {
     };
   }
 
+  // SAT provider error → escalate to manual review
+  if (satResult.skipped) {
+    log.warn({ stage: "stage1", rfc: applicant.rfc, error: satResult.error }, "SAT check failed — escalating to manual review");
+    return {
+      pass: false,
+      escalateToStage: 5,
+      reason: "PROVIDER_ERROR_SAT",
+      data,
+      cost: costItems,
+    };
+  }
+
   // 5. CNBV sector risk (informational — uses Firestore)
   let cnbvResult = { pass: true, skipped: true };
   if (db && applicant.sectorCode) {
     try {
       cnbvResult = await checkCNBVSector(db, applicant.sectorCode);
     } catch (err) {
-      cnbvResult = { pass: true, skipped: true, error: err.message };
+      cnbvResult = { pass: false, skipped: true, error: err.message };
     }
   }
   data.cnbv = cnbvResult;
