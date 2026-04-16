@@ -46,6 +46,7 @@ export function EmployerLayout() {
               { path: '/employer', label: t('dash_dashboard') },
               { path: '/employer/employees', label: t('dash_employees') },
               { path: '/employer/deductions', label: t('dash_loans') },
+              { path: '/employer/payroll', label: t('dash_payroll') },
             ].map(({ path, label }) => (
               <Link
                 key={path}

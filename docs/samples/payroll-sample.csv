@@ -1,0 +1,4 @@
+employeeId,grossSalary,netSalary,payPeriod,deductionAmount
+emp_abc123,18000,15000,2026-04-30,1080
+emp_def456,22000,18500,2026-04-30,
+emp_ghi789,12000,9800,2026-04-30,540
