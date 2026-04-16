@@ -16,6 +16,7 @@ load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
 from services.firestore_client import FirestoreClient
 from monitoring.alerts import alert_5xx, alert_redis_lost, alert_model_fallback, alert_rate_limit
+from monitoring.metrics import prediction_latency, record_prediction, set_model_info, metrics_app
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ml-service")
@@ -107,6 +108,9 @@ class AlertMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(AlertMiddleware)
+
+# ── Prometheus /metrics endpoint ──────────────────────────────────────
+app.mount("/metrics", metrics_app())
 
 
 # ── Redis connection monitoring ────────────────────────────────────────
@@ -364,11 +368,16 @@ async def score_loan_direct(
     champion_path = _os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
     challenger_path = _os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
     router = ModelRouter.load(champion_path, challenger_path)
-    result = router.predict(features, threshold=APPROVAL_THRESHOLD)
+
+    with prediction_latency.time():
+        result = router.predict(features, threshold=APPROVAL_THRESHOLD)
 
     decision = result["decision"]
     if features["employment_tenure_months"] < 3:
         decision = "rejected"
+
+    record_prediction(decision, result["champion_model"])
+    set_model_info(result["champion_model"], result["challenger_model"])
 
     return {
         "decision": decision,

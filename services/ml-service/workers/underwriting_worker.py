@@ -27,6 +27,7 @@ from models.active_learner import HumanReviewRouter
 from services.firestore_client import FirestoreClient
 from services.softcredito_client import SoftcreditoClient
 from monitoring.alerts import alert_model_fallback, alert_rate_limit
+from monitoring.metrics import prediction_latency, record_prediction, set_model_info
 
 logger = logging.getLogger("underwriting_worker")
 
@@ -234,7 +235,9 @@ async def process_underwrite_loan(job, job_token=None):
 
     # ── 3. Run champion/challenger models ─────────────────────────────────────
     router = get_router()
-    result = router.predict(features, threshold=APPROVAL_THRESHOLD)
+
+    with prediction_latency.time():
+        result = router.predict(features, threshold=APPROVAL_THRESHOLD)
 
     decision = result["decision"]
     champion_score = result["champion_score"]
@@ -291,6 +294,10 @@ async def process_underwrite_loan(job, job_token=None):
         "[underwriting] Loan %s → %s (champion=%.3f, challenger=%.3f, threshold=%.2f)",
         loan_id, decision, champion_score, challenger_score, APPROVAL_THRESHOLD,
     )
+
+    # ── Prometheus metrics ────────────────────────────────────────────────────
+    record_prediction(decision, result["champion_model"])
+    set_model_info(result["champion_model"], result["challenger_model"])
 
     # ── 5. Write decision to Firestore (blocking SDK → run in executor) ───────
     now_iso = datetime.now(timezone.utc).isoformat()
