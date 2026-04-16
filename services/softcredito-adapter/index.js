@@ -61,7 +61,8 @@ let _token = null, _tokenExp = 0;
 async function scToken() {
   if (_token && Date.now() < _tokenExp - 60000) return _token;
   const { default: fetch } = await import('node-fetch');
-  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL || (process.env.SOFTCREDITO_API_URL + '/../../api/oauth/token');
+  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL
+    || 'https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token';
   const r = await fetch(tokenUrl, {
     method: 'POST',
     headers: {
@@ -89,7 +90,8 @@ async function scCall(method, path, body) {
     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
   };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(process.env.SOFTCREDITO_API_URL + path, opts);
+  const apiBase = process.env.SOFTCREDITO_API_BASE || 'https://softcredito.com/produccion/ALIADOSDECRED/app';
+  const r = await fetch(apiBase + path, opts);
   if (r.status === 429) {
     alertRateLimit(SERVICE_NAME, 'SoftCredito');
   }
@@ -241,84 +243,33 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
 
 // ── Bureau query via SoftCrédito API ────────────────────────────────────────
 app.get('/debug-connectivity', async (req, res) => {
-  const { execSync } = require('child_process');
-  const results = {};
-  
-  // 1. Our outbound IP
+  const { default: fetch } = await import('node-fetch');
+  const tokenUrl = req.query.token_url
+    || process.env.SOFTCREDITO_TOKEN_URL
+    || 'https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token';
   try {
-    const { default: fetch } = await import('node-fetch');
-    const r = await fetch('https://api.ipify.org?format=json');
-    results.outboundIP = (await r.json()).ip;
-  } catch(e) { results.outboundIP = 'ERROR: ' + e.message; }
-  
-  // 2. DNS resolution
-  try {
-    const dns = require('dns').promises;
-    results.dns_softcredito = await dns.resolve4('softcredito.com');
-    results.dns_pr_softcredito = await dns.resolve4('pr.softcredito.com').catch(() => 'NXDOMAIN');
-  } catch(e) { results.dns = 'ERROR: ' + e.message; }
-  
-  // 3. Direct HTTPS to softcredito.com
-  try {
-    const { default: fetch } = await import('node-fetch');
-    const start = Date.now();
-    const r = await fetch('https://softcredito.com/', { 
-      method: 'GET',
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10000)
-    });
-    results.https_softcredito = { 
-      status: r.status, 
-      statusText: r.statusText,
-      latencyMs: Date.now() - start,
-      headers: Object.fromEntries([...r.headers.entries()].slice(0, 5))
-    };
-  } catch(e) { results.https_softcredito = 'ERROR: ' + e.message; }
-  
-  // 4. Direct HTTPS to the token endpoint
-  try {
-    const { default: fetch } = await import('node-fetch');
-    const start = Date.now();
-    const r = await fetch('https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token', {
+    const r = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-REST-PRODUCT': process.env.SOFTCREDITO_PRODUCT_ID || process.env.SOFTCREDITO_CLIENT_ID,
-        'X-REST-APPLICATION': process.env.SOFTCREDITO_APPLICATION_ID || process.env.SOFTCREDITO_CLIENT_SECRET,
+        'X-REST-PRODUCT': process.env.SOFTCREDITO_PRODUCT_ID || '',
+        'X-REST-APPLICATION': process.env.SOFTCREDITO_APPLICATION_ID || '',
       },
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(10_000),
     });
-    const body = await r.text();
-    results.token_endpoint = {
+    const text = await r.text();
+    const contentType = r.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    res.json({
+      url: tokenUrl,
       status: r.status,
-      latencyMs: Date.now() - start,
-      isJson: body.trim().startsWith('{'),
-      bodyPreview: body.substring(0, 200),
-      server: r.headers.get('server'),
-      contentType: r.headers.get('content-type'),
-    };
-  } catch(e) { results.token_endpoint = 'ERROR: ' + e.message; }
-
-  // 5. Direct IP connection to their production server
-  try {
-    const { default: fetch } = await import('node-fetch');
-    const start = Date.now();
-    const r = await fetch('https://3.128.113.238/', {
-      method: 'GET',
-      headers: { 'Host': 'softcredito.com' },
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10000),
-      agent: new (require('https').Agent)({ rejectUnauthorized: false })
+      contentType,
+      isJson,
+      bodyPreview: isJson ? JSON.parse(text) : text.slice(0, 300),
     });
-    results.direct_ip = {
-      status: r.status,
-      latencyMs: Date.now() - start,
-      server: r.headers.get('server'),
-    };
-  } catch(e) { results.direct_ip = 'ERROR: ' + e.message; }
-  
-  res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message, url: tokenUrl });
+  }
 });
 
 app.get('/debug-sc-token', async (req, res) => {
