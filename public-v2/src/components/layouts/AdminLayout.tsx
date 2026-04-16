@@ -13,7 +13,7 @@ export function AdminLayout() {
     navigate('/');
   };
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => location.pathname === path || (path === '/ops/review-queue' && location.pathname.startsWith('/ops/review-queue/'));
 
   return (
     <div style={{ minHeight: '100vh', background: '#f5f1eb' }}>
@@ -33,6 +33,7 @@ export function AdminLayout() {
           <nav style={{ display: 'flex', gap: 32, borderTop: '1px solid rgba(168,213,208,0.08)', marginTop: -1 }}>
             {[
               { path: '/ops', label: t('admin_tab_dashboard', 'Panel') },
+              { path: '/ops/review-queue', label: t('admin_tab_review', 'Revisión') },
               { path: '/ops/employers', label: t('admin_tab_employers', 'Empleadores') },
               { path: '/ops/loans', label: t('admin_tab_loans', 'Préstamos') },
               { path: '/ops/health', label: t('admin_tab_health', 'Salud') },
