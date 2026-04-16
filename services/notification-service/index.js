@@ -2,10 +2,11 @@ const express = require('express');
 const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
-const { Worker } = require('bullmq');
+const { Queue, Worker } = require('bullmq');
 const twilio  = require('twilio');
 const sg      = require('@sendgrid/mail');
 const createLogger = require('../shared/logger');
+const { alert5xx, alertQueueDepth, alertWebhookRetries, alertRedisLost } = require('../shared/alerting');
 require('dotenv').config();
 
 const log = createLogger('vida-notification-service');
@@ -20,6 +21,13 @@ const db    = admin.firestore();
 const redis = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest:null, tls:process.env.REDIS_URL?.startsWith('rediss://')?{rejectUnauthorized:false}:undefined });
 const tw    = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 sg.setApiKey(process.env.SENDGRID_API_KEY);
+
+const SERVICE_NAME = 'vida-notification-service';
+redis.on('error', (err) => {
+  if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.message?.includes('ECONNRESET')) {
+    alertRedisLost(SERVICE_NAME);
+  }
+});
 
 const WA_FROM = 'whatsapp:' + process.env.TWILIO_WHATSAPP_FROM;
 const fmtPhone = p => { const d=String(p).replace(/\D/g,''); return 'whatsapp:+' + (d.length===10?'52'+d:d); };
@@ -78,7 +86,20 @@ const worker = new Worker('vida-notifications', async job => {
 
 worker.on('failed', async (job,err) => {
   await db.collection('incident_log').add({ source:'notification-worker', type:job?.data?.type, error:err.message, attempts:job?.attemptsMade, ts:admin.firestore.FieldValue.serverTimestamp() });
+  if (job?.attemptsMade > 3) {
+    alertWebhookRetries(SERVICE_NAME, job.data?.type || 'notification', job.attemptsMade);
+  }
 });
+
+// Periodic queue depth check (every 60s)
+setInterval(async () => {
+  try {
+    const q = new Queue('vida-notifications', { connection: redis });
+    const depth = await q.getWaitingCount();
+    await q.close();
+    if (depth > 100) alertQueueDepth(SERVICE_NAME, 'vida-notifications', depth, 100);
+  } catch (_) {}
+}, 60_000);
 
 const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
@@ -90,6 +111,17 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({limit:'100kb'}));
+
+// 5xx alert interceptor
+app.use((req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = function (body) {
+    if (res.statusCode >= 500) alert5xx(SERVICE_NAME, res.statusCode, req.path);
+    return origJson(body);
+  };
+  next();
+});
+
 app.get('/health', async (req,res) => {
   const redisOk = await redis.ping().then(()=>true).catch(()=>false);
   res.json({status:redisOk?'ok':'degraded',service:'vida-notification-service',redis:redisOk,worker:worker.isRunning()});

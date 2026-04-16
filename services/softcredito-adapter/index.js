@@ -4,6 +4,7 @@ const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Worker } = require('bullmq');
 const pino = require('pino');
+const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting');
 require('dotenv').config();
 
 const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
@@ -19,6 +20,13 @@ const redis = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,
   tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
+const SERVICE_NAME = 'vida-softcredito-adapter';
+redis.on('error', (err) => {
+  if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.message?.includes('ECONNRESET')) {
+    alertRedisLost(SERVICE_NAME);
+  }
+});
+
 const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
 app.use(helmet());
@@ -29,6 +37,16 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '100kb' }));
+
+// 5xx alert interceptor
+app.use((req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = function (body) {
+    if (res.statusCode >= 500) alert5xx(SERVICE_NAME, res.statusCode, req.path);
+    return origJson(body);
+  };
+  next();
+});
 
 const requireInternal = (req, res, next) => {
   if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
@@ -68,6 +86,9 @@ async function scCall(method, path, body) {
   };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(process.env.SOFTCREDITO_API_URL + path, opts);
+  if (r.status === 429) {
+    alertRateLimit(SERVICE_NAME, 'SoftCredito');
+  }
   const d = await r.json();
   if (!r.ok) throw new Error('SC API ' + path + ': ' + JSON.stringify(d));
   return d;

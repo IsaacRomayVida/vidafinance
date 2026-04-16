@@ -7,6 +7,7 @@ const { Queue, Worker } = require("bullmq");
 const Handlebars = require("handlebars");
 const fs         = require("fs");
 const path       = require("path");
+const { alert5xx, alertQueueDepth, alertRedisLost } = require("../shared/alerting");
 require("dotenv").config();
 
 const pkg = require("./package.json");
@@ -25,6 +26,13 @@ const redis = new IORedis(process.env.REDIS_URL, {
   tls: process.env.REDIS_URL?.startsWith("rediss://")
     ? { rejectUnauthorized: false }
     : undefined,
+});
+
+const SERVICE_NAME = "vida-pdf-generator";
+redis.on("error", (err) => {
+  if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND" || err.message?.includes("ECONNRESET")) {
+    alertRedisLost(SERVICE_NAME);
+  }
 });
 
 const CONTRACT_TPL = Handlebars.compile(
@@ -154,6 +162,16 @@ worker.on("failed", async (job, err) => {
   });
 });
 
+// Periodic queue depth check (every 60s)
+setInterval(async () => {
+  try {
+    const q = new Queue("vida-pdfs", { connection: redis });
+    const depth = await q.getWaitingCount();
+    await q.close();
+    if (depth > 100) alertQueueDepth(SERVICE_NAME, "vida-pdfs", depth, 100);
+  } catch (_) {}
+}, 60_000);
+
 /* ─── Express server ─── */
 
 const requireInternal = (req, res, next) => {
@@ -173,6 +191,16 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: "100kb" }));
+
+// 5xx alert interceptor
+app.use((req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = function (body) {
+    if (res.statusCode >= 500) alert5xx(SERVICE_NAME, res.statusCode, req.path);
+    return origJson(body);
+  };
+  next();
+});
 
 app.post("/contracts/generate", requireInternal, async (req, res) => {
   const { loanId, employeeId } = req.body;

@@ -3,7 +3,8 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 import os, json, time
 import redis as Redis
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ from firebase_admin import credentials, firestore
 load_dotenv()
 from scoring import employer_score, employee_score, fraud_score
 from services.firestore_client import FirestoreClient
+from monitoring.alerts import alert_5xx, alert_redis_lost, alert_model_fallback, alert_rate_limit
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ml-service")
@@ -72,7 +74,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Could not start drift scheduler: %s", e)
 
+    # Start Redis connection monitor
+    _redis_monitor_task = asyncio.create_task(_check_redis_connection())
+
     yield
+
+    _redis_monitor_task.cancel()
+    try:
+        await _redis_monitor_task
+    except asyncio.CancelledError:
+        pass
 
     for task, name in [(_worker_task, "worker"), (_drift_task, "drift scheduler")]:
         if task and not task.done():
@@ -85,6 +96,33 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="vida-ml-service", lifespan=lifespan)
+
+
+# ── 5xx alert middleware ───────────────────────────────────────────────
+class AlertMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if response.status_code >= 500:
+            await alert_5xx(response.status_code, request.url.path)
+        return response
+
+app.add_middleware(AlertMiddleware)
+
+
+# ── Redis connection monitoring ────────────────────────────────────────
+_redis_was_connected = True
+
+async def _check_redis_connection():
+    global _redis_was_connected
+    while True:
+        try:
+            rdb.ping()
+            _redis_was_connected = True
+        except Exception:
+            if _redis_was_connected:
+                _redis_was_connected = False
+                await alert_redis_lost()
+        await asyncio.sleep(30)
 
 
 def auth(s):

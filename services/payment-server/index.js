@@ -4,6 +4,7 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Queue, Worker } = require('bullmq');
+const { alert5xx, alertDisbursementFailed, alertQueueDepth, alertRedisLost } = require('../shared/alerting');
 require('dotenv').config();
 
 const pkg = require('./package.json');
@@ -21,6 +22,13 @@ const redis = new IORedis(process.env.REDIS_URL, {
   tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
 
+const SERVICE_NAME = 'vida-payment-server';
+redis.on('error', (err) => {
+  if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.message?.includes('ECONNRESET')) {
+    alertRedisLost(SERVICE_NAME);
+  }
+});
+
 const cors = require('cors');
 const ALLOWED = (process.env.ALLOWED_ORIGINS || 'https://vida-finance.web.app').split(',').map(s => s.trim());
 const app = express();
@@ -34,6 +42,16 @@ app.use((req, res, next) => {
 });
 app.use('/webhooks', express.raw({ type: 'application/json', limit: '10kb' }));
 app.use(express.json({ limit: '100kb' }));
+
+// 5xx alert interceptor
+app.use((req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = function (body) {
+    if (res.statusCode >= 500) alert5xx(SERVICE_NAME, res.statusCode, req.path);
+    return origJson(body);
+  };
+  next();
+});
 
 const requireInternal = (req, res, next) => {
   if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
@@ -291,7 +309,18 @@ disburseWorker.on('failed', async (job, err) => {
   if (job?.attemptsMade >= 5) {
     await db.collection('loans').doc(job.data.loanId).update({ status: 'disbursement_error', disbursementError: err.message });
     await db.collection('incident_log').add({ source: 'disbursement-worker', loanId: job.data.loanId, error: err.message, ts: admin.firestore.FieldValue.serverTimestamp() });
+    alertDisbursementFailed(SERVICE_NAME, job.data.loanId, err.message);
   }
 });
+
+// Periodic queue depth check (every 60s)
+setInterval(async () => {
+  try {
+    const q = new Queue('vida-disbursements', { connection: redis });
+    const depth = await q.getWaitingCount();
+    await q.close();
+    if (depth > 100) alertQueueDepth(SERVICE_NAME, 'vida-disbursements', depth, 100);
+  } catch (_) {}
+}, 60_000);
 
 app.listen(process.env.PORT || 3001, () => console.log('vida-payment-server on', process.env.PORT || 3001));
