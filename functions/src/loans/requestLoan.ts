@@ -10,6 +10,10 @@ import { checkRateLimit } from '../utils/rateLimiter';
 
 // ─── Input Schema ─────────────────────────────────────────────────────────────
 
+export const FLAT_FEE_RATE = 0.08;
+
+export const ALLOWED_TERM_DAYS = [15, 30, 45, 60] as const;
+
 export const RequestLoanSchema = z.object({
   amount: z
     .number()
@@ -28,6 +32,13 @@ export const RequestLoanSchema = z.object({
   termsAccepted: z.literal(true, {
     error: 'You must accept the terms and conditions',
   }),
+  termDays: z
+    .number()
+    .refine((v): v is 15 | 30 | 45 | 60 => (ALLOWED_TERM_DAYS as readonly number[]).includes(v), {
+      message: 'Term must be 15, 30, 45, or 60 days',
+    })
+    .optional()
+    .default(30),
   loanPurpose: z
     .enum([
       'emergency',
@@ -290,7 +301,7 @@ export async function handleRequestLoan(request: {
   const loanId = loanRef.id;
   const correlationId = randomUUID();
   const now = Timestamp.now();
-  const feeAmount = Math.round(input.amount * 0.3);
+  const feeAmount = Math.round(input.amount * FLAT_FEE_RATE);
 
   const statusHistory: StatusChange[] = [
     {
@@ -312,6 +323,7 @@ export async function handleRequestLoan(request: {
     feeAmount,
     totalRepaymentAmount: input.amount + feeAmount,
     disbursementAmount: input.amount,
+    termDays: input.termDays,
     currency: 'MXN',
     status: 'pending' as LoanStatus,
     statusHistory,
