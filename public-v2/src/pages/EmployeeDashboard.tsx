@@ -6,6 +6,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { LoanStatusCard } from '../components/LoanStatusCard';
 
 interface Repayment {
   id: string;
@@ -63,7 +64,12 @@ export function EmployeeDashboard() {
 
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
-  const hasActiveLoan = loans.some(l => ['pending', 'approved', 'active', 'disbursement_queued'].includes(l.status));
+  const IN_FLIGHT_STATUSES = ['pending', 'under_review', 'approved', 'active', 'disbursement_queued', 'disbursed', 'escalated', 'overdue'];
+  const hasActiveLoan = loans.some(l => IN_FLIGHT_STATUSES.includes(l.status));
+
+  // Most recent in-flight or recently-completed loan for the status card
+  const statusCardLoan = loans.find(l => IN_FLIGHT_STATUSES.includes(l.status))
+    || loans.find(l => ['paid', 'repaid', 'completed', 'rejected'].includes(l.status));
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -350,6 +356,23 @@ export function EmployeeDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Loan Status Card */}
+        {statusCardLoan && (
+          <LoanStatusCard
+            loan={statusCardLoan}
+            totalPaid={
+              (repaymentsByLoan[statusCardLoan.id] || [])
+                .filter((r) => r.status === 'completed')
+                .reduce((sum, r) => sum + (r.amount || 0), 0)
+            }
+            onRequestAnother={
+              ['paid', 'repaid', 'completed'].includes(statusCardLoan.status)
+                ? () => setShowModal(true)
+                : undefined
+            }
+          />
+        )}
 
         {/* Next Repayment */}
         {nextRepayment && (

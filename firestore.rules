@@ -99,7 +99,7 @@ service cloud.firestore {
     // REVIEW QUEUE — ADMIN-ONLY READ, WRITES VIA CLOUD FUNCTIONS
     // =============================================
     match /review_queue/{docId} {
-      allow read: if isAdmin();
+      allow read: if isOps();
       allow write: if false;  // Only Cloud Functions via Admin SDK
     }
 
@@ -107,14 +107,14 @@ service cloud.firestore {
     // AUDIT & OPERATIONAL LOGS — ADMIN-ONLY READ, IMMUTABLE
     // All writes go through Cloud Functions (Admin SDK).
     // =============================================
-    match /audit_log/{docId}         { allow read: if isAdmin();  allow write: if false; }
+    match /audit_log/{docId}         { allow read: if isOps();    allow write: if false; }
     match /overdue_log/{d}           { allow read: if isAdmin();  allow write: if false; }
     match /spei_log/{d}              { allow read: if isAdmin();  allow write: if false; }
     match /payment_failures/{d}      { allow read: if isAdmin();  allow write: if false; }
     match /incident_log/{d}          { allow read: if isAdmin();  allow write: if false; }
     match /notification_log/{d}      { allow read: if isAdmin();  allow write: if false; }
     match /softcredito_employers/{d} { allow read: if isAdmin();  allow write: if false; }
-    match /ml_decisions/{d}          { allow read: if isAdmin();  allow write: if false; }
+    match /ml_decisions/{d}          { allow read: if isOps();    allow write: if false; }
 
     // =============================================
     // OPS-READABLE OPERATIONAL COLLECTIONS
