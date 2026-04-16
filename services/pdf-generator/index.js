@@ -35,6 +35,8 @@ redis.on("error", (err) => {
   }
 });
 
+const { sendPagareForSigning } = require("./src/mifiel-client");
+
 const CONTRACT_TPL = Handlebars.compile(
   fs.readFileSync(path.join(__dirname, "templates", "contract.hbs"), "utf8")
 );
@@ -248,10 +250,68 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
         generatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-    res.json({ contractUrl: url });
+    // Mifiel e-signature (if enabled and env configured)
+    let mifielDocumentId = null;
+    let mifielSigningUrl = null;
+    const mifielEnabled = process.env.MIFIEL_ENABLED === 'true';
+    if (mifielEnabled && process.env.MIFIEL_APP_ID && loan.employeeEmail && loan.employeeRfc) {
+      try {
+        const tmp = `/tmp/contract_${loanId}.pdf`;
+        fs.writeFileSync(tmp, pdf);
+        const mifielRes = await sendPagareForSigning({
+          pdfPath: tmp,
+          borrowerName: loan.employeeName,
+          borrowerEmail: loan.employeeEmail,
+          borrowerRfc: loan.employeeRfc,
+          loanId,
+        });
+        mifielDocumentId = mifielRes.documentId;
+        mifielSigningUrl = mifielRes.signingUrl;
+        await db.collection("loans").doc(loanId).update({
+          mifielDocumentId,
+          mifielSigningUrl,
+          mifielStatus: "sent_for_signing",
+          mifielSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        try { fs.unlinkSync(tmp); } catch (_) {}
+      } catch (mifielErr) {
+        console.error("Mifiel send failed:", mifielErr.message);
+        await db.collection("loans").doc(loanId).update({
+          mifielStatus: "send_failed",
+          mifielError: mifielErr.message,
+        });
+      }
+    }
+
+    res.json({ contractUrl: url, mifielDocumentId, mifielSigningUrl });
   } catch (err) {
     console.error("Contract generation failed:", err);
     res.status(500).json({ error: "Contract generation failed" });
+  }
+});
+
+/**
+ * Mifiel webhook callback. Fires when borrower completes e-signature.
+ * Body: { id (document id), signed, file_signed, external_id (loanId) }
+ */
+app.post("/webhooks/mifiel/signed", async (req, res) => {
+  const { id: mifielDocumentId, signed, file_signed, external_id: loanId, certificate_detail } = req.body || {};
+  if (!loanId || !mifielDocumentId) {
+    return res.status(400).json({ error: "loanId and documentId required" });
+  }
+  try {
+    const update = {
+      mifielStatus: signed ? "signed" : "webhook_received",
+      mifielSignedAt: signed ? admin.firestore.FieldValue.serverTimestamp() : null,
+    };
+    if (file_signed) update.contractSignedUrl = file_signed;
+    if (certificate_detail) update.mifielCertificate = certificate_detail;
+    if (signed) update.status = "contract_signed";
+    await db.collection("loans").doc(loanId).update(update);
+    res.json({ ok: true, loanId, signed: !!signed });
+  } catch (err) {
+    console.error("Mifiel webhook handler failed:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
