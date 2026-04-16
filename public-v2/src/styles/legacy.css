@@ -444,6 +444,7 @@ table tr:last-child td{border-bottom:none}
 .badge-in_collections{background:#fdf0f0;color:#8b2020}
 .badge-written_off{background:#f0f0f0;color:#666}
 .badge-cancelled{background:#f0f0f0;color:#666}
+.badge-escalated{background:#fdf7e8;color:#7a5a10}
 .badge-overdue{background:#8b2020;color:#fff;animation:pulse 1.5s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 .doc-link{display:inline-block;padding:3px 10px;font-size:12px;font-weight:600;color:var(--brand);background:var(--bg2);border-radius:6px;text-decoration:none;border:1px solid rgba(25,68,69,.12);transition:all .2s;margin-right:4px}
@@ -934,6 +935,13 @@ table tr:last-child td{border-bottom:none}
 .flag-pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;margin:2px}
 .flag-pill.red{background:#fdf0f0;color:#8b2020}
 .flag-pill.green{background:#edf7f0;color:#1a5e3a}
+
+/* Loan Status Card */
+.loan-status-card{animation:lscIn .5s cubic-bezier(.16,1,.3,1)}
+@keyframes lscIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@media (max-width: 480px){
+  .loan-status-active-grid{grid-template-columns:1fr !important;justify-items:center;text-align:center}
+}
 
 /* Staggered mobile menu reveal */
 @keyframes menuLinkIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
