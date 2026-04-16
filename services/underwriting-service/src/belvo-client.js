@@ -30,6 +30,51 @@ async function getClient() {
 }
 
 /**
+ * Extract full error details from a Belvo SDK error.
+ * The SDK often throws errors with empty `.message` but rich detail
+ * in `.detail`, `.body`, `.statusCode`, or nested response objects.
+ */
+function extractBelvoError(err, context) {
+  const detail = {
+    context,
+    message: err.message || "(empty message)",
+    code: err.code || err.statusCode || err.status || null,
+    detail: err.detail || null,
+    body: null,
+    stack: err.stack || null,
+  };
+
+  // Belvo SDK may attach response body as .body or .response
+  if (err.body) {
+    try {
+      detail.body = typeof err.body === "string" ? JSON.parse(err.body) : err.body;
+    } catch (_) {
+      detail.body = err.body;
+    }
+  } else if (err.response) {
+    try {
+      detail.body = typeof err.response === "string"
+        ? JSON.parse(err.response)
+        : err.response?.body || err.response?.data || err.response;
+    } catch (_) {
+      detail.body = String(err.response);
+    }
+  }
+
+  // Build a descriptive message for upstream consumers
+  const parts = [context];
+  if (detail.code) parts.push(`status=${detail.code}`);
+  if (err.message) parts.push(err.message);
+  if (detail.detail) parts.push(detail.detail);
+  if (detail.body && !err.message) {
+    parts.push(typeof detail.body === "string" ? detail.body : JSON.stringify(detail.body));
+  }
+  detail.summary = parts.join(" — ");
+
+  return detail;
+}
+
+/**
  * IMSS employment records for a single employee CURP.
  * Returns: salary (SBC), tenure, employer RFC, IMSS active status, contribution history.
  * Used in Employee Stage 2.
@@ -38,13 +83,26 @@ async function getClient() {
  * can be an empty string (Belvo handles the gov-portal auth).
  */
 async function getIMSSEmployment(curp) {
-  const c = await getClient();
-  const link = await c.links.register("imss_mx_employment", curp, "", {
-    accessMode: "single",
-  });
-  const records = await c.employmentRecords.retrieve(link.id);
-  await c.links.delete(link.id).catch(() => {});
-  return records;
+  let linkId;
+  try {
+    const c = await getClient();
+    const link = await c.links.register("imss_mx_employment", curp, "", {
+      accessMode: "single",
+    });
+    linkId = link.id;
+    const records = await c.employmentRecords.retrieve(link.id);
+    await c.links.delete(link.id).catch(() => {});
+    return records;
+  } catch (err) {
+    if (linkId) {
+      const c = await getClient().catch(() => null);
+      if (c) await c.links.delete(linkId).catch(() => {});
+    }
+    const detail = extractBelvoError(err, "getIMSSEmployment");
+    const enriched = new Error(detail.summary);
+    enriched.belvoDetail = detail;
+    throw enriched;
+  }
 }
 
 /**
@@ -68,13 +126,26 @@ async function getINFONAVIT(curp) {
  * Regular contributions = employment stability signal.
  */
 async function getAFORE(curp) {
-  const c = await getClient();
-  const link = await c.links.register("afore_mx", curp, "", {
-    accessMode: "single",
-  });
-  const data = await c.incomes.retrieve(link.id);
-  await c.links.delete(link.id).catch(() => {});
-  return data;
+  let linkId;
+  try {
+    const c = await getClient();
+    const link = await c.links.register("afore_mx", curp, "", {
+      accessMode: "single",
+    });
+    linkId = link.id;
+    const data = await c.incomes.retrieve(link.id);
+    await c.links.delete(link.id).catch(() => {});
+    return data;
+  } catch (err) {
+    if (linkId) {
+      const c = await getClient().catch(() => null);
+      if (c) await c.links.delete(linkId).catch(() => {});
+    }
+    const detail = extractBelvoError(err, "getAFORE");
+    const enriched = new Error(detail.summary);
+    enriched.belvoDetail = detail;
+    throw enriched;
+  }
 }
 
 /**
@@ -130,4 +201,5 @@ module.exports = {
   getAFORE,
   verifyEmployerIMSS,
   getISSSTE,
+  extractBelvoError,
 };
