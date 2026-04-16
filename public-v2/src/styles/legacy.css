@@ -1,3 +1,15 @@
+/* ═══════════════════════════════════════════════════════════════
+   LEGACY.CSS — Core component styles (single source of truth)
+   ═══════════════════════════════════════════════════════════════
+   OWNERSHIP:
+   • This file: All core component styles — nav, hero, phone widget,
+     benefits, statement, calculator, employer, scenarios, trust,
+     FAQ, closing, footer, hamburger/mobile menu, auth-v1, dashboard,
+     onboarding wizard, tables, badges, toasts, modals, responsive
+     breakpoints (1024/768/480)
+   • index.css: Tailwind @theme tokens, auth-v2 login classes,
+     admin portal, micro-interactions, mobile polish, photo layout
+   ═══════════════════════════════════════════════════════════════ */
 
 /* Sprint 1: prevent mobile horizontal overflow */
 html,body{overflow-x:hidden}
