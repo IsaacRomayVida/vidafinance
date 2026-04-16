@@ -25,12 +25,22 @@ async function getSWToken() {
   const cached = await redis.get(SW_TOKEN_KEY).catch(() => null);
   if (cached) return cached;
 
+  const user = process.env.SW_USER;
+  const password = process.env.SW_PASSWORD;
+  if (!user || !password) throw new Error("SW credentials not configured: SW_USER and SW_PASSWORD env vars required");
+
   const res = await fetch(`${BASE()}/security/authenticate`, {
-    headers: { user: process.env.SW_USER, password: process.env.SW_PASSWORD },
+    headers: { user, password },
     timeout: 10000,
   });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`SW auth HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+
   const data = await res.json();
-  if (!data?.data?.token) throw new Error("SW auth failed: " + JSON.stringify(data));
+  if (!data?.data?.token) throw new Error("SW auth failed — no token in response: " + JSON.stringify(data).slice(0, 300));
 
   const token = data.data.token;
   await redis.set(SW_TOKEN_KEY, token, "EX", 6000); // 100 min — well under 2h expiry
@@ -51,6 +61,12 @@ async function check69B(rfc) {
     headers: { Authorization: `bearer ${token}` },
     timeout: 10000,
   });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`SW EFOS HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+
   const data = await res.json();
 
   const situacion = data?.data?.situacion || null;
@@ -79,6 +95,12 @@ async function checkArt69(rfc) {
     headers: { Authorization: `bearer ${token}` },
     timeout: 10000,
   });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`SW Art69 HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+
   const data = await res.json();
 
   const deudas = data?.data?.deudas || data?.data?.records || [];

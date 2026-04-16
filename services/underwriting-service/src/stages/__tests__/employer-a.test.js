@@ -143,27 +143,33 @@ describe("runEmployerScreening", () => {
     expect(result.reason).toBe("repse_not_registered");
   });
 
-  // ── Graceful degradation ──────────────────────────────────────────
-  it("degrades gracefully when an API call fails", async () => {
+  // ── Provider error → escalate (never pass silently) ────────────────
+  it("escalates to manual review when an API call fails", async () => {
     mockAllPass();
     checkDENUE.mockRejectedValue(new Error("DENUE timeout"));
 
     const result = await runEmployerScreening(EMPLOYER);
 
-    // Should still pass — failed check treated as skipped
-    expect(result.pass).toBe(true);
+    expect(result.pass).toBe(false);
+    expect(result.escalateToStage).toBe(5);
+    expect(result.reason).toBe("provider_errors_escalate");
+    expect(result.skippedChecks).toContain("denue");
     expect(result.signals.denue.skipped).toBe(true);
     expect(result.signals.denue.error).toContain("DENUE timeout");
   });
 
-  it("degrades gracefully when multiple APIs fail", async () => {
+  it("escalates to manual review when multiple APIs fail", async () => {
     mockAllPass();
     checkDENUE.mockRejectedValue(new Error("DENUE down"));
     checkREPSE.mockRejectedValue(new Error("REPSE down"));
 
     const result = await runEmployerScreening(EMPLOYER);
 
-    expect(result.pass).toBe(true);
+    expect(result.pass).toBe(false);
+    expect(result.escalateToStage).toBe(5);
+    expect(result.reason).toBe("provider_errors_escalate");
+    expect(result.skippedChecks).toContain("denue");
+    expect(result.skippedChecks).toContain("repse");
     expect(result.signals.denue.skipped).toBe(true);
     expect(result.signals.repse.skipped).toBe(true);
   });
