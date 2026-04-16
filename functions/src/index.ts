@@ -1378,3 +1378,6 @@ export const queueHealthCheck = onSchedule(
     }
   }
 );
+
+// ─── Payroll deduction processing (VID3-625) ────────────────────────────────
+export { processPayroll } from './payroll/processPayroll';
