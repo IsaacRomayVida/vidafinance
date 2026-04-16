@@ -75,7 +75,7 @@ async function callML(path: string, body: Record<string, unknown>): Promise<Reco
     },
     body: JSON.stringify(body),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    signal: (AbortSignal as any).timeout(8000),
+    signal: AbortSignal.timeout(8000),
   });
   if (!r.ok) throw new Error(`ML ${path}: ${r.status}`);
   return r.json() as Promise<Record<string, unknown>>;
@@ -184,7 +184,7 @@ export const validateCURP = onCall(
           curp: curp.toUpperCase(),
           ...(expectedName ? { expectedName } : {}),
         }),
-        signal: (AbortSignal as any).timeout(10000),
+        signal: AbortSignal.timeout(10000),
       });
 
       if (!resp.ok) {
@@ -291,7 +291,7 @@ export const requestLoan = onCall(
                 employer: { rfc: employer['rfc'] || '', companyName: employer['companyName'] || '' },
                 loanAmount: amount,
               }),
-              signal: (AbortSignal as any).timeout(30000),
+              signal: AbortSignal.timeout(30000),
             });
             if (uwRes.ok) {
               uwResult = await uwRes.json() as Record<string, unknown>;
@@ -1050,7 +1050,7 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
         }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        signal: (AbortSignal as any).timeout(10000),
+        signal: AbortSignal.timeout(10000),
       }).then(async (r) => {
         if (r.ok) {
           const result = await r.json() as Record<string, unknown>;
@@ -1245,7 +1245,7 @@ export const systemHealthCheck = onSchedule(
       services.map(async (s) => {
         const start = Date.now();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const r = await fetch(s.url, { signal: (AbortSignal as any).timeout(6000) });
+        const r = await fetch(s.url, { signal: AbortSignal.timeout(6000) });
         const d = (await r.json()) as Record<string, unknown>;
         return { name: s.name, status: d['status'], redis: d['redis'], latencyMs: Date.now() - start };
       })
@@ -1282,7 +1282,7 @@ export const queueHealthCheck = onSchedule(
       const r = await fetch(process.env['PAYMENT_SERVER_URL'] + '/internal/queue-stats', {
         headers: { 'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        signal: (AbortSignal as any).timeout(6000),
+        signal: AbortSignal.timeout(6000),
       });
       if (!r.ok) return;
 

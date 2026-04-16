@@ -175,7 +175,7 @@ describe('generatePaymentLink', () => {
       await fn({ auth: employeeAuth, data: validInput });
 
       expect(fetch).toHaveBeenCalledWith(
-        'https://payment-server.internal/payment-links/oxxo',
+        'https://payment-server.internal/create-checkout',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -194,7 +194,7 @@ describe('generatePaymentLink', () => {
       await fn({ auth: employeeAuth, data: validInput });
 
       const body = JSON.parse((fetch as jest.Mock).mock.calls[0][1].body as string);
-      expect(body.borrowerName).toBe('Test Employee');
+      expect(body.employeeName).toBe('Test Employee');
     });
 
     it('falls back to employeeId when userId is not set', async () => {
