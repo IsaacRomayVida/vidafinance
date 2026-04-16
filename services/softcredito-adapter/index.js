@@ -61,7 +61,8 @@ let _token = null, _tokenExp = 0;
 async function scToken() {
   if (_token && Date.now() < _tokenExp - 60000) return _token;
   const { default: fetch } = await import('node-fetch');
-  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL || (process.env.SOFTCREDITO_API_URL + '/../../api/oauth/token');
+  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL
+    || 'https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token';
   const r = await fetch(tokenUrl, {
     method: 'POST',
     headers: {
@@ -275,11 +276,14 @@ app.get('/debug-connectivity', async (req, res) => {
     };
   } catch(e) { results.https_softcredito = 'ERROR: ' + e.message; }
   
-  // 4. Direct HTTPS to the token endpoint
+  // 4. Direct HTTPS to the token endpoint (supports ?token_url= override for probing)
+  const tokenUrl = req.query.token_url
+    || process.env.SOFTCREDITO_TOKEN_URL
+    || 'https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token';
   try {
     const { default: fetch } = await import('node-fetch');
     const start = Date.now();
-    const r = await fetch('https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token', {
+    const r = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -290,15 +294,17 @@ app.get('/debug-connectivity', async (req, res) => {
       signal: AbortSignal.timeout(15000)
     });
     const body = await r.text();
+    const contentType = r.headers.get('content-type') || '';
     results.token_endpoint = {
+      url: tokenUrl,
       status: r.status,
       latencyMs: Date.now() - start,
-      isJson: body.trim().startsWith('{'),
-      bodyPreview: body.substring(0, 200),
+      isJson: contentType.includes('application/json') || body.trim().startsWith('{'),
+      bodyPreview: body.substring(0, 300),
       server: r.headers.get('server'),
-      contentType: r.headers.get('content-type'),
+      contentType,
     };
-  } catch(e) { results.token_endpoint = 'ERROR: ' + e.message; }
+  } catch(e) { results.token_endpoint = { error: e.message, url: tokenUrl }; }
 
   // 5. Direct IP connection to their production server
   try {
