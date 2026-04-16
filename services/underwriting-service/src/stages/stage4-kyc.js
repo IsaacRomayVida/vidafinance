@@ -28,6 +28,69 @@ const INTERNAL_SECRET = () => process.env.INTERNAL_SECRET || "";
 const ANOMALY_THRESHOLD = 0.75;
 const FACE_MATCH_THRESHOLD = 0.80;
 
+const VALID_KYC_MODES = ["real", "mock_pass", "mock_fail"];
+
+/**
+ * Read KYC_MODE env var. Defaults to "real".
+ * - real: normal MetaMap flow
+ * - mock_pass: skip MetaMap, return verified result
+ * - mock_fail: skip MetaMap, return failed result
+ */
+function getKycMode() {
+  const mode = (process.env.KYC_MODE || "real").toLowerCase();
+  if (!VALID_KYC_MODES.includes(mode)) {
+    console.warn(`[stage4-kyc] Invalid KYC_MODE="${mode}", falling back to "real"`);
+    return "real";
+  }
+  return mode;
+}
+
+/**
+ * Build a mock MetaMap result for test mode.
+ */
+function buildMockMetamapResult(mode) {
+  if (mode === "mock_pass") {
+    return {
+      verificationId: "mock-kyc-pass",
+      status: "verified",
+      verified: true,
+      liveness: { passed: true, score: 0.99 },
+      documentVerification: { passed: true, quality: 0.95 },
+      facematch: { passed: true, score: 0.96 },
+      governmentCheck: { passed: true },
+      deviceFingerprint: {
+        emulator_detected: 0,
+        vpn_detected: 0,
+        rooted_device: 0,
+        gps_spoofing: 0,
+        app_cloning: 0,
+        screen_sharing: 0,
+        remote_desktop: 0,
+      },
+    };
+  }
+
+  // mock_fail
+  return {
+    verificationId: "mock-kyc-fail",
+    status: "rejected",
+    verified: false,
+    liveness: { passed: true, score: 0.90 },
+    documentVerification: { passed: false, reason: "document_quality", quality: 0.30 },
+    facematch: { passed: false, score: 0.40 },
+    governmentCheck: { passed: false },
+    deviceFingerprint: {
+      emulator_detected: 0,
+      vpn_detected: 0,
+      rooted_device: 0,
+      gps_spoofing: 0,
+      app_cloning: 0,
+      screen_sharing: 0,
+      remote_desktop: 0,
+    },
+  };
+}
+
 /**
  * Run Stage 4 Full KYC.
  *
@@ -42,6 +105,45 @@ const FACE_MATCH_THRESHOLD = 0.80;
 async function runStage4(context) {
   const { loanId, correlationId, applicant, bankConnection, previousStages } = context;
   const startedAt = new Date().toISOString();
+
+  // ── KYC_MODE: skip MetaMap for headless E2E tests ──────────────────────────
+  const kycMode = getKycMode();
+  if (kycMode !== "real") {
+    console.warn(
+      `[stage4-kyc] ⚠ KYC_MODE="${kycMode}" — MetaMap verification SKIPPED (test mode). ` +
+      `Never use this in production! loanId=${loanId}`
+    );
+
+    const mockMetamap = buildMockMetamapResult(kycMode);
+
+    // Still run Belvo cash flow (it works in sandbox)
+    let cashFlow;
+    try {
+      cashFlow = await runBelvoCashFlow(bankConnection, applicant);
+    } catch (err) {
+      cashFlow = { available: false, reason: err.message };
+    }
+
+    // Check biometric failures on mock result (mock_fail will trigger rejection)
+    const biometricReject = checkBiometricFailures(mockMetamap);
+    if (biometricReject) {
+      return buildResult({
+        loanId, correlationId, startedAt,
+        decision: "reject",
+        reason: biometricReject.reason,
+        metamap: mockMetamap, cashFlow, anomaly: null,
+      });
+    }
+
+    return buildResult({
+      loanId, correlationId, startedAt,
+      decision: "approve",
+      reason: `All Stage 4 checks passed (KYC_MODE=${kycMode})`,
+      enhancedMonitoring: true,
+      metamap: mockMetamap, cashFlow, anomaly: { reconstructionError: 0, isAnomaly: false, threshold: ANOMALY_THRESHOLD },
+    });
+  }
+  // ── End KYC_MODE ───────────────────────────────────────────────────────────
 
   // Run all three checks in parallel
   const [metamapResult, cashFlowResult, anomalyResult] = await Promise.allSettled([
@@ -388,6 +490,8 @@ module.exports = {
   identifyPayrollDeposits,
   identifyLoanPayments,
   calculateRegularity,
+  getKycMode,
+  buildMockMetamapResult,
   ANOMALY_THRESHOLD,
   FACE_MATCH_THRESHOLD,
 };
