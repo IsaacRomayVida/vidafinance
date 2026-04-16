@@ -33,6 +33,7 @@ const cors = require('cors');
 const ALLOWED = (process.env.ALLOWED_ORIGINS || 'https://vida-finance.web.app').split(',').map(s => s.trim());
 const app = express();
 app.use(helmet());
+app.use(metricsMiddleware('vida-payment-server'));
 app.use((req, res, next) => {
   if (req.path.startsWith('/webhooks')) return next();
   const origin = req.headers.origin;
@@ -66,6 +67,11 @@ const getQueue = name => new Queue(name, {
 });
 
 // ── Health ──────────────────────────────────────────────────────────
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metricsRegister.contentType);
+  res.end(await metricsRegister.metrics());
+});
+
 app.get('/health', async (req, res) => {
   const redisOk = await redis.ping().then(() => true).catch(() => false);
   let firestoreOk = false;

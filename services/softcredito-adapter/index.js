@@ -30,6 +30,7 @@ redis.on('error', (err) => {
 const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
 app.use(helmet());
+app.use(metricsMiddleware('vida-softcredito-adapter'));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
@@ -107,6 +108,11 @@ app.get('/debug-routes', (req, res) => {
 });
 
 // ── Health ──────────────────────────────────────────────────────────
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metricsRegister.contentType);
+  res.end(await metricsRegister.metrics());
+});
+
 app.get('/health', async (req, res) => {
   // v2 - with bureau+curp routes
   const redisOk = await redis.ping().then(() => true).catch(() => false);

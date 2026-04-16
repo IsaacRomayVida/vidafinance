@@ -8,6 +8,7 @@ const Handlebars = require("handlebars");
 const fs         = require("fs");
 const path       = require("path");
 const { alert5xx, alertQueueDepth, alertRedisLost } = require("../shared/alerting");
+const { register: metricsRegister, metricsMiddleware } = require("../shared/metrics");
 require("dotenv").config();
 
 const pkg = require("./package.json");
@@ -186,6 +187,7 @@ const cors = require("cors");
 const ALLOWED = ["https://vida-finance.web.app"];
 const app = express();
 app.use(helmet());
+app.use(metricsMiddleware('vida-pdf-generator'));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && ALLOWED.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
@@ -313,6 +315,11 @@ app.post("/webhooks/mifiel/signed", async (req, res) => {
     console.error("Mifiel webhook handler failed:", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metricsRegister.contentType);
+  res.end(await metricsRegister.metrics());
 });
 
 app.get("/health", async (req, res) => {

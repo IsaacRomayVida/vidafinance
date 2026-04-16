@@ -104,6 +104,7 @@ setInterval(async () => {
 const ALLOWED = ['https://vida-finance.web.app'];
 const app = express();
 app.use(helmet());
+app.use(metricsMiddleware('vida-notification-service'));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
@@ -120,6 +121,11 @@ app.use((req, res, next) => {
     return origJson(body);
   };
   next();
+});
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metricsRegister.contentType);
+  res.end(await metricsRegister.metrics());
 });
 
 app.get('/health', async (req,res) => {
