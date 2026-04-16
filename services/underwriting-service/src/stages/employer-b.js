@@ -32,12 +32,12 @@ async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) 
   // Compute employer score
   let score = 50; // base
 
-  // Part A signals
-  const partA = partAResults.data || {};
+  // Part A signals (new format uses "signals", fallback to "data" for compat)
+  const partA = partAResults.signals || partAResults.data || {};
   if (partA.sat?.pass) score += 10;
   if (partA.denue?.pass) score += 5;
   if (partA.repse?.pass) score += 5;
-  if (partA.efos?.flag) score -= 15; // PRESUNTO flag
+  if (partA.lista69B?.flag || partA.efos?.flag) score -= 15; // PRESUNTO flag
 
   // IMSS employee verification
   if (imssVerification && !imssVerification.skipped) {

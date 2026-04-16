@@ -60,19 +60,22 @@ let _token = null, _tokenExp = 0;
 async function scToken() {
   if (_token && Date.now() < _tokenExp - 60000) return _token;
   const { default: fetch } = await import('node-fetch');
-  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL || (process.env.SOFTCREDITO_API_URL + '/../../oauth2/token');
+  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL || (process.env.SOFTCREDITO_API_URL + '/../../api/oauth/token');
   const r = await fetch(tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=client_credentials&client_id=${encodeURIComponent(process.env.SOFTCREDITO_CLIENT_ID)}&client_secret=${encodeURIComponent(process.env.SOFTCREDITO_CLIENT_SECRET)}`
+    headers: {
+      'Content-Type': 'application/json',
+      'X-REST-PRODUCT': process.env.SOFTCREDITO_PRODUCT_ID || process.env.SOFTCREDITO_CLIENT_ID,
+      'X-REST-APPLICATION': process.env.SOFTCREDITO_APPLICATION_ID || process.env.SOFTCREDITO_CLIENT_SECRET,
+    },
   });
   if (!r.ok) {
     const body = await r.text().catch(() => '');
     throw new Error('SC auth failed: ' + r.status + ' ' + body.slice(0, 200));
   }
   const d = await r.json();
-  _token = d.access_token || d.token;
-  _tokenExp = Date.now() + (d.expires_in || 7200) * 1000;
+  _token = d.token || d.access_token;
+  _tokenExp = Date.now() + (d.expires_in || 900) * 1000;
   log.info({ tokenUrl }, 'SC token acquired');
   return _token;
 }
@@ -270,10 +273,14 @@ app.get('/debug-connectivity', async (req, res) => {
   try {
     const { default: fetch } = await import('node-fetch');
     const start = Date.now();
-    const r = await fetch('https://softcredito.com/produccion/ALIADOSDECRED/app/oauth2/token', {
+    const r = await fetch('https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-      body: 'grant_type=client_credentials&client_id=' + encodeURIComponent(process.env.SOFTCREDITO_CLIENT_ID) + '&client_secret=' + encodeURIComponent(process.env.SOFTCREDITO_CLIENT_SECRET),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-REST-PRODUCT': process.env.SOFTCREDITO_PRODUCT_ID || process.env.SOFTCREDITO_CLIENT_ID,
+        'X-REST-APPLICATION': process.env.SOFTCREDITO_APPLICATION_ID || process.env.SOFTCREDITO_CLIENT_SECRET,
+      },
       signal: AbortSignal.timeout(15000)
     });
     const body = await r.text();

@@ -48,10 +48,10 @@ async function runFraudGates(applicant, _priorResults, { logger } = {}) {
     checks.push(
       checkBehavioralRisk(applicant.sessionKey, applicant.userId)
         .then(r => ({ key: "metamapBehavioral", result: r }))
-        .catch(err => ({ key: "metamapBehavioral", result: { pass: true, skipped: true, error: err.message } }))
+        .catch(err => ({ key: "metamapBehavioral", result: { pass: false, skipped: true, error: err.message } }))
     );
   } else {
-    checks.push(Promise.resolve({ key: "metamapBehavioral", result: { pass: true, skipped: true, reason: "no_session_key" } }));
+    checks.push(Promise.resolve({ key: "metamapBehavioral", result: { pass: false, skipped: true, reason: "no_session_key" } }));
   }
 
   // 2. INFONAVIT/FONACOT senior claimant detection
@@ -75,7 +75,7 @@ async function runFraudGates(applicant, _priorResults, { logger } = {}) {
       rfc: applicant.rfc,
     })
       .then(r => ({ key: "riskseal", result: r }))
-      .catch(err => ({ key: "riskseal", result: { pass: true, skipped: true, error: err.message } }))
+      .catch(err => ({ key: "riskseal", result: { pass: false, skipped: true, error: err.message } }))
   );
 
   // 4. ML anomaly detection

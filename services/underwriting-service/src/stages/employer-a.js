@@ -10,15 +10,27 @@
  *   3. Art. 69 fiscal debt (SW)
  *   4. DENUE business registry (gov-apis)
  *   5. REPSE labor compliance (gov-apis)
+ *
+ * On provider error: escalate to manual review (Stage 5). Never default to pass.
  */
+const redis = require("../redis-client");
 const { checkSATTaxpayer } = require("../verifik");
 const { check69B, checkArt69 } = require("../sw-client");
 const { checkDENUE, checkREPSE } = require("../gov-apis");
 
+const CACHE_TTL = 86400; // 24 h
+
 async function runEmployerScreening(employer, { logger } = {}) {
   const log = logger || console;
   const rfc = employer.rfc;
+  const stateCode = employer.stateCode || "00";
+  const startTime = Date.now();
   const costItems = [];
+
+  // Return cached result if available
+  const cacheKey = `employer-a:${rfc}`;
+  const cached = await redis.get(cacheKey).catch(() => null);
+  if (cached) return JSON.parse(cached);
 
   log.info({ stage: "employer-a", rfc }, "Starting employer screening");
 
@@ -27,74 +39,127 @@ async function runEmployerScreening(employer, { logger } = {}) {
       checkSATTaxpayer(rfc),
       check69B(rfc),
       checkArt69(rfc),
-      checkDENUE(employer.companyName, employer.stateCode),
+      checkDENUE(employer.companyName, stateCode),
       checkREPSE(rfc),
     ]);
 
-  const sat   = satResult.status   === "fulfilled" ? satResult.value   : { pass: true, skipped: true, error: satResult.reason?.message };
-  const efos  = efosResult.status  === "fulfilled" ? efosResult.value  : { pass: true, skipped: true, error: efosResult.reason?.message };
-  const art69 = art69Result.status === "fulfilled" ? art69Result.value : { pass: true, skipped: true, error: art69Result.reason?.message };
-  const denue = denueResult.status === "fulfilled" ? denueResult.value : { pass: true, skipped: true, error: denueResult.reason?.message };
-  const repse = repseResult.status === "fulfilled" ? repseResult.value : { pass: true, skipped: true, error: repseResult.reason?.message };
+  // On API error: pass: false, skipped: true — never silently pass
+  const sat     = satResult.status   === "fulfilled" ? satResult.value   : { pass: false, skipped: true, error: satResult.reason?.message };
+  const lista69B = efosResult.status === "fulfilled" ? efosResult.value  : { pass: false, skipped: true, error: efosResult.reason?.message };
+  const art69   = art69Result.status === "fulfilled" ? art69Result.value : { pass: false, skipped: true, error: art69Result.reason?.message };
+  const denue   = denueResult.status === "fulfilled" ? denueResult.value : { pass: false, skipped: true, error: denueResult.reason?.message };
+  const repse   = repseResult.status === "fulfilled" ? repseResult.value : { pass: false, skipped: true, error: repseResult.reason?.message };
 
-  // SAT + SW are paid calls
-  if (!sat.skipped)   costItems.push({ api: "verifik-sat", mxn: 1.5 });
-  if (!efos.skipped)  costItems.push({ api: "sw-69b", mxn: 0.5 });
-  if (!art69.skipped) costItems.push({ api: "sw-art69", mxn: 0.5 });
+  // Log full details for every skipped check so failures are never swallowed
+  const skippedChecks = [];
+  if (sat.skipped)     { log.error({ stage: "employer-a", rfc, api: "verifik-sat", error: sat.error }, "SAT check failed — provider error"); skippedChecks.push("sat"); }
+  if (lista69B.skipped) { log.error({ stage: "employer-a", rfc, api: "sw-69b", error: lista69B.error }, "Lista 69-B check failed — provider error"); skippedChecks.push("lista69B"); }
+  if (art69.skipped)   { log.error({ stage: "employer-a", rfc, api: "sw-art69", error: art69.error }, "Art. 69 check failed — provider error"); skippedChecks.push("art69"); }
+  if (denue.skipped)   { log.error({ stage: "employer-a", rfc, api: "denue", error: denue.error }, "DENUE check failed — provider error"); skippedChecks.push("denue"); }
+  if (repse.skipped)   { log.error({ stage: "employer-a", rfc, api: "repse", error: repse.error }, "REPSE check failed — provider error"); skippedChecks.push("repse"); }
 
-  // Lista 69-B DEFINITIVO = permanent hard reject — stop immediately
-  if (efos.hardReject) {
+  // Cost tracking — only for successful paid calls
+  if (!sat.skipped)     costItems.push({ api: "verifik-sat", mxn: 1.5 });
+  if (!lista69B.skipped) costItems.push({ api: "sw-69b", mxn: 0.5 });
+  if (!art69.skipped)   costItems.push({ api: "sw-art69", mxn: 0.5 });
+
+  const signals = { sat, lista69B, art69, denue, repse };
+
+  // ── Hard reject: Lista 69-B DEFINITIVO ────────────────────────────────
+  if (lista69B.hardReject) {
     log.warn({ stage: "employer-a", rfc }, "EFOS DEFINITIVO — hard reject");
-    return {
+    return cacheAndReturn(cacheKey, {
       pass: false,
-      escalateToStage: null,
-      reason: "EFOS_DEFINITIVO",
-      data: { sat, efos, art69, denue, repse },
+      hardReject: true,
+      reason: "lista_69b_definitivo",
+      signals,
       cost: costItems,
-    };
+      durationMs: Date.now() - startTime,
+    });
   }
 
-  // SAT not active = reject
+  // ── SAT not active = reject ───────────────────────────────────────────
   if (!sat.pass && !sat.skipped) {
     log.warn({ stage: "employer-a", rfc }, "SAT not active");
-    return {
+    return cacheAndReturn(cacheKey, {
       pass: false,
-      escalateToStage: null,
-      reason: "SAT_INACTIVE",
-      data: { sat, efos, art69, denue, repse },
+      hardReject: false,
+      reason: "sat_inactive",
+      signals,
       cost: costItems,
-    };
+      durationMs: Date.now() - startTime,
+    });
   }
 
-  // Art. 69 fiscal debt = reject
+  // ── Art. 69 fiscal debt = reject ──────────────────────────────────────
   if (!art69.pass && !art69.skipped) {
     log.warn({ stage: "employer-a", rfc }, "Art. 69 fiscal debt found");
-    return {
+    return cacheAndReturn(cacheKey, {
       pass: false,
-      escalateToStage: null,
-      reason: "FISCAL_DEBT",
-      data: { sat, efos, art69, denue, repse },
+      hardReject: false,
+      reason: "art69_fiscal_debt",
+      signals,
       cost: costItems,
-    };
+      durationMs: Date.now() - startTime,
+    });
   }
 
-  // EFOS PRESUNTO = flag, continue but escalate to Part B
-  const efosFlag = efos.flag || false;
+  // ── DENUE not found = reject ──────────────────────────────────────────
+  if (!denue.pass && !denue.skipped) {
+    log.warn({ stage: "employer-a", rfc }, "DENUE — no matching business found");
+    return cacheAndReturn(cacheKey, {
+      pass: false,
+      hardReject: false,
+      reason: "denue_not_found",
+      signals,
+      cost: costItems,
+      durationMs: Date.now() - startTime,
+    });
+  }
 
-  // DENUE not found or REPSE invalid = informational flags (not hard rejects)
-  const denueFlag = !denue.pass && !denue.skipped;
-  const repseFlag = !repse.pass && !repse.skipped;
+  // ── REPSE not registered = reject ─────────────────────────────────────
+  if (!repse.pass && !repse.skipped) {
+    log.warn({ stage: "employer-a", rfc }, "REPSE — not registered or expired");
+    return cacheAndReturn(cacheKey, {
+      pass: false,
+      hardReject: false,
+      reason: "repse_not_registered",
+      signals,
+      cost: costItems,
+      durationMs: Date.now() - startTime,
+    });
+  }
 
-  const allPass = sat.pass && efos.pass && art69.pass;
+  // ── Provider errors → escalate to manual review (never pass silently) ─
+  if (skippedChecks.length > 0) {
+    log.warn({ stage: "employer-a", rfc, skippedChecks }, "Provider errors — escalating to manual review");
+    return cacheAndReturn(cacheKey, {
+      pass: false,
+      hardReject: false,
+      escalateToStage: 5,
+      reason: "provider_errors_escalate",
+      skippedChecks,
+      signals,
+      cost: costItems,
+      durationMs: Date.now() - startTime,
+    });
+  }
 
-  return {
-    pass: allPass,
-    escalateToStage: allPass ? null : "employer-b",
-    reason: allPass ? null : "EMPLOYER_FLAGS",
-    flags: { efosFlag, denueFlag, repseFlag },
-    data: { sat, efos, art69, denue, repse },
+  // ── PRESUNTO = flag, but still passes (Part B will weigh it) ──────────
+  // All non-skipped, non-PRESUNTO checks passed if we reach here
+  return cacheAndReturn(cacheKey, {
+    pass: true,
+    hardReject: false,
+    reason: null,
+    signals,
     cost: costItems,
-  };
+    durationMs: Date.now() - startTime,
+  });
+}
+
+async function cacheAndReturn(cacheKey, result) {
+  await redis.set(cacheKey, JSON.stringify(result), "EX", CACHE_TTL).catch(() => {});
+  return result;
 }
 
 module.exports = { runEmployerScreening };

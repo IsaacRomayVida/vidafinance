@@ -19,6 +19,8 @@ const {
   identifyPayrollDeposits,
   identifyLoanPayments,
   calculateRegularity,
+  getKycMode,
+  buildMockMetamapResult,
   ANOMALY_THRESHOLD,
   FACE_MATCH_THRESHOLD,
 } = require("./stage4-kyc");
@@ -274,5 +276,94 @@ describe("stage4-kyc: anomaly threshold", () => {
 
   it("should have correct face match threshold", () => {
     assert.strictEqual(FACE_MATCH_THRESHOLD, 0.80);
+  });
+});
+
+// ─── KYC_MODE (VID3-641) ────────────────────────────────────────────────────
+
+describe("stage4-kyc: getKycMode", () => {
+  afterEach(() => {
+    delete process.env.KYC_MODE;
+  });
+
+  it("should default to 'real' when KYC_MODE is not set", () => {
+    delete process.env.KYC_MODE;
+    assert.strictEqual(getKycMode(), "real");
+  });
+
+  it("should return 'mock_pass' when set", () => {
+    process.env.KYC_MODE = "mock_pass";
+    assert.strictEqual(getKycMode(), "mock_pass");
+  });
+
+  it("should return 'mock_fail' when set", () => {
+    process.env.KYC_MODE = "mock_fail";
+    assert.strictEqual(getKycMode(), "mock_fail");
+  });
+
+  it("should be case-insensitive", () => {
+    process.env.KYC_MODE = "MOCK_PASS";
+    assert.strictEqual(getKycMode(), "mock_pass");
+  });
+
+  it("should fall back to 'real' for invalid values", () => {
+    process.env.KYC_MODE = "invalid_value";
+    assert.strictEqual(getKycMode(), "real");
+  });
+});
+
+describe("stage4-kyc: buildMockMetamapResult", () => {
+  it("should return verified result for mock_pass", () => {
+    const result = buildMockMetamapResult("mock_pass");
+    assert.strictEqual(result.verified, true);
+    assert.strictEqual(result.status, "verified");
+    assert.strictEqual(result.liveness.passed, true);
+    assert.strictEqual(result.documentVerification.passed, true);
+    assert.strictEqual(result.facematch.passed, true);
+    assert.ok(result.deviceFingerprint);
+  });
+
+  it("should return rejected result for mock_fail", () => {
+    const result = buildMockMetamapResult("mock_fail");
+    assert.strictEqual(result.verified, false);
+    assert.strictEqual(result.status, "rejected");
+    assert.strictEqual(result.documentVerification.passed, false);
+    assert.strictEqual(result.documentVerification.reason, "document_quality");
+  });
+});
+
+describe("stage4-kyc: runStage4 with KYC_MODE", () => {
+  afterEach(() => {
+    delete process.env.KYC_MODE;
+  });
+
+  it("should approve with mock_pass and skip MetaMap", async () => {
+    process.env.KYC_MODE = "mock_pass";
+    const result = await runStage4({
+      loanId: "test-mock-001",
+      correlationId: "corr-mock-001",
+      applicant: baseApplicant,
+      bankConnection: null,
+      previousStages: {},
+    });
+
+    assert.strictEqual(result.decision, "approve");
+    assert.ok(result.reason.includes("KYC_MODE=mock_pass"));
+    assert.strictEqual(result.details.metamap.verificationId, "mock-kyc-pass");
+    assert.strictEqual(result.enhancedMonitoring, true);
+  });
+
+  it("should reject with mock_fail due to biometric failures", async () => {
+    process.env.KYC_MODE = "mock_fail";
+    const result = await runStage4({
+      loanId: "test-mock-002",
+      correlationId: "corr-mock-002",
+      applicant: baseApplicant,
+      bankConnection: null,
+      previousStages: {},
+    });
+
+    assert.strictEqual(result.decision, "reject");
+    assert.ok(result.reason.includes("Document verification failed"));
   });
 });
