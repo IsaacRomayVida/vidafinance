@@ -42,7 +42,7 @@ let _token = null, _tokenExp = 0;
 async function scToken() {
   if (_token && Date.now() < _tokenExp - 60000) return _token;
   const { default: fetch } = await import('node-fetch');
-  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL || (process.env.SOFTCREDITO_API_URL + '/../../oauth2/token');
+  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL || (process.env.SOFTCREDITO_API_URL + '/../../api/oauth/token');
   const r = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -249,7 +249,7 @@ app.get('/debug-connectivity', async (req, res) => {
   try {
     const { default: fetch } = await import('node-fetch');
     const start = Date.now();
-    const r = await fetch('https://softcredito.com/produccion/ALIADOSDECRED/app/oauth2/token', {
+    const r = await fetch('https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
       body: 'grant_type=client_credentials&client_id=' + encodeURIComponent(process.env.SOFTCREDITO_CLIENT_ID) + '&client_secret=' + encodeURIComponent(process.env.SOFTCREDITO_CLIENT_SECRET),
