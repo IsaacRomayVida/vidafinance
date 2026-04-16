@@ -32,7 +32,7 @@ jobs:
         run: cd functions && npm run build
 
       - name: Install frontend deps
-        run: cd public-v2 && npm ci
+        run: cd public-v2 && npm ci --legacy-peer-deps
 
       - name: Build frontend (public-v2)
         run: cd public-v2 && npm run build
