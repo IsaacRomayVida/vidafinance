@@ -166,6 +166,9 @@ input,select,textarea{font-family:var(--db)}
 .ben-lbl{font-size:11px;color:var(--t3);letter-spacing:.3px;margin-top:3px}
 .ben-sep{width:3px;height:3px;border-radius:50%;background:var(--aqua);opacity:.4;flex-shrink:0}
 
+/* Below-fold content-visibility for paint optimization */
+.statement-section,.section,.calc,.closing{content-visibility:auto;contain-intrinsic-size:auto 800px}
+
 /* STATEMENT + EMOTIONAL */
 .statement-section{padding:120px 0}
 .statement-inner{max-width:var(--mx);margin:0 auto;padding:0 64px;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}

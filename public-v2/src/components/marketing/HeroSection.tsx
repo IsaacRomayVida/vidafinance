@@ -68,6 +68,7 @@ export function HeroSection() {
               pointerEvents: 'none',
             }} />
             <img src="/images/worker.png" alt="Trabajador usando VIDA"
+              fetchPriority="high"
               style={{
                 width: 340, position: 'relative',
                 filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.12))',
