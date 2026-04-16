@@ -294,3 +294,5 @@
   .stmt-photo-col img{width:260px!important}
   .emo-col[style*="grid-template-columns"]{grid-template-columns:1fr!important}
 }
+/* Below-fold content-visibility for paint optimization (VID3-620) */
+.statement-section,.section,.calc,.closing{content-visibility:auto;contain-intrinsic-size:auto 800px}

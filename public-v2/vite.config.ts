@@ -19,11 +19,17 @@ export default defineConfig({
           if (id.includes('node_modules/react-router-dom') || id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
             return 'vendor';
           }
-          if (id.includes('node_modules/firebase')) {
+          if (id.includes('node_modules/firebase/auth') || id.includes('node_modules/@firebase/auth')) {
+            return 'firebase-auth';
+          }
+          if (id.includes('node_modules/firebase') || id.includes('node_modules/@firebase')) {
             return 'firebase';
           }
           if (id.includes('node_modules/i18next') || id.includes('node_modules/react-i18next')) {
             return 'i18n';
+          }
+          if (id.includes('node_modules/react-helmet-async')) {
+            return 'helmet';
           }
         },
       },
