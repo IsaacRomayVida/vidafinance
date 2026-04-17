@@ -5,6 +5,7 @@ const IORedis = require('ioredis');
 const { Worker } = require('bullmq');
 const pino = require('pino');
 const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting');
+const { scTokenRaw, scTokenProbe } = require('./lib/scToken');
 require('dotenv').config();
 
 const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
@@ -60,25 +61,10 @@ let _token = null, _tokenExp = 0;
 
 async function scToken() {
   if (_token && Date.now() < _tokenExp - 60000) return _token;
-  const { default: fetch } = await import('node-fetch');
-  const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL
-    || 'https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token';
-  const r = await fetch(tokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-REST-PRODUCT': process.env.SOFTCREDITO_PRODUCT_ID || process.env.SOFTCREDITO_CLIENT_ID,
-      'X-REST-APPLICATION': process.env.SOFTCREDITO_APPLICATION_ID || process.env.SOFTCREDITO_CLIENT_SECRET,
-    },
-  });
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    throw new Error('SC auth failed: ' + r.status + ' ' + body.slice(0, 200));
-  }
-  const d = await r.json();
+  const d = await scTokenRaw();
   _token = d.token || d.access_token;
   _tokenExp = Date.now() + (d.expires_in || 900) * 1000;
-  log.info({ tokenUrl }, 'SC token acquired');
+  log.info({ tokenUrl: process.env.SOFTCREDITO_TOKEN_URL }, 'SC token acquired');
   return _token;
 }
 
@@ -276,32 +262,26 @@ app.get('/debug-connectivity', async (req, res) => {
     };
   } catch(e) { results.https_softcredito = 'ERROR: ' + e.message; }
   
-  // 4. Direct HTTPS to the token endpoint (supports ?token_url= override for probing)
+  // 4. Direct HTTPS to the token endpoint (supports ?token_url= override for probing).
+  // Uses native https.request — same code path as scToken() — to reflect production
+  // behavior. node-fetch lowercases headers on the wire, which causes a 404 from
+  // SoftCredito's Apache auth module (see VID3-702/703).
   const tokenUrl = req.query.token_url
     || process.env.SOFTCREDITO_TOKEN_URL
     || 'https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token';
   try {
-    const { default: fetch } = await import('node-fetch');
-    const start = Date.now();
-    const r = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-REST-PRODUCT': process.env.SOFTCREDITO_PRODUCT_ID || process.env.SOFTCREDITO_CLIENT_ID,
-        'X-REST-APPLICATION': process.env.SOFTCREDITO_APPLICATION_ID || process.env.SOFTCREDITO_CLIENT_SECRET,
-      },
-      signal: AbortSignal.timeout(15000)
+    const probe = await scTokenProbe(tokenUrl, {
+      product: process.env.SOFTCREDITO_PRODUCT_ID || process.env.SOFTCREDITO_CLIENT_ID,
+      application: process.env.SOFTCREDITO_APPLICATION_ID || process.env.SOFTCREDITO_CLIENT_SECRET,
     });
-    const body = await r.text();
-    const contentType = r.headers.get('content-type') || '';
+    const contentType = probe.headers['content-type'] || '';
     results.token_endpoint = {
       url: tokenUrl,
-      status: r.status,
-      latencyMs: Date.now() - start,
-      isJson: contentType.includes('application/json') || body.trim().startsWith('{'),
-      bodyPreview: body.substring(0, 300),
-      server: r.headers.get('server'),
+      status: probe.status,
+      latencyMs: probe.latencyMs,
+      isJson: contentType.includes('application/json') || probe.body.trim().startsWith('{'),
+      bodyPreview: probe.body.substring(0, 300),
+      server: probe.headers['server'],
       contentType,
     };
   } catch(e) { results.token_endpoint = { error: e.message, url: tokenUrl }; }
@@ -325,40 +305,6 @@ app.get('/debug-connectivity', async (req, res) => {
   } catch(e) { results.direct_ip = 'ERROR: ' + e.message; }
   
   res.json(results);
-});
-
-app.get('/debug-sc-token', async (req, res) => {
-  try {
-    const { default: fetch } = await import('node-fetch');
-    const tokenUrl = process.env.SOFTCREDITO_TOKEN_URL;
-    const clientId = process.env.SOFTCREDITO_CLIENT_ID;
-    const clientSecret = process.env.SOFTCREDITO_CLIENT_SECRET;
-    const body = 'grant_type=client_credentials&client_id=' + encodeURIComponent(clientId) + '&client_secret=' + encodeURIComponent(clientSecret);
-    
-    console.log('Testing SC token URL:', tokenUrl);
-    console.log('Body:', body);
-    
-    const r = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-      body
-    });
-    
-    const rawText = await r.text();
-    const isJson = rawText.trim().startsWith('{');
-    
-    res.json({
-      status: r.status,
-      statusText: r.statusText,
-      headers: Object.fromEntries(r.headers.entries()),
-      isJson,
-      body: rawText.substring(0, 500),
-      tokenUrl,
-      clientIdPrefix: clientId?.substring(0, 8) + '...',
-    });
-  } catch (e) {
-    res.json({ error: e.message, stack: e.stack?.substring(0, 300) });
-  }
 });
 
 app.get('/check-outbound-ip', async (req, res) => {
