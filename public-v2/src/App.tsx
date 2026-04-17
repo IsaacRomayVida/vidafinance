@@ -28,6 +28,7 @@ const MyLoans = React.lazy(() => import('./pages/MyLoans').then(m => ({ default:
 const EmployerDashboard = React.lazy(() => import('./pages/EmployerDashboard').then(m => ({ default: m.EmployerDashboard })));
 const EmployeeRoster = React.lazy(() => import('./pages/EmployeeRoster').then(m => ({ default: m.EmployeeRoster })));
 const DeductionReports = React.lazy(() => import('./pages/DeductionReports').then(m => ({ default: m.DeductionReports })));
+const PayrollUpload = React.lazy(() => import('./pages/PayrollUpload').then(m => ({ default: m.PayrollUpload })));
 const OnboardingWizard = React.lazy(() => import('./pages/OnboardingWizard').then(m => ({ default: m.OnboardingWizard })));
 const AnalyticsPage = React.lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
@@ -94,6 +95,7 @@ export default function App() {
             <Route path="/employer/loans" element={<Navigate to="/employer/deductions" replace />} />
             <Route path="/employer/deductions" element={<Suspense fallback={<PageSpinner />}><DeductionReports /></Suspense>} />
             <Route path="/employer/onboarding" element={<Suspense fallback={<PageSpinner />}><OnboardingWizard /></Suspense>} />
+            <Route path="/employer/payroll" element={<Suspense fallback={<PageSpinner />}><PayrollUpload /></Suspense>} />
             <Route path="/employer/analytics" element={<Suspense fallback={<PageSpinner />}><AnalyticsPage /></Suspense>} />
           </Route>
         </Route>

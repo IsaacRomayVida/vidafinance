@@ -12,9 +12,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@types/papaparse": "^5.5.2",
     "firebase": "^12.11.0",
     "i18next": "^25.9.0",
     "i18next-browser-languagedetector": "^8.2.1",
+    "papaparse": "^5.5.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-helmet-async": "^3.0.0",
