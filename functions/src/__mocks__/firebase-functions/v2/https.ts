@@ -9,3 +9,9 @@ export class HttpsError extends Error {
 export const onCall = jest.fn(
   (_options: unknown, handler: (req: unknown) => unknown) => handler
 );
+
+// onRequest returns the handler as-is. Supports both (options, handler) and (handler) forms.
+export const onRequest = jest.fn((...args: unknown[]) => {
+  if (args.length === 1 && typeof args[0] === 'function') return args[0];
+  return args[1];
+});
