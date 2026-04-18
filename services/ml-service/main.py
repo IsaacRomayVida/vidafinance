@@ -442,6 +442,10 @@ async def score_loan_direct(
         if features["employment_tenure_months"] < 3:
             decision = "rejected"
 
+        # VID3-712 — ML_MODE override
+        from ml_mode import apply_ml_mode_override
+        decision = apply_ml_mode_override(decision)
+
         outcome = _DECISION_OUTCOME.get(decision, "review")
         return {
             "decision": decision,
