@@ -235,13 +235,33 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
     const pdf = await renderPDF(html);
     const url = await upload(pdf, `loans/${loanId}/contrato_${Date.now()}.pdf`);
 
-    // Persist metamapVerificationId on the loan doc so VID3-656's
-    // metamap-signing-client.js (flag-gated, not yet wired) can bind the
-    // generated contract to the signer's verified identity.
+    let metamapDocumentId = null;
+    let contractStatus = 'generated';
+    try {
+      const signing = require('./src/metamap-signing-client');
+      if (signing.isEnabled() && metamapVerificationId) {
+        const pdfBase64 = pdf.toString('base64');
+        const result = await signing.createSignedDocument({
+          loanId,
+          metamapVerificationId,
+          pdfBase64,
+          signerEmail: loan.employeeEmail,
+          signerName: loan.employeeName,
+        });
+        metamapDocumentId = result.documentId;
+        contractStatus = 'awaiting_signature';
+        console.log(`[metamap] Loan ${loanId} submitted for signing, documentId=${metamapDocumentId}`);
+      }
+    } catch (err) {
+      console.error(`[metamap] Signing failed for loan ${loanId}:`, err.message);
+    }
+
     await db.collection("loans").doc(loanId).update({
       contractUrl: url,
       contractGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
       metamapVerificationId: metamapVerificationId || null,
+      metamapDocumentId,
+      contractStatus,
     });
     await db
       .collection("employees")
