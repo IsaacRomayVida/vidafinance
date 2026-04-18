@@ -3,6 +3,7 @@ import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { notifyLoanEvent } from '../utils/notify';
+import { checkRateLimit } from '../utils/rateLimiter';
 
 // ─── Input Schema ─────────────────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ function calcExpectedDeduction(
 // ─── Main function ───────────────────────────────────────────────────────────
 
 export const processPayroll = onCall(
-  { region: 'us-central1', enforceAppCheck: false },
+  { region: 'us-central1', enforceAppCheck: true },
   async (request) => {
     // Auth: employer_admin role only
     if (!request.auth) {
@@ -45,6 +46,17 @@ export const processPayroll = onCall(
     const claims = request.auth.token;
     if (claims['role'] !== 'employer_admin' && claims['role'] !== 'admin') {
       throw new HttpsError('permission-denied', 'Employer admin role required');
+    }
+
+    // Rate limit: 10/min/uid (expensive batch operation, up to 10k rows)
+    try {
+      const allowed = await checkRateLimit(`rl:processPayroll:${request.auth.uid}`, 10, 60);
+      if (!allowed) {
+        throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+      }
+    } catch (e: unknown) {
+      if (e instanceof HttpsError) throw e;
+      logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
     }
 
     const input = ProcessPayrollSchema.parse(request.data);

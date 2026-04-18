@@ -115,6 +115,10 @@ jest.mock('crypto', () => ({
   }),
 }));
 
+jest.mock('../../utils/rateLimiter', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(true),
+}));
+
 // ── Imports (after mocks) ──────────────────────────────────────────────────────
 
 import {
@@ -123,6 +127,7 @@ import {
   getIndustryCode,
   INDUSTRY_CODES,
 } from '../approveEmployer';
+import { checkRateLimit } from '../../utils/rateLimiter';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -816,6 +821,16 @@ describe('approveEmployer', () => {
       expect(q).toBeDefined();
 
       process.env['REDIS_URL'] = originalUrl;
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('throws resource-exhausted when rate limit is exceeded', async () => {
+      (checkRateLimit as jest.Mock).mockResolvedValueOnce(false);
+      const req = makeRequest({});
+      await expect(approveEmployerHandler(req)).rejects.toMatchObject({
+        code: 'resource-exhausted',
+      });
     });
   });
 });

@@ -1,10 +1,12 @@
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { validateInput } from '../utils/validateInput';
+import { checkRateLimit } from '../utils/rateLimiter';
 
 const PortfolioReportSchema = z.object({
   period: z.enum(['7d', '30d', '90d', 'all']),
@@ -22,6 +24,17 @@ export const getPortfolioReport = onCall(
   { enforceAppCheck: true },
   withAuth(['admin', 'super_admin'], async (data, auth) =>
     withErrorHandling({ functionName: 'getPortfolioReport', uid: auth.uid }, async () => {
+      // Rate limit: 10/min/uid (expensive aggregation)
+      try {
+        const allowed = await checkRateLimit(`rl:getPortfolioReport:${auth.uid}`, 10, 60);
+        if (!allowed) {
+          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+        }
+      } catch (e: unknown) {
+        if (e instanceof HttpsError) throw e;
+        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+      }
+
       const { period } = validateInput(PortfolioReportSchema, data);
       const db = getFirestore();
       const cutoff = getPeriodCutoff(period);

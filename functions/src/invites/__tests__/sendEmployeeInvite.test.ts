@@ -82,9 +82,14 @@ jest.mock('bullmq', () => ({
   Queue: jest.fn().mockImplementation(() => ({ add: mockQueueAdd })),
 }));
 
+jest.mock('../../utils/rateLimiter', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(true),
+}));
+
 // ── Imports ───────────────────────────────────────────────────────────────────
 
 import { sendEmployeeInvite } from '../sendEmployeeInvite';
+import { checkRateLimit } from '../../utils/rateLimiter';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
 const fn = sendEmployeeInvite as unknown as Handler;
@@ -209,5 +214,13 @@ describe('sendEmployeeInvite', () => {
     >;
     expect(result.success).toBe(true);
     expect(mockInviteDocSet).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws resource-exhausted when rate-limited', async () => {
+    (checkRateLimit as jest.Mock).mockResolvedValueOnce(false);
+    await expect(fn({ auth: employerAuth, data: validInput })).rejects.toMatchObject({
+      code: 'resource-exhausted',
+    });
+    expect(mockInviteDocSet).not.toHaveBeenCalled();
   });
 });

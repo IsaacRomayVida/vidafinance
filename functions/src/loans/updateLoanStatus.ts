@@ -1,10 +1,12 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { validateInput } from '../utils/validateInput';
+import { checkRateLimit } from '../utils/rateLimiter';
 
 const UpdateLoanStatusSchema = z.object({
   loanId: z.string().min(1),
@@ -33,6 +35,17 @@ export const updateLoanStatus = onCall(
   { enforceAppCheck: true },
   withAuth(['ops', 'admin', 'super_admin'], async (data, auth) =>
     withErrorHandling({ functionName: 'updateLoanStatus', uid: auth.uid }, async () => {
+      // Rate limit: 20/min/uid (mutation)
+      try {
+        const allowed = await checkRateLimit(`rl:updateLoanStatus:${auth.uid}`, 20, 60);
+        if (!allowed) {
+          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+        }
+      } catch (e: unknown) {
+        if (e instanceof HttpsError) throw e;
+        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+      }
+
       const input = validateInput(UpdateLoanStatusSchema, data);
       const db = getFirestore();
       const now = Timestamp.now();

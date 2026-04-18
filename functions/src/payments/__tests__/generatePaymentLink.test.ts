@@ -1,5 +1,10 @@
+jest.mock('../../utils/rateLimiter', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(true),
+}));
+
 import { generatePaymentLink } from '../generatePaymentLink';
 import { _mockStore } from '../../__mocks__/firebase-admin/firestore';
+import { checkRateLimit } from '../../utils/rateLimiter';
 import fetch from '../../__mocks__/node-fetch';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
@@ -225,6 +230,17 @@ describe('generatePaymentLink', () => {
         })
       );
       delete process.env['INTERNAL_API_SECRET'];
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('throws resource-exhausted when rate limit is exceeded', async () => {
+      _mockStore.loans['loan-xyz'] = approvedLoan;
+      (checkRateLimit as jest.Mock).mockResolvedValueOnce(false);
+
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'resource-exhausted',
+      });
     });
   });
 });

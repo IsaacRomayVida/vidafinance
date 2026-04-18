@@ -1,6 +1,11 @@
+jest.mock('../../utils/rateLimiter', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(true),
+}));
+
 import { markLoanDisbursed } from '../markLoanDisbursed';
 import { _mockStore, mockDb } from '../../__mocks__/firebase-admin/firestore';
 import { mockRedis } from '../../__mocks__/utils/redis';
+import { checkRateLimit } from '../../utils/rateLimiter';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
 
@@ -210,6 +215,17 @@ describe('markLoanDisbursed', () => {
       const result = await fn({ auth: opsAuth, data: validInput }) as Record<string, unknown>;
       expect(result.success).toBe(true);
       expect(typeof result.dueDate).toBe('string');
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('throws resource-exhausted when rate limit is exceeded', async () => {
+      _mockStore.loans['loan-abc'] = approvedLoan;
+      (checkRateLimit as jest.Mock).mockResolvedValueOnce(false);
+
+      await expect(fn({ auth: opsAuth, data: validInput })).rejects.toMatchObject({
+        code: 'resource-exhausted',
+      });
     });
   });
 });
