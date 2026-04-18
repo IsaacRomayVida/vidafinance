@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 
@@ -35,8 +36,25 @@ interface Employee {
   kycStatus?: string;
   createdAt?: { seconds: number };
   loanCount?: number;
+  authUid?: string;
+  status?: string;
   [key: string]: unknown;
 }
+
+interface InviteRecord {
+  employeeDocId: string;
+  sentAt?: { seconds: number } | null;
+  acceptedAt?: { seconds: number } | null;
+  expiresAt?: { seconds: number } | null;
+  status?: string;
+}
+
+type InviteState = 'active' | 'invited' | 'pending';
+
+const RESEND_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const BULK_DELAY_MS = 200;
+const BULK_WARN_THRESHOLD = 50;
 
 interface Loan {
   id: string;
@@ -71,6 +89,33 @@ function KycBadge({ status }: { status?: string }) {
       whiteSpace: 'nowrap',
     }}>
       {c.label}
+    </span>
+  );
+}
+
+/* ── Invite status badge ─────────────────────────────────── */
+
+const INVITE_COLORS: Record<InviteState, { bg: string; text: string }> = {
+  active:  { bg: 'rgba(36,122,110,0.10)', text: '#247a6e' },
+  invited: { bg: 'rgba(42,102,160,0.10)', text: '#2a66a0' },
+  pending: { bg: 'rgba(147,170,169,0.15)', text: '#6b8382' },
+};
+
+function InviteBadge({ state, label }: { state: InviteState; label: string }) {
+  const c = INVITE_COLORS[state];
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '3px 10px',
+      borderRadius: 20,
+      fontSize: 11,
+      fontWeight: 600,
+      background: c.bg,
+      color: c.text,
+      letterSpacing: '0.2px',
+      whiteSpace: 'nowrap',
+    }}>
+      {label}
     </span>
   );
 }
@@ -110,6 +155,12 @@ export function EmployeeRoster() {
   /* filters */
   const [search, setSearch] = useState('');
   const [kycFilter, setKycFilter] = useState<KycFilter>('all');
+
+  /* invites */
+  const [invitesByEmployee, setInvitesByEmployee] = useState<Record<string, InviteRecord>>({});
+  const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
+  const [bulkSending, setBulkSending] = useState(false);
+  const [toast, setToast] = useState<{ kind: 'success' | 'error' | 'info'; msg: string } | null>(null);
 
   /* ── fetch employer code ─────────────────────────────── */
   useEffect(() => {
@@ -158,6 +209,38 @@ export function EmployeeRoster() {
     return unsub;
   }, [user]);
 
+  /* ── real-time invites (for status + cooldown) ───────── */
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'invites'),
+      where('employerId', '==', user.uid),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const map: Record<string, InviteRecord> = {};
+      snap.docs.forEach((d) => {
+        const data = d.data() as InviteRecord;
+        const empId = data.employeeDocId;
+        if (!empId) return;
+        const existing = map[empId];
+        const newSec = data.sentAt?.seconds ?? 0;
+        const oldSec = existing?.sentAt?.seconds ?? 0;
+        if (!existing || newSec > oldSec) {
+          map[empId] = data;
+        }
+      });
+      setInvitesByEmployee(map);
+    });
+    return unsub;
+  }, [user]);
+
+  /* ── toast auto-dismiss ──────────────────────────────── */
+  useEffect(() => {
+    if (!toast || toast.kind === 'info') return;
+    const id = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(id);
+  }, [toast]);
+
   /* ── derived: loan counts per employee ───────────────── */
   const loanCountMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -187,6 +270,95 @@ export function EmployeeRoster() {
       return true;
     });
   }, [employees, search, kycFilter]);
+
+  /* ── invite helpers ──────────────────────────────────── */
+  const getInviteState = (emp: Employee): InviteState => {
+    if (emp.authUid) return 'active';
+    const inv = invitesByEmployee[emp.id];
+    const sentMs = (inv?.sentAt?.seconds ?? 0) * 1000;
+    if (inv && !inv.acceptedAt && sentMs > 0 && Date.now() - sentMs < INVITE_TTL_MS) {
+      return 'invited';
+    }
+    return 'pending';
+  };
+
+  const canResend = (emp: Employee): boolean => {
+    const inv = invitesByEmployee[emp.id];
+    const sentMs = (inv?.sentAt?.seconds ?? 0) * 1000;
+    if (!sentMs) return true;
+    return Date.now() - sentMs >= RESEND_COOLDOWN_MS;
+  };
+
+  const sendInvite = async (employeeDocId: string): Promise<void> => {
+    if (!user) throw new Error('not authenticated');
+    const fn = httpsCallable(getFunctions(), 'sendEmployeeInvite');
+    await fn({ employerId: user.uid, employeeDocId });
+  };
+
+  const handleInvite = async (employeeDocId: string) => {
+    setSendingIds((prev) => {
+      const next = new Set(prev);
+      next.add(employeeDocId);
+      return next;
+    });
+    try {
+      await sendInvite(employeeDocId);
+      setToast({ kind: 'success', msg: t('roster_toast_invite_sent', 'Invitación enviada') });
+    } catch (e: unknown) {
+      const msg = (e instanceof Error ? e.message : String(e)) ||
+        t('roster_toast_invite_error', 'No se pudo enviar la invitación');
+      setToast({ kind: 'error', msg });
+    } finally {
+      setSendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(employeeDocId);
+        return next;
+      });
+    }
+  };
+
+  const pendingEmployees = useMemo(
+    () => employees.filter((e) => getInviteState(e) === 'pending'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [employees, invitesByEmployee],
+  );
+
+  const handleBulkInvite = async () => {
+    if (bulkSending) return;
+    const targets = pendingEmployees;
+    if (targets.length === 0) {
+      setToast({ kind: 'info', msg: t('roster_bulk_nothing', 'No hay empleados pendientes por invitar') });
+      return;
+    }
+    if (targets.length > BULK_WARN_THRESHOLD) {
+      const confirmMsg = t('roster_bulk_confirm_many', 'Se enviarán {{count}} invitaciones. ¿Continuar?', { count: targets.length });
+      if (!window.confirm(confirmMsg)) return;
+    }
+    setBulkSending(true);
+    let sent = 0;
+    let failed = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const emp = targets[i];
+      setToast({
+        kind: 'info',
+        msg: t('roster_bulk_progress', 'Enviando {{done}} de {{total}} invitaciones…', { done: i + 1, total: targets.length }),
+      });
+      try {
+        await sendInvite(emp.id);
+        sent++;
+      } catch {
+        failed++;
+      }
+      if (i < targets.length - 1) {
+        await new Promise((r) => setTimeout(r, BULK_DELAY_MS));
+      }
+    }
+    setBulkSending(false);
+    setToast({
+      kind: failed > 0 ? 'error' : 'success',
+      msg: t('roster_bulk_done', '{{sent}} enviadas, {{failed}} fallaron', { sent, failed }),
+    });
+  };
 
   /* ── copy invite code ────────────────────────────────── */
   const handleCopy = async () => {
@@ -330,7 +502,54 @@ export function EmployeeRoster() {
             </button>
           ))}
         </div>
+
+        {/* Bulk invite */}
+        <button
+          onClick={handleBulkInvite}
+          disabled={bulkSending || pendingEmployees.length === 0}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 20,
+            fontSize: 12,
+            fontWeight: 600,
+            border: 'none',
+            cursor: bulkSending || pendingEmployees.length === 0 ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s',
+            background: pendingEmployees.length === 0 ? 'rgba(25,68,69,0.08)' : '#a28657',
+            color: pendingEmployees.length === 0 ? '#93aaa9' : '#fff',
+            opacity: bulkSending ? 0.7 : 1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {bulkSending
+            ? t('roster_btn_sending', 'Enviando…')
+            : `${t('roster_bulk_invite', 'Invitar a todos los pendientes')} (${pendingEmployees.length})`}
+        </button>
       </div>
+
+      {/* ── Toast ───────────────────────────────────────── */}
+      {toast && (
+        <div
+          role="status"
+          style={{
+            marginBottom: 16,
+            padding: '12px 16px',
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 500,
+            background:
+              toast.kind === 'success' ? 'rgba(36,122,110,0.10)' :
+              toast.kind === 'error'   ? 'rgba(180,60,60,0.10)' :
+                                         'rgba(25,68,69,0.06)',
+            color:
+              toast.kind === 'success' ? '#247a6e' :
+              toast.kind === 'error'   ? '#a83232' :
+                                         '#4a6364',
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
 
       {/* ── Employee list ───────────────────────────────── */}
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
@@ -366,7 +585,7 @@ export function EmployeeRoster() {
             {/* Table header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '2fr 1.4fr 1.2fr 1fr 0.7fr 0.6fr',
+              gridTemplateColumns: '1.8fr 1.3fr 1.2fr 0.9fr 0.7fr 0.5fr 1.3fr',
               padding: '14px 24px',
               borderBottom: '1px solid rgba(25,68,69,0.06)',
               background: '#fafaf8',
@@ -378,6 +597,7 @@ export function EmployeeRoster() {
                 t('roster_col_joined', 'Registro'),
                 t('roster_col_kyc', 'KYC'),
                 t('roster_col_loans', 'Prést.'),
+                t('roster_col_status', 'Estado'),
               ].map((h) => (
                 <div key={h} style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '1.5px', color: '#93aaa9' }}>
                   {h}
@@ -386,12 +606,16 @@ export function EmployeeRoster() {
             </div>
 
             {/* Rows */}
-            {filtered.map((emp) => (
+            {filtered.map((emp) => {
+              const inviteState = getInviteState(emp);
+              const isSending = sendingIds.has(emp.id);
+              const resendReady = canResend(emp);
+              return (
               <div
                 key={emp.id}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '2fr 1.4fr 1.2fr 1fr 0.7fr 0.6fr',
+                  gridTemplateColumns: '1.8fr 1.3fr 1.2fr 0.9fr 0.7fr 0.5fr 1.3fr',
                   padding: '16px 24px',
                   borderBottom: '1px solid rgba(25,68,69,0.04)',
                   alignItems: 'center',
@@ -432,8 +656,64 @@ export function EmployeeRoster() {
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', textAlign: 'center' }}>
                   {loanCountMap[emp.id] ?? 0}
                 </div>
+
+                {/* Invite status + action */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                  {inviteState === 'active' && (
+                    <InviteBadge state="active" label={t('roster_status_active', 'Activo')} />
+                  )}
+                  {inviteState === 'invited' && (
+                    <>
+                      <InviteBadge state="invited" label={t('roster_status_invited', 'Invitación enviada')} />
+                      <button
+                        onClick={() => handleInvite(emp.id)}
+                        disabled={isSending || !resendReady || bulkSending}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 14,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          border: '1px solid rgba(25,68,69,0.12)',
+                          background: '#fff',
+                          color: resendReady && !isSending ? '#194445' : '#93aaa9',
+                          cursor: isSending || !resendReady || bulkSending ? 'not-allowed' : 'pointer',
+                          opacity: isSending || !resendReady ? 0.6 : 1,
+                        }}
+                      >
+                        {isSending
+                          ? t('roster_btn_sending', 'Enviando…')
+                          : t('roster_btn_resend', 'Reenviar')}
+                      </button>
+                    </>
+                  )}
+                  {inviteState === 'pending' && (
+                    <>
+                      <InviteBadge state="pending" label={t('roster_status_pending', 'Pendiente')} />
+                      <button
+                        onClick={() => handleInvite(emp.id)}
+                        disabled={isSending || bulkSending}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: 14,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          border: 'none',
+                          background: '#194445',
+                          color: '#fff',
+                          cursor: isSending || bulkSending ? 'not-allowed' : 'pointer',
+                          opacity: isSending || bulkSending ? 0.6 : 1,
+                        }}
+                      >
+                        {isSending
+                          ? t('roster_btn_sending', 'Enviando…')
+                          : t('roster_btn_invite', 'Invitar')}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-            ))}
+              );
+            })}
           </>
         )}
       </div>
