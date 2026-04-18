@@ -6,6 +6,7 @@ const { Worker } = require('bullmq');
 const pino = require('pino');
 const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting');
 const { scTokenRaw, scTokenProbe } = require('./lib/scToken');
+const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 require('dotenv').config();
 
 const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
