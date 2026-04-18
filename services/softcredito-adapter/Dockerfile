@@ -3,16 +3,19 @@
 FROM node:22.15-alpine3.21
 WORKDIR /app
 
-# Copy the shared module (services/shared/) so ../shared/ resolves from the service directory
-COPY services/shared/ ./services/shared/
-
-# Install service deps (cached layer — only invalidates when package*.json changes)
-COPY services/softcredito-adapter/package*.json ./services/softcredito-adapter/
-WORKDIR /app/services/softcredito-adapter
+# Install the service's deps at /app/node_modules so Node's module resolution
+# can find them from both services/softcredito-adapter/ AND services/shared/ files.
+COPY services/softcredito-adapter/package*.json ./
 RUN npm ci --only=production
 
-# Copy the rest of the service source
-COPY services/softcredito-adapter/ .
+# Copy the shared module (../shared/ relative to the service at runtime)
+COPY services/shared/ ./services/shared/
+
+# Copy the service source
+COPY services/softcredito-adapter/ ./services/softcredito-adapter/
+
+# Run from the service directory so relative requires (../shared/alerting) resolve
+WORKDIR /app/services/softcredito-adapter
 
 EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
