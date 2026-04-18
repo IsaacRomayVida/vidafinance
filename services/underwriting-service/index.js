@@ -3,6 +3,7 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { alert5xx, alertRateLimit, alertFraudScore, alertFirestoreFailure, alertRedisLost } = require('../shared/alerting');
+const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 require('dotenv').config();
 
 const metamapClient = require('./src/metamap-client');
