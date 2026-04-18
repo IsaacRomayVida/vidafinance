@@ -469,3 +469,107 @@ describe('metamap_shadow_log collection', () => {
     await assertFails(getDoc(doc(anonCtx.firestore(), 'metamap_shadow_log/ver1')));
   });
 });
+
+// ── VID3-664 core isolation tests ─────────────────────────────────────────────
+// These five tests enshrine the isolation invariants the rule rewrite exists
+// to protect. If any of these regress, employee PII (CURP/RFC/bank/salary)
+// leaks across tenants. Keep passing.
+
+describe('VID3-664 core isolation', () => {
+  it('(1) employee A cannot read employee B in the same employer', async () => {
+    await seedEmployee('employeeA', 'employer1', { curp: 'AAAA000000HDFAAA01', monthlySalary: 10000 });
+    await seedEmployee('employeeB', 'employer1', { curp: 'BBBB000000HDFBBB02', monthlySalary: 20000 });
+
+    const ctx = testEnv.authenticatedContext('employeeA', { role: 'employee' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'employees/employeeB')));
+  });
+
+  it('(2) employee A cannot read employee C in a different employer', async () => {
+    await seedEmployee('employeeA', 'employer1');
+    await seedEmployee('employeeC', 'employer2', { curp: 'CCCC000000HDFCCC03', bankClabe: '012345678901234567' });
+
+    const ctx = testEnv.authenticatedContext('employeeA', { role: 'employee' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'employees/employeeC')));
+  });
+
+  it('(3) employer admin A can read their own employees but not employer B employees', async () => {
+    await seedEmployee('employeeA', 'employer1');
+    await seedEmployee('employeeB', 'employer2');
+
+    const employerAdminA = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertSucceeds(getDoc(doc(employerAdminA.firestore(), 'employees/employeeA')));
+    await assertFails(getDoc(doc(employerAdminA.firestore(), 'employees/employeeB')));
+  });
+
+  it('(4) ops can read any employee', async () => {
+    await seedEmployee('employeeA', 'employer1');
+    await seedEmployee('employeeB', 'employer2');
+
+    const opsCtx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(getDoc(doc(opsCtx.firestore(), 'employees/employeeA')));
+    await assertSucceeds(getDoc(doc(opsCtx.firestore(), 'employees/employeeB')));
+  });
+
+  it('(5) employee cannot write to their own loan doc from client SDK', async () => {
+    await seedLoan('loan1', 'employeeA', 'employer1');
+
+    const ctx = testEnv.authenticatedContext('employeeA', { role: 'employee' });
+    // create
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'loans/loan-new'), {
+        employeeId: 'employeeA', employerId: 'employer1', amount: 1000, status: 'pending',
+      })
+    );
+    // update
+    await assertFails(updateDoc(doc(ctx.firestore(), 'loans/loan1'), { status: 'paid' }));
+  });
+});
+
+// ── invites collection — deny all client access (VID3-672) ───────────────────
+
+describe('invites collection', () => {
+  it('no client can read invites — Admin SDK only', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'invites/invite1'), {
+        employerId: 'employer1', tokenHash: 'abc', status: 'pending',
+      });
+    });
+
+    const adminCtx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(getDoc(doc(adminCtx.firestore(), 'invites/invite1')));
+
+    const employerCtx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertFails(getDoc(doc(employerCtx.firestore(), 'invites/invite1')));
+  });
+
+  it('no client can write invites — Admin SDK only', async () => {
+    const employerCtx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertFails(
+      setDoc(doc(employerCtx.firestore(), 'invites/invite-new'), {
+        employerId: 'employer1', tokenHash: 'x', status: 'pending',
+      })
+    );
+  });
+});
+
+// ── webhookEvents — deny all client access (VID3-657) ────────────────────────
+
+describe('webhookEvents collection', () => {
+  it('admin cannot read webhookEvents from client SDK', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'webhookEvents/ev1'), {
+        provider: 'metamap', signatureValid: true,
+      });
+    });
+
+    const adminCtx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(getDoc(doc(adminCtx.firestore(), 'webhookEvents/ev1')));
+  });
+
+  it('no client can write webhookEvents', async () => {
+    const adminCtx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(
+      setDoc(doc(adminCtx.firestore(), 'webhookEvents/ev-new'), { provider: 'metamap' })
+    );
+  });
+});

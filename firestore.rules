@@ -9,74 +9,123 @@ service cloud.firestore {
       return request.auth != null;
     }
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isAuthenticated() && request.auth.uid == userId;
     }
     function hasRole(role) {
-      return request.auth.token.role == role;
+      return isAuthenticated() && request.auth.token.role == role;
     }
     function isAdmin() {
-      // Support both legacy token.admin boolean and new role-based claims
-      return hasRole('admin') || hasRole('super_admin') || request.auth.token.admin == true;
+      return hasRole('admin') || hasRole('super_admin') || (isAuthenticated() && request.auth.token.admin == true);
     }
     function isOps() {
       return hasRole('ops') || isAdmin();
     }
+    // An employer_admin's uid is the employer doc id; the employerId claim is
+    // a fallback for the case where the two diverge (set by setClaims CF).
+    function isEmployerAdminOf(employerId) {
+      return isAuthenticated() && (
+        request.auth.uid == employerId ||
+        request.auth.token.employerId == employerId
+      );
+    }
+    // Only touching these fields is a no-op update — allow self-updates that don't modify them.
+    function onlyAffects(allowedKeys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedKeys);
+    }
 
     // =============================================
     // USERS COLLECTION
-    // Users can read their own profile (role, email, etc.).
-    // All writes go through Cloud Functions (Admin SDK).
+    // Owner or admin can read their profile. All writes via Admin SDK (setClaims CF).
     // =============================================
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
       allow write: if false;
     }
 
     // =============================================
     // EMPLOYERS COLLECTION
-    // Employers can read/update their own record (limited fields).
-    // Users can create their own employer record during onboarding.
-    // Only admins can create records for other users.
+    // Get: the employer's own admin or ops. (Employee onboarding uses
+    //   list+where('employerCode') — single-doc get by id is not used cross-tenant.)
+    // List: left open for the unauthenticated employerCode lookup during
+    //   onboarding (Onboarding.tsx). The document reveals only public company
+    //   info (name, logo). Tightening requires moving lookup into a CF — follow-up.
+    // Create: user bootstrapping their own employer doc during onboarding, or admin.
+    // Update: admin (any field), or own admin (whitelisted contact fields only).
+    // Delete: ops only.
     // =============================================
     match /employers/{employerId} {
-      // Allow list queries for employer code lookup during employee onboarding
+      allow get: if isEmployerAdminOf(employerId) || isOps();
       allow list: if true;
-      allow get: if isOwner(employerId) || isOps();
       allow create: if isAdmin() || isOwner(employerId);
-      allow update: if isAdmin() || isOwner(employerId);
+      allow update: if isAdmin()
+                    || (isEmployerAdminOf(employerId)
+                        && onlyAffects(['contactName', 'contactEmail', 'contactPhone', 'logoUrl', 'updatedAt']));
       allow delete: if isOps();
     }
 
     // =============================================
-    // EMPLOYEES COLLECTION
-    // Employees can read/update their own record (limited fields).
-    // Employers can read their own employees (via employerId match).
-    // Authenticated users can create their own employee record (self-registration).
+    // EMPLOYEES COLLECTION (flat /employees/{uid})
+    // Read: the employee themselves, the employer_admin of their employer, or ops.
+    //   This is the core isolation: employee A cannot read employee B even in
+    //   the same employer, and employer A cannot read employer B's employees.
+    // Create: self-registration during onboarding (uid == employeeId).
+    // Update: ops (any field), or self (whitelisted personal fields only) —
+    //   creditLimit, availableCredit, employerId, kycStatus must come from CFs.
+    // Delete: ops only.
     // =============================================
     match /employees/{employeeId} {
       allow read: if isOwner(employeeId)
-                  || (isAuthenticated() && resource.data.employerId == request.auth.uid)
+                  || (resource != null && isEmployerAdminOf(resource.data.employerId))
                   || isOps();
-      allow create: if request.auth != null && request.auth.uid == employeeId;
-      allow update: if isOps() || isOwner(employeeId);
+      allow create: if isOwner(employeeId);
+      allow update: if isOps()
+                    || (isOwner(employeeId)
+                        && onlyAffects(['phone', 'bankClabe', 'bankName', 'address',
+                                        'dateOfBirth', 'gender', 'updatedAt']));
       allow delete: if isOps();
+    }
+
+    // =============================================
+    // EMPLOYEES SUBCOLLECTION (/employers/{employerId}/employees/{employeeDocId})
+    // Used by the invite flow (sendEmployeeInvite CF). All writes via Admin SDK.
+    // Read: the employer_admin of that employer, or ops.
+    // =============================================
+    match /employers/{employerId}/employees/{employeeDocId} {
+      allow read: if isEmployerAdminOf(employerId) || isOps();
+      allow write: if false;
     }
 
     // =============================================
     // LOANS COLLECTION
-    // Employees can read their own loans; employers can read loans under them.
-    // ALL writes are Cloud Function only (Admin SDK bypasses rules).
-    // Client SDK can NEVER create or modify loans.
+    // Read: the loan's employee, its employer_admin, or ops.
+    // All writes via Admin SDK (requestLoan / markLoanDisbursed / etc.).
     // =============================================
     match /loans/{loanId} {
-      allow read: if isAuthenticated() && (
-        resource.data.employeeId == request.auth.uid ||
-        resource.data.employerId == request.auth.uid ||
-        isOps()
-      );
-      allow create: if false;  // Only Cloud Functions via Admin SDK
-      allow update: if false;  // Only Cloud Functions via Admin SDK
-      allow delete: if isOps();  // Ops can delete test data
+      allow read: if resource != null && (
+                    isOwner(resource.data.employeeId) ||
+                    isEmployerAdminOf(resource.data.employerId) ||
+                    isOps()
+                  );
+      allow create, update: if false;
+      allow delete: if isOps();
+    }
+
+    // =============================================
+    // INVITES COLLECTION (VID3-672)
+    // All access via Admin SDK: sendEmployeeInvite / lookupInvite / acceptInvite CFs.
+    // The lookupInvite CF accepts the raw token and hashes it server-side,
+    // so clients never need to read these documents directly.
+    // =============================================
+    match /invites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    // =============================================
+    // WEBHOOK EVENTS (VID3-657) — MetaMap webhook handler
+    // Admin SDK only — written by the webhook Cloud Function, read by ops via CF.
+    // =============================================
+    match /webhookEvents/{eventId} {
+      allow read, write: if false;
     }
 
     // =============================================
@@ -91,20 +140,21 @@ service cloud.firestore {
     // REPAYMENTS — EMPLOYEE + ADMIN READ, IMMUTABLE
     // =============================================
     match /repayments/{d} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.employeeId == request.auth.uid);
+      allow read: if isAdmin()
+                  || (resource != null && isOwner(resource.data.employeeId));
       allow write: if false;
     }
 
     // =============================================
-    // REVIEW QUEUE — ADMIN-ONLY READ, WRITES VIA CLOUD FUNCTIONS
+    // REVIEW QUEUE — OPS-ONLY READ, WRITES VIA CLOUD FUNCTIONS
     // =============================================
     match /review_queue/{docId} {
       allow read: if isOps();
-      allow write: if false;  // Only Cloud Functions via Admin SDK
+      allow write: if false;
     }
 
     // =============================================
-    // AUDIT & OPERATIONAL LOGS — ADMIN-ONLY READ, IMMUTABLE
+    // AUDIT & OPERATIONAL LOGS — OPS/ADMIN-ONLY READ, IMMUTABLE
     // All writes go through Cloud Functions (Admin SDK).
     // =============================================
     match /audit_log/{docId}         { allow read: if isOps();    allow write: if false; }
@@ -133,7 +183,6 @@ service cloud.firestore {
 
     // =============================================
     // DENY ALL OTHER PATHS
-    // Explicit catch-all to prevent accidental access.
     // =============================================
     match /{document=**} {
       allow read, write: if false;
