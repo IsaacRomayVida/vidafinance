@@ -261,10 +261,21 @@ async def process_underwrite_loan(job, job_token=None):
         decision = "rejected"
         rejection_reason = "Flagged by Stage 0 fraud pre-screen"
 
+    # ── 4.5 ML_MODE override (VID3-712) ──────────────────────────────────────
+    from ml_mode import apply_ml_mode_override, get_ml_mode
+    _original_decision = decision
+    decision = apply_ml_mode_override(decision)
+    if decision != _original_decision:
+        logger.info(
+            "[underwriting] ML_MODE=%s overrode decision: %s → %s (loan %s)",
+            get_ml_mode(), _original_decision, decision, loan_id,
+        )
+        rejection_reason = None  # not a rejection, just routed for review
+
     # ── 5. Stage 5: Active learning human-review routing ─────────────────────
     route_to_human = False
     human_review_router = get_human_review_router()
-    if human_review_router is not None and decision != "rejected":
+    if human_review_router is not None and decision == "approved":
         try:
             import numpy as _np
             feature_vector = _np.array([
