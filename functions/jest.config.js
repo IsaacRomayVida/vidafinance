@@ -22,6 +22,7 @@ module.exports = {
   moduleNameMapper: {
     '^firebase-admin/app$': '<rootDir>/src/__mocks__/firebase-admin/app.ts',
     '^firebase-admin/firestore$': '<rootDir>/src/__mocks__/firebase-admin/firestore.ts',
+    '^firebase-admin/storage$': '<rootDir>/src/__mocks__/firebase-admin/storage.ts',
     '^firebase-admin/auth$': '<rootDir>/src/__mocks__/firebase-admin/auth.ts',
     '^firebase-functions/v2/https$': '<rootDir>/src/__mocks__/firebase-functions/v2/https.ts',
     '^node-fetch$': '<rootDir>/src/__mocks__/node-fetch.ts',
