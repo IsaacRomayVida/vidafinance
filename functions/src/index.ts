@@ -22,6 +22,7 @@ export { generatePaymentLink } from './payments/generatePaymentLink';
 export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
 export { getSystemHealth } from './admin/getSystemHealth';
 export { sendVerificationEmail } from './auth/sendVerificationEmail';
+export { sendEmployeeInvite, lookupInvite, acceptInvite } from './invites';
 
 
 initializeApp();
