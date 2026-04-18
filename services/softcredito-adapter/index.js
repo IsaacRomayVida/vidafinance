@@ -7,9 +7,14 @@ const pino = require('pino');
 const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting');
 const { scTokenRaw, scTokenProbe } = require('./lib/scToken');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
+const { parseBureauMode, withBureauFallback } = require('./lib/bureauFallback');
 require('dotenv').config();
 
 const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
+
+// Fail-fast on invalid BUREAU_MODE. Default is 'live' (no behavior change).
+const BUREAU_MODE = parseBureauMode(process.env.BUREAU_MODE);
+log.info({ bureauMode: BUREAU_MODE }, 'bureau mode configured');
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -327,9 +332,14 @@ app.post('/bureau/query', requireInternal, async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields: curp, fullName, dateOfBirth' });
   }
   try {
-    const data = await scCall('POST', '/bureau/query', { curp, fullName, dateOfBirth, rfc });
+    const data = await withBureauFallback({
+      mode: BUREAU_MODE,
+      log,
+      liveFn: () => scCall('POST', '/bureau/query', { curp, fullName, dateOfBirth, rfc }),
+    });
     res.json(data);
   } catch (err) {
+    // Only reached in 'live' mode, where errors propagate through.
     log.warn({ error: err.message }, 'Bureau query error — returning defaults');
     res.json({ hasBureauRecord: false, score: 500, activeDefaults: 0, competitorLoans: 0, error: err.message });
   }
