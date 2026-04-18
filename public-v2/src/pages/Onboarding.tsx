@@ -234,6 +234,54 @@ export function Onboarding() {
   const [metamapVerificationId, setMetamapVerificationId] = useState('');
   const [metamapIdentityId, setMetamapIdentityId] = useState('');
 
+  // Invite token state — populated when user arrives at /onboarding?invite=TOKEN
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [inviteId, setInviteId] = useState<string | null>(null);
+  const [inviteEmployerName, setInviteEmployerName] = useState('');
+  const [inviteInvalid, setInviteInvalid] = useState(false);
+
+  // Detect ?invite=TOKEN and validate via lookupInvite callable
+  useEffect(() => {
+    const token = searchParams.get('invite');
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const functions = getFunctions();
+        const lookup = httpsCallable<
+          { token: string },
+          | { valid: false; reason: string }
+          | {
+              valid: true;
+              employerName: string;
+              employeeName: string;
+              employeeEmail: string;
+              inviteId: string;
+            }
+        >(functions, 'lookupInvite');
+        const { data } = await lookup({ token });
+        if (cancelled) return;
+        if (data.valid) {
+          setInviteToken(token);
+          setInviteId(data.inviteId);
+          setInviteEmployerName(data.employerName);
+          setMemData((d) => ({
+            ...d,
+            name: d.name || data.employeeName,
+            email: d.email || data.employeeEmail,
+          }));
+        } else {
+          setInviteInvalid(true);
+        }
+      } catch {
+        if (!cancelled) setInviteInvalid(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const totalSteps = role === 'employer' ? 7 : role === 'employee' ? 6 : 0;
 
   const goForward = useCallback((toStep: number) => {
@@ -519,6 +567,20 @@ export function Onboarding() {
       await updateDoc(doc(db, 'employers', memData.employerId), {
         totalEmployees: increment(1),
       });
+      // Link auth.uid to the pre-existing roster employee doc when the user
+      // arrived via an invite. Non-fatal: employees/{uid} was already written.
+      if (inviteToken && inviteId) {
+        try {
+          const functions = getFunctions();
+          const accept = httpsCallable<
+            { inviteId: string; token: string },
+            { success: boolean; employerId: string; employeeDocId: string }
+          >(functions, 'acceptInvite');
+          await accept({ inviteId, token: inviteToken });
+        } catch (inviteErr) {
+          console.warn('acceptInvite failed', inviteErr);
+        }
+      }
       goForward(6);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error creating account');
@@ -1348,6 +1410,26 @@ export function Onboarding() {
       <div className="onb-progress">
         <div className="onb-progress-fill" style={{ width: `${progressPct}%` }} />
       </div>
+
+      {/* Invite banner */}
+      {inviteEmployerName && (
+        <div style={{
+          margin: '12px 20px 0', padding: '10px 14px', borderRadius: 10,
+          background: 'rgba(168,213,208,0.18)', border: '1px solid rgba(29,82,83,0.25)',
+          color: '#194445', fontSize: 13, textAlign: 'center', position: 'relative', zIndex: 10,
+        }}>
+          Has sido invitado por <strong>{inviteEmployerName}</strong>
+        </div>
+      )}
+      {inviteInvalid && (
+        <div style={{
+          margin: '12px 20px 0', padding: '10px 14px', borderRadius: 10,
+          background: 'rgba(220,170,50,0.15)', border: '1px solid rgba(180,130,20,0.35)',
+          color: '#6b4a10', fontSize: 13, textAlign: 'center', position: 'relative', zIndex: 10,
+        }}>
+          Esta invitación no es válida o ya expiró
+        </div>
+      )}
 
       {/* Body */}
       <div className="onb-body">
