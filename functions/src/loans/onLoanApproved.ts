@@ -14,6 +14,7 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
   const db = getFirestore();
   const loanId = event.params['loanId'];
   const emp = (await db.collection('employees').doc(after['employeeId'] as string).get()).data() ?? {};
+  const metamapVerificationId = (emp['metamapVerificationId'] as string | undefined) ?? null;
 
   await db.collection('disbursement_queue').doc(loanId).set({
     loanId,
@@ -28,7 +29,10 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
     status: 'queued',
     queuedAt: FieldValue.serverTimestamp(),
   });
-  await db.collection('loans').doc(loanId).update({ status: 'disbursement_queued' });
+  await db.collection('loans').doc(loanId).update({
+    status: 'disbursement_queued',
+    metamapVerificationId,
+  });
 
   const softcreditoUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
   const internalSecret = process.env['INTERNAL_SECRET'] ?? '';
@@ -164,6 +168,7 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         body: JSON.stringify({
           loanId,
           employeeId: after['employeeId'],
+          metamapVerificationId,
         }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         signal: (AbortSignal as any).timeout(30000),
