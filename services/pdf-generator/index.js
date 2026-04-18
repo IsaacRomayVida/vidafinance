@@ -205,7 +205,7 @@ app.use((req, res, next) => {
 });
 
 app.post("/contracts/generate", requireInternal, async (req, res) => {
-  const { loanId, employeeId } = req.body;
+  const { loanId, employeeId, metamapVerificationId } = req.body;
   if (!loanId || !employeeId) {
     return res.status(400).json({ error: "loanId and employeeId are required" });
   }
@@ -235,9 +235,13 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
     const pdf = await renderPDF(html);
     const url = await upload(pdf, `loans/${loanId}/contrato_${Date.now()}.pdf`);
 
+    // Persist metamapVerificationId on the loan doc so VID3-656's
+    // metamap-signing-client.js (flag-gated, not yet wired) can bind the
+    // generated contract to the signer's verified identity.
     await db.collection("loans").doc(loanId).update({
       contractUrl: url,
       contractGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
+      metamapVerificationId: metamapVerificationId || null,
     });
     await db
       .collection("employees")
