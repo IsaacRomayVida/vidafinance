@@ -1,25 +1,113 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow unauthenticated uploads ONLY to onboarding docs path
-    // (users upload documents before account creation at Step 4)
-    match /onboarding/employer_docs/{allPaths=**} {
-      allow write: if request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('application/pdf|image/.*');
-      allow read: if request.auth != null;
+
+    // ---- helpers ----
+    function isAuth() {
+      return request.auth != null;
     }
-    match /employers/{uid}/docs/{file} {
-      allow read: if request.auth != null &&
-        (request.auth.uid == uid || request.auth.token.admin == true);
-      allow write: if request.auth != null &&
-        request.auth.uid == uid && resource == null &&
-        request.resource.size < 5 * 1024 * 1024 &&
-        request.resource.contentType.matches('image/.*|application/pdf');
+    function isOps() {
+      return isAuth() && (
+        request.auth.token.role == 'ops' ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'super_admin'
+      );
     }
-    match /loans/{loanId}/{file} {
-      allow read: if request.auth != null;
+    function isEmployerAdminOf(employerId) {
+      return isAuth()
+        && request.auth.token.role == 'employer_admin'
+        && request.auth.token.employerId == employerId;
+    }
+    function sizeUnder(limit) {
+      return request.resource.size < limit;
+    }
+    function contentTypeIn(pattern) {
+      return request.resource.contentType.matches(pattern);
+    }
+    function isCreate() {
+      return resource == null;
+    }
+    function loanDoc(loanId) {
+      return firestore.get(/databases/(default)/documents/loans/$(loanId)).data;
+    }
+
+    // ---- 1. Employer signup docs (pre-auth) ----
+    // Unauthenticated writes allowed ONLY during the employer self-signup wizard.
+    // sessionId must have >= 20 chars of entropy to prevent trivial path guessing.
+    match /onboarding/employer_signup/{sessionId}/{fileName} {
+      allow write: if sessionId.size() >= 20
+                   && sizeUnder(10 * 1024 * 1024)
+                   && contentTypeIn('application/pdf|image/.*');
+      allow read: if isOps();
+    }
+
+    // ---- 1b. Legacy onboarding path (migration window) ----
+    // EmployerDashboard.tsx still writes to onboarding/employer_docs/{uid}/...
+    // after auth. Tighten to authenticated owner only until clients migrate.
+    match /onboarding/employer_docs/{uid}/{fileName} {
+      allow write: if isAuth()
+                   && request.auth.uid == uid
+                   && sizeUnder(10 * 1024 * 1024)
+                   && contentTypeIn('application/pdf|image/.*');
+      allow read: if isAuth() && (request.auth.uid == uid || isOps());
+    }
+
+    // ---- 2. Employer post-signup docs ----
+    match /employers/{employerId}/docs/{fileName} {
+      allow read: if isEmployerAdminOf(employerId) || isOps();
+      allow write: if isEmployerAdminOf(employerId)
+                   && isCreate()
+                   && sizeUnder(10 * 1024 * 1024)
+                   && contentTypeIn('application/pdf|image/.*');
+    }
+
+    // ---- 3. Signed loan contracts ----
+    // Writes are performed by the pdf-generator service (Admin SDK, bypasses rules).
+    // Forward-looking path: contracts/{loanId}.pdf
+    match /contracts/{fileName} {
+      allow read: if isAuth() && (
+        request.auth.uid == firestore.get(
+          /databases/(default)/documents/loans/$(fileName.split('\\.')[0])
+        ).data.employeeUid ||
+        request.auth.uid == firestore.get(
+          /databases/(default)/documents/loans/$(fileName.split('\\.')[0])
+        ).data.employerAdminUid ||
+        isOps()
+      );
       allow write: if false;
     }
-    match /{all=**} { allow read, write: if false; }
+    // Legacy path currently used by pdf-generator: loans/{loanId}/{file}
+    match /loans/{loanId}/{file} {
+      allow read: if isAuth() && (
+        request.auth.uid == loanDoc(loanId).employeeUid ||
+        request.auth.uid == loanDoc(loanId).employerAdminUid ||
+        isOps()
+      );
+      allow write: if false;
+    }
+
+    // ---- 4. KYC identity documents ----
+    match /kyc/{employeeUid}/{fileName} {
+      allow read: if isAuth() && (request.auth.uid == employeeUid || isOps());
+      allow write: if isAuth()
+                   && request.auth.uid == employeeUid
+                   && isCreate()
+                   && sizeUnder(20 * 1024 * 1024)
+                   && contentTypeIn('image/.*|application/pdf');
+    }
+
+    // ---- 5. Payroll CSV uploads ----
+    match /payroll/{employerId}/{yyyyMM}/{fileName} {
+      allow read: if isEmployerAdminOf(employerId) || isOps();
+      allow write: if isEmployerAdminOf(employerId)
+                   && isCreate()
+                   && sizeUnder(50 * 1024 * 1024)
+                   && contentTypeIn('text/csv|application/vnd.ms-excel');
+    }
+
+    // ---- 6. Default deny ----
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
   }
 }
