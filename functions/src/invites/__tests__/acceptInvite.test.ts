@@ -72,9 +72,14 @@ jest.mock('firebase-functions/v2/https', () => {
   };
 });
 
+jest.mock('../../utils/rateLimiter', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(true),
+}));
+
 // ── Imports ───────────────────────────────────────────────────────────────────
 
 import { acceptInvite } from '../acceptInvite';
+import { checkRateLimit } from '../../utils/rateLimiter';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
 const fn = acceptInvite as unknown as Handler;
@@ -182,5 +187,13 @@ describe('acceptInvite', () => {
     await expect(fn({ data: validInput })).rejects.toMatchObject({
       code: 'unauthenticated',
     });
+  });
+
+  it('throws resource-exhausted when rate-limited', async () => {
+    (checkRateLimit as jest.Mock).mockResolvedValueOnce(false);
+    await expect(fn({ auth: callerAuth, data: validInput })).rejects.toMatchObject({
+      code: 'resource-exhausted',
+    });
+    expect(mockRunTransaction).not.toHaveBeenCalled();
   });
 });

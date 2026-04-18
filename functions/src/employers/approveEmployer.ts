@@ -6,6 +6,8 @@ import { nanoid } from 'nanoid';
 import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 
+import { checkRateLimit } from '../utils/rateLimiter';
+
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
 export const ApproveEmployerSchema = z.object({
@@ -184,6 +186,17 @@ export async function approveEmployerHandler(
     }
   }
 
+  // Rate limit: 20/min/uid (mutation)
+  try {
+    const allowed = await checkRateLimit(`rl:approveEmployer:${adminUid}`, 20, 60);
+    if (!allowed) {
+      throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+    }
+  } catch (e: unknown) {
+    if (e instanceof HttpsError) throw e;
+    logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+  }
+
   // Fetch admin email for audit log (best-effort from token or Firestore)
   const adminEmail =
     (request.auth.token['email'] as string | undefined) ??
@@ -326,7 +339,7 @@ export async function approveEmployerHandler(
 export const approveEmployer = onCall(
   {
     region: 'us-central1',
-    enforceAppCheck: false,
+    enforceAppCheck: true,
     maxInstances: 5,
     memory: '256MiB',
     timeoutSeconds: 30,

@@ -1,13 +1,26 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { getFirestore } from 'firebase-admin/firestore';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { checkRateLimit } from '../utils/rateLimiter';
 
 export const getEmployeeDashboard = onCall(
   { enforceAppCheck: true },
   withAuth(['employee'], async (_data, auth) =>
     withErrorHandling({ functionName: 'getEmployeeDashboard', uid: auth.uid }, async () => {
+      // Rate limit: 60/min/uid (read-only dashboard)
+      try {
+        const allowed = await checkRateLimit(`rl:getEmployeeDashboard:${auth.uid}`, 60, 60);
+        if (!allowed) {
+          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+        }
+      } catch (e: unknown) {
+        if (e instanceof HttpsError) throw e;
+        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+      }
+
       const db = getFirestore();
       const uid = auth.uid;
 

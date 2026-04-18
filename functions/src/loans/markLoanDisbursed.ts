@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { getRedis } from '../utils/redis';
+import { checkRateLimit } from '../utils/rateLimiter';
 import { calculateNextPayrollDate } from './calculateNextPayrollDate';
 
 const MarkLoanDisbursedSchema = z.object({
@@ -37,6 +38,17 @@ export const markLoanDisbursed = onCall(
           loanId: (data as Record<string, unknown>)['loanId'] as string,
         },
         async () => {
+          // Rate limit: 20/min/uid (mutation)
+          try {
+            const allowed = await checkRateLimit(`rl:markLoanDisbursed:${auth.uid}`, 20, 60);
+            if (!allowed) {
+              throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+            }
+          } catch (e: unknown) {
+            if (e instanceof HttpsError) throw e;
+            logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+          }
+
           const parseResult = MarkLoanDisbursedSchema.safeParse(data);
           if (!parseResult.success) {
             throw new HttpsError(

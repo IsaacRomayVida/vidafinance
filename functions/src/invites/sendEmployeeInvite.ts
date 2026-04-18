@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { checkRateLimit } from '../utils/rateLimiter';
 
 const SendEmployeeInviteSchema = z.object({
   employerId: z.string().min(1),
@@ -45,6 +46,17 @@ export const sendEmployeeInvite = onCall(
     ['employer_admin'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'sendEmployeeInvite', uid: auth.uid }, async () => {
+        // Rate limit: 20/min/uid (mutation — sends outbound email/notification)
+        try {
+          const allowed = await checkRateLimit(`rl:sendEmployeeInvite:${auth.uid}`, 20, 60);
+          if (!allowed) {
+            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+          }
+        } catch (e: unknown) {
+          if (e instanceof HttpsError) throw e;
+          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+        }
+
         const parsed = SendEmployeeInviteSchema.safeParse(data);
         if (!parsed.success) {
           throw new HttpsError(

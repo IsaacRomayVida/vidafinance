@@ -1,9 +1,11 @@
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import { withErrorHandling } from '../utils/errorHandler';
 import { validateInput } from '../utils/validateInput';
+import { checkRateLimit } from '../utils/rateLimiter';
 
 const ContactFormSchema = z.object({
   name: z.string().min(2).max(100),
@@ -14,9 +16,22 @@ const ContactFormSchema = z.object({
 });
 
 export const submitContactForm = onCall(
-  { cors: true, enforceAppCheck: false },
+  { cors: true, enforceAppCheck: true },
   async (request) => {
     return withErrorHandling({ functionName: 'submitContactForm' }, async () => {
+      // Rate limit: 30/min keyed on App Check token (unauth endpoint)
+      const appCheckToken =
+        (request as unknown as { app?: { appId?: string } }).app?.appId ?? 'anonymous';
+      try {
+        const allowed = await checkRateLimit(`rl:submitContactForm:${appCheckToken}`, 30, 60);
+        if (!allowed) {
+          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+        }
+      } catch (e: unknown) {
+        if (e instanceof HttpsError) throw e;
+        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+      }
+
       const input = validateInput(ContactFormSchema, request.data);
       const db = getFirestore();
 
