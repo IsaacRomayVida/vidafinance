@@ -23,6 +23,7 @@ export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
 export { getSystemHealth } from './admin/getSystemHealth';
 export { sendVerificationEmail } from './auth/sendVerificationEmail';
 export { sendEmployeeInvite, lookupInvite, acceptInvite } from './invites';
+export { metamapWebhook } from './webhooks';
 
 
 initializeApp();
