@@ -573,3 +573,103 @@ describe('webhookEvents collection', () => {
     );
   });
 });
+
+// ── VID3-710 additional coverage ─────────────────────────────────────────────
+// Fills the remaining gaps in the VID3-646 isolation matrix: employer_admin
+// write isolation, field-level update whitelist on employees, admin read on
+// users, rate-limit collection lockdown, and the default-deny fallback.
+
+describe('employees — write isolation (VID3-710)', () => {
+  it('employer_admin cannot update an employee in their own employer (Admin SDK only)', async () => {
+    await seedEmployee('employeeA', 'employer1');
+
+    const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'employees/employeeA'), { phone: '+521111111111' })
+    );
+  });
+
+  it('employer_admin cannot write to /employers/{id}/employees subcollection (Admin SDK only)', async () => {
+    const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employers/employer1/employees/emp1'), {
+        name: 'Injected', employerId: 'employer1',
+      })
+    );
+  });
+
+  it('employee cannot update their own salary field', async () => {
+    await seedEmployee('employee1', 'employer1', { monthlySalary: 10000 });
+
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'employees/employee1'), { monthlySalary: 99999 })
+    );
+  });
+
+  it('employee cannot update their own employerId field', async () => {
+    await seedEmployee('employee1', 'employer1');
+
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'employees/employee1'), { employerId: 'employer2' })
+    );
+  });
+
+  it('ops can update employee fields (manual correction path)', async () => {
+    await seedEmployee('employee1', 'employer1');
+
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'employees/employee1'), { creditLimit: 5000 })
+    );
+  });
+});
+
+describe('users — admin read (VID3-710)', () => {
+  it('admin can read any user profile', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users/userX'), {
+        email: 'x@example.com', role: 'employee',
+      });
+    });
+
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'users/userX')));
+  });
+});
+
+describe('rate_limits collection (VID3-710)', () => {
+  it('no client can read rate_limits docs', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rate_limits/uid1_requestLoan'), { count: 1 });
+    });
+
+    const adminCtx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(getDoc(doc(adminCtx.firestore(), 'rate_limits/uid1_requestLoan')));
+
+    const employeeCtx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(getDoc(doc(employeeCtx.firestore(), 'rate_limits/uid1_requestLoan')));
+  });
+
+  it('no client can write rate_limits docs', async () => {
+    const adminCtx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(
+      setDoc(doc(adminCtx.firestore(), 'rate_limits/uid1_requestLoan'), { count: 1 })
+    );
+  });
+});
+
+describe('default deny (VID3-710)', () => {
+  it('reads on an unknown collection are denied for authenticated users', async () => {
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'some_random_coll/x')));
+  });
+
+  it('writes to an unknown collection are denied for authenticated users', async () => {
+    const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'some_random_coll/x'), { foo: 'bar' })
+    );
+  });
+});
