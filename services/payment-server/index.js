@@ -5,6 +5,7 @@ const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Queue, Worker } = require('bullmq');
 const { alert5xx, alertDisbursementFailed, alertQueueDepth, alertRedisLost } = require('../shared/alerting');
+const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 require('dotenv').config();
 
 const pkg = require('./package.json');
