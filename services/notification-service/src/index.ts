@@ -39,7 +39,7 @@ app.get('/health', async (_req, res) => {
   // Queue depth
   const queueDepth: Record<string, number> = {};
   try {
-    const q = new Queue('vida-notifications', { connection: redis });
+    const q = new Queue('vida-notifications', { connection: redis as any });
     queueDepth.notifications = await q.getWaitingCount();
     await q.close();
   } catch (_) { queueDepth.notifications = -1; }
