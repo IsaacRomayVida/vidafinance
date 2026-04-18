@@ -18,6 +18,7 @@ import { sendSlackAlert } from './utils/slackAlert';
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
+export { getContractDownloadUrl } from './loans/getContractDownloadUrl';
 export { generatePaymentLink } from './payments/generatePaymentLink';
 export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
 export { getSystemHealth } from './admin/getSystemHealth';
