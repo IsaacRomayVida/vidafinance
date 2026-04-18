@@ -19,3 +19,4 @@ torch>=2.2.0
 modAL-python==0.4.2.1
 faiss-cpu==1.8.0
 openai==1.14.0
+prometheus-client==0.20.0

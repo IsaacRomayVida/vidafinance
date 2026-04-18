@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Header, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from prometheus_client import Counter, Histogram, make_asgi_app
 import os, json, time
 import redis as Redis
 from dotenv import load_dotenv
@@ -39,6 +40,22 @@ elif not AKEY:
 
 VERSION = "1.0.0"
 START_TIME = time.time()
+
+predictions_total = Counter(
+    "ml_predictions_total",
+    "Total ML predictions served",
+    ["endpoint", "outcome"],
+)
+prediction_latency_seconds = Histogram(
+    "ml_prediction_latency_seconds",
+    "Prediction latency",
+    ["endpoint"],
+)
+fallback_total = Counter(
+    "ml_fallback_total",
+    "Times ml-service fell back to default/neutral response",
+    ["endpoint", "reason"],
+)
 
 # Initialize Firebase if credentials are available
 _fb_app = None
@@ -118,6 +135,8 @@ class AlertMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(AlertMiddleware)
 
+app.mount("/metrics", make_asgi_app())
+
 
 # ── Redis connection monitoring ────────────────────────────────────────
 _redis_was_connected = True
@@ -179,104 +198,128 @@ def health():
     }
 
 
+_RISK_TIER_OUTCOME = {1: "approve", 2: "review", 3: "decline"}
+
+
 @app.post("/underwrite/employer")
 async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
-    uid = payload.get("employerUid", "")
-    ck = f"ml:employer:{uid}"
+    endpoint = "/underwrite/employer"
+    _start = time.time()
+    outcome = "error"
     try:
-        c = rdb.get(ck)
-        if c:
-            return json.loads(c)
-    except Exception:
-        pass
-    result = employer_score(payload)
-    llm = {
-        "risk_tier": result["risk_tier"],
-        "red_flags": [],
-        "green_flags": [],
-        "escalate_to_human": False,
-        "summary": "Rule-based",
-    }
-    global _LLM_ENABLED
-    if _LLM_ENABLED:
-        import anthropic
-
+        uid = payload.get("employerUid", "")
+        ck = f"ml:employer:{uid}"
         try:
-            client = anthropic.Anthropic(api_key=AKEY)
-            msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=400,
-                system="Credit risk analyst for VIDA Finance Mexico SOFOM. Respond ONLY with valid JSON.",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f'Analyze employer risk. Company:{payload.get("companyName","?")} '
-                            f'Size:{payload.get("companySize","?")} Industry:{payload.get("industry","?")} '
-                            f'Payroll:{payload.get("payrollSystem","?")} Years:{payload.get("yearsActive","?")}\n'
-                            'Respond: {"risk_tier":1|2|3,"red_flags":[],"green_flags":[],'
-                            '"escalate_to_human":true|false,"summary":"1 sentence"}'
-                        ),
-                    }
-                ],
-            )
-            llm = json.loads(msg.content[0].text)
-        except anthropic.AuthenticationError as e:
-            # Disable for the process so a bad key doesn't spam logs per request.
-            _LLM_ENABLED = False
-            logger.warning(
-                "Anthropic authentication failed; disabling LLM enrichment for this process: %s",
-                e,
-            )
-        except Exception as e:
-            logger.warning("LLM enrichment failed, falling back to rule-based: %s", e)
-    final = {
-        **result,
-        "llm_analysis": llm,
-        "fraud": fraud_score({}),
-        "shap": [],
-        "decisionId": f"{uid}_{int(time.time())}",
-        "ts": int(time.time()),
-    }
-    try:
-        rdb.setex(ck, TTL, json.dumps(final))
-    except Exception:
-        pass
-    return final
+            c = rdb.get(ck)
+            if c:
+                cached = json.loads(c)
+                outcome = _RISK_TIER_OUTCOME.get(cached.get("risk_tier"), "success")
+                return cached
+        except Exception:
+            pass
+        result = employer_score(payload)
+        llm = {
+            "risk_tier": result["risk_tier"],
+            "red_flags": [],
+            "green_flags": [],
+            "escalate_to_human": False,
+            "summary": "Rule-based",
+        }
+        global _LLM_ENABLED
+        if _LLM_ENABLED:
+            import anthropic
+
+            try:
+                client = anthropic.Anthropic(api_key=AKEY)
+                msg = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=400,
+                    system="Credit risk analyst for VIDA Finance Mexico SOFOM. Respond ONLY with valid JSON.",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": (
+                                f'Analyze employer risk. Company:{payload.get("companyName","?")} '
+                                f'Size:{payload.get("companySize","?")} Industry:{payload.get("industry","?")} '
+                                f'Payroll:{payload.get("payrollSystem","?")} Years:{payload.get("yearsActive","?")}\n'
+                                'Respond: {"risk_tier":1|2|3,"red_flags":[],"green_flags":[],'
+                                '"escalate_to_human":true|false,"summary":"1 sentence"}'
+                            ),
+                        }
+                    ],
+                )
+                llm = json.loads(msg.content[0].text)
+            except anthropic.AuthenticationError as e:
+                # Disable for the process so a bad key doesn't spam logs per request.
+                _LLM_ENABLED = False
+                fallback_total.labels(endpoint=endpoint, reason="anthropic_auth_failed").inc()
+                logger.warning(
+                    "Anthropic authentication failed; disabling LLM enrichment for this process: %s",
+                    e,
+                )
+            except Exception as e:
+                fallback_total.labels(endpoint=endpoint, reason="anthropic_unavailable").inc()
+                logger.warning("LLM enrichment failed, falling back to rule-based: %s", e)
+        final = {
+            **result,
+            "llm_analysis": llm,
+            "fraud": fraud_score({}),
+            "shap": [],
+            "decisionId": f"{uid}_{int(time.time())}",
+            "ts": int(time.time()),
+        }
+        try:
+            rdb.setex(ck, TTL, json.dumps(final))
+        except Exception:
+            pass
+        outcome = _RISK_TIER_OUTCOME.get(final.get("risk_tier"), "success")
+        return final
+    finally:
+        prediction_latency_seconds.labels(endpoint=endpoint).observe(time.time() - _start)
+        predictions_total.labels(endpoint=endpoint, outcome=outcome).inc()
 
 
 @app.post("/underwrite/employee")
 async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
     auth(x_internal_secret)
-    uid = payload.get("employeeId", "")
-    amt = payload.get("amount", 0)
-    ck = f"ml:employee:{uid}:{amt}"
+    endpoint = "/underwrite/employee"
+    _start = time.time()
+    outcome = "error"
     try:
-        c = rdb.get(ck)
-        if c:
-            return json.loads(c)
-    except Exception:
-        pass
-    fd = fraud_score(
-        {
-            "requestsLastHour": payload.get("requestsLastHour", 0),
-            "amountToSalaryRatio": amt / max(payload.get("monthlySalary", 1), 1),
+        uid = payload.get("employeeId", "")
+        amt = payload.get("amount", 0)
+        ck = f"ml:employee:{uid}:{amt}"
+        try:
+            c = rdb.get(ck)
+            if c:
+                outcome = "success"
+                return json.loads(c)
+        except Exception:
+            pass
+        fd = fraud_score(
+            {
+                "requestsLastHour": payload.get("requestsLastHour", 0),
+                "amountToSalaryRatio": amt / max(payload.get("monthlySalary", 1), 1),
+            }
+        )
+        result = employee_score(payload)
+        final = {
+            **result,
+            "fraud": fd,
+            "shap": [],
+            "decisionId": f"{uid}_{int(time.time())}",
+            "ts": int(time.time()),
         }
-    )
-    result = employee_score(payload)
-    final = {
-        **result,
-        "fraud": fd,
-        "shap": [],
-        "decisionId": f"{uid}_{int(time.time())}",
-        "ts": int(time.time()),
-    }
-    try:
-        rdb.setex(ck, 3600, json.dumps(final))
-    except Exception:
-        pass
-    return final
+        try:
+            rdb.setex(ck, 3600, json.dumps(final))
+        except Exception:
+            pass
+        outcome = "success"
+        return final
+    finally:
+        prediction_latency_seconds.labels(endpoint=endpoint).observe(time.time() - _start)
+        predictions_total.labels(endpoint=endpoint, outcome=outcome).inc()
 
 
 @app.get("/explain/{decision_id}")
@@ -356,6 +399,9 @@ def clear_cache(uid: str, x_internal_secret: str = Header(None)):
     return {"cleared": f"ml:employer:{uid}"}
 
 
+_DECISION_OUTCOME = {"approved": "approve", "rejected": "decline"}
+
+
 @app.post("/score")
 async def score_loan_direct(
     payload: dict, x_internal_secret: str = Header(None)
@@ -366,36 +412,48 @@ async def score_loan_direct(
     Returns champion decision + challenger shadow score + SHAP top-5.
     """
     auth(x_internal_secret)
-    from workers.underwriting_worker import (
-        build_model_features,
-        APPROVAL_THRESHOLD,
-    )
-    from models.champion_challenger import ModelRouter
-    import os as _os
+    endpoint = "/score"
+    _start = time.time()
+    outcome = "error"
+    try:
+        from workers.underwriting_worker import (
+            build_model_features,
+            APPROVAL_THRESHOLD,
+        )
+        from models.champion_challenger import ModelRouter
+        import os as _os
 
-    borrower = payload.get("borrowerSnapshot", {})
-    principal = float(payload.get("principalAmount", 0))
-    monthly_salary = float(borrower.get("monthlySalary", 1))
+        borrower = payload.get("borrowerSnapshot", {})
+        principal = float(payload.get("principalAmount", 0))
+        monthly_salary = float(borrower.get("monthlySalary", 1))
 
-    features = build_model_features(borrower, principal, monthly_salary)
+        features = build_model_features(borrower, principal, monthly_salary)
 
-    champion_path = _os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
-    challenger_path = _os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
-    router = ModelRouter.load(champion_path, challenger_path)
-    result = router.predict(features, threshold=APPROVAL_THRESHOLD)
+        champion_path = _os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
+        challenger_path = _os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
+        try:
+            router = ModelRouter.load(champion_path, challenger_path)
+        except Exception:
+            fallback_total.labels(endpoint=endpoint, reason="model_load_failed").inc()
+            raise
+        result = router.predict(features, threshold=APPROVAL_THRESHOLD)
 
-    decision = result["decision"]
-    if features["employment_tenure_months"] < 3:
-        decision = "rejected"
+        decision = result["decision"]
+        if features["employment_tenure_months"] < 3:
+            decision = "rejected"
 
-    return {
-        "decision": decision,
-        "championScore": result["champion_score"],
-        "challengerScore": result["challenger_score"],
-        "threshold": APPROVAL_THRESHOLD,
-        "championModel": result["champion_model"],
-        "challengerModel": result["challenger_model"],
-        "shapTop5": result["shap_top5"],
-    }
+        outcome = _DECISION_OUTCOME.get(decision, "review")
+        return {
+            "decision": decision,
+            "championScore": result["champion_score"],
+            "challengerScore": result["challenger_score"],
+            "threshold": APPROVAL_THRESHOLD,
+            "championModel": result["champion_model"],
+            "challengerModel": result["challenger_model"],
+            "shapTop5": result["shap_top5"],
+        }
+    finally:
+        prediction_latency_seconds.labels(endpoint=endpoint).observe(time.time() - _start)
+        predictions_total.labels(endpoint=endpoint, outcome=outcome).inc()
 
 
