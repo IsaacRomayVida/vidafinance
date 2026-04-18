@@ -27,6 +27,16 @@ SEC = os.environ.get("INTERNAL_SECRET", "")
 AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
 
+# Prefix check avoids 401-per-request when a placeholder string is set.
+_LLM_ENABLED = AKEY.startswith("sk-ant-")
+if AKEY and not _LLM_ENABLED:
+    logger.warning(
+        "ANTHROPIC_API_KEY is set but does not look like a real key; "
+        "LLM enrichment disabled."
+    )
+elif not AKEY:
+    logger.info("ANTHROPIC_API_KEY not set; LLM enrichment disabled.")
+
 VERSION = "1.0.0"
 START_TIME = time.time()
 
@@ -188,10 +198,11 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
         "escalate_to_human": False,
         "summary": "Rule-based",
     }
-    if AKEY:
-        try:
-            import anthropic
+    global _LLM_ENABLED
+    if _LLM_ENABLED:
+        import anthropic
 
+        try:
             client = anthropic.Anthropic(api_key=AKEY)
             msg = client.messages.create(
                 model="claude-sonnet-4-20250514",
@@ -211,8 +222,15 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
                 ],
             )
             llm = json.loads(msg.content[0].text)
+        except anthropic.AuthenticationError as e:
+            # Disable for the process so a bad key doesn't spam logs per request.
+            _LLM_ENABLED = False
+            logger.warning(
+                "Anthropic authentication failed; disabling LLM enrichment for this process: %s",
+                e,
+            )
         except Exception as e:
-            print("LLM error:", e)
+            logger.warning("LLM enrichment failed, falling back to rule-based: %s", e)
     final = {
         **result,
         "llm_analysis": llm,
