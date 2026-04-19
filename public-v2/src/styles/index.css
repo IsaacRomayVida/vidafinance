@@ -296,3 +296,37 @@
 }
 /* Below-fold content-visibility for paint optimization (VID3-620) */
 .statement-section,.section,.calc,.closing{content-visibility:auto;contain-intrinsic-size:auto 800px}
+
+/* ═══════════════════════════════════════════════════════════════
+   A11Y — FOCUS-VISIBLE BASELINE (VID3-715 PR A)
+   ═══════════════════════════════════════════════════════════════
+   Global focus ring for every keyboard-focusable element. Honors
+   prefers-reduced-motion: the transition is skipped when enabled.
+
+   The :not() exclusions are for elements that already have their
+   own focus style (e.g. .auth-input uses border-bottom change).
+   ═══════════════════════════════════════════════════════════════ */
+
+:is(button, a, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Auth inputs already have a custom border-bottom focus style — let them keep it */
+.auth-input:focus-visible {
+  outline: none;
+  border-radius: 0;
+}
+
+/* Buttons with rounded corners — match the radius so the ring follows the shape */
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :is(button, a, input, select, textarea, [role="button"], [tabindex]) {
+    transition: outline-offset 0.12s ease-out;
+  }
+}
