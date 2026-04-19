@@ -2,6 +2,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
+import { safeSetItem } from '../../lib/safeStorage';
 
 export function EmployeeLayout() {
   const { t, i18n } = useTranslation();
@@ -25,7 +26,7 @@ export function EmployeeLayout() {
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <button
-                onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); localStorage.setItem('vida_lang', next); }}
+                onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); safeSetItem('vida_lang', next); }}
                 style={{ fontSize: 11, fontWeight: 700, color: '#93aaa9', background: 'none', border: '1px solid rgba(25,68,69,0.08)', borderRadius: 20, padding: '5px 14px', cursor: 'pointer', letterSpacing: '0.5px' }}
               >
                 {i18n.language === 'es' ? 'EN' : 'ES'}
