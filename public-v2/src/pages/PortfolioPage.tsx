@@ -75,7 +75,7 @@ export function PortfolioPage() {
           setReport(result.data);
           setLoading(false);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.warn('getPortfolioReport error:', e);
         if (!cancelled) {
           // Show empty state instead of error
