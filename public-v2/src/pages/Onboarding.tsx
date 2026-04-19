@@ -16,6 +16,7 @@ import {
   increment,
   serverTimestamp,
 } from 'firebase/firestore';
+import { safeSetItem } from '../lib/safeStorage';
 
 
 type Role = 'employer' | 'employee' | null;
@@ -1400,7 +1401,7 @@ export function Onboarding() {
           <Link to="/login">
             {t('onb_already_account')} <strong>{t('onb_login')}</strong>
           </Link>
-          <button className="nav-lang" onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); localStorage.setItem('vida_lang', next); }}>
+          <button className="nav-lang" onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); safeSetItem('vida_lang', next); }}>
             {i18n.language === 'es' ? 'EN' : 'ES'}
           </button>
         </div>

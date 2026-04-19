@@ -54,7 +54,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         {/* Marketing pages */}
-        <Route element={<MarketingLayout />}>
+        <Route element={<ErrorBoundary><MarketingLayout /></ErrorBoundary>}>
           <Route path="/" element={<Suspense fallback={<PageSpinner />}><HomePage /></Suspense>} />
           <Route path="/employers" element={<Suspense fallback={<PageSpinner />}><EmployerPage /></Suspense>} />
           <Route path="/employees" element={<Suspense fallback={<PageSpinner />}><EmployeePage /></Suspense>} />
@@ -70,15 +70,15 @@ export default function App() {
 
         {/* Get-started and onboarding redirect to contact */}
         <Route path="/get-started" element={<Navigate to="/contact" replace />} />
-        <Route path="/onboarding" element={<Suspense fallback={<PageSpinner />}><Onboarding /></Suspense>} />
+        <Route path="/onboarding" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}><Onboarding /></Suspense></ErrorBoundary>} />
 
         {/* Auth */}
-        <Route path="/login" element={<Suspense fallback={<PageSpinner />}><Login /></Suspense>} />
+        <Route path="/login" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}><Login /></Suspense></ErrorBoundary>} />
 
         {/* Employee portal — Suspense is INSIDE the guard so auth checks
             always run before any lazy chunk is loaded */}
         <Route element={<RouteGuard allowedRoles={['employee']} />}>
-          <Route element={<EmployeeLayout />}>
+          <Route element={<ErrorBoundary><EmployeeLayout /></ErrorBoundary>}>
             <Route path="/employee" element={<Suspense fallback={<PageSpinner />}><EmployeeDashboard /></Suspense>} />
             <Route path="/employee/dashboard" element={<Navigate to="/employee" replace />} />
             <Route path="/employee/apply" element={<Suspense fallback={<PageSpinner />}><LoanWizard /></Suspense>} />
@@ -88,7 +88,7 @@ export default function App() {
 
         {/* Employer portal */}
         <Route element={<RouteGuard allowedRoles={['employer_admin']} />}>
-          <Route element={<EmployerLayout />}>
+          <Route element={<ErrorBoundary><EmployerLayout /></ErrorBoundary>}>
             <Route path="/employer" element={<Suspense fallback={<PageSpinner />}><EmployerDashboard /></Suspense>} />
             <Route path="/employer/dashboard" element={<Navigate to="/employer" replace />} />
             <Route path="/employer/employees" element={<Suspense fallback={<PageSpinner />}><EmployeeRoster /></Suspense>} />
@@ -102,7 +102,7 @@ export default function App() {
 
         {/* Ops / Admin portal */}
         <Route element={<RouteGuard allowedRoles={['ops', 'admin', 'super_admin']} />}>
-          <Route element={<AdminLayout />}>
+          <Route element={<ErrorBoundary><AdminLayout /></ErrorBoundary>}>
             <Route path="/ops" element={<Suspense fallback={<PageSpinner />}><AdminDashboard /></Suspense>} />
             <Route path="/ops/review-queue" element={<Suspense fallback={<PageSpinner />}><ReviewQueue /></Suspense>} />
             <Route path="/ops/review-queue/:id" element={<Suspense fallback={<PageSpinner />}><ReviewDetail /></Suspense>} />
@@ -118,7 +118,7 @@ export default function App() {
         <Route path="/admin/*" element={<Navigate to="/ops" replace />} />
 
         {/* 404 catch-all */}
-        <Route path="*" element={<Suspense fallback={<PageSpinner />}><NotFound /></Suspense>} />
+        <Route path="*" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}><NotFound /></Suspense></ErrorBoundary>} />
       </Routes>
     </BrowserRouter>
     </AuthProvider>

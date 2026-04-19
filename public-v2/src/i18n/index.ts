@@ -2,8 +2,9 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import es from './es.json';
 import en from './en.json';
+import { safeGetItem, safeSetItem } from '../lib/safeStorage';
 
-const savedLang = localStorage.getItem('vida_lang') || 'es';
+const savedLang = safeGetItem('vida_lang') || 'es';
 
 i18n
   .use(initReactI18next)
@@ -21,7 +22,7 @@ i18n
 document.documentElement.lang = savedLang;
 i18n.on('languageChanged', (lang) => {
   document.documentElement.lang = lang;
-  localStorage.setItem('vida_lang', lang);
+  safeSetItem('vida_lang', lang);
 });
 
 export default i18n;

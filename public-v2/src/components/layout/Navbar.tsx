@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { VidaLogo } from '../shared/VidaLogo';
+import { safeSetItem } from '../../lib/safeStorage';
 
 interface NavbarProps {
   ctaLabel?: string;
@@ -23,7 +24,7 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
   const toggleLang = () => {
     const next = i18n.language === 'es' ? 'en' : 'es';
     i18n.changeLanguage(next);
-    localStorage.setItem('vida_lang', next);
+    safeSetItem('vida_lang', next);
     document.documentElement.lang = next;
   };
 
