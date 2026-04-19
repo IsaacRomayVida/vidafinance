@@ -88,8 +88,9 @@ export function EmployerMgmt() {
       const functions = getFunctions();
       const fn = httpsCallable(functions, 'approveEmployer');
       await fn({ employerId, approved });
-    } catch (e: any) {
-      alert('Error: ' + (e?.message || 'Unknown error'));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      alert('Error: ' + msg);
     } finally {
       setActionLoading(null);
     }
