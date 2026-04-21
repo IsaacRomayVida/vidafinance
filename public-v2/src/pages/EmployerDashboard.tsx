@@ -5,6 +5,7 @@ import { doc, getDoc, updateDoc, collection, query, where, orderBy, onSnapshot }
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db, storage } from '../lib/firebase';
+import { classifyError, friendlyError } from '../lib/errors';
 import { useAuth } from '../hooks/useAuth';
 import { signOut } from 'firebase/auth';
 
@@ -407,8 +408,9 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
       setSaved(true);
       onUpdated({ prefixes, mode });
       setTimeout(() => setSaved(false), 3000);
-    } catch {
-      setError(t('curp_config_error'));
+    } catch (err) {
+      const code = classifyError(err);
+      setError(code === 'generic' ? t('curp_config_error') : friendlyError(err));
     } finally {
       setSaving(false);
     }

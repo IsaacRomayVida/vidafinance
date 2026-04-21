@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../lib/firebase';
+import { friendlyError } from '../lib/errors';
 import { useAuth } from '../hooks/useAuth';
 
 const LOAN_PURPOSES = [
@@ -227,8 +228,7 @@ export function LoanWizard() {
         loanRef: result.data.loanRef || result.data.loanId,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      setError(friendlyError(err));
       setSubmitting(false);
     }
   };

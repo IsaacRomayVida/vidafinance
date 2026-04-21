@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
+import { classifyError, friendlyError } from '../lib/errors';
 import { useAuth } from '../hooks/useAuth';
 
 interface Loan {
@@ -276,8 +277,9 @@ function PayButton({ loanId, t }: { loanId: string; t: ReturnType<typeof useTran
       const result = await genPayLink({ loanId });
       setPayUrl(result.data.paymentUrl);
       window.open(result.data.paymentUrl, '_blank');
-    } catch {
-      setError(t('dash_pay_error', 'Error'));
+    } catch (err) {
+      const code = classifyError(err);
+      setError(code === 'generic' ? t('dash_pay_error', 'Error') : friendlyError(err));
     } finally {
       setLoading(false);
     }

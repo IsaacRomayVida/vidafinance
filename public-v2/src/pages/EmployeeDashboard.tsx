@@ -5,6 +5,7 @@ import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'fire
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
+import { classifyError, friendlyError } from '../lib/errors';
 import { useAuth } from '../hooks/useAuth';
 import { LoanStatusCard } from '../components/LoanStatusCard';
 
@@ -565,8 +566,11 @@ function PaymentModal({
       );
       const result = await genPayLink({ loanId: loan.id });
       setPaymentUrl(result.data.paymentUrl);
-    } catch {
-      setError(t('dash_pay_error'));
+    } catch (err) {
+      // Rate-limit / session / timeout get a specific message; anything
+      // else falls back to the domain-specific "can't generate link" copy.
+      const code = classifyError(err);
+      setError(code === 'generic' ? t('dash_pay_error') : friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -826,7 +830,7 @@ function LoanModal({
       });
       onSubmitted();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
       setSubmitting(false);
     }
   };
