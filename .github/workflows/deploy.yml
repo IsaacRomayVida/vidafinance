@@ -128,6 +128,8 @@ jobs:
 
       - name: Build frontend (public-v2)
         run: cd public-v2 && npm run build
+        env:
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
