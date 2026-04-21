@@ -53,7 +53,6 @@ jest.mock('node-fetch', () => ({
 }));
 
 import { getFirestore } from 'firebase-admin/firestore';
-import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 import {
   validateClabeChecksum,

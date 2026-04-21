@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { sendSlackAlert } from './slackAlert';
+import { captureException } from './sentry';
 
 export enum VidaErrorCode {
   LOAN_LIMIT_EXCEEDED = 'LOAN_LIMIT_EXCEEDED',
@@ -42,10 +43,16 @@ export function handleError(error: unknown, context: ErrorContext): never {
   });
 
   // Re-throw HttpsErrors unchanged — message was already written by the
-  // thrower and is considered safe for the client.
+  // thrower and is considered safe for the client. These are expected
+  // control-flow signals (validation, auth, rate limit), not crashes,
+  // so they don't go to Sentry.
   if (error instanceof HttpsError) {
     throw error;
   }
+
+  // Everything that falls through is an unhandled exception. Report to
+  // Sentry for triage (no-op if SENTRY_DSN is unset).
+  captureException(error, context);
 
   // Map Firebase Auth error codes to safe client messages.
   if (error instanceof Error) {

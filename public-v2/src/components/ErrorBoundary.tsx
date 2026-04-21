@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { captureError } from '../lib/sentry';
 
 interface Props {
   children: ReactNode;
@@ -22,6 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[VIDA ErrorBoundary]', error, info.componentStack);
+    captureError(error, { componentStack: info.componentStack });
   }
 
   render() {
