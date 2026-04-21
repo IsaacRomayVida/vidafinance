@@ -29,3 +29,6 @@ functions/.env
 
 # Cursor config source bundle (kept local; installed .cursor/ is committed)
 Instructions for Cursor/
+
+# Claude Code local state (settings, worktrees — never commit)
+.claude/
