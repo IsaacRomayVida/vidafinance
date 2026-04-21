@@ -31,6 +31,27 @@ jobs:
       - name: Lint (functions)
         run: cd functions && npm run lint
 
+  frontend:
+    name: Frontend Lint, Typecheck & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: public-v2/package-lock.json
+
+      - name: Install frontend deps
+        run: cd public-v2 && npm ci --legacy-peer-deps
+
+      - name: Lint
+        run: cd public-v2 && npm run lint
+
+      - name: Typecheck + Build
+        run: cd public-v2 && npm run build
+
   health-check:
     name: Verify production endpoints
     runs-on: ubuntu-latest
