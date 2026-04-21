@@ -446,8 +446,8 @@ export function Onboarding() {
     });
     metamapWidget.start();
 
-    metamapWidget.on('metamap:userFinishedSdk', (event: { detail: { identityId?: string; verificationId?: string } }) => {
-      const { identityId, verificationId } = event.detail || event as any;
+    metamapWidget.on('metamap:userFinishedSdk', (event: { detail?: { identityId?: string; verificationId?: string } }) => {
+      const { identityId, verificationId } = event.detail ?? {};
       setMetamapVerificationId(verificationId || '');
       setMetamapIdentityId(identityId || '');
       setKycStatus('pending_review');
