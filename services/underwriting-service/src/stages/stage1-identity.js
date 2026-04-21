@@ -5,13 +5,16 @@
  * Checks:
  *   1. RFC format validation (regex)
  *   2. CURP format validation (regex)
- *   3. SAT active status (may be cached from Employer Part A)
- *   4. Age 18-65 from CURP parse
- *   5. CNBV sector risk flag (informational)
+ *   3. Age 18-65 from CURP parse
+ *   4. CNBV sector risk flag (informational)
+ *
+ * Note: individual SAT taxpayer-status check was dropped 2026-04-21. Tier-1
+ * Mexican workers commonly have personal RFCs in "suspendido" state (no
+ * personal invoicing history), which a direct SAT check would reject. This
+ * check was also redundant with MetaMap gov-check performed in Stage 4.
  *
  * ~5% reject rate.
  */
-const { checkSATTaxpayer } = require("../verifik");
 const { checkCNBVSector } = require("../gov-apis");
 
 // RFC: 4 letters + 6 digits (date) + 3 alphanum (homoclave) for persona física
@@ -80,27 +83,6 @@ async function runIdentityValidation(applicant, priorResults, { logger, db } = {
       pass: false,
       escalateToStage: null,
       reason: age < 18 ? "UNDERAGE" : "OVERAGE",
-      data,
-      cost: costItems,
-    };
-  }
-
-  // 4. SAT active status (may be cached from Employer Part A)
-  let satResult;
-  try {
-    satResult = await checkSATTaxpayer(applicant.rfc);
-    costItems.push({ api: "verifik-sat", mxn: 1.5 });
-  } catch (err) {
-    log.warn({ stage: "stage1", err: err.message }, "SAT check failed");
-    satResult = { pass: false, skipped: true, error: err.message };
-  }
-  data.sat = satResult;
-
-  if (!satResult.pass && !satResult.skipped) {
-    return {
-      pass: false,
-      escalateToStage: null,
-      reason: "SAT_INACTIVE",
       data,
       cost: costItems,
     };

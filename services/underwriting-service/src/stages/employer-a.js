@@ -5,16 +5,20 @@
  * All checks run in parallel. Cost: ~$1-3 MXN. Time: ~30s. ~80% pass.
  *
  * Checks:
- *   1. SAT active status (Verifik)
- *   2. Lista 69-B EFOS blacklist (SW)
- *   3. Art. 69 fiscal debt (SW)
- *   4. DENUE business registry (gov-apis)
- *   5. REPSE labor compliance (gov-apis)
+ *   1. Lista 69-B EFOS blacklist (SW)
+ *   2. Art. 69 fiscal debt (SW)
+ *   3. DENUE business registry (gov-apis)
+ *   4. REPSE labor compliance (gov-apis)
+ *
+ * Note: direct SAT taxpayer-status check was dropped 2026-04-21 after product
+ * decision to standardize KYC on MetaMap. EFOS + Art. 69 are both SAT-derived
+ * signals that together provide reasonable due diligence without a dedicated
+ * vendor. Edge case: SAT-suspendido RFCs not on EFOS/Art69 blacklists will pass.
+ * Regulatory counsel sign-off pending.
  *
  * On provider error: escalate to manual review (Stage 5). Never default to pass.
  */
 const redis = require("../redis-client");
-const { checkSATTaxpayer } = require("../verifik");
 const { check69B, checkArt69 } = require("../sw-client");
 const { checkDENUE, checkREPSE } = require("../gov-apis");
 
@@ -34,9 +38,8 @@ async function runEmployerScreening(employer, { logger } = {}) {
 
   log.info({ stage: "employer-a", rfc }, "Starting employer screening");
 
-  const [satResult, efosResult, art69Result, denueResult, repseResult] =
+  const [efosResult, art69Result, denueResult, repseResult] =
     await Promise.allSettled([
-      checkSATTaxpayer(rfc),
       check69B(rfc),
       checkArt69(rfc),
       checkDENUE(employer.companyName, stateCode),
@@ -44,7 +47,6 @@ async function runEmployerScreening(employer, { logger } = {}) {
     ]);
 
   // On API error: pass: false, skipped: true — never silently pass
-  const sat     = satResult.status   === "fulfilled" ? satResult.value   : { pass: false, skipped: true, error: satResult.reason?.message };
   const lista69B = efosResult.status === "fulfilled" ? efosResult.value  : { pass: false, skipped: true, error: efosResult.reason?.message };
   const art69   = art69Result.status === "fulfilled" ? art69Result.value : { pass: false, skipped: true, error: art69Result.reason?.message };
   const denue   = denueResult.status === "fulfilled" ? denueResult.value : { pass: false, skipped: true, error: denueResult.reason?.message };
@@ -52,18 +54,16 @@ async function runEmployerScreening(employer, { logger } = {}) {
 
   // Log full details for every skipped check so failures are never swallowed
   const skippedChecks = [];
-  if (sat.skipped)     { log.error({ stage: "employer-a", rfc, api: "verifik-sat", error: sat.error }, "SAT check failed — provider error"); skippedChecks.push("sat"); }
   if (lista69B.skipped) { log.error({ stage: "employer-a", rfc, api: "sw-69b", error: lista69B.error }, "Lista 69-B check failed — provider error"); skippedChecks.push("lista69B"); }
   if (art69.skipped)   { log.error({ stage: "employer-a", rfc, api: "sw-art69", error: art69.error }, "Art. 69 check failed — provider error"); skippedChecks.push("art69"); }
   if (denue.skipped)   { log.error({ stage: "employer-a", rfc, api: "denue", error: denue.error }, "DENUE check failed — provider error"); skippedChecks.push("denue"); }
   if (repse.skipped)   { log.error({ stage: "employer-a", rfc, api: "repse", error: repse.error }, "REPSE check failed — provider error"); skippedChecks.push("repse"); }
 
   // Cost tracking — only for successful paid calls
-  if (!sat.skipped)     costItems.push({ api: "verifik-sat", mxn: 1.5 });
   if (!lista69B.skipped) costItems.push({ api: "sw-69b", mxn: 0.5 });
   if (!art69.skipped)   costItems.push({ api: "sw-art69", mxn: 0.5 });
 
-  const signals = { sat, lista69B, art69, denue, repse };
+  const signals = { lista69B, art69, denue, repse };
 
   // ── Hard reject: Lista 69-B DEFINITIVO ────────────────────────────────
   if (lista69B.hardReject) {
@@ -72,19 +72,6 @@ async function runEmployerScreening(employer, { logger } = {}) {
       pass: false,
       hardReject: true,
       reason: "lista_69b_definitivo",
-      signals,
-      cost: costItems,
-      durationMs: Date.now() - startTime,
-    });
-  }
-
-  // ── SAT not active = reject ───────────────────────────────────────────
-  if (!sat.pass && !sat.skipped) {
-    log.warn({ stage: "employer-a", rfc }, "SAT not active");
-    return cacheAndReturn(cacheKey, {
-      pass: false,
-      hardReject: false,
-      reason: "sat_inactive",
       signals,
       cost: costItems,
       durationMs: Date.now() - startTime,

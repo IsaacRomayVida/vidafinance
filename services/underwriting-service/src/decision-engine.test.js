@@ -54,11 +54,6 @@ jest.mock("./belvo-client", () => ({
 jest.mock("./riskseal-client", () => ({
   checkDigitalFootprint: jest.fn(() => Promise.resolve({ score: 72, risk_level: "medium", pass: true })),
 }));
-jest.mock("./verifik", () => ({
-  checkSATTaxpayer: jest.fn(() => Promise.resolve({ pass: true, statusSat: "ACTIVO" })),
-  validateRFC: jest.fn(),
-  checkRPP: jest.fn(),
-}));
 jest.mock("./sw-client", () => ({
   getSWToken: jest.fn(),
   check69B: jest.fn(() => Promise.resolve({ pass: true, situacion: null, hardReject: false, flag: false })),
@@ -157,7 +152,6 @@ describe("Decision Engine — MetaMap integration", () => {
 
   it("sumCosts aggregates across stages", () => {
     const results = {
-      employerA: { cost: [{ api: "verifik", mxn: 1.5 }] },
       stage2: { cost: [{ api: "belvo", mxn: 3.0 }, { api: "metamap", mxn: 5.0 }] },
     };
     const { totalMXN, items } = sumCosts(results);
