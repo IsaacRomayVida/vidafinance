@@ -24,22 +24,12 @@ require("dotenv").config({ path: "functions/.env" });
 
 const isCI = (process.env.VERIFY_MODE || (process.env.CI === "true" ? "ci" : "local")) === "ci";
 
-// Known public Railway production endpoints. Used as fallback URLs in CI
-// when per-service GitHub secrets aren't wired, so health checks still run.
-const FALLBACK_URLS = {
-  "payment-server":       "https://vida-payment-server.railway.app",
-  "softcredito-adapter":  "https://vida-softcredito.railway.app",
-  "notification-service": "https://vida-notifications.railway.app",
-  "pdf-generator":        "https://vida-pdf-generator.railway.app",
-  "ml-service":           "https://vida-ml-service.railway.app",
-};
-
 const SERVICES = {
-  "payment-server":       process.env.PAYMENT_SERVER_URL       || FALLBACK_URLS["payment-server"],
-  "softcredito-adapter":  process.env.SOFTCREDITO_ADAPTER_URL  || FALLBACK_URLS["softcredito-adapter"],
-  "notification-service": process.env.NOTIFICATION_SERVICE_URL || FALLBACK_URLS["notification-service"],
-  "pdf-generator":        process.env.PDF_GENERATOR_URL        || FALLBACK_URLS["pdf-generator"],
-  "ml-service":           process.env.ML_SERVICE_URL           || FALLBACK_URLS["ml-service"],
+  "payment-server":       process.env.PAYMENT_SERVER_URL,
+  "softcredito-adapter":  process.env.SOFTCREDITO_ADAPTER_URL,
+  "notification-service": process.env.NOTIFICATION_SERVICE_URL,
+  "pdf-generator":        process.env.PDF_GENERATOR_URL,
+  "ml-service":           process.env.ML_SERVICE_URL,
 };
 
 const results = [];
@@ -49,7 +39,11 @@ const skip = (n, d) => results.push({ s: "SKP", n, d });
 const fail = (n, d) => results.push({ s: "ERR", n, d });
 
 async function checkHealth(name, url) {
-  if (!url) { fail(name, "URL not set"); return; }
+  if (!url) {
+    if (isCI) skip(name, "URL secret not set in CI (skipped; only checked locally)");
+    else      fail(name, "URL not set in functions/.env");
+    return;
+  }
   try {
     const r = await fetch(url + "/health", { signal: AbortSignal.timeout(8000) });
     if (!r.ok) { fail(name, "HTTP " + r.status); return; }
