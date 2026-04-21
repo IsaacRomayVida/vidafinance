@@ -1,0 +1,299 @@
+---
+apply: always
+description: VIDA's actual visual language — Tailwind v4 tokens, DM Sans/DM Serif, real CSS variables
+---
+
+# VIDA Design System
+
+This matches the **actual code** in `public-v2/src/styles/index.css` (Tailwind v4 `@theme`) and `public-v2/src/styles/legacy.css` (legacy CSS variables). When there's conflict with what feels "better", the code wins — update the code via a ticket, don't deviate silently in a single component.
+
+## Design principles
+
+1. **Clarity over cleverness** — if a user doesn't know what to do in 2 seconds, redesign
+2. **Trust through restraint** — financial products earn trust by looking calm and considered
+3. **Mexico, not Silicon Valley** — warm, human, direct. Not startup-cute
+4. **Mobile first, Android first** — 360×780 is the baseline viewport
+5. **Fast before pretty** — first contentful paint < 1.5s on 3G
+
+## Color tokens — Tailwind v4 classes
+
+Tailwind v4 reads `@theme` from CSS. The classes below are AUTO-GENERATED from `src/styles/index.css` — use them directly.
+
+### Teal (brand primary)
+
+From `@theme { --color-teal-* }`:
+
+```
+bg-teal-50    #e6eded   — very light bg
+bg-teal-100   #c0d3d4
+bg-teal-200   #97b7b8
+bg-teal-300   #6d9b9c
+bg-teal-400   #4d8687
+bg-teal-500   #2e7172   — medium teal
+bg-teal-600   #29696a
+bg-teal-700   #235e5f
+bg-teal-800   #1d5455
+bg-teal-900   #194445   — PRIMARY BRAND (buttons, headers, logo)
+bg-teal-950   #0f2a2b
+```
+
+Use `bg-teal-900` + `text-white` for primary buttons. Use `text-teal-900` on cream backgrounds for headers.
+
+### Gold (accent)
+
+```
+bg-gold-50    #f5f0e7
+bg-gold-100   #e6d9c3
+...
+bg-gold-500   #a28657   — ACCENT (badges, admin highlights)
+bg-gold-900   #644520
+bg-gold-950   #3a2710
+```
+
+Gold is used sparingly — admin portal accents, premium indicators. Don't decorate with it.
+
+### Legacy CSS variables (in `legacy.css`)
+
+The legacy stylesheet defines a parallel set — when modifying classes that use them, don't replace with Tailwind classes unless you're doing the whole component:
+
+```css
+--brand: #194445        /* same as teal-900 */
+--brand-mid: #1d5253
+--brand-light: #247a6e
+--aqua: #a8d5d0
+--aqua-soft: #dceeed
+--gold: #a28657         /* same as gold-500 */
+--bg: #ffffff
+--bg2: #f5f8f7
+--canvas: #f5f1eb       /* warm cream */
+--t1: #0c1e1f           /* primary text */
+--t2: #4a6364           /* secondary */
+--t3: #93aaa9           /* tertiary */
+--danger: #dc503c
+--success: #247a6e
+```
+
+**Rule of thumb:** if the component already uses legacy classes like `.hero`, `.benefits-bar`, `.wrap` — stay in the legacy system. If you're building new → Tailwind utilities with `teal-*` / `gold-*` classes.
+
+## Typography
+
+### Actual fonts (from legacy.css)
+
+```css
+--df: 'DM Serif Display', Georgia, serif   /* display — headings, hero */
+--db: 'DM Sans', sans-serif                /* body — everything else */
+```
+
+Tailwind v4 also sets `--font-sans: 'DM Sans', system-ui, sans-serif` in `@theme`, so `font-sans` works for body.
+
+**For display headings**, there's no Tailwind alias yet — use inline style or CSS class:
+
+```tsx
+// Inline (OK for one-offs):
+<h1 style={{ fontFamily: 'DM Serif Display, Georgia, serif' }}>Tu respaldo financiero</h1>
+
+// Or add a Tailwind token (in @theme):
+// --font-display: 'DM Serif Display', Georgia, serif;
+// Then: <h1 className="font-display">
+```
+
+If you need the display font in a new component, **propose adding `--font-display` to the `@theme` block** as part of your PR rather than inlining a string.
+
+### Type scale
+
+Follow the legacy CSS patterns but prefer Tailwind utilities for new work:
+
+| Purpose | Tailwind | Size |
+|---|---|---|
+| Caption | `text-xs` | 12px |
+| Secondary | `text-sm` | 14px |
+| Body | `text-base` | 16px |
+| Emphasis | `text-lg` | 18px |
+| Subheading | `text-xl` / `text-2xl` | 20–24px |
+| Section heading | `text-3xl` / `text-4xl` | 30–36px |
+| Page heading | `text-5xl` | 48px |
+| Hero | `text-6xl` to `text-7xl` (rare) | 60–72px |
+
+For fluid sizing use Tailwind's arbitrary values with `clamp()`:
+
+```tsx
+<h1 className="text-[clamp(2.25rem,1.9rem+1.75vw,3.25rem)] leading-tight">
+```
+
+**Rules:**
+- Never set hard-coded `font-size: 18px` in `style={}` — use Tailwind or extend `@theme`
+- Never center body paragraphs. Left-align
+- Max line length `max-w-[65ch]` for body text
+- Line-height 1.15 for headings (`leading-tight` or `leading-none`), 1.55 for body (`leading-relaxed`)
+- Letter-spacing `-0.02em` (`tracking-tight`) for headings ≥ 24px
+
+### Tabular nums for money
+
+Every peso amount, every interest rate, every percentage:
+
+```tsx
+<span className="tabular-nums">${formatPesos(5000)}</span>
+```
+
+Non-negotiable — without this, amounts misalign in tables and lists.
+
+## Spacing
+
+Tailwind defaults (already 4px-based). Preferred scale:
+
+| Tailwind | px | Use |
+|---|---|---|
+| `p-1` / `gap-1` | 4 | inside icons |
+| `p-2` / `gap-2` | 8 | tight inline |
+| `p-3` | 12 | small gap |
+| `p-4` | 16 | default paragraph |
+| `p-6` | 24 | section padding mobile |
+| `p-8` | 32 | card padding |
+| `p-12` | 48 | section padding desktop |
+| `p-16` | 64 | major breathing |
+| `p-24` | 96 | hero block |
+
+Section rhythm: `py-12 md:py-16 lg:py-24` between major blocks. Cards: `p-4 md:p-6`.
+
+**Legacy `.wrap` class** sets `max-width: 1200px; margin: 0 auto; padding: 0 64px` — the canonical container in marketing pages. For new Tailwind work, use `max-w-7xl mx-auto px-4 md:px-8 lg:px-16`.
+
+## Breakpoints (Tailwind defaults)
+
+- `sm:` 640px
+- `md:` 768px
+- `lg:` 1024px
+- `xl:` 1280px
+- `2xl:` 1536px
+
+Mobile-first always: base styles = 360px, then progressively enhance.
+
+Legacy CSS breaks at `1024px / 768px / 480px` — the legacy stylesheet uses these. When modifying legacy components, don't mix in Tailwind's breakpoints; stay consistent within the file.
+
+## Components
+
+### Buttons
+
+**Primary** (teal-900 filled, white text, min 44px tap target):
+
+```tsx
+<button className="h-11 px-5 bg-teal-900 hover:bg-teal-800 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+  Solicitar préstamo
+</button>
+```
+
+**Secondary** (teal outline, transparent bg):
+
+```tsx
+<button className="h-11 px-5 bg-transparent border border-teal-900 text-teal-900 hover:bg-teal-900/5 rounded-lg font-semibold transition-colors">
+  Cancelar
+</button>
+```
+
+**Ghost** (text only):
+
+```tsx
+<button className="text-teal-900 hover:underline font-medium">
+  Más información
+</button>
+```
+
+Legacy button class `.auth-btn` exists for login page — don't mix systems in one button.
+
+**Rules:**
+- One primary per visible area
+- Label is a verb ("Continuar", "Solicitar") — never a noun
+- Loading state: disable + keep width fixed (no layout shift)
+
+### Forms
+
+- Labels above inputs (never placeholder-as-label)
+- Error text: `text-[#dc503c]` (or `var(--danger)` if legacy) below input, with `aria-describedby`
+- Required: asterisk + "(obligatorio)" in aria-label
+- Min 44px height (`h-11` or `h-12`)
+- `inputMode` hints for mobile keyboards (`inputMode="numeric"` for CURP digits)
+
+### Cards
+
+```tsx
+<div className="bg-white rounded-xl p-6 shadow-sm border border-teal-900/10">
+  {/* content */}
+</div>
+```
+
+Hoverable (selectable item):
+
+```tsx
+<div className="bg-white rounded-xl p-6 shadow-sm border border-teal-900/10 hover:shadow-md hover:border-teal-900/30 transition-all cursor-pointer">
+```
+
+### Money display
+
+```tsx
+function formatPesos(n: number): string {
+  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+<span className="tabular-nums">{formatPesos(5000)}</span>  // "$5,000"
+<span className="tabular-nums">{formatPesos(1234.50)}</span>  // "$1,234.50"
+```
+
+### Mexican identifiers
+
+- **Phone:** `+52 55 1234 5678` (group with spaces)
+- **CURP** (18 chars): display without separators, monospace-feel via `tabular-nums`
+- **RFC** (13 chars): uppercase, no separators
+- **CLABE** (18 digits): `XXXX XXXX XX XXXX XXXX` groups when displaying
+
+## Motion
+
+```css
+--ease-out: cubic-bezier(0.16, 1, 0.3, 1)
+--duration-fast: 120ms    /* hovers */
+--duration-normal: 200ms  /* transitions */
+--duration-slow: 320ms    /* modal enter, page transitions */
+```
+
+The existing `.rv` reveal-on-scroll pattern in legacy.css uses `opacity` + `transform: translateY(32px)` with `.9s cubic-bezier(.16,1,.3,1)` — via the `useRevealOnScroll` hook.
+
+**Rules:**
+- Only animate `opacity` + `transform`
+- Respect `prefers-reduced-motion` (Tailwind: `motion-safe:` prefix)
+- Loading spinners only for > 300ms waits
+- No infinite loops
+
+## Iconography
+
+- **Not installed:** no lucide-react or react-icons in deps (verified). If you want icons, either inline SVG or propose adding a library.
+- **Currently:** many components use emoji-as-icon (found in marketing sections) — that's a known design debt. Don't add more; replace when you touch a section
+
+## Imagery
+
+- Landing uses hero photography (warm, candid)
+- Always `loading="lazy"` for below-fold
+- Always explicit `width` + `height` to prevent CLS
+- Prefer WebP with JPG fallback via `<picture>`
+
+## Accessibility baseline (non-negotiable)
+
+- Focus rings are applied **globally** via `src/styles/index.css` for `button`, `a`, `input`, `select`, `textarea`, `summary`, `[role="button"]`, `[tabindex]` — you don't need to add `focus-visible:` classes per component. Only add them if overriding (rare). `.auth-input` is the one exclusion (has custom border-bottom focus).
+- `<label>` or `aria-label` on every input
+- `alt` on every image (`alt=""` only if purely decorative — explicit empty string)
+- `aria-label` on icon-only buttons
+- Color never the only signal (pair with icon or text)
+- Skip-to-content link
+- `<html lang="es">` is set dynamically in `src/i18n/index.ts` on language change
+- Error messages via `aria-live="polite"`
+- No manual `tabIndex > 0`
+
+## Anti-patterns to catch
+
+- Using `bg-vida-teal` or `bg-vida-gold` — **those classes don't exist.** Use `bg-teal-900`, `bg-gold-500`
+- Fraunces or Inter in a `style={fontFamily:...}` — actual fonts are DM Serif Display + DM Sans
+- Hard-coded `font-size: 18px` in inline style — use Tailwind
+- New third CSS file
+- `React.FC` usage
+- Placeholder-as-label
+- Icon-only buttons without aria-label
+- Center-aligned body text
+- Hover-only interactions (no touch equivalent)
+- Emojis as UI icons (known debt — don't add more)
