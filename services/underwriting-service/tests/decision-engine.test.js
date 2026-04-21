@@ -5,11 +5,6 @@
  */
 
 // ── Mock all external dependencies ─────────────────────────────────────
-jest.mock("../src/verifik", () => ({
-  checkSATTaxpayer: jest.fn(),
-  validateRFC: jest.fn(),
-  checkRPP: jest.fn(),
-}));
 jest.mock("../src/sw-client", () => ({
   getSWToken: jest.fn(),
   check69B: jest.fn(),
@@ -54,7 +49,6 @@ const { evaluateAutoApprove } = require("../src/stages/stage3-autoapprove");
 const { computeLTI } = require("../src/stages/stage2-bureau");
 
 // Mocked modules
-const verifik = require("../src/verifik");
 const sw = require("../src/sw-client");
 const govApis = require("../src/gov-apis");
 const belvo = require("../src/belvo-client");
@@ -100,7 +94,6 @@ const silentLogger = {
 
 function setupHappyPath() {
   // Employer Part A
-  verifik.checkSATTaxpayer.mockResolvedValue({ pass: true, statusSat: "ACTIVO" });
   sw.check69B.mockResolvedValue({ pass: true, situacion: null, hardReject: false, flag: false });
   sw.checkArt69.mockResolvedValue({ pass: true, hasDebt: false });
   govApis.checkDENUE.mockResolvedValue({ pass: true, found: true });
@@ -202,7 +195,6 @@ describe("Decision Engine — Pipeline", () => {
   });
 
   test("SAT inactive employer → rejected at Employer Part A", async () => {
-    verifik.checkSATTaxpayer.mockResolvedValue({ pass: false, statusSat: "CANCELADO" });
 
     const result = await runPipeline(
       { applicant: GOOD_APPLICANT, employer: GOOD_EMPLOYER },
@@ -215,13 +207,11 @@ describe("Decision Engine — Pipeline", () => {
 
   test("low employer score → rejected at Employer Part B", async () => {
     // Make everything fail to get a very low score
-    verifik.checkSATTaxpayer.mockResolvedValue({ pass: false, statusSat: "CANCELADO", skipped: false });
     sw.check69B.mockResolvedValue({ pass: false, situacion: "PRESUNTO", hardReject: false, flag: true });
     govApis.checkDENUE.mockResolvedValue({ pass: false, found: false });
     govApis.checkREPSE.mockResolvedValue({ pass: false, registrado: false });
     // But SAT inactive triggers employer A reject, so let's use a different approach:
     // SAT passes but EFOS is PRESUNTO + all others fail → escalates to Part B
-    verifik.checkSATTaxpayer.mockResolvedValue({ pass: true, statusSat: "ACTIVO" });
     belvo.verifyEmployerIMSS.mockResolvedValue([
       { curp: "C1", rfcMatch: false },
       { curp: "C2", rfcMatch: false },
@@ -518,7 +508,6 @@ describe("Stage Utilities", () => {
 
   test("sumCosts aggregates across stages", () => {
     const results = {
-      employerA: { cost: [{ api: "verifik", mxn: 1.5 }] },
       stage2: { cost: [{ api: "belvo", mxn: 3.0 }, { api: "softcredito", mxn: 8.0 }] },
     };
     const { totalMXN, items } = sumCosts(results);

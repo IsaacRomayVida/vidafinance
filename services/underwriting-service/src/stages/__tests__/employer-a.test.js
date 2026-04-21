@@ -6,9 +6,6 @@ jest.mock("../../redis-client", () => ({
   set: jest.fn().mockResolvedValue("OK"),
 }));
 
-jest.mock("../../verifik", () => ({
-  checkSATTaxpayer: jest.fn(),
-}));
 
 jest.mock("../../sw-client", () => ({
   check69B: jest.fn(),
@@ -21,7 +18,6 @@ jest.mock("../../gov-apis", () => ({
 }));
 
 const redis = require("../../redis-client");
-const { checkSATTaxpayer } = require("../../verifik");
 const { check69B, checkArt69 } = require("../../sw-client");
 const { checkDENUE, checkREPSE } = require("../../gov-apis");
 const { runEmployerScreening } = require("../employer-a");
@@ -29,7 +25,6 @@ const { runEmployerScreening } = require("../employer-a");
 const EMPLOYER = { rfc: "ABC123456XYZ", companyName: "Vida Corp", stateCode: "09" };
 
 function mockAllPass() {
-  checkSATTaxpayer.mockResolvedValue({ rfc: EMPLOYER.rfc, statusSat: "ACTIVO", pass: true });
   check69B.mockResolvedValue({ rfc: EMPLOYER.rfc, situacion: null, pass: true, flag: false, hardReject: false });
   checkArt69.mockResolvedValue({ rfc: EMPLOYER.rfc, hasDebt: false, count: 0, pass: true });
   checkDENUE.mockResolvedValue({ found: true, count: 1, pass: true });
@@ -44,7 +39,7 @@ beforeEach(() => {
 
 describe("runEmployerScreening", () => {
   // ── All checks pass ───────────────────────────────────────────────
-  it("returns pass when all 5 checks succeed", async () => {
+  it("returns pass when all 4 checks succeed", async () => {
     mockAllPass();
 
     const result = await runEmployerScreening(EMPLOYER);
@@ -52,7 +47,6 @@ describe("runEmployerScreening", () => {
     expect(result.pass).toBe(true);
     expect(result.hardReject).toBe(false);
     expect(result.reason).toBeNull();
-    expect(result.signals).toHaveProperty("sat");
     expect(result.signals).toHaveProperty("lista69B");
     expect(result.signals).toHaveProperty("art69");
     expect(result.signals).toHaveProperty("denue");
@@ -61,12 +55,11 @@ describe("runEmployerScreening", () => {
     expect(result).toHaveProperty("durationMs");
   });
 
-  it("runs all 5 checks in parallel", async () => {
+  it("runs all 4 checks in parallel", async () => {
     mockAllPass();
 
     await runEmployerScreening(EMPLOYER);
 
-    expect(checkSATTaxpayer).toHaveBeenCalledWith(EMPLOYER.rfc);
     expect(check69B).toHaveBeenCalledWith(EMPLOYER.rfc);
     expect(checkArt69).toHaveBeenCalledWith(EMPLOYER.rfc);
     expect(checkDENUE).toHaveBeenCalledWith(EMPLOYER.companyName, EMPLOYER.stateCode);
@@ -96,18 +89,6 @@ describe("runEmployerScreening", () => {
     expect(result.pass).toBe(true);
     expect(result.hardReject).toBe(false);
     expect(result.signals.lista69B.flag).toBe(true);
-  });
-
-  // ── SAT inactive = fail ────────────────────────────────────────────
-  it("fails when SAT status is not ACTIVO", async () => {
-    mockAllPass();
-    checkSATTaxpayer.mockResolvedValue({ rfc: EMPLOYER.rfc, statusSat: "CANCELADO", pass: false });
-
-    const result = await runEmployerScreening(EMPLOYER);
-
-    expect(result.pass).toBe(false);
-    expect(result.hardReject).toBe(false);
-    expect(result.reason).toBe("sat_inactive");
   });
 
   // ── Art. 69 fiscal debt = fail ─────────────────────────────────────
@@ -208,7 +189,6 @@ describe("runEmployerScreening", () => {
 
     expect(result).toEqual(cachedResult);
     // No API calls should have been made
-    expect(checkSATTaxpayer).not.toHaveBeenCalled();
     expect(check69B).not.toHaveBeenCalled();
   });
 
