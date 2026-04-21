@@ -1,7 +1,11 @@
 ---
-apply: auto-attached
-globs: public-v2/src/**/*.{ts,tsx},public-v2/src/i18n/**,public-v2/public/**/*.html
 description: Mexican Spanish copy voice, register, and vocabulary
+globs:
+  - "public-v2/src/**/*.ts"
+  - "public-v2/src/**/*.tsx"
+  - "public-v2/src/i18n/**"
+  - "public-v2/public/**/*.html"
+alwaysApply: false
 ---
 
 # Mexican Spanish Copy
@@ -74,8 +78,8 @@ VIDA speaks to Mexican tier-1 hourly workers — warehouse, maquiladora, factory
 
 ### Sentence case, not Title Case
 
-- ✅ "Solicitar préstamo"
-- ❌ "Solicitar Préstamo"
+- "Solicitar préstamo" (good)
+- "Solicitar Préstamo" (bad)
 
 Capitalize only the first word + proper nouns.
 
@@ -106,13 +110,13 @@ Note: the hero uses `<em>` tags rendered via `dangerouslySetInnerHTML`. This is 
 
 ## Don't
 
-- ❌ No emoji in UI (✅ ❌ 🎉 🚀) — juvenile for financial product. Icons via SVG.
-- ❌ No gringo-ismos: "resetear", "customizar", "deletear". Use "reiniciar", "personalizar", "eliminar"
-- ❌ No anglicisms in core flows: "login" → "Iniciar sesión", "logout" → "Cerrar sesión", "signup" → "Crear cuenta" or "Regístrate". ("Dashboard" widely used, acceptable)
-- ❌ No legal jargon in UX copy. "Declaración contractual" → "Firma tu contrato"
-- ❌ No vague errors. "Algo no está bien" → specific: "El CURP debe tener 18 caracteres"
-- ❌ No "Lo sentimos" spam
-- ❌ No "Haz clic aquí" — link text describes destination
+- No emoji in UI — juvenile for financial product. Icons via SVG.
+- No gringo-ismos: "resetear", "customizar", "deletear". Use "reiniciar", "personalizar", "eliminar"
+- No anglicisms in core flows: "login" → "Iniciar sesión", "logout" → "Cerrar sesión", "signup" → "Crear cuenta" or "Regístrate". ("Dashboard" widely used, acceptable)
+- No legal jargon in UX copy. "Declaración contractual" → "Firma tu contrato"
+- No vague errors. "Algo no está bien" → specific: "El CURP debe tener 18 caracteres"
+- No "Lo sentimos" spam
+- No "Haz clic aquí" — link text describes destination
 
 ## Regulatory-mandated copy
 

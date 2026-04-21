@@ -1,6 +1,6 @@
 ---
-apply: always
 description: VIDA's actual visual language — Tailwind v4 tokens, DM Sans/DM Serif, real CSS variables
+alwaysApply: true
 ---
 
 # VIDA Design System

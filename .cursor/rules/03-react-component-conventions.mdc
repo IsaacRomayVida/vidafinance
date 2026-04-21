@@ -1,7 +1,9 @@
 ---
-apply: auto-attached
-globs: public-v2/src/**/*.{ts,tsx}
 description: React 19 + TypeScript patterns for public-v2
+globs:
+  - "public-v2/src/**/*.ts"
+  - "public-v2/src/**/*.tsx"
+alwaysApply: false
 ---
 
 # React Component Conventions — public-v2
@@ -48,10 +50,10 @@ export function LoanCard({ loanId, amount, status, onCancel, children }: LoanCar
 - Discriminated unions over multiple booleans:
 
 ```tsx
-// ❌
+// Bad
 interface BadProps { isPrimary?: boolean; isSecondary?: boolean }
 
-// ✅
+// Good
 interface GoodProps { variant: 'primary' | 'secondary' | 'ghost' }
 ```
 
@@ -300,14 +302,14 @@ The app has a `<ErrorBoundary>` wrapping `<AuthProvider>` in `App.tsx` (global),
 
 ## Anti-patterns to reject
 
-- ❌ `React.FC` / `React.FunctionComponent`
-- ❌ Default exports on pages (breaks the lazy-load pattern in App.tsx)
-- ❌ Direct `fetch()` to CF endpoints — use `httpsCallable`
-- ❌ `getDoc` / `onSnapshot` directly in component body — extract to a hook
-- ❌ `any`, `object`, `Function` types
-- ❌ `useEffect` without cleanup on subscriptions
-- ❌ Components > 250 lines — split
-- ❌ Props interfaces > 10 properties — component doing too much
-- ❌ Prop drilling past 2 levels — context or restructure
-- ❌ Mutating state (`array.push(x)` instead of `setArray([...array, x])`)
-- ❌ Raw `localStorage.*` — use `@/lib/safeStorage` (`safeGetItem`, `safeSetItem`, `safeRemoveItem`) instead. Raw calls throw in Safari private mode and Firefox resist-fingerprinting.
+- `React.FC` / `React.FunctionComponent`
+- Default exports on pages (breaks the lazy-load pattern in App.tsx)
+- Direct `fetch()` to CF endpoints — use `httpsCallable`
+- `getDoc` / `onSnapshot` directly in component body — extract to a hook
+- `any`, `object`, `Function` types
+- `useEffect` without cleanup on subscriptions
+- Components > 250 lines — split
+- Props interfaces > 10 properties — component doing too much
+- Prop drilling past 2 levels — context or restructure
+- Mutating state (`array.push(x)` instead of `setArray([...array, x])`)
+- Raw `localStorage.*` — use `@/lib/safeStorage` (`safeGetItem`, `safeSetItem`, `safeRemoveItem`) instead. Raw calls throw in Safari private mode and Firefox resist-fingerprinting.

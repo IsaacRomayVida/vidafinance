@@ -1,6 +1,6 @@
 ---
-apply: always
 description: VIDA Finance — what the product is, the real stack, and the verified state of the codebase
+alwaysApply: true
 ---
 
 # VIDA Finance — Project Context
@@ -165,13 +165,13 @@ Memorize these — don't invent new ones.
 
 ## What NOT to do from a frontend task
 
-- ❌ Don't modify `functions/`, `services/`, `firestore.rules`, `storage.rules`, `firebase.json`
-- ❌ Don't install a test runner, form library, or CSS framework as a side quest
-- ❌ Don't move files to "clean up" the duplicates above without a ticket — they're known
-- ❌ Don't assume tests exist — if you write `.test.tsx`, you have to wire a runner first (open a ticket)
-- ❌ Don't commit secrets. `.env.local` is gitignored for dev values
-- ❌ Don't use raw `localStorage.*` — use `@/lib/safeStorage` helpers
-- ❌ Don't add a third CSS file — extend `styles/index.css` or `styles/legacy.css`
+- Don't modify `functions/`, `services/`, `firestore.rules`, `storage.rules`, `firebase.json`
+- Don't install a test runner, form library, or CSS framework as a side quest
+- Don't move files to "clean up" the duplicates above without a ticket — they're known
+- Don't assume tests exist — if you write `.test.tsx`, you have to wire a runner first (open a ticket)
+- Don't commit secrets. `.env.local` is gitignored for dev values
+- Don't use raw `localStorage.*` — use `@/lib/safeStorage` helpers
+- Don't add a third CSS file — extend `styles/index.css` or `styles/legacy.css`
 
 ## Verification before declaring work done
 

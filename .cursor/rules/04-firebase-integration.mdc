@@ -1,7 +1,9 @@
 ---
-apply: auto-attached
-globs: public-v2/src/**/*.{ts,tsx}
 description: Firebase SDK patterns — Auth, Firestore, Storage, Callable Functions, App Check
+globs:
+  - "public-v2/src/**/*.ts"
+  - "public-v2/src/**/*.tsx"
+alwaysApply: false
 ---
 
 # Firebase Integration Patterns
@@ -177,10 +179,10 @@ Server-side secrets (client_secret, webhook secrets, service accounts) **never**
 
 ## Things you should never do
 
-- ❌ Call `firebase/admin` / `firebase-admin` from client (it's Node-only, won't bundle and would leak)
-- ❌ Build Firestore REST URLs manually
-- ❌ Disable App Check to "make local dev easier" — use debug tokens
-- ❌ Write directly to `loans/`, `employers/`, `employees/`, `invites/` from client — use CFs
-- ❌ Log auth ID tokens or App Check tokens (even temporarily)
-- ❌ Commit `.env` or `.env.local`
-- ❌ Call `signInWithCustomToken` from client unless wired to a specific custom-token CF
+- Call `firebase/admin` / `firebase-admin` from client (it's Node-only, won't bundle and would leak)
+- Build Firestore REST URLs manually
+- Disable App Check to "make local dev easier" — use debug tokens
+- Write directly to `loans/`, `employers/`, `employees/`, `invites/` from client — use CFs
+- Log auth ID tokens or App Check tokens (even temporarily)
+- Commit `.env` or `.env.local`
+- Call `signInWithCustomToken` from client unless wired to a specific custom-token CF

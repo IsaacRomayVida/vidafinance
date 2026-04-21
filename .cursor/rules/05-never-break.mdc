@@ -1,6 +1,6 @@
 ---
-apply: always
 description: Non-negotiable invariants — things that must never break regardless of the task
+alwaysApply: true
 ---
 
 # Never Break — Hard Invariants
