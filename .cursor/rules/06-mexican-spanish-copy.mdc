@@ -1,0 +1,164 @@
+---
+description: Mexican Spanish copy voice, register, and vocabulary
+globs:
+  - "public-v2/src/**/*.ts"
+  - "public-v2/src/**/*.tsx"
+  - "public-v2/src/i18n/**"
+  - "public-v2/public/**/*.html"
+alwaysApply: false
+---
+
+# Mexican Spanish Copy
+
+VIDA speaks to Mexican tier-1 hourly workers — warehouse, maquiladora, factory, service, retail. 25–50, high-school education, phone-first.
+
+## i18n setup (as of 2026-04-19)
+
+- Library: **i18next + react-i18next** (v16)
+- Translation files: `src/i18n/es.json` (canonical) and `src/i18n/en.json` (fallback for admin users)
+- Init: `src/i18n/index.ts` — sets `<html lang>` on language change, persists to `localStorage.vida_lang`
+- Keys are **flat, snake_case, prefix-first**: `nav_employers`, `hero_h1`, `chip_24hrs`, `phone_available`
+
+**When adding new strings:**
+1. Add to `es.json` first with the correct Mexican Spanish (see voice rules below)
+2. Add to `en.json` with the same key
+3. Use via `const { t } = useTranslation(); t('your_key')`
+4. Ship the strings in the same PR as the UI using them
+
+## Voice & register
+
+- **Informal "tú", always.** "Tus datos", "tu préstamo", "te invitamos". Never "usted".
+- **Short sentences.** Max ~16 words. Split anything longer.
+- **Active voice.** "Solicita tu préstamo", not "Tu préstamo puede ser solicitado".
+- **Direct, not euphemistic.** "Rechazado" over "no aprobado en este momento". Respect by being honest.
+- **Warm but serious.** Money is involved. One `!` per page max.
+- **Mexican, not Spain-ish.** "Celular" (not "móvil"), "carro" (not "coche" in casual), "platicar" (not "hablar" in casual).
+
+## Vocabulary
+
+### Banking/money
+
+| Use | Avoid | Why |
+|---|---|---|
+| préstamo | crédito, mutuo | Plain word users recognize |
+| solicitar | pedir, requerir | Expected verb for applying |
+| monto | cantidad, suma | Industry-standard |
+| cuota | mensualidad (OK) | Short, clear |
+| saldo | balance (Spanglish) | Proper Spanish |
+| plazo | tiempo | Financial-specific |
+| tasa de interés | intereses (OK in body) | Regulatory term |
+| CAT | — | Explain on first use: "Costo Anual Total, o CAT" |
+| nómina | sueldo, paga | "Nómina" = payroll, precise |
+| deducción | descuento | "Deducción" correct for payroll |
+| descontar de tu nómina | sacar de tu sueldo | Precise + clean |
+
+### Identity
+
+| Use | Avoid |
+|---|---|
+| empleador | empresa, jefe, patrón |
+| trabajador / empleado | obrero (demeaning), colaborador (corporate) |
+| nombre completo | nombres y apellidos |
+| teléfono celular | número de teléfono |
+| CURP, RFC, CLABE | never rename to "código" |
+
+## Formatting
+
+- **Peso amounts:** `$5,000` (symbol + comma thousands). Never `MXN 5,000` inline. OK in legal footer.
+- **Percentages:** `36%` (no space before `%`)
+- **CAT/rates:** `CAT 45.2%` (one decimal)
+- **Dates:** `15 de mayo de 2026` in prose, `15/05/2026` in tight UI
+- **Phone:** `+52 55 1234 5678`
+
+### Currency display
+
+- Always currency context — never a bare "5000"
+- Cents omitted by default, shown when present: `$5,000` vs `$5,000.50`
+- Tabular nums: `<span className="tabular-nums">{formatPesos(n)}</span>`
+
+### Sentence case, not Title Case
+
+- "Solicitar préstamo" (good)
+- "Solicitar Préstamo" (bad)
+
+Capitalize only the first word + proper nouns.
+
+### Punctuation
+
+- **Inverted marks required:** `¿Cuál es tu CURP?`, `¡Bienvenido!` — never drop `¿` or `¡`
+- **No serial comma in Spanish.** "Nombre, edad y teléfono" — not "nombre, edad, y teléfono"
+- **Ellipsis:** single `…` char, not `...`
+- **Quotes:** `"..."` (straight double)
+
+## Existing good examples from es.json
+
+Reference these when writing new copy:
+
+```
+"hero_h1": "Tu respaldo <em>financiero</em> integrado."
+"hero_sub": "Liquidez de emergencia a través de la nómina de tu empleador. Pre-aprobado. Instantáneo."
+"hero_cta_employer": "Soy Empleador"
+"hero_cta_employee": "Soy Empleado"
+"phone_available": "Crédito Disponible"
+"phone_currency": "Pesos Mexicanos · Vía nómina"
+"chip_24hrs": "24 hrs"
+"chip_0fees": "$0 comisiones"
+"ben_fees": "Comisiones ocultas"
+```
+
+Note: the hero uses `<em>` tags rendered via `dangerouslySetInnerHTML`. This is established; don't disrupt for a single fix.
+
+## Don't
+
+- No emoji in UI — juvenile for financial product. Icons via SVG.
+- No gringo-ismos: "resetear", "customizar", "deletear". Use "reiniciar", "personalizar", "eliminar"
+- No anglicisms in core flows: "login" → "Iniciar sesión", "logout" → "Cerrar sesión", "signup" → "Crear cuenta" or "Regístrate". ("Dashboard" widely used, acceptable)
+- No legal jargon in UX copy. "Declaración contractual" → "Firma tu contrato"
+- No vague errors. "Algo no está bien" → specific: "El CURP debe tener 18 caracteres"
+- No "Lo sentimos" spam
+- No "Haz clic aquí" — link text describes destination
+
+## Regulatory-mandated copy
+
+Per CNBV/CONDUSEF rules, preserve verbatim — don't improve:
+
+- **CAT disclosure:** `Costo Anual Total (CAT) promedio [X]% sin IVA. Informativo. Fecha de cálculo: [fecha]. Vigente hasta [fecha].`
+- **SOFOM identifier:** `VIDA Finance SOFOM, E.N.R. Sociedad Financiera de Objeto Múltiple, Entidad No Regulada. La inscripción en el Registro no implica certificado de solvencia.`
+- **CONDUSEF link in footer:** `Para dudas compara en el portal de CONDUSEF: https://www.condusef.gob.mx`
+
+If unsure whether copy is regulated → ask Isaac, don't change.
+
+## Status/state message templates
+
+| Event | Spanish copy |
+|---|---|
+| Loan approved | Tu préstamo fue aprobado |
+| In manual review | Estamos revisando tu solicitud. Te avisamos en máximo 24 horas. |
+| Rejected | No pudimos aprobar tu solicitud en este momento. [Reason in plain language.] |
+| Disbursement complete | Depositamos $X,XXX en tu cuenta. Puede tardar hasta 60 segundos en aparecer. |
+| Payroll deduction ok | Tu cuota de $X fue descontada de esta nómina. |
+| Missed deduction | No pudimos descontar tu cuota esta nómina. Contacta a tu empleador. |
+| Contract ready | Tu contrato está listo. Fírmalo aquí. |
+| Session expired | Tu sesión expiró. Inicia sesión de nuevo. |
+| Generic fallback | Algo salió mal. Intenta de nuevo. |
+
+## Microcopy checklist (apply to every user-facing string)
+
+- [ ] Tú, not usted
+- [ ] ≤ 16 words
+- [ ] Active voice
+- [ ] Specific (what happened / what to do)
+- [ ] Mexican vocabulary
+- [ ] Sentence case
+- [ ] No emoji
+- [ ] `¿` / `¡` where needed
+- [ ] Consistent voice with surrounding copy
+- [ ] Peso amounts formatted
+- [ ] No "haz clic aquí"
+- [ ] No gringo-isms
+
+## When editing existing copy
+
+- Preserve meaning, improve tone. Don't wholesale rewrite working flows without being asked.
+- Spanish runs ~20% longer than English — check button widths at 360px with the longer string.
+- Regulatory copy → verify with Isaac before shipping changes.

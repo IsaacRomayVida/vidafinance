@@ -1,0 +1,181 @@
+---
+description: VIDA Finance — what the product is, the real stack, and the verified state of the codebase
+alwaysApply: true
+---
+
+# VIDA Finance — Project Context
+
+You're working in the **VIDA Finance** monorepo (`IsaacRomayVida/vidafinance`). Launch target: **2026-05-31 (v1.8.0)**. As of 2026-04-21, main tip is `d975bb0` (after PRs #342/#343/#344/#345/#346), production is green.
+
+## What VIDA is
+
+Payroll-deducted microcredit SOFOM for Mexican workers. Loans MXN 500–5,000 deducted automatically from payroll. B2B2C: VIDA sells to **employers** who enroll their **employees** who request loans. Regulated by CNBV SOFOM + CONDUSEF.
+
+## Real stack (verified 2026-04-19)
+
+**Frontend — `public-v2/`:**
+- **React 19.2** + **TypeScript 5.9** + **Vite 8** + **Tailwind CSS v4**
+- **Dev server: port 3000** (`vite` config, NOT the default 5173)
+- **Build: `npm run build`** runs `tsc && vite build`
+- **Firebase SDK 12.11** (auth, firestore, storage, app-check)
+- **react-router-dom 7** for routing
+- **i18next + react-i18next 16** for i18n (JSON files, not TS)
+- **react-helmet-async 3** for `<head>` management
+- **papaparse 5** for CSV parsing (used in payroll upload)
+- **No test runner configured** (not Vitest, not Jest) — don't pretend otherwise
+- **No form library** (not react-hook-form) — plain controlled components
+- **No class-name utility** (no clsx) — manual template strings
+
+**Backend — don't modify from a frontend task:**
+- `functions/` — 36 callable CFs, all with `enforceAppCheck: true` + rate limiting
+- 6 Railway services under `observant-miracle`
+
+## The actual `public-v2/src/` tree
+
+```
+src/
+├── App.tsx                          ← route map (lazy-loaded pages)
+├── main.tsx                         ← imports ./styles/legacy.css, ./styles/index.css
+├── components/
+│   ├── ErrorBoundary.tsx
+│   ├── LoanStatusCard.tsx
+│   ├── RouteGuard.tsx
+│   ├── layout/                      ← singular — marketing layout
+│   │   ├── Footer.tsx
+│   │   ├── MarketingLayout.tsx
+│   │   └── Navbar.tsx
+│   ├── layouts/                     ← ⚠ PLURAL — portal layouts (admin, employee, employer)
+│   │   ├── AdminLayout.tsx
+│   │   ├── EmployeeLayout.tsx
+│   │   ├── EmployerLayout.tsx
+│   │   └── MarketingLayout.tsx       ← ⚠ also duplicated in layout/
+│   ├── marketing/                    ← hero, how-it-works, FAQ, etc.
+│   │   ├── BenefitsBar.tsx
+│   │   ├── ClosingSection.tsx
+│   │   ├── ContactForm.tsx
+│   │   ├── EmployerSection.tsx
+│   │   ├── FAQSection.tsx
+│   │   ├── FeatureCards.tsx
+│   │   ├── HeroSection.tsx
+│   │   ├── HowItWorks.tsx
+│   │   ├── LogosBar.tsx
+│   │   ├── ROICalculator.tsx
+│   │   ├── StatementSection.tsx
+│   │   └── TrustSection.tsx
+│   └── shared/
+│       ├── RichText.tsx
+│       └── VidaLogo.tsx
+├── hooks/
+│   ├── useAuth.ts                    ← AuthProvider + useAuth with role resolution
+│   ├── useDocumentTitle.ts
+│   ├── useHashScroll.ts
+│   └── useRevealOnScroll.ts
+├── i18n/
+│   ├── en.json
+│   ├── es.json                       ← canonical Spanish (flat keys: hero_h1, nav_employers…)
+│   └── index.ts                      ← i18next init
+├── lib/
+│   └── firebase.ts                   ← Firebase init + App Check gated on VITE_RECAPTCHA_SITE_KEY
+├── pages/
+│   ├── AboutPage.tsx                 ─┐
+│   ├── ContactPage.tsx                │  Marketing pages:
+│   ├── EmployeePage.tsx               │  /employees (plural!)
+│   ├── EmployerPage.tsx               │  /employers
+│   ├── HomePage.tsx                   │  /
+│   ├── InvestorsPage.tsx              │  /investors
+│   ├── PartnersPage.tsx               │  /partners
+│   ├── PressPage.tsx                  │  /press
+│   ├── PrivacyPage.tsx                │  /privacy
+│   ├── SecurityPage.tsx               │  /security
+│   ├── TermsPage.tsx                 ─┘  /terms
+│   ├── Login.tsx                     ← /login
+│   ├── Onboarding.tsx                ← /onboarding (legacy entry, invite-token flow)
+│   ├── OnboardingWizard.tsx          ← /employer/onboarding (employer-side)
+│   ├── EmployeeDashboard.tsx         ← /employee
+│   ├── LoanWizard.tsx                ← /employee/apply
+│   ├── MyLoans.tsx                   ← /employee/loans
+│   ├── EmployerDashboard.tsx         ← /employer
+│   ├── EmployeeRoster.tsx            ← /employer/employees
+│   ├── DeductionReports.tsx          ← /employer/deductions
+│   ├── PayrollUpload.tsx             ← /employer/payroll
+│   ├── AnalyticsPage.tsx             ← /employer/analytics
+│   ├── AdminDashboard.tsx            ← /ops
+│   ├── ReviewQueue.tsx               ← /ops/review-queue
+│   ├── ReviewDetail.tsx              ← /ops/review-queue/:id
+│   ├── PortfolioPage.tsx             ← /ops/portfolio
+│   ├── EmployerMgmt.tsx              ← /ops/employers
+│   ├── AlertsPage.tsx                ← /ops/alerts
+│   ├── SystemHealth.tsx              ← /ops/health
+│   └── NotFound.tsx                  ← * catch-all
+└── styles/
+    ├── index.css                     ← Tailwind v4 @theme + supplemental (auth-v2, admin, photo layout)
+    └── legacy.css                    ← core component styles (nav, hero, dashboard, onboarding, etc.)
+```
+
+## The full route map
+
+Memorize these — don't invent new ones.
+
+### Marketing (no auth required)
+- `/` — HomePage
+- `/employers` — EmployerPage (b2b pitch)
+- `/employees` — EmployeePage (b2c pitch; **plural!**)
+- `/about`, `/security`, `/privacy`, `/terms`, `/partners`, `/investors`, `/contact`, `/press`
+
+### Auth + onboarding
+- `/login` — Login
+- `/onboarding` — Onboarding (employee invite-accept entry; **NOT `/signup`**)
+- `/employer/onboarding` — OnboardingWizard (employer-side, multi-step)
+- `/get-started` → redirects to `/contact`
+
+### Employee portal (role: `employee`)
+- `/employee` — EmployeeDashboard
+- `/employee/apply` — LoanWizard
+- `/employee/loans` — MyLoans
+- `/employee/dashboard` → redirects to `/employee`
+
+### Employer portal (role: `employer_admin`)
+- `/employer` — EmployerDashboard
+- `/employer/employees` — EmployeeRoster (**not** `EmployeesTab.tsx`)
+- `/employer/deductions` — DeductionReports
+- `/employer/payroll` — PayrollUpload
+- `/employer/analytics` — AnalyticsPage
+- `/employer/dashboard` → redirects to `/employer`
+- `/employer/loans` → redirects to `/employer/deductions`
+
+### Ops / admin portal (roles: `ops`, `admin`, `super_admin`)
+- `/ops` — AdminDashboard
+- `/ops/review-queue` — ReviewQueue
+- `/ops/review-queue/:id` — ReviewDetail
+- `/ops/portfolio`, `/ops/employers`, `/ops/alerts`, `/ops/health`
+- `/admin` or `/admin/*` → redirect to `/ops`
+
+## Known patterns to respect (not bugs — don't "clean up")
+
+- **`Onboarding.tsx` AND `OnboardingWizard.tsx`** both exist and are both routed. Different purposes: `Onboarding.tsx` is the employee invite-accept flow at `/onboarding`; `OnboardingWizard.tsx` is the employer-side multi-step setup at `/employer/onboarding`. Keep both.
+- **`useAuth` custom-claims resolution is complex** — it tries cached token → force-refreshed token → Firestore `employers/{uid}` → Firestore `users/{uid}` with retry. Don't simplify this; it's load-bearing for the different portal entry points.
+- **Two CSS files**: `src/styles/index.css` (Tailwind v4 `@theme` + supplemental) and `src/styles/legacy.css` (core component styles). Consolidation is done — don't add a third.
+
+## Shared infrastructure already in place (use, don't re-invent)
+
+- **`@/lib/safeStorage`** — `safeGetItem`, `safeSetItem`, `safeRemoveItem` with try/catch guards. **Always use these** instead of raw `localStorage.*`. Safari private mode / Firefox resist-fingerprinting will throw on raw calls. Shipped in PR #343.
+- **Per-portal `<ErrorBoundary>`** in `App.tsx` — each layout (marketing, employee, employer, admin) and each standalone route (`/login`, `/onboarding`, `/*`) is wrapped in its own `ErrorBoundary`. A crash in one page degrades that route only. Don't remove the wrapping.
+- **Global `:focus-visible` baseline** — `src/styles/index.css` has a global block that applies teal-900 focus rings to all interactive elements. `.auth-input` is excluded (has its own border-bottom focus style). Don't duplicate focus-visible styles per component.
+- **`useRevealOnScroll`** respects `prefers-reduced-motion` — elements get `.vis` immediately if the OS setting is enabled, skipping the intersection-triggered animation. Don't add parallel scroll-animation logic.
+
+## What NOT to do from a frontend task
+
+- Don't modify `functions/`, `services/`, `firestore.rules`, `storage.rules`, `firebase.json`
+- Don't install a test runner, form library, or CSS framework as a side quest
+- Don't move files to "clean up" the duplicates above without a ticket — they're known
+- Don't assume tests exist — if you write `.test.tsx`, you have to wire a runner first (open a ticket)
+- Don't commit secrets. `.env.local` is gitignored for dev values
+- Don't use raw `localStorage.*` — use `@/lib/safeStorage` helpers
+- Don't add a third CSS file — extend `styles/index.css` or `styles/legacy.css`
+
+## Verification before declaring work done
+
+1. `cd public-v2 && npm run build` — must succeed cleanly (`tsc && vite build`)
+2. `npm run dev` then open `http://localhost:3000` — no console errors
+3. Test at 360×780 AND 1440×900 viewports
+4. If you touched any callable CF: verify with a logged-in session (or note in PR that App Check will block until VID3-676)
