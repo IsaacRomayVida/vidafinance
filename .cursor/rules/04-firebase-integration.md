@@ -1,0 +1,186 @@
+---
+apply: auto-attached
+globs: public-v2/src/**/*.{ts,tsx}
+description: Firebase SDK patterns — Auth, Firestore, Storage, Callable Functions, App Check
+---
+
+# Firebase Integration Patterns
+
+Attached when editing files that import from `firebase/*`, `@/lib/firebase`, `@/hooks/useAuth`.
+
+## Init is centralized — never duplicate
+
+`src/lib/firebase.ts` is the ONLY place that calls `initializeApp`. It exports singletons: `auth`, `db`, `storage`. Import from there:
+
+```tsx
+import { auth, db, storage } from '@/lib/firebase';
+```
+
+The firebase config is **hardcoded in the file** (apiKey, projectId, etc. — these are NOT secrets; they're identifiers, and rules + App Check gate actual access).
+
+## App Check — gated on env var
+
+Already wired in `src/lib/firebase.ts`. Behavior:
+
+- `VITE_RECAPTCHA_SITE_KEY` **set** → `initializeAppCheck` fires; callable CFs work
+- `VITE_RECAPTCHA_SITE_KEY` **unset** (current default for local dev) → App Check is no-op; callable CFs will return 401 `unauthenticated`
+- `VITE_APPCHECK_DEBUG_TOKEN` set in dev → uses debug token registered in Firebase Console
+
+**For local CF testing, get a debug token from Isaac** (requires Firebase Console access). Don't modify `firebase.ts` to disable App Check.
+
+## Auth — use the existing provider
+
+`src/hooks/useAuth.ts` already provides `<AuthProvider>` + `useAuth()` with role resolution. The provider wraps the app in `App.tsx`. In any component:
+
+```tsx
+import { useAuth } from '@/hooks/useAuth';
+
+const { user, role, loading } = useAuth();
+```
+
+Roles: `'employee' | 'employer_admin' | 'ops' | 'admin' | 'super_admin' | null`.
+
+**Route protection** via `<RouteGuard allowedRoles={[...]}>` in `App.tsx`. Don't do inline role checks for route protection — only for in-component UX decisions (show/hide a button).
+
+### Sign-in (not yet implemented for email/password in the component — check `Login.tsx`)
+
+```tsx
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+
+await signInWithEmailAndPassword(auth, email, password);
+// onAuthStateChanged in AuthProvider picks it up
+```
+
+Map auth errors via `friendlyError` (see rule 03).
+
+## Firestore — always via a hook
+
+Never call `getDoc` or `onSnapshot` directly in a component body. Extract a hook.
+
+### Reading a doc (real-time, preferred for mutable data)
+
+```tsx
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
+useEffect(() => {
+  if (!loanId) return;
+  const unsub = onSnapshot(doc(db, 'loans', loanId), (snap) => {
+    if (snap.exists()) setLoan({ id: snap.id, ...snap.data() } as Loan);
+  });
+  return unsub;
+}, [loanId]);
+```
+
+### Listing a collection
+
+Always filter + limit:
+
+```tsx
+import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
+
+const q = query(
+  collection(db, 'loans'),
+  where('employeeId', '==', user.uid),
+  orderBy('createdAt', 'desc'),
+  limit(20),
+);
+const unsub = onSnapshot(q, (snap) => setLoans(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+```
+
+### Writing — go through a Cloud Function
+
+Client direct writes are heavily restricted by `firestore.rules`. For any business action (create loan, accept invite, change status) → use a callable CF, not a direct write.
+
+Allowed direct writes are typically:
+- User self-editing their own profile fields (within rules)
+- Optimistic UI flags (rare)
+
+If you get `permission-denied` on a direct write, the right answer is almost always "there's a CF for this" — find and use it, don't try to weaken rules.
+
+## Storage — paths matter
+
+`storage.rules` enforces per-path access:
+
+- `contracts/{loanId}/**` — signed-URL only via `getContractDownloadUrl` CF
+- `kyc/{uid}/**` — self + ops
+- `payroll/{employerId}/{yyyyMM}/**` — employer_admin of that employer + ops
+
+### Uploading payroll CSV
+
+```tsx
+import { ref, uploadBytes } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
+
+const yyyyMM = new Date().toISOString().slice(0, 7); // "2026-04"
+const pathRef = ref(storage, `payroll/${employerId}/${yyyyMM}/payroll.csv`);
+await uploadBytes(pathRef, file);
+```
+
+### Downloading contracts — NEVER build URLs yourself
+
+```tsx
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+const fn = httpsCallable<{ loanId: string }, { url: string }>(getFunctions(), 'getContractDownloadUrl');
+const { data } = await fn({ loanId });
+window.open(data.url, '_blank'); // 15-min signed URL
+```
+
+## Callable Cloud Functions
+
+```tsx
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+const functions = getFunctions(); // us-central1 by default
+
+const requestLoan = httpsCallable<
+  { amount: number; termDays: number; termsAccepted: boolean },
+  { loanId: string; status: string }
+>(functions, 'requestLoan');
+
+try {
+  const { data } = await requestLoan({ amount: 5000, termDays: 30, termsAccepted: true });
+  // data.loanId, data.status
+} catch (err) {
+  setError(friendlyError(err));
+}
+```
+
+### Common error codes
+
+| `err.code` | Meaning | Default Spanish |
+|---|---|---|
+| `unauthenticated` | No valid auth token | "Tu sesión expiró. Inicia sesión de nuevo." |
+| `permission-denied` | Auth OK, action not allowed | "No tienes permiso para esta acción." |
+| `resource-exhausted` | Rate limit hit (10-60/min) | "Demasiadas solicitudes. Espera un minuto." |
+| `invalid-argument` | Bad input; message is user-safe | Use `err.message` |
+| `failed-precondition` | State doesn't allow this op | Use `err.message` |
+| `not-found` | Target doc missing | "No encontramos lo que buscas." |
+| `already-exists` | Idempotency collision | "Este recurso ya existe." |
+
+All 31 user-facing CFs have:
+- `enforceAppCheck: true`
+- Per-UID rate limiting (tiered 10-60/min)
+
+## Env variables
+
+All client env vars must start with `VITE_`:
+
+```
+VITE_RECAPTCHA_SITE_KEY=6L...         # App Check site key (Isaac to provide)
+VITE_APPCHECK_DEBUG_TOKEN=<uuid>      # Local dev only, from Firebase Console
+```
+
+Server-side secrets (client_secret, webhook secrets, service accounts) **never** go in `VITE_*` — they ship to every browser. Those live in Firebase Functions secrets or Railway env.
+
+## Things you should never do
+
+- ❌ Call `firebase/admin` / `firebase-admin` from client (it's Node-only, won't bundle and would leak)
+- ❌ Build Firestore REST URLs manually
+- ❌ Disable App Check to "make local dev easier" — use debug tokens
+- ❌ Write directly to `loans/`, `employers/`, `employees/`, `invites/` from client — use CFs
+- ❌ Log auth ID tokens or App Check tokens (even temporarily)
+- ❌ Commit `.env` or `.env.local`
+- ❌ Call `signInWithCustomToken` from client unless wired to a specific custom-token CF
