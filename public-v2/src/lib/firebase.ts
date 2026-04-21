@@ -4,6 +4,10 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
+declare global {
+  var FIREBASE_APPCHECK_DEBUG_TOKEN: string | boolean | undefined;
+}
+
 const firebaseConfig = {
   apiKey: 'AIzaSyD5FFDHe2mAtqfBBw6vz4-V2WflvTxCTEw',
   authDomain: 'vida-finance.firebaseapp.com',
@@ -25,9 +29,9 @@ const appCheckDebugToken = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN as string |
 
 if (recaptchaSiteKey) {
   if (import.meta.env.DEV && appCheckDebugToken) {
-    (globalThis as any).FIREBASE_APPCHECK_DEBUG_TOKEN = appCheckDebugToken;
+    globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = appCheckDebugToken;
   } else if (import.meta.env.DEV) {
-    (globalThis as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
   }
 
   try {

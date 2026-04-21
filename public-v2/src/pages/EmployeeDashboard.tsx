@@ -782,7 +782,7 @@ function LoanModal({
         setLoadingEmployer(false);
       }
     })();
-  }, [employerId]);
+  }, [employerId, initialEmployerCode]);
 
   const fee = Math.round(amount * 0.3);
   const total = amount + fee;

@@ -59,14 +59,13 @@ export function PortfolioPage() {
   const [report, setReport] = useState<PortfolioReport | null>(null);
   const [period, setPeriod] = useState<Period>('30d');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     (async () => {
+      setLoading(true);
       try {
         const functions = getFunctions();
         const getReport = httpsCallable<{ period: Period }, PortfolioReport>(functions, 'getPortfolioReport');
