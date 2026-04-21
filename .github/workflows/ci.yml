@@ -67,9 +67,13 @@ jobs:
       - run: npm install
       - run: npm run verify
         env:
+          # CI mode falls back to known public Railway URLs and skips
+          # env-var-only checks so the job stays green when repo secrets
+          # aren't configured. Run locally with functions/.env for the
+          # full launch-readiness gate.
+          VERIFY_MODE: ci
           PAYMENT_SERVER_URL: ${{ secrets.PAYMENT_SERVER_URL }}
           SOFTCREDITO_ADAPTER_URL: ${{ secrets.SOFTCREDITO_ADAPTER_URL }}
           NOTIFICATION_SERVICE_URL: ${{ secrets.NOTIFICATION_SERVICE_URL }}
           PDF_GENERATOR_URL: ${{ secrets.PDF_GENERATOR_URL }}
           ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL }}
-        continue-on-error: true
