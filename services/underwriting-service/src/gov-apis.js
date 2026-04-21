@@ -47,27 +47,41 @@ async function checkCFDI({ uuid, emisorRfc, receptorRfc, total }) {
 }
 
 // ── 2. INEGI DENUE — business registry ───────────────────────────────
+// INEGI v4.2 API format (https://www.inegi.org.mx/servicios/api_denue.html):
+//   /app/api/denue/v1/consulta/BuscarEntidad/{nombre}/{entidad}/{pagIni}/{pagFin}/{token}
+// The API token is the last path segment, NOT a query param or header.
+// `stateCode` is the 2-digit INEGI entidad code ("01"–"32"), or "00" for nationwide.
 async function checkDENUE(companyName, stateCode) {
   const baseUrl = process.env.DENUE_API_URL;
+  const token   = process.env.DENUE_API_KEY;
   if (!baseUrl) throw new Error("DENUE_API_URL env var is not configured");
+  if (!token)   throw new Error("DENUE_API_KEY env var is not configured");
 
   const cacheKey = `denue:${companyName}:${stateCode}`;
   const cached = await redis.get(cacheKey).catch(() => null);
   if (cached) return JSON.parse(cached);
 
-  const url = `${baseUrl}?keyword=${encodeURIComponent(companyName)}&entidad=${stateCode}&pageSize=5`;
+  // Normalise state code: accept either "09" or "9"; DENUE requires 2-digit
+  const entidad = String(stateCode || "00").padStart(2, "0");
+  const encodedName = encodeURIComponent(companyName);
+  const url = `${baseUrl}/BuscarEntidad/${encodedName}/${entidad}/1/5/${token}`;
+
   const res  = await fetch(url, { timeout: 10000 });
+  if (!res.ok) throw new Error(`DENUE API ${res.status}: ${await res.text().catch(() => "")}`);
   const data = await res.json();
 
-  const results = data.results || [];
+  // v4.2 returns an array of business records (capitalized field names)
+  const results = Array.isArray(data) ? data : [];
   const result = {
     found:   results.length > 0,
     count:   results.length,
     topMatch: results[0] ? {
-      nombre:     results[0].nombre,
-      municipio:  results[0].municipio,
-      sector:     results[0].codigo_actividad,
-      fechaAlta:  results[0].fecha_alta,
+      nombre:       results[0].Nombre,
+      razonSocial:  results[0].Razon_social,
+      municipio:    results[0].Municipio,
+      claseActividad: results[0].Clase_actividad,
+      estrato:      results[0].Estrato,
+      clee:         results[0].CLEE,
     } : null,
     pass: results.length > 0,
   };
