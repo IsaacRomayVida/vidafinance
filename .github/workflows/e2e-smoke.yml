@@ -1,0 +1,46 @@
+name: E2E Smoke (public routes)
+
+# Credential-free Puppeteer smoke over the public marketing routes and the
+# login entry point. Runs nightly against production so regressions get
+# caught even on days we don't deploy, and on-demand via workflow_dispatch
+# when investigating an incident.
+#
+# NOT gated on PRs — this hits real prod and we don't want a temporary
+# CDN flake to block merges. The PR-gating coverage lives in the `test`
+# and `frontend` jobs in ci.yml.
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # 13:00 UTC ≈ 07:00 CDMX
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Override APP_URL (default: prod)"
+        required: false
+        default: "https://vida-finance.web.app"
+      strict_console:
+        description: "Treat console.error as test failures (1 = yes)"
+        required: false
+        default: "0"
+
+jobs:
+  smoke:
+    name: Public-routes smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run public E2E smoke
+        run: npm run test:e2e -- public-smoke
+        env:
+          E2E_APP_URL: ${{ github.event.inputs.target_url || 'https://vida-finance.web.app' }}
+          E2E_STRICT_CONSOLE: ${{ github.event.inputs.strict_console || '0' }}
