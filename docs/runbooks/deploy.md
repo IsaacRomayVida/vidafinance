@@ -245,6 +245,7 @@ After the emergency deploy, **immediately** open a PR with the same fix so git h
 - `scaling.md` — when to bump Cloud Functions concurrency / memory / instances
 - `alerting-runbook.md` — what each alert means, severity levels
 - `model-retrain.md` — ML model retraining cadence and validation
+- `uptime-monitoring.md` — external uptime monitors (UptimeRobot) + PagerDuty routing
 
 ---
 
