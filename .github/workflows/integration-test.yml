@@ -23,7 +23,7 @@ jobs:
     env:
       TARGET_ENV: ${{ inputs.environment || 'staging' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set base URLs
         id: urls
