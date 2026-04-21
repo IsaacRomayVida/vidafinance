@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@sentry/react": "^10.49.0",
     "@types/papaparse": "^5.5.2",
     "firebase": "^12.11.0",
     "i18next": "^25.9.0",

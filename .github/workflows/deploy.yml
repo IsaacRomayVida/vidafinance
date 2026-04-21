@@ -118,6 +118,8 @@ jobs:
           NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          SENTRY_RELEASE=${{ github.sha }}
           ENVEOF
 
       - name: Build Cloud Functions
@@ -130,6 +132,8 @@ jobs:
         run: cd public-v2 && npm run build
         env:
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_APP_VERSION: ${{ github.sha }}
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools

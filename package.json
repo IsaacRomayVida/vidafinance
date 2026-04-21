@@ -46,7 +46,7 @@
   "lint-staged": {
     "functions/src/**/*.ts": [
       "eslint --fix --max-warnings 0",
-      "tsc --noEmit -p functions/tsconfig.json"
+      "bash -c 'cd functions && tsc --noEmit'"
     ],
     "services/**/*.ts": [
       "eslint --fix --max-warnings 0"

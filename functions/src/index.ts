@@ -15,6 +15,9 @@ import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { checkRateLimit } from './utils/rateLimiter';
 import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
+import { initSentry } from './utils/sentry';
+
+initSentry();
 
 // Re-export fully-implemented cloud functions from their own modules
 export { markLoanDisbursed } from './loans/markLoanDisbursed';
@@ -77,7 +80,7 @@ async function callML(path: string, body: Record<string, unknown>): Promise<Reco
       'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '',
     },
     body: JSON.stringify(body),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     signal: AbortSignal.timeout(8000),
   });
   if (!r.ok) throw new Error(`ML ${path}: ${r.status}`);
@@ -1257,7 +1260,7 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           amount: after['total'],
           dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
         }),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         signal: AbortSignal.timeout(10000),
       }).then(async (r) => {
         if (r.ok) {
@@ -1452,7 +1455,7 @@ export const systemHealthCheck = onSchedule(
     const results = await Promise.allSettled(
       services.map(async (s) => {
         const start = Date.now();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const r = await fetch(s.url, { signal: AbortSignal.timeout(6000) });
         const d = (await r.json()) as Record<string, unknown>;
         return { name: s.name, status: d['status'], redis: d['redis'], latencyMs: Date.now() - start };
@@ -1489,7 +1492,7 @@ export const queueHealthCheck = onSchedule(
     try {
       const r = await fetch(process.env['PAYMENT_SERVER_URL'] + '/internal/queue-stats', {
         headers: { 'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '' },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         signal: AbortSignal.timeout(6000),
       });
       if (!r.ok) return;
