@@ -196,6 +196,7 @@ railway variables set \
   ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   MODEL_PATH="models/underwriting_v1.joblib" \
   USE_ML_MODELS="false" \
+  ML_MODE="manual_review_all" \
   ML_CACHE_TTL=86400 \
   --service vida-ml-service 2>/dev/null || \
 railway variables set \
@@ -203,6 +204,7 @@ railway variables set \
   ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   MODEL_PATH="models/underwriting_v1.joblib" \
   USE_ML_MODELS="false" \
+  ML_MODE="manual_review_all" \
   ML_CACHE_TTL=86400 \
   --service ml-service
 echo "✅ vida-ml-service configured"
