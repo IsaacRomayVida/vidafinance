@@ -119,6 +119,23 @@ describe('parseCsv', () => {
     expect(parseCsv('')).toEqual([]);
     expect(parseCsv('\n\n')).toEqual([]);
   });
+
+  it('skips preamble rows before the real RFC header (SAT EFOS shape)', () => {
+    const csv = [
+      '"Información actualizada al 31 de diciembre de 2025; listados públicos...",,,,,,',
+      'Listado completo de contribuyentes (Artículo 69-B del CFF),,,,,,',
+      'No,RFC,Nombre del Contribuyente,Situación del contribuyente',
+      '1,AAA080808HL8,"ACME, S.A. DE C.V.",Definitivo',
+      '2,BBB010101CCC,"BETA S.C.",Presunto',
+    ].join('\n');
+    const rows = parseCsv(csv);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      rfc: 'AAA080808HL8',
+      situacin_del_contribuyente: 'Definitivo',
+    });
+    expect(rows[1].rfc).toBe('BBB010101CCC');
+  });
 });
 
 describe('decodeLatin1', () => {
@@ -147,9 +164,10 @@ describe('normalizeEfos', () => {
       },
     ];
     const result = normalizeEfos(rows);
-    expect(result['ABCD010101AAA'].situacion).toBe('DEFINITIVO');
-    expect(result['ZZZZ020202ZZZ'].situacion).toBe('PRESUNTO');
-    expect(result['BAD']).toBeUndefined();
+    expect(result.entries['ABCD010101AAA'].situacion).toBe('DEFINITIVO');
+    expect(result.entries['ZZZZ020202ZZZ'].situacion).toBe('PRESUNTO');
+    expect(result.entries['BAD']).toBeUndefined();
+    expect(result.invalidRfcRows).toBe(1);
   });
 
   it('finds the situacion column even when named verbosely', () => {
@@ -160,7 +178,8 @@ describe('normalizeEfos', () => {
         situacion_del_contribuyente: 'definitivo',
       },
     ]);
-    expect(result['ABCD010101AAA'].situacion).toBe('DEFINITIVO');
+    expect(result.entries['ABCD010101AAA'].situacion).toBe('DEFINITIVO');
+    expect(result.invalidRfcRows).toBe(0);
   });
 });
 
@@ -174,7 +193,7 @@ describe('normalizeArt69', () => {
         monto: '100',
       },
     ]);
-    expect(result['ABCD010101AAA']).toEqual({
+    expect(result.entries['ABCD010101AAA']).toEqual({
       rfc: 'ABCD010101AAA',
       nombre: 'X',
       tipo_adeudo: 'Firme',
@@ -182,12 +201,25 @@ describe('normalizeArt69', () => {
     });
   });
 
-  it('drops rows with malformed RFCs', () => {
+  it('drops rows with malformed RFCs and counts them', () => {
     const result = normalizeArt69([
       { rfc: 'BAD', nombre: 'X' },
       { rfc: 'ABCD010101AAA', nombre: 'X' },
     ]);
-    expect(Object.keys(result)).toEqual(['ABCD010101AAA']);
+    expect(Object.keys(result.entries)).toEqual(['ABCD010101AAA']);
+    expect(result.invalidRfcRows).toBe(1);
+  });
+
+  it('keeps only the first row per RFC when SAT publishes multiple supuestos', () => {
+    const result = normalizeArt69([
+      { rfc: 'ABCD010101AAA', razon_social: 'ACME', supuesto: 'CANCELADOS' },
+      { rfc: 'ABCD010101AAA', razon_social: 'ACME', supuesto: 'FIRMES' },
+      { rfc: 'ABCD010101AAA', razon_social: 'ACME', supuesto: 'EXIGIBLES' },
+    ]);
+    expect(Object.keys(result.entries)).toEqual(['ABCD010101AAA']);
+    expect(result.entries['ABCD010101AAA'].tipo_adeudo).toBe('CANCELADOS');
+    // Dedupe is NOT a parse failure — the rows are valid, they just collapse.
+    expect(result.invalidRfcRows).toBe(0);
   });
 });
 

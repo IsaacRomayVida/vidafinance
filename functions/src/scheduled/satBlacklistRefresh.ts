@@ -42,8 +42,13 @@ import { sendSlackAlert } from '../utils/slackAlert';
 // overwritten each publication cycle. Override via env if SAT restructures.
 const DEFAULT_EFOS_URL =
   'http://omawww.sat.gob.mx/cifras_sat/Documents/Listado_Completo_69-B.csv';
+// Art. 69 moved off /cifras_sat/Documents in 2025; SAT publishes under
+// /tramitesyservicios/Paginas/documentos/ with a different filename suffix.
+// If they move it again: scrape the index at
+// http://omawww.sat.gob.mx/tramitesyservicios/Paginas/datos_abiertos_articulo69.htm
+// and pick the `Listado_Completo_*` href from the CSV list.
 const DEFAULT_ART69_URL =
-  'http://omawww.sat.gob.mx/cifras_sat/Documents/Listado_Completo_69.csv';
+  'http://omawww.sat.gob.mx/tramitesyservicios/Paginas/documentos/Listado_Completo_69_articulo69.csv';
 
 const GCS_EFOS_PATH = 'sat/efos.json';
 const GCS_ART69_PATH = 'sat/art69.json';
@@ -90,6 +95,9 @@ export interface RefreshStats {
  *   - CRLF / LF line endings
  *   - Double-quoted fields with embedded commas + escaped quotes ("")
  *   - Header row with mixed case and spaces (lowercased + snake_cased)
+ *   - Preamble rows before the real header (SAT now prepends a metadata
+ *     line and a title line to EFOS; we scan downward for the first row
+ *     that looks like a column header — i.e. contains an RFC cell).
  * SAT CSVs are well-formed enough that we don't need a full RFC 4180 parser.
  */
 export function parseCsv(text: string): Array<Record<string, string>> {
@@ -121,11 +129,26 @@ export function parseCsv(text: string): Array<Record<string, string>> {
     return cells.map((c) => c.trim());
   };
 
-  const header = splitRow(lines[0]).map((h) =>
+  // Scan for the real header row. SAT CSVs sometimes prepend 1-2 preamble
+  // rows ("Información actualizada al…" + a title line). The true header
+  // is the first row that contains an exact `RFC` cell. Fall back to the
+  // first line if nothing matches in the first ~10 rows (legacy shape).
+  const isHeader = (cells: string[]): boolean =>
+    cells.some((c) => c.trim().toUpperCase() === 'RFC');
+  const maxPreamble = Math.min(lines.length, 10);
+  let headerIdx = 0;
+  for (let i = 0; i < maxPreamble; i++) {
+    if (isHeader(splitRow(lines[i]))) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  const header = splitRow(lines[headerIdx]).map((h) =>
     h.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
   );
   const rows: Array<Record<string, string>> = [];
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerIdx + 1; i < lines.length; i++) {
     const cells = splitRow(lines[i]);
     const row: Record<string, string> = {};
     header.forEach((name, idx) => {
@@ -151,48 +174,59 @@ function findColumn(row: Record<string, string>, patterns: RegExp[]): string {
 }
 
 // ── Normalizers ─────────────────────────────────────────────────────────
+export interface NormalizeResult<T> {
+  entries: Record<string, T>;
+  invalidRfcRows: number;
+}
+
 export function normalizeEfos(
   rows: Array<Record<string, string>>
-): Record<string, EfosEntry> {
-  const out: Record<string, EfosEntry> = {};
+): NormalizeResult<EfosEntry> {
+  const entries: Record<string, EfosEntry> = {};
+  let invalidRfcRows = 0;
   for (const row of rows) {
     const rfcKey = findColumn(row, [/^rfc$/, /rfc/]);
     const rfc = (row[rfcKey] || '').trim().toUpperCase();
-    if (!RFC_REGEX.test(rfc)) continue;
+    if (!RFC_REGEX.test(rfc)) { invalidRfcRows++; continue; }
 
     const nombreKey = findColumn(row, [/nombre_del_contribuyente/, /^nombre$/, /nombre/]);
     const situacionKey = findColumn(row, [/^situacion$/, /situacion/]);
 
-    out[rfc] = {
+    entries[rfc] = {
       rfc,
       nombre: (row[nombreKey] || '').trim(),
       situacion: (row[situacionKey] || '').trim().toUpperCase(),
     };
   }
-  return out;
+  return { entries, invalidRfcRows };
 }
 
 export function normalizeArt69(
   rows: Array<Record<string, string>>
-): Record<string, Art69Entry> {
-  const out: Record<string, Art69Entry> = {};
+): NormalizeResult<Art69Entry> {
+  const entries: Record<string, Art69Entry> = {};
+  let invalidRfcRows = 0;
   for (const row of rows) {
     const rfcKey = findColumn(row, [/^rfc$/, /rfc/]);
     const rfc = (row[rfcKey] || '').trim().toUpperCase();
-    if (!RFC_REGEX.test(rfc)) continue;
+    if (!RFC_REGEX.test(rfc)) { invalidRfcRows++; continue; }
 
-    const nombreKey = findColumn(row, [/nombre_del_contribuyente/, /^nombre$/, /nombre/]);
+    const nombreKey = findColumn(row, [/nombre_del_contribuyente/, /razon_social/, /^nombre$/, /nombre/]);
     const tipoKey = findColumn(row, [/tipo.*adeudo/, /tipo.*deuda/, /supuesto/]);
     const montoKey = findColumn(row, [/^monto$/, /monto/, /importe/]);
 
-    out[rfc] = {
-      rfc,
-      nombre: (row[nombreKey] || '').trim(),
-      tipo_adeudo: (row[tipoKey] || '').trim(),
-      monto: (row[montoKey] || '').trim(),
-    };
+    // Art. 69 has one row per (rfc, supuesto) — keep the first hit per rfc
+    // for lookup; the client only needs to know that a debt exists.
+    if (!entries[rfc]) {
+      entries[rfc] = {
+        rfc,
+        nombre: (row[nombreKey] || '').trim(),
+        tipo_adeudo: (row[tipoKey] || '').trim(),
+        monto: (row[montoKey] || '').trim(),
+      };
+    }
   }
-  return out;
+  return { entries, invalidRfcRows };
 }
 
 // ── Download + persistence ──────────────────────────────────────────────
@@ -241,13 +275,16 @@ export async function performRefresh(
   const efosNormalized = normalizeEfos(efosRows);
   const art69Normalized = normalizeArt69(art69Rows);
 
-  const efosCount = Object.keys(efosNormalized).length;
-  const art69Count = Object.keys(art69Normalized).length;
+  const efosCount = Object.keys(efosNormalized.entries).length;
+  const art69Count = Object.keys(art69Normalized.entries).length;
 
+  // Failure rate = rows where RFC didn't validate / total rows. Rows that
+  // dedupe into the same RFC are NOT failures — Art. 69 legitimately
+  // publishes one row per (rfc, supuesto) pair.
   const efosFailureRate =
-    efosRows.length > 0 ? 1 - efosCount / efosRows.length : 0;
+    efosRows.length > 0 ? efosNormalized.invalidRfcRows / efosRows.length : 0;
   const art69FailureRate =
-    art69Rows.length > 0 ? 1 - art69Count / art69Rows.length : 0;
+    art69Rows.length > 0 ? art69Normalized.invalidRfcRows / art69Rows.length : 0;
 
   if (efosFailureRate > MAX_PARSE_FAILURE_RATE) {
     throw new Error(
@@ -270,12 +307,12 @@ export async function performRefresh(
     writeJsonToBucket(GCS_EFOS_PATH, {
       generatedAt,
       source: efosUrl,
-      rows: efosNormalized,
+      rows: efosNormalized.entries,
     }),
     writeJsonToBucket(GCS_ART69_PATH, {
       generatedAt,
       source: art69Url,
-      rows: art69Normalized,
+      rows: art69Normalized.entries,
     }),
   ]);
 
@@ -345,7 +382,7 @@ export const satBlacklistRefresh = onSchedule(
     schedule: '0 2 15 * *',
     timeZone: 'America/Mexico_City',
     timeoutSeconds: 540,
-    memory: '1GiB',
+    memory: '512MiB',
   },
   async () => {
     await performRefreshWithAlerting();
@@ -367,7 +404,7 @@ export const refreshSatBlacklists = onCall(
     cors: true,
     enforceAppCheck: false,
     timeoutSeconds: 540,
-    memory: '1GiB',
+    memory: '512MiB',
   },
   async (request): Promise<RefreshStats> => {
     const token = (request.auth?.token ?? {}) as Record<string, unknown>;
