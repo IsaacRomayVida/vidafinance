@@ -6,8 +6,15 @@ jest.mock("../../redis-client", () => ({
   set: jest.fn().mockResolvedValue("OK"),
 }));
 
-
+// Both SAT provider modules are mocked so these tests stay independent
+// of the EMPLOYER_SAT_PROVIDER flag — whichever module employer-a loads,
+// it gets the same mock surface.
 jest.mock("../../sw-client", () => ({
+  check69B: jest.fn(),
+  checkArt69: jest.fn(),
+}));
+
+jest.mock("../../sat-blacklist-client", () => ({
   check69B: jest.fn(),
   checkArt69: jest.fn(),
 }));
@@ -18,7 +25,16 @@ jest.mock("../../gov-apis", () => ({
 }));
 
 const redis = require("../../redis-client");
-const { check69B, checkArt69 } = require("../../sw-client");
+// employer-a.js picks its provider at module-load based on EMPLOYER_SAT_PROVIDER.
+// Default is "local" -> sat-blacklist-client. Existing behavioral tests grab
+// handles on whichever provider is active so assertions on check69B /
+// checkArt69 remain meaningful.
+const activeProvider =
+  (process.env.EMPLOYER_SAT_PROVIDER || "local") === "sw"
+    ? "../../sw-client"
+    : "../../sat-blacklist-client";
+// eslint-disable-next-line global-require
+const { check69B, checkArt69 } = require(activeProvider);
 const { checkDENUE, checkREPSE } = require("../../gov-apis");
 const { runEmployerScreening } = require("../employer-a");
 
