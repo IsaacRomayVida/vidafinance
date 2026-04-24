@@ -66,7 +66,17 @@ async function checkDENUE(companyName, stateCode) {
   const encodedName = encodeURIComponent(companyName);
   const url = `${baseUrl}/BuscarEntidad/${encodedName}/${entidad}/1/5/${token}`;
 
-  const res  = await fetch(url, { timeout: 10000 });
+  // INEGI's DENUE is frequently slow (10-20s routine, occasional 25s+). A single
+  // 10s timeout was failing often enough to force stage-a into escalation for
+  // every applicant. Bump to 30s + one retry with 5s backoff; that handles the
+  // long tail of INEGI response times without changing the upstream contract.
+  let res;
+  try {
+    res = await fetch(url, { timeout: 30000 });
+  } catch (err) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    res = await fetch(url, { timeout: 30000 });
+  }
   if (!res.ok) throw new Error(`DENUE API ${res.status}: ${await res.text().catch(() => "")}`);
   const data = await res.json();
 

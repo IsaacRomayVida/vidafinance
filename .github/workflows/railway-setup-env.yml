@@ -217,7 +217,7 @@ jobs:
             BELVO_BASE_URL="https://sandbox.belvo.com" \
             RISKSEAL_MOCK="false" \
             RISKSEAL_API_KEY="$RISKSEAL_API_KEY" \
-            RISKSEAL_BASE_URL="https://api.riskseal.io/v1" \
+            RISKSEAL_BASE_URL="https://latam-1.riskseal.io" \
             GOOGLE_DOCAI_PROJECT_ID="vida-finance" \
             GOOGLE_DOCAI_LOCATION="us" \
             GOOGLE_DOCAI_PROCESSOR_ID="8d46c79a75eb5406" \
