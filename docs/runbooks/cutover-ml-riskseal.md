@@ -35,11 +35,23 @@ Alert thresholds (Slack `#vida-ops`):
 - `efosCount` drops by >20% month-over-month → SAT may have changed their CSV layout
 - `parseFailureRate > 0.05` → CF aborts the write and fires a critical Slack alert automatically
 
-To force a refresh (bootstrap or after a schema fix) call the HTTPS-callable:
+To force a refresh (bootstrap or after a schema fix), trigger the underlying Cloud Scheduler job created by the scheduled function. Firebase v2 scheduled functions register a job at `firebase-schedule-<functionName>-<region>`:
 
 ```bash
-firebase functions:call refreshSatBlacklists --project vida-finance
+gcloud scheduler jobs run \
+  firebase-schedule-satBlacklistRefresh-us-central1 \
+  --location=us-central1 \
+  --project=vida-finance
 ```
+
+This runs the same code path as the monthly schedule. Watch progress:
+
+```bash
+gcloud functions logs read satBlacklistRefresh \
+  --gen2 --region=us-central1 --project=vida-finance --limit=50
+```
+
+Expect a line `[satBlacklistRefresh] completed in N ms` and a new doc at Firestore `sat_refresh_meta/latest`. (The `refreshSatBlacklists` onCall HTTPS function exists too, but can only be invoked from the web/admin client with a Firebase ID token carrying `admin` custom claims — the scheduler job above is the straightforward CLI path.)
 
 If the underwriting-service logs `stage-a | api: sat-local-69b | error: …` repeatedly, the GCS blobs are either missing (CF never ran) or stale. Fix the CF first, don't flip to `sw` unless you have a contract.
 
