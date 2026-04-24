@@ -200,10 +200,12 @@ export function Login() {
 
             <form onSubmit={handleLogin}>
               <div className="form-group">
-                <label>{t('auth_email')}</label>
+                <label htmlFor="login-email">{t('auth_email')}</label>
                 <input
+                  id="login-email"
                   className="auth-input"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t('auth_email_placeholder')}
@@ -211,10 +213,12 @@ export function Login() {
                 />
               </div>
               <div className="form-group">
-                <label>{t('auth_password')}</label>
+                <label htmlFor="login-password">{t('auth_password')}</label>
                 <input
+                  id="login-password"
                   className="auth-input"
                   type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t('auth_password_placeholder')}
@@ -272,10 +276,12 @@ export function Login() {
 
             <form onSubmit={handleForgotPassword}>
               <div className="form-group">
-                <label>{t('auth_email')}</label>
+                <label htmlFor="forgot-email">{t('auth_email')}</label>
                 <input
+                  id="forgot-email"
                   className="auth-input"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t('auth_email_placeholder')}

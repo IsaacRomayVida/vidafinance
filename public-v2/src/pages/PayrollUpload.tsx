@@ -187,6 +187,7 @@ export function PayrollUpload() {
               ref={fileInputRef}
               type="file"
               accept=".csv"
+              aria-label={t('payroll_drop_label')}
               style={{ display: 'none' }}
               onChange={e => e.target.files?.[0] && onFile(e.target.files[0])}
             />

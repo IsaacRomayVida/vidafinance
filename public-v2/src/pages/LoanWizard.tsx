@@ -618,7 +618,9 @@ export function LoanWizard() {
                 />
               </div>
               <input
+                id="lw-amount-range"
                 type="range"
+                aria-label={t('a11y_loan_amount_slider')}
                 min={MIN_AMOUNT}
                 max={cappedMax}
                 step={STEP}
@@ -1242,6 +1244,7 @@ export function LoanWizard() {
             {/* Loan Purpose (optional) */}
             <div style={{ marginBottom: 20 }}>
               <label
+                htmlFor="lw-purpose"
                 style={{
                   display: 'block',
                   fontSize: 13,
@@ -1252,6 +1255,7 @@ export function LoanWizard() {
                 {t('modal_purpose_label')}
               </label>
               <select
+                id="lw-purpose"
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
                 style={{

@@ -39,16 +39,16 @@ export function ContactForm() {
   return (
     <form className="contact-form" onSubmit={handleSubmit}>
       <div className="cf-field">
-        <label>{t('pg_contact_form_name')}</label>
-        <input type="text" name="name" placeholder={t('pg_contact_form_name_ph')} required />
+        <label htmlFor="cf-name">{t('pg_contact_form_name')}</label>
+        <input id="cf-name" type="text" name="name" placeholder={t('pg_contact_form_name_ph')} required />
       </div>
       <div className="cf-field">
-        <label>{t('pg_contact_form_email')}</label>
-        <input type="email" name="email" placeholder={t('pg_contact_form_email_ph')} required />
+        <label htmlFor="cf-email">{t('pg_contact_form_email')}</label>
+        <input id="cf-email" type="email" name="email" placeholder={t('pg_contact_form_email_ph')} required />
       </div>
       <div className="cf-field">
-        <label>{t('pg_contact_form_type')}</label>
-        <select name="type" required>
+        <label htmlFor="cf-type">{t('pg_contact_form_type')}</label>
+        <select id="cf-type" name="type" required>
           <option value="general">{t('pg_contact_form_type_general')}</option>
           <option value="employer">{t('pg_contact_form_type_employer')}</option>
           <option value="partner">{t('pg_contact_form_type_partner')}</option>
@@ -58,8 +58,8 @@ export function ContactForm() {
         </select>
       </div>
       <div className="cf-field">
-        <label>{t('pg_contact_form_msg')}</label>
-        <textarea name="message" placeholder={t('pg_contact_form_msg_ph')} rows={4} required />
+        <label htmlFor="cf-msg">{t('pg_contact_form_msg')}</label>
+        <textarea id="cf-msg" name="message" placeholder={t('pg_contact_form_msg_ph')} rows={4} required />
       </div>
       <button type="submit" className="cf-btn" disabled={submitting}>
         {submitting ? <span className="spinner" /> : t('pg_contact_form_send')}

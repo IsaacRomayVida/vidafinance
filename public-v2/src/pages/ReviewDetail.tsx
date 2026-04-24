@@ -583,6 +583,7 @@ export function ReviewDetail() {
         <div style={{ ...cardStyle, position: 'sticky', bottom: 0, zIndex: 10, boxShadow: '0 -4px 20px rgba(25,68,69,0.08)' }}>
           <div style={sectionLabel}>Actions</div>
           <textarea
+            aria-label="Review notes"
             placeholder="Review notes (optional)..."
             value={notes}
             onChange={e => setNotes(e.target.value)}
@@ -656,6 +657,7 @@ export function ReviewDetail() {
             </p>
             <textarea
               autoFocus
+              aria-label="Reason for denial"
               placeholder="Reason for denial..."
               value={denyReason}
               onChange={e => setDenyReason(e.target.value)}

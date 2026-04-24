@@ -464,6 +464,7 @@ export function EmployeeRoster() {
           </svg>
           <input
             type="text"
+            aria-label={t('a11y_search_roster')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('roster_search', 'Buscar por nombre o CURP…')}
