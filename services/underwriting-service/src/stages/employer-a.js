@@ -19,7 +19,19 @@
  * On provider error: escalate to manual review (Stage 5). Never default to pass.
  */
 const redis = require("../redis-client");
-const { check69B, checkArt69 } = require("../sw-client");
+// SAT blacklist provider is flag-selected at module load.
+// - "local" (default): reads self-hosted EFOS + Art. 69 CSVs from GCS
+//   via sat-blacklist-client. Populated by the satBlacklistRefresh
+//   Cloud Function. No vendor cost, monthly-fresh data.
+// - "sw": uses the legacy SW SAPiens integration in sw-client. Kept
+//   available for contingency; flip EMPLOYER_SAT_PROVIDER=sw if a SAT
+//   portal outage or schema change takes the local path out of commission.
+//   Requires SW_USER + SW_PASSWORD to be configured.
+const EMPLOYER_SAT_PROVIDER = process.env.EMPLOYER_SAT_PROVIDER || "local";
+const { check69B, checkArt69 } =
+  EMPLOYER_SAT_PROVIDER === "sw"
+    ? require("../sw-client")
+    : require("../sat-blacklist-client");
 const { checkDENUE, checkREPSE } = require("../gov-apis");
 
 const CACHE_TTL = 86400; // 24 h
@@ -52,16 +64,22 @@ async function runEmployerScreening(employer, { logger } = {}) {
   const denue   = denueResult.status === "fulfilled" ? denueResult.value : { pass: false, skipped: true, error: denueResult.reason?.message };
   const repse   = repseResult.status === "fulfilled" ? repseResult.value : { pass: false, skipped: true, error: repseResult.reason?.message };
 
-  // Log full details for every skipped check so failures are never swallowed
+  // Log full details for every skipped check so failures are never swallowed.
+  // The api label reflects which provider actually ran, for ops debuggability.
+  const efosApi = EMPLOYER_SAT_PROVIDER === "sw" ? "sw-69b" : "sat-local-69b";
+  const art69Api = EMPLOYER_SAT_PROVIDER === "sw" ? "sw-art69" : "sat-local-art69";
   const skippedChecks = [];
-  if (lista69B.skipped) { log.error({ stage: "employer-a", rfc, api: "sw-69b", error: lista69B.error }, "Lista 69-B check failed — provider error"); skippedChecks.push("lista69B"); }
-  if (art69.skipped)   { log.error({ stage: "employer-a", rfc, api: "sw-art69", error: art69.error }, "Art. 69 check failed — provider error"); skippedChecks.push("art69"); }
+  if (lista69B.skipped) { log.error({ stage: "employer-a", rfc, api: efosApi, error: lista69B.error }, "Lista 69-B check failed — provider error"); skippedChecks.push("lista69B"); }
+  if (art69.skipped)   { log.error({ stage: "employer-a", rfc, api: art69Api, error: art69.error }, "Art. 69 check failed — provider error"); skippedChecks.push("art69"); }
   if (denue.skipped)   { log.error({ stage: "employer-a", rfc, api: "denue", error: denue.error }, "DENUE check failed — provider error"); skippedChecks.push("denue"); }
   if (repse.skipped)   { log.error({ stage: "employer-a", rfc, api: "repse", error: repse.error }, "REPSE check failed — provider error"); skippedChecks.push("repse"); }
 
-  // Cost tracking — only for successful paid calls
-  if (!lista69B.skipped) costItems.push({ api: "sw-69b", mxn: 0.5 });
-  if (!art69.skipped)   costItems.push({ api: "sw-art69", mxn: 0.5 });
+  // Cost tracking — paid APIs only. Local SAT provider is free; leave cost
+  // reporting silent in that branch so accounting stays accurate.
+  if (EMPLOYER_SAT_PROVIDER === "sw") {
+    if (!lista69B.skipped) costItems.push({ api: "sw-69b", mxn: 0.5 });
+    if (!art69.skipped)   costItems.push({ api: "sw-art69", mxn: 0.5 });
+  }
 
   const signals = { lista69B, art69, denue, repse };
 
