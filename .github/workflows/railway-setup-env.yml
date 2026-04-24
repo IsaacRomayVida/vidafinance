@@ -179,6 +179,7 @@ jobs:
             ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
             MODEL_PATH="models/underwriting_v1.joblib" \
             USE_ML_MODELS="false" \
+            ML_MODE="manual_review_all" \
             ML_CACHE_TTL=86400 \
             SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
             PAGERDUTY_ROUTING_KEY="$PAGERDUTY_ROUTING_KEY" \
@@ -214,7 +215,7 @@ jobs:
             BELVO_SECRET_ID="$BELVO_SECRET_ID" \
             BELVO_SECRET_PASSWORD="$BELVO_SECRET_PASSWORD" \
             BELVO_BASE_URL="https://sandbox.belvo.com" \
-            RISKSEAL_MOCK="true" \
+            RISKSEAL_MOCK="false" \
             RISKSEAL_API_KEY="$RISKSEAL_API_KEY" \
             RISKSEAL_BASE_URL="https://api.riskseal.io/v1" \
             GOOGLE_DOCAI_PROJECT_ID="vida-finance" \
