@@ -61,8 +61,15 @@ export function ContactForm() {
         <label htmlFor="cf-msg">{t('pg_contact_form_msg')}</label>
         <textarea id="cf-msg" name="message" placeholder={t('pg_contact_form_msg_ph')} rows={4} required />
       </div>
-      <button type="submit" className="cf-btn" disabled={submitting}>
-        {submitting ? <span className="spinner" /> : t('pg_contact_form_send')}
+      <button type="submit" className="cf-btn" disabled={submitting} aria-busy={submitting}>
+        {submitting ? (
+          <>
+            <span className="spinner" aria-hidden="true" />
+            <span className="sr-only">{t('a11y_loading')}</span>
+          </>
+        ) : (
+          t('pg_contact_form_send')
+        )}
       </button>
     </form>
   );

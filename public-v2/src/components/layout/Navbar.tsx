@@ -35,12 +35,16 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
       <nav className={`nav${scrolled ? " nav-scrolled" : " nav-transparent"}`}>
         <div className="nav-inner">
           <div className="nav-left">
-            <div
+            <button
+              type="button"
               className={`hamburger${menuOpen ? ' open' : ''}`}
+              aria-label={t('a11y_open_menu')}
+              aria-expanded={menuOpen}
+              aria-controls="nav-mobile-menu"
               onClick={() => setMenuOpen(!menuOpen)}
             >
               <span /><span /><span />
-            </div>
+            </button>
             <Link to="/" className="nav-logo"><VidaLogo /></Link>
             <div className="nav-links">
               <Link to="/employers">{t('nav_employers')}</Link>
@@ -56,8 +60,15 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
           </div>
         </div>
       </nav>
-      <div className={`nav-menu${menuOpen ? ' open' : ''}`}>
-        <div className="menu-close" onClick={() => setMenuOpen(false)}>&#x2715;</div>
+      <div id="nav-mobile-menu" className={`nav-menu${menuOpen ? ' open' : ''}`}>
+        <button
+          type="button"
+          className="menu-close"
+          aria-label={t('a11y_close_menu')}
+          onClick={() => setMenuOpen(false)}
+        >
+          &#x2715;
+        </button>
         <Link to="/employers" className="menu-link" style={{ animationDelay: '0.05s' }} onClick={() => setMenuOpen(false)}>{t('nav_employers')}</Link>
         <Link to="/employees" className="menu-link" style={{ animationDelay: '0.1s' }} onClick={() => setMenuOpen(false)}>{t('nav_employees')}</Link>
         <Link to="/#trust" className="menu-link" style={{ animationDelay: '0.15s' }} onClick={() => setMenuOpen(false)}>{t('nav_trust')}</Link>
