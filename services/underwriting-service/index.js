@@ -7,6 +7,7 @@ const { register: metricsRegister, metricsMiddleware } = require('../shared/metr
 require('dotenv').config();
 
 const metamapClient = require('./src/metamap-client');
+const { riskSealSmokeHandler } = require('./src/riskseal-smoke');
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -91,6 +92,11 @@ app.get('/health', async (req, res) => {
   const r = await redis.ping().then(() => true).catch(() => false);
   res.json({ status: r ? 'ok' : 'degraded', service: 'vida-underwriting-service', redis: r, ts: new Date().toISOString() });
 });
+
+// ── RiskSeal smoke (VID3-713 live verification) ─────────────────────
+// GET /riskseal/smoke — isolates the RiskSeal call from the full pipeline
+// so operators can confirm live mode is wired correctly. Internal-only.
+app.get('/riskseal/smoke', requireInternal, riskSealSmokeHandler);
 
 // ── MetaMap webhook ─────────────────────────────────────────────────
 app.post('/webhooks/metamap', async (req, res) => {
