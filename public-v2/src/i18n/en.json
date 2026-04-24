@@ -928,5 +928,14 @@
   "payroll_status_skipped": "Skipped",
   "payroll_status_error": "Error",
   "payroll_status_already_processed": "Already processed",
-  "payroll_upload_another": "Upload another file"
+  "payroll_upload_another": "Upload another file",
+  "a11y_close": "Close",
+  "a11y_open_menu": "Open menu",
+  "a11y_close_menu": "Close menu",
+  "a11y_loading": "Loading...",
+  "a11y_search_roster": "Search employees",
+  "a11y_search_employers": "Search employers",
+  "a11y_salary_slider": "Monthly salary",
+  "a11y_loan_amount_slider": "Loan amount",
+  "a11y_file_upload": "Upload file"
 }

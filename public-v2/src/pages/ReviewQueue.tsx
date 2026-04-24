@@ -310,6 +310,7 @@ export function ReviewQueue() {
           Filters
         </div>
         <select
+          aria-label="Filter by urgency"
           value={urgencyFilter}
           onChange={e => setUrgencyFilter(e.target.value as UrgencyFilter)}
           style={selectStyle}
@@ -319,6 +320,7 @@ export function ReviewQueue() {
           <option value="warning">SLA warning</option>
         </select>
         <select
+          aria-label="Filter by employer"
           value={employerFilter}
           onChange={e => setEmployerFilter(e.target.value)}
           style={selectStyle}
@@ -327,6 +329,7 @@ export function ReviewQueue() {
           {employers.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
         <select
+          aria-label="Filter by reason"
           value={reasonFilter}
           onChange={e => setReasonFilter(e.target.value)}
           style={selectStyle}
@@ -340,6 +343,7 @@ export function ReviewQueue() {
             Sort
           </span>
           <select
+            aria-label="Sort reviews"
             value={sortKey}
             onChange={e => setSortKey(e.target.value as SortKey)}
             style={selectStyle}

@@ -228,6 +228,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                 ref={(el) => { fileRefs.current[slot.key] = el; }}
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf"
+                aria-label={`${t('a11y_file_upload')}: ${t(slot.i18nKey)}`}
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -352,8 +353,9 @@ function PayrollDeductionCard({ uid, employer, onSubmitted }: { uid: string; emp
       <div className="partb-fields">
         {curps.map((curp, i) => (
           <div key={i} className="partb-field">
-            <label className="partb-label">{t('dash_partb_curp_label', { n: i + 1 })}</label>
+            <label className="partb-label" htmlFor={`partb-curp-${i}`}>{t('dash_partb_curp_label', { n: i + 1 })}</label>
             <input
+              id={`partb-curp-${i}`}
               type="text"
               className={`partb-input${errors[i] ? ' partb-input-error' : ''}`}
               value={curp}
@@ -493,13 +495,14 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
       {/* Prefix list (only shown when mode is allowlist) */}
       {mode === 'allowlist' && (
         <div style={{ marginBottom: 24 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: '#0c1e1f', display: 'block', marginBottom: 8 }}>
+          <label htmlFor="curp-prefix-input" style={{ fontSize: 13, fontWeight: 600, color: '#0c1e1f', display: 'block', marginBottom: 8 }}>
             {t('curp_config_prefixes_label')}
           </label>
 
           {/* Input row */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             <input
+              id="curp-prefix-input"
               type="text"
               value={prefixInput}
               onChange={(e) => {

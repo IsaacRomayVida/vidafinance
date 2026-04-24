@@ -65,6 +65,7 @@ export function ROICalculator() {
                   className="sal-in"
                   type="text"
                   inputMode="numeric"
+                  aria-label={t('calc_salary')}
                   value={salary}
                   onChange={handleSalaryChange}
                   placeholder={t('calc_salary_placeholder')}
@@ -83,6 +84,7 @@ export function ROICalculator() {
                 </div>
                 <input
                   type="range"
+                  aria-label={t('calc_credit')}
                   min="500"
                   max="5000"
                   step="100"

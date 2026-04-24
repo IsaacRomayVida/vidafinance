@@ -85,7 +85,7 @@ export function EmployeePage() {
                 <div className="cf-label">{t('lp_m_widget_salary')}</div>
                 <div className="sal-wrap">
                   <span className="sal-pre">$</span>
-                  <input className="sal-in" type="text" inputMode="numeric" value={fmt(salary)} onChange={handleSalaryChange} placeholder={t('lp_m_widget_salary_ph')} />
+                  <input className="sal-in" type="text" inputMode="numeric" aria-label={t('lp_m_widget_salary')} value={fmt(salary)} onChange={handleSalaryChange} placeholder={t('lp_m_widget_salary_ph')} />
                   <span className="sal-suf">MXN</span>
                 </div>
               </div>

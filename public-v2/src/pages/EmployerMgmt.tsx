@@ -208,6 +208,7 @@ export function EmployerMgmt() {
       <div style={{ marginBottom: 24 }}>
         <input
           type="text"
+          aria-label="Search employers by company name"
           placeholder="Search by company name..."
           value={search}
           onChange={e => setSearch(e.target.value)}

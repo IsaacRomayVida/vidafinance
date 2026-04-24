@@ -702,6 +702,8 @@ export function Onboarding() {
             <div className="onb-field">
               <input
                 autoFocus
+                id="onb-e-company"
+                aria-label={t('onb_e_step1_placeholder')}
                 className="onb-input"
                 placeholder={t('onb_e_step1_placeholder')}
                 value={empData.company}
@@ -719,9 +721,10 @@ export function Onboarding() {
             <h1 className="onb-h"><RichText html={t('onb_e_step2_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step2_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step2_name')}</label>
+              <label className="onb-label" htmlFor="onb-e-name">{t('onb_e_step2_name')}</label>
               <input
                 autoFocus
+                id="onb-e-name"
                 className="onb-input"
                 placeholder={t('onb_e_step2_name_ph')}
                 value={empData.name}
@@ -729,8 +732,9 @@ export function Onboarding() {
               />
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step2_email')}</label>
+              <label className="onb-label" htmlFor="onb-e-email">{t('onb_e_step2_email')}</label>
               <input
+                id="onb-e-email"
                 type="email"
                 className={`onb-input${emailStatus === 'taken' ? ' invalid' : emailStatus === 'available' ? ' valid' : ''}`}
                 placeholder={t('onb_e_step2_email_ph')}
@@ -748,8 +752,9 @@ export function Onboarding() {
               )}
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step2_phone')}</label>
+              <label className="onb-label" htmlFor="onb-e-phone">{t('onb_e_step2_phone')}</label>
               <input
+                id="onb-e-phone"
                 type="tel"
                 className="onb-input"
                 placeholder={t('onb_e_step2_phone_ph')}
@@ -768,9 +773,10 @@ export function Onboarding() {
             <h1 className="onb-h"><RichText html={t('onb_e_step3_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step3_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step3_rfc')}</label>
+              <label className="onb-label" htmlFor="onb-e-rfc">{t('onb_e_step3_rfc')}</label>
               <input
                 autoFocus
+                id="onb-e-rfc"
                 className="onb-input"
                 placeholder={t('onb_e_step3_rfc_ph')}
                 maxLength={13}
@@ -780,8 +786,9 @@ export function Onboarding() {
               <div className="onb-input-hint">{t('onb_e_step3_rfc_hint')}</div>
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step3_state')}</label>
+              <label className="onb-label" htmlFor="onb-e-state">{t('onb_e_step3_state')}</label>
               <select
+                id="onb-e-state"
                 className="onb-select"
                 value={empData.state}
                 onChange={(e) => setEmpData({ ...empData, state: e.target.value })}
@@ -793,8 +800,9 @@ export function Onboarding() {
               </select>
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step3_industry')}</label>
+              <label className="onb-label" htmlFor="onb-e-industry">{t('onb_e_step3_industry')}</label>
               <select
+                id="onb-e-industry"
                 className="onb-select"
                 value={empData.industry}
                 onChange={(e) => setEmpData({ ...empData, industry: e.target.value })}
@@ -845,8 +853,9 @@ export function Onboarding() {
               </div>
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step4_payroll')}</label>
+              <label className="onb-label" htmlFor="onb-e-payroll">{t('onb_e_step4_payroll')}</label>
               <select
+                id="onb-e-payroll"
                 className="onb-select"
                 value={empData.payrollSystem}
                 onChange={(e) => setEmpData({ ...empData, payrollSystem: e.target.value })}
@@ -886,14 +895,15 @@ export function Onboarding() {
               </div>
               {empData.usesDispersora === 'yes' && (
                 <div style={{marginTop: 16}}>
-                  <label className="onb-label">Nombre de la dispersora</label>
-                  <input className="onb-input" placeholder="Ej. Nomipay, Konfío, etc." value={empData.dispersoraName} onChange={(e) => setEmpData(prev => ({...prev, dispersoraName: e.target.value}))} />
+                  <label className="onb-label" htmlFor="onb-e-dispersora-name">Nombre de la dispersora</label>
+                  <input id="onb-e-dispersora-name" className="onb-input" placeholder="Ej. Nomipay, Konfío, etc." value={empData.dispersoraName} onChange={(e) => setEmpData(prev => ({...prev, dispersoraName: e.target.value}))} />
                 </div>
               )}
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step5a_clabe')}</label>
+              <label className="onb-label" htmlFor="onb-e-clabe">{t('onb_e_step5a_clabe')}</label>
               <input
+                id="onb-e-clabe"
                 className="onb-input"
                 placeholder={t('onb_e_step5a_clabe_ph')}
                 maxLength={18}
@@ -915,8 +925,8 @@ export function Onboarding() {
             <h1 className="onb-h">Documentos <em>requeridos</em>.</h1>
             <p className="onb-sub">Sube los documentos de tu empresa para verificación.</p>
             <div className="onb-field">
-              <label className="onb-label">Constancia de Situación Fiscal (SAT)</label>
-              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
+              <label className="onb-label" htmlFor="onb-e-doc-rfc">Constancia de Situación Fiscal (SAT)</label>
+              <input id="onb-e-doc-rfc" type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
                   setEmpData(prev => ({...prev, docRFC: file.name}));
@@ -925,8 +935,8 @@ export function Onboarding() {
               }} />
             </div>
             <div className="onb-field">
-              <label className="onb-label">INE del Representante Legal</label>
-              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
+              <label className="onb-label" htmlFor="onb-e-doc-id">INE del Representante Legal</label>
+              <input id="onb-e-doc-id" type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
                   setEmpData(prev => ({...prev, docId: file.name}));
@@ -935,8 +945,8 @@ export function Onboarding() {
               }} />
             </div>
             <div className="onb-field">
-              <label className="onb-label">Acta Constitutiva</label>
-              <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
+              <label className="onb-label" htmlFor="onb-e-doc-address">Acta Constitutiva</label>
+              <input id="onb-e-doc-address" type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
                   setEmpData(prev => ({...prev, docAddress: file.name}));
@@ -946,7 +956,7 @@ export function Onboarding() {
             </div>
             {empData.usesDispersora === 'yes' && (
               <div className="onb-field">
-                <label className="onb-label">Factura de la dispersora ({empData.dispersoraName || 'dispersora'})</label>
+                <label className="onb-label" htmlFor="doc-dispersora">Factura de la dispersora ({empData.dispersoraName || 'dispersora'})</label>
                 <input type="file" accept=".pdf,.jpg,.png" className="onb-input" style={{padding:'12px'}} id="doc-dispersora" />
                 <div className="onb-input-hint">Comprobante de que la dispersora paga nómina de tus empleados</div>
               </div>
@@ -963,8 +973,9 @@ export function Onboarding() {
             <p className="onb-sub">Ingresa el CURP de 3 empleados para verificar tu registro en el IMSS y activar las deducciones de nómina.</p>
             {[0, 1, 2].map((i) => (
               <div className="onb-field" key={i}>
-                <label className="onb-label">CURP del Empleado {i + 1}</label>
+                <label className="onb-label" htmlFor={`onb-e-emp-curp-${i}`}>CURP del Empleado {i + 1}</label>
                 <input
+                  id={`onb-e-emp-curp-${i}`}
                   className="onb-input"
                   placeholder="CURP de 18 caracteres"
                   maxLength={18}
@@ -989,9 +1000,10 @@ export function Onboarding() {
             <h1 className="onb-h"><RichText html={t('onb_e_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_e_step5_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_e_step5_pass')}</label>
+              <label className="onb-label" htmlFor="onb-e-password">{t('onb_e_step5_pass')}</label>
               <input
                 autoFocus
+                id="onb-e-password"
                 type="password"
                 className="onb-input"
                 placeholder={t('onb_e_step5_pass_ph')}
@@ -1002,11 +1014,12 @@ export function Onboarding() {
             </div>
             <div className="onb-terms">
               <input
+                id="onb-e-terms"
                 type="checkbox"
                 checked={empData.terms}
                 onChange={(e) => setEmpData({ ...empData, terms: e.target.checked })}
               />
-              <label>
+              <label htmlFor="onb-e-terms">
                 {t('onb_e_step5_terms')}{' '}
                 <Link to="/terms" target="_blank">{t('onb_e_step5_terms_link')}</Link>
               </label>
@@ -1051,6 +1064,8 @@ export function Onboarding() {
             <div className="onb-field">
               <input
                 autoFocus
+                id="onb-m-code"
+                aria-label={t('onb_m_step1_placeholder')}
                 className={`onb-input big${codeStatus === 'found' ? ' valid' : codeStatus === 'not_found' ? ' invalid' : ''}`}
                 placeholder={t('onb_m_step1_placeholder')}
                 maxLength={8}
@@ -1075,9 +1090,10 @@ export function Onboarding() {
             <h1 className="onb-h"><RichText html={t('onb_m_step2_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step2_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step2_name')}</label>
+              <label className="onb-label" htmlFor="onb-m-name">{t('onb_m_step2_name')}</label>
               <input
                 autoFocus
+                id="onb-m-name"
                 className="onb-input"
                 placeholder={t('onb_m_step2_name_ph')}
                 value={memData.name}
@@ -1085,8 +1101,9 @@ export function Onboarding() {
               />
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step2_email')}</label>
+              <label className="onb-label" htmlFor="onb-m-email">{t('onb_m_step2_email')}</label>
               <input
+                id="onb-m-email"
                 type="email"
                 className={`onb-input${emailStatus === 'taken' ? ' invalid' : emailStatus === 'available' ? ' valid' : ''}`}
                 placeholder={t('onb_m_step2_email_ph')}
@@ -1104,8 +1121,9 @@ export function Onboarding() {
               )}
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step2_phone')}</label>
+              <label className="onb-label" htmlFor="onb-m-phone">{t('onb_m_step2_phone')}</label>
               <input
+                id="onb-m-phone"
                 type="tel"
                 className="onb-input"
                 placeholder={t('onb_m_step2_phone_ph')}
@@ -1114,8 +1132,9 @@ export function Onboarding() {
               />
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step2_dob')}</label>
+              <label className="onb-label" htmlFor="onb-m-dob">{t('onb_m_step2_dob')}</label>
               <input
+                id="onb-m-dob"
                 type="date"
                 className={`onb-input${memData.dateOfBirth && (getAge(memData.dateOfBirth) < 18 || getAge(memData.dateOfBirth) > 65) ? ' invalid' : memData.dateOfBirth && getAge(memData.dateOfBirth) >= 18 && getAge(memData.dateOfBirth) <= 65 ? ' valid' : ''}`}
                 value={memData.dateOfBirth}
@@ -1194,9 +1213,10 @@ export function Onboarding() {
             <h1 className="onb-h"><RichText html={t('onb_m_step4_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step4_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step4_salary')}</label>
+              <label className="onb-label" htmlFor="onb-m-salary">{t('onb_m_step4_salary')}</label>
               <input
                 autoFocus
+                id="onb-m-salary"
                 type="text"
                 inputMode="numeric"
                 className="onb-input"
@@ -1220,8 +1240,9 @@ export function Onboarding() {
               </div>
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step4_tenure')}</label>
+              <label className="onb-label" htmlFor="onb-m-tenure">{t('onb_m_step4_tenure')}</label>
               <select
+                id="onb-m-tenure"
                 className="onb-select"
                 value={memData.employmentTenure}
                 onChange={(e) => setMemData({ ...memData, employmentTenure: e.target.value })}
@@ -1233,8 +1254,9 @@ export function Onboarding() {
               </select>
             </div>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step4_clabe')}</label>
+              <label className="onb-label" htmlFor="onb-m-clabe">{t('onb_m_step4_clabe')}</label>
               <input
+                id="onb-m-clabe"
                 type="text"
                 inputMode="numeric"
                 className={`onb-input${memData.bankClabe.length > 0 && !validateCLABE(memData.bankClabe) ? ' invalid' : validateCLABE(memData.bankClabe) ? ' valid' : ''}`}
@@ -1280,9 +1302,10 @@ export function Onboarding() {
             <h1 className="onb-h"><RichText html={t('onb_m_step5_h')} /></h1>
             <p className="onb-sub">{t('onb_m_step5_sub')}</p>
             <div className="onb-field">
-              <label className="onb-label">{t('onb_m_step5_pass')}</label>
+              <label className="onb-label" htmlFor="onb-m-password">{t('onb_m_step5_pass')}</label>
               <input
                 autoFocus
+                id="onb-m-password"
                 type="password"
                 className="onb-input"
                 placeholder={t('onb_m_step5_pass_ph')}
@@ -1293,11 +1316,12 @@ export function Onboarding() {
             </div>
             <div className="onb-terms">
               <input
+                id="onb-m-terms"
                 type="checkbox"
                 checked={memData.terms}
                 onChange={(e) => setMemData({ ...memData, terms: e.target.checked })}
               />
-              <label>
+              <label htmlFor="onb-m-terms">
                 {t('onb_m_step5_terms')}{' '}
                 <Link to="/terms" target="_blank">{t('onb_m_step5_terms_link')}</Link>
               </label>

@@ -851,8 +851,9 @@ function LoanModal({
         <form onSubmit={handleSubmit}>
           {/* Amount */}
           <div className="form-group">
-            <label>{t('modal_amount')}</label>
+            <label htmlFor="ed-modal-amount">{t('modal_amount')}</label>
             <input
+              id="ed-modal-amount"
               type="number"
               min={500}
               max={availableCredit}
@@ -865,7 +866,7 @@ function LoanModal({
 
           {/* CLABE */}
           <div className="form-group">
-            <label>{t('modal_clabe_label')}</label>
+            <label htmlFor="ed-modal-clabe">{t('modal_clabe_label')}</label>
             {savedClabe && !editingClabe ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 14, color: 'var(--t1)', fontFamily: 'var(--mono, monospace)' }}>
@@ -881,6 +882,7 @@ function LoanModal({
               </div>
             ) : (
               <input
+                id="ed-modal-clabe"
                 type="text"
                 inputMode="numeric"
                 maxLength={18}
@@ -894,8 +896,9 @@ function LoanModal({
 
           {/* Loan Purpose */}
           <div className="form-group">
-            <label>{t('modal_purpose_label')}</label>
+            <label htmlFor="ed-modal-purpose">{t('modal_purpose_label')}</label>
             <select
+              id="ed-modal-purpose"
               value={loanPurpose}
               onChange={(e) => setLoanPurpose(e.target.value)}
               style={{ width: '100%' }}
