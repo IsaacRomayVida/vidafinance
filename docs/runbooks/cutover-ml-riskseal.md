@@ -1,6 +1,6 @@
 # Cutover Runbook — ML Go + RiskSeal Live
 
-Last reviewed: 2026-04-24 · Owner: Isaac / on-call engineer · Tickets: VID3-663 (ML go), VID3-713 (RiskSeal live)
+Last reviewed: 2026-04-21 · Owner: Isaac / on-call engineer · Tickets: VID3-663 (ML go), VID3-713 (RiskSeal live), VID3-714 (employer-screening unblock)
 
 This runbook covers the two production toggles:
 
@@ -11,13 +11,37 @@ Both are low-risk by design: `manual_review_all` cannot autonomously approve, an
 
 ---
 
-## Current state (as of 2026-04-24)
+## Current state (as of 2026-04-21)
 
-Production is in `observant-miracle` on Railway (not `vida-production` — that project name does not exist; `vida-backend` is leftover/unused).
+Production is in `observant-miracle` on Railway (not `vida-production` — that project name does not exist; `vida-backend` is audited separately — see `docs/ops/railway-project-audit.md`).
 
-- **RiskSeal**: already live — `RISKSEAL_MOCK=false`, `RISKSEAL_API_KEY` set, `RISKSEAL_BASE_URL=https://latam-1.riskseal.io` (regional endpoint, not `api.riskseal.io/v1`).
+- **RiskSeal**: live — `RISKSEAL_MOCK=false`, `RISKSEAL_API_KEY` set, `RISKSEAL_BASE_URL=https://latam-1.riskseal.io` (regional endpoint, not `api.riskseal.io/v1`).
 - **ML**: `ML_MODE=manual_review_all` on `observant-miracle/ml-service` (set 2026-04-24 during initial cutover).
-- **Caveat — pipeline does not currently reach stage 0 in prod**: employer-screening (stage-a) short-circuits every applicant because SW credentials (`SW_USER`, `SW_PASSWORD`) and `REPSE_URL` are not set. This means real user traffic never calls RiskSeal or ML in the current state. Fixing those provider credentials is tracked separately and is a launch blocker before taking real applications.
+- **Employer-screening (stage-a)**: now feature-flagged via `EMPLOYER_SAT_PROVIDER` (default `local`). Production is on `local` — EFOS (Lista 69-B) and Art. 69 data are self-hosted via the `satBlacklistRefresh` scheduled Cloud Function (monthly on the 15th at 02:00 MX), published to `sat/efos.json` + `sat/art69.json` in the default GCS bucket. `DENUE` timeout was raised from 10s → 30s + 1 retry. `REPSE_URL` is now configured. SW SAPiens (`sw-client`) stays dormant behind the flag; flip `EMPLOYER_SAT_PROVIDER=sw` + set `SW_USER`/`SW_PASSWORD` only if the SAT portal scrape breaks and the local data goes stale.
+- **Pipeline reach**: with stage-a unblocked, real traffic now reaches stage 0 (RiskSeal + ML). The pre-requisite that `sat_refresh_meta/latest` in Firestore shows recent, non-empty counts must hold before approving real applicants — see the ops note below.
+
+### Ops note — SAT blacklist health signal
+
+Canonical health doc: Firestore `sat_refresh_meta/latest`. Expect:
+
+- `efosCount` ≈ 12,000 (±1k)
+- `art69Count` ≈ 500,000–800,000
+- `lastRun` within the last 35 days
+- `parseFailureRate` < 0.01 for both lists
+
+Alert thresholds (Slack `#vida-ops`):
+
+- `lastRun > 40 days ago` → SAT refresh has missed a schedule; investigate CF run
+- `efosCount` drops by >20% month-over-month → SAT may have changed their CSV layout
+- `parseFailureRate > 0.05` → CF aborts the write and fires a critical Slack alert automatically
+
+To force a refresh (bootstrap or after a schema fix) call the HTTPS-callable:
+
+```bash
+firebase functions:call refreshSatBlacklists --project vida-finance
+```
+
+If the underwriting-service logs `stage-a | api: sat-local-69b | error: …` repeatedly, the GCS blobs are either missing (CF never ran) or stale. Fix the CF first, don't flip to `sw` unless you have a contract.
 
 ---
 
@@ -193,7 +217,39 @@ If approval rate ≠ 0% manual or if you see RiskSeal 5xx >5% of calls → roll 
 
 ---
 
-## 8. When ML can move beyond `manual_review_all`
+## 8. Verifying employer-screening end-to-end (VID3-714)
+
+After the CF has been deployed and `refreshSatBlacklists` has been invoked at least once (confirmed via `sat_refresh_meta/latest`), spot-check stage-a directly:
+
+```bash
+# Known-clean RFC (should flow past stage-a, reach stage 0)
+curl -sS -X POST \
+  -H "Content-Type: application/json" \
+  -H "x-internal-secret: $INTERNAL_SECRET" \
+  https://underwriting-service-production.up.railway.app/underwrite \
+  -d '{
+    "applicant": { "rfc": "<known-clean-applicant-rfc>", "fullName": "Test Clean", "state": "09" },
+    "employer": { "rfc": "<known-clean-employer-rfc>", "name": "Empresa Limpia SA" }
+  }' | jq '.stageA, .reachedStages'
+# Expected: stageA.pass === true, reachedStages includes "stage0"
+
+# Known-listed RFC (pick one from the current EFOS DEFINITIVO list after CF run)
+curl -sS -X POST \
+  -H "Content-Type: application/json" \
+  -H "x-internal-secret: $INTERNAL_SECRET" \
+  https://underwriting-service-production.up.railway.app/underwrite \
+  -d '{
+    "applicant": { "rfc": "<any-test-applicant>", "fullName": "Test Listed", "state": "09" },
+    "employer": { "rfc": "<known-EFOS-DEFINITIVO-rfc>", "name": "Empresa En Lista" }
+  }' | jq '.decision, .reasons'
+# Expected: decision === "reject", reasons includes "lista_69b_definitivo"
+```
+
+Canonical test RFCs to use once the EFOS list is live will be pinned in `docs/ops/employer-screening-test-rfcs.md` (to be created after first successful CF run). Until then, pick any `situacion=DEFINITIVO` row from the EFOS CSV directly.
+
+---
+
+## 9. When ML can move beyond `manual_review_all`
 
 Per `docs/ML_MODEL_STATUS.md` (VID3-661):
 
