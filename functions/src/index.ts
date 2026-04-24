@@ -1522,3 +1522,9 @@ export const queueHealthCheck = onSchedule(
 
 // ─── Payroll deduction processing (VID3-625) ────────────────────────────────
 export { processPayroll } from './payroll/processPayroll';
+
+// ─── SAT blacklist refresh (VID3-714) ───────────────────────────────────────
+// Self-hosts SAT public EFOS + Art. 69 CSVs to unblock employer-screening.
+// Scheduled monthly on the 15th + admin-only manual trigger. See
+// functions/src/scheduled/satBlacklistRefresh.ts for full rationale.
+export { satBlacklistRefresh, refreshSatBlacklists } from './scheduled/satBlacklistRefresh';
