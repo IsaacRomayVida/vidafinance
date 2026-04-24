@@ -593,7 +593,14 @@ function PaymentModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="modal" style={{ position: 'relative', maxWidth: 480 }}>
-        <div className="modal-close" onClick={onClose}>✕</div>
+        <button
+          type="button"
+          className="modal-close"
+          aria-label={t('a11y_close')}
+          onClick={onClose}
+        >
+          ✕
+        </button>
 
         <h3>{t('pay_modal_title', 'Make a Payment')}</h3>
         <p className="modal-sub" style={{ marginBottom: 20 }}>
@@ -841,7 +848,14 @@ function LoanModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="modal" style={{ position: 'relative' }}>
-        <div className="modal-close" onClick={onClose}>✕</div>
+        <button
+          type="button"
+          className="modal-close"
+          aria-label={t('a11y_close')}
+          onClick={onClose}
+        >
+          ✕
+        </button>
 
         <h3>{t('modal_request')}</h3>
         <p className="modal-sub">

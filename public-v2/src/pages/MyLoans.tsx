@@ -290,9 +290,17 @@ function PayButton({ loanId, t }: { loanId: string; t: ReturnType<typeof useTran
       <button
         onClick={handlePay}
         disabled={loading}
+        aria-busy={loading}
         className="btn-sm btn-approve"
       >
-        {loading ? <span className="spinner" /> : t('dash_pay_now', 'Pagar')}
+        {loading ? (
+          <>
+            <span className="spinner" aria-hidden="true" />
+            <span className="sr-only">{t('a11y_loading')}</span>
+          </>
+        ) : (
+          t('dash_pay_now', 'Pagar')
+        )}
       </button>
       {error && <span style={{ fontSize: 10, color: 'var(--danger)' }}>{error}</span>}
     </div>
