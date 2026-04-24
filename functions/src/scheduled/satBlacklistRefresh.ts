@@ -190,7 +190,12 @@ export function normalizeEfos(
     if (!RFC_REGEX.test(rfc)) { invalidRfcRows++; continue; }
 
     const nombreKey = findColumn(row, [/nombre_del_contribuyente/, /^nombre$/, /nombre/]);
-    const situacionKey = findColumn(row, [/^situacion$/, /situacion/]);
+    // NB: column "Situación del contribuyente" → accents are stripped to
+    // "situacin_del_contribuyente", so the regex must be accent-tolerant.
+    const situacionKey = findColumn(row, [
+      /^situaci[oó]n$/,
+      /situaci/, // matches both situacion and situacin
+    ]);
 
     entries[rfc] = {
       rfc,
