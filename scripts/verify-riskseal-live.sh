@@ -38,8 +38,14 @@ for cmd in curl jq; do
 done
 
 # ── required env ──────────────────────────────────────────────────────
-: "${INTERNAL_SECRET:?ERROR: INTERNAL_SECRET must be set}"
-: "${UNDERWRITE_URL:?ERROR: UNDERWRITE_URL must be set (e.g. https://underwriting-service-production.up.railway.app/underwrite)}"
+if [ -z "${INTERNAL_SECRET:-}" ]; then
+  echo "ERROR: INTERNAL_SECRET must be set" >&2
+  exit 4
+fi
+if [ -z "${UNDERWRITE_URL:-}" ]; then
+  echo "ERROR: UNDERWRITE_URL must be set (e.g. https://underwriting-service-production.up.railway.app/underwrite)" >&2
+  exit 4
+fi
 
 TEST_EMAIL="${TEST_EMAIL:-vida-riskseal-verify+$(date +%s)@example.com}"
 TEST_PHONE="${TEST_PHONE:-+5215555000001}"
@@ -86,7 +92,9 @@ HTTP_CODE=$(curl -sS -o "$TMP" -w "%{http_code}" \
   -H "Content-Type: application/json" \
   -H "x-internal-secret: $INTERNAL_SECRET" \
   --max-time 60 \
-  --data "$BODY" || echo "000")
+  --data "$BODY" 2>/dev/null || true)
+# On connection failure curl writes "000" to stdout via -w; on success writes the real code.
+HTTP_CODE="${HTTP_CODE:-000}"
 
 if [ "$HTTP_CODE" != "200" ]; then
   echo "FAIL: /underwrite returned HTTP $HTTP_CODE"
