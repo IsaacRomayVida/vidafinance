@@ -181,14 +181,14 @@ export function AnalyticsPage() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '2.2px',
-    color: '#a28657',
+    color: 'var(--gold)',
     marginBottom: 10,
   };
 
   const valueStyle: React.CSSProperties = {
     fontFamily: 'var(--df)',
     fontSize: 36,
-    color: '#0c1e1f',
+    color: 'var(--t1)',
     letterSpacing: '-0.03em',
     fontWeight: 400,
     lineHeight: 1,
@@ -196,7 +196,7 @@ export function AnalyticsPage() {
 
   const subValueStyle: React.CSSProperties = {
     fontSize: 12,
-    color: '#93aaa9',
+    color: 'var(--t3)',
     marginTop: 6,
   };
 
@@ -205,7 +205,7 @@ export function AnalyticsPage() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '1.5px',
-    color: '#93aaa9',
+    color: 'var(--t3)',
   };
 
   /* ────────────────────── render ────────────────────── */
@@ -215,10 +215,10 @@ export function AnalyticsPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
             Employer Analytics
           </h1>
-          <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
+          <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
             Workforce loan metrics and monthly trends.
           </p>
         </div>
@@ -226,7 +226,7 @@ export function AnalyticsPage() {
           <button
             onClick={downloadCSV}
             style={{
-              background: '#194445',
+              background: 'var(--brand)',
               color: '#fff',
               borderRadius: 60,
               padding: '10px 22px',
@@ -246,7 +246,7 @@ export function AnalyticsPage() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '64px 24px', color: '#93aaa9' }}>
+        <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--t3)' }}>
           <p style={{ fontSize: 14 }}>Loading analytics...</p>
         </div>
       )}
@@ -296,8 +296,8 @@ export function AnalyticsPage() {
             {monthlyTrend.map((m) => (
               <div key={m.label} style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: '#0c1e1f' }}>{m.label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#4a6364' }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--t1)' }}>{m.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t2)' }}>
                     {m.count} loan{m.count !== 1 ? 's' : ''} · {fmtCurrency(m.volume)}
                   </span>
                 </div>
@@ -307,7 +307,7 @@ export function AnalyticsPage() {
                       height: '100%',
                       width: `${(m.volume / maxMonthlyVolume) * 100}%`,
                       borderRadius: 4,
-                      background: '#a28657',
+                      background: 'var(--gold)',
                       transition: 'width 0.4s ease',
                     }}
                   />
@@ -338,9 +338,9 @@ export function AnalyticsPage() {
                   alignItems: 'center',
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 500, color: '#0c1e1f' }}>{m.label}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#4a6364', textAlign: 'right' }}>{fmt(m.count)}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', textAlign: 'right', fontFamily: 'var(--df)' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--t1)' }}>{m.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t2)', textAlign: 'right' }}>{fmt(m.count)}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', textAlign: 'right', fontFamily: 'var(--df)' }}>
                   {fmtCurrency(m.volume)}
                 </div>
               </div>

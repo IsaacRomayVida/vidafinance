@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { motion, useReducedMotion } from 'motion/react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { classifyError, friendlyError } from '../../lib/errors';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import type { Loan, Repayment } from './types';
 import { fmt } from './types';
 
@@ -14,6 +15,7 @@ interface PaymentModalProps {
 
 export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
   const { t } = useTranslation();
+  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [paymentUrl, setPaymentUrl] = useState('');
@@ -73,8 +75,12 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
     <div
       className="modal-overlay show"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('pay_modal_title', 'Make a Payment')}
     >
       <motion.div
+        ref={dialogRef}
         className="modal"
         style={{ position: 'relative', maxWidth: 480 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}

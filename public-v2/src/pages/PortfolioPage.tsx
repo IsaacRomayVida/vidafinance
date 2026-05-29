@@ -42,16 +42,16 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: '#a28657',
-  approved: '#247a6e',
-  disbursed: '#194445',
-  disbursement_queued: '#4a6364',
-  repaid: '#247a6e',
-  overdue: '#dc503c',
-  in_collections: '#dc503c',
-  written_off: '#93aaa9',
-  rejected: '#93aaa9',
-  cancelled: '#93aaa9',
+  pending: 'var(--gold)',
+  approved: 'var(--brand-light)',
+  disbursed: 'var(--brand)',
+  disbursement_queued: 'var(--t2)',
+  repaid: 'var(--brand-light)',
+  overdue: 'var(--danger)',
+  in_collections: 'var(--danger)',
+  written_off: 'var(--t3)',
+  rejected: 'var(--t3)',
+  cancelled: 'var(--t3)',
 };
 
 export function PortfolioPage() {
@@ -106,14 +106,14 @@ export function PortfolioPage() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '2.2px',
-    color: '#a28657',
+    color: 'var(--gold)',
     marginBottom: 10,
   };
 
   const valueStyle: React.CSSProperties = {
     fontFamily: 'var(--df)',
     fontSize: 36,
-    color: '#0c1e1f',
+    color: 'var(--t1)',
     letterSpacing: '-0.03em',
     fontWeight: 400,
     lineHeight: 1,
@@ -121,7 +121,7 @@ export function PortfolioPage() {
 
   const subValueStyle: React.CSSProperties = {
     fontSize: 12,
-    color: '#93aaa9',
+    color: 'var(--t3)',
     marginTop: 6,
   };
 
@@ -158,10 +158,10 @@ export function PortfolioPage() {
     <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
           Portfolio Analytics
         </h1>
-        <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
+        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
           Loan portfolio performance, risk metrics, and employer breakdown.
         </p>
       </div>
@@ -173,8 +173,8 @@ export function PortfolioPage() {
             key={opt.value}
             onClick={() => setPeriod(opt.value)}
             style={{
-              background: period === opt.value ? '#194445' : 'rgba(25,68,69,0.04)',
-              color: period === opt.value ? '#fff' : '#4a6364',
+              background: period === opt.value ? 'var(--brand)' : 'rgba(25,68,69,0.04)',
+              color: period === opt.value ? '#fff' : 'var(--t2)',
               borderRadius: 60,
               padding: '8px 20px',
               fontSize: 12,
@@ -192,7 +192,7 @@ export function PortfolioPage() {
 
       {/* Loading state */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '64px 24px', color: '#93aaa9' }}>
+        <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--t3)' }}>
           <p style={{ fontSize: 14 }}>Loading portfolio data...</p>
         </div>
       )}
@@ -200,7 +200,7 @@ export function PortfolioPage() {
       {/* Error state */}
       {error && !loading && (
         <div style={{ ...cardStyle, background: 'rgba(220,80,60,0.04)', borderColor: 'rgba(220,80,60,0.12)' }}>
-          <p style={{ fontSize: 14, color: '#dc503c' }}>Error: {error}</p>
+          <p style={{ fontSize: 14, color: 'var(--danger)' }}>Error: {error}</p>
         </div>
       )}
 
@@ -245,15 +245,15 @@ export function PortfolioPage() {
           <div style={{ ...cardStyle, padding: '32px 28px' }}>
             <div style={{ ...labelStyle, marginBottom: 24 }}>Loan Volume by Status</div>
             {statusEntries.length === 0 && (
-              <p style={{ fontSize: 13, color: '#93aaa9' }}>No loan data for this period.</p>
+              <p style={{ fontSize: 13, color: 'var(--t3)' }}>No loan data for this period.</p>
             )}
             {statusEntries.map(([status, count]) => (
               <div key={status} style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: '#0c1e1f' }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--t1)' }}>
                     {STATUS_LABELS[status] || status}
                   </span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#4a6364' }}>{count}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t2)' }}>{count}</span>
                 </div>
                 <div style={{ height: 8, borderRadius: 4, background: 'rgba(25,68,69,0.04)', overflow: 'hidden' }}>
                   <div
@@ -261,7 +261,7 @@ export function PortfolioPage() {
                       height: '100%',
                       width: `${(count / maxStatusCount) * 100}%`,
                       borderRadius: 4,
-                      background: STATUS_COLORS[status] || '#194445',
+                      background: STATUS_COLORS[status] || 'var(--brand)',
                       transition: 'width 0.4s ease',
                     }}
                   />
@@ -274,15 +274,15 @@ export function PortfolioPage() {
           <div style={{ ...cardStyle, padding: '32px 28px' }}>
             <div style={{ ...labelStyle, marginBottom: 24 }}>Top Employers by Loan Volume</div>
             {topEmployers.length === 0 && (
-              <p style={{ fontSize: 13, color: '#93aaa9' }}>No employer data for this period.</p>
+              <p style={{ fontSize: 13, color: 'var(--t3)' }}>No employer data for this period.</p>
             )}
             {topEmployers.length > 0 && (
               <div>
                 {/* Table header */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 120px', gap: 12, paddingBottom: 12, borderBottom: '1px solid rgba(25,68,69,0.06)' }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#93aaa9' }}>Employer</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#93aaa9', textAlign: 'right' }}>Loans</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#93aaa9', textAlign: 'right' }}>Volume (MXN)</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)' }}>Employer</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)', textAlign: 'right' }}>Loans</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)', textAlign: 'right' }}>Volume (MXN)</div>
                 </div>
                 {/* Table rows */}
                 {topEmployers.map(([employerId, data], i) => (
@@ -297,13 +297,13 @@ export function PortfolioPage() {
                       alignItems: 'center',
                     }}
                   >
-                    <div style={{ fontSize: 13, fontWeight: 500, color: '#0c1e1f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {employerId}
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#4a6364', textAlign: 'right' }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t2)', textAlign: 'right' }}>
                       {fmt(data.count)}
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', textAlign: 'right', fontFamily: 'var(--df)' }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', textAlign: 'right', fontFamily: 'var(--df)' }}>
                       {fmtCurrency(data.volume)}
                     </div>
                   </div>
@@ -313,7 +313,7 @@ export function PortfolioPage() {
           </div>
 
           {/* Report timestamp */}
-          <div style={{ textAlign: 'center', padding: '16px 0', color: '#93aaa9', fontSize: 11 }}>
+          <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--t3)', fontSize: 11 }}>
             Report generated {new Date(report.generatedAt).toLocaleString()}
           </div>
         </>

@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { RevealOnScroll } from '../ui/RevealOnScroll';
 
 const items = [
   { key: '1', icon: <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 12h8M12 8v8" strokeLinecap="round" /></> },
@@ -15,39 +14,35 @@ export function TrustSection() {
   return (
     <section className="section" id="trust">
       <div className="wrap">
-        <RevealOnScroll><div className="tag">{t('trust_tag')}</div></RevealOnScroll>
-        <RevealOnScroll delay={0.1}><h2 className="sh">{t('trust_h2')}</h2></RevealOnScroll>
-        <RevealOnScroll delay={0.2}><p className="sp" style={{ marginBottom: 56 }}>{t('trust_p')}</p></RevealOnScroll>
-        <RevealOnScroll delay={0.25} style={{ marginBottom: 48, maxWidth: 1100, margin: '0 auto 48px', position: 'relative', overflow: 'hidden', borderRadius: 28 }}>
-          <img loading="lazy" src="/images/worker-group.png" alt="Empleados usando VIDA" style={{ width: '100%', display: 'block', filter: 'drop-shadow(0 12px 32px rgba(25,68,69,0.08))' }} />
-        </RevealOnScroll>
-        <RevealOnScroll delay={0.3}>
-          <div className="trust-grid">
-            {items.map((item) => (
-              <div key={item.key} className="trust-item">
-                <div className="trust-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="var(--t3)" strokeWidth="1.5">
-                    {item.icon}
-                  </svg>
-                </div>
-                <div>
-                  <div className="trust-t">{t(`trust_${item.key}_title`)}</div>
-                  <div className="trust-d">{t(`trust_${item.key}_desc`)}</div>
-                </div>
+        <div className="tag rv">{t('trust_tag')}</div>
+        <h2 className="sh rv d1">{t('trust_h2')}</h2>
+        <p className="sp rv d2" style={{ marginBottom: 56 }}>{t('trust_p')}</p>
+        <div className="rv d2" style={{ marginBottom: 48, maxWidth: 1100, margin: '0 auto 48px', position: 'relative', overflow: 'hidden', borderRadius: 28 }}>
+          <img loading="lazy" src="/images/worker-group.png" alt="Empleados usando Funpay" style={{ width: '100%', display: 'block', filter: 'drop-shadow(0 12px 32px rgba(25,68,69,0.08))' }} />
+        </div>
+        <div className="trust-grid rv d3">
+          {items.map((item) => (
+            <div key={item.key} className="trust-item">
+              <div className="trust-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#93aaa9" strokeWidth="1.5" aria-hidden="true">
+                  {item.icon}
+                </svg>
               </div>
-            ))}
-          </div>
-        </RevealOnScroll>
-        <RevealOnScroll delay={0.35}>
-          <div className="trust-link">
-            <Link to="/security">
-              {t('trust_link')}{' '}
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-        </RevealOnScroll>
+              <div>
+                <div className="trust-t">{t(`trust_${item.key}_title`)}</div>
+                <div className="trust-d">{t(`trust_${item.key}_desc`)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="trust-link rv d3">
+          <Link to="/security">
+            {t('trust_link')}{' '}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
       </div>
     </section>
   );

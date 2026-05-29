@@ -17,7 +17,7 @@ const ClosingSection = React.lazy(() => import('../components/marketing/ClosingS
 
 export function HomePage() {
   useRevealOnScroll();
-  useDocumentTitle('VIDA Finance');
+  useDocumentTitle('Funpay');
 
   return (
     <>

@@ -29,15 +29,15 @@ interface DisplayItem {
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const colors = {
-  bg: '#f5f1eb',
+  bg: 'var(--canvas)',
   card: '#fff',
-  dark: '#0c1e1f',
-  mid: '#4a6364',
-  light: '#93aaa9',
-  gold: '#a28657',
-  green: '#247a6e',
+  dark: 'var(--t1)',
+  mid: 'var(--t2)',
+  light: 'var(--t3)',
+  gold: 'var(--gold)',
+  green: 'var(--brand-light)',
   yellow: '#b8860b',
-  red: '#dc503c',
+  red: 'var(--danger)',
   border: 'rgba(25,68,69,0.04)',
   shadow: '0 1px 4px rgba(25,68,69,0.02)',
 };
@@ -251,7 +251,7 @@ export function SystemHealth() {
 
       {/* Error banner */}
       {error && (
-        <div style={{ ...cardStyle, background: '#fdf2f0', border: `1px solid ${colors.red}`, color: colors.red, fontSize: 13 }}>
+        <div style={{ ...cardStyle, background: 'var(--danger-bg)', border: `1px solid ${colors.red}`, color: colors.red, fontSize: 13 }}>
           {error}
         </div>
       )}

@@ -5,21 +5,21 @@ import { RichText } from '../shared/RichText';
 
 const testimonials = [
   {
-    quote: 'VIDA nos permitió ofrecer un beneficio real a nuestros empleados sin ningún costo ni riesgo. La adopción fue inmediata.',
+    quote: 'Funpay nos permitió ofrecer un beneficio real a nuestros empleados sin ningún costo ni riesgo. La adopción fue inmediata.',
     name: 'Carlos Rodríguez',
     role: 'Director de RRHH · Manufactura del Norte',
     img: '/images/carlosheadshot.png',
     initials: 'CR',
   },
   {
-    quote: 'Cuando mi hijo se enfermó, VIDA me salvó. Sin este beneficio, habría tenido que pedir un préstamo con intereses altísimos. Recibí el dinero en 24 horas.',
+    quote: 'Cuando mi hijo se enfermó, Funpay me salvó. Sin este beneficio, habría tenido que pedir un préstamo con intereses altísimos. Recibí el dinero en 24 horas.',
     name: 'Ana Martínez',
     role: 'Operadora · Manufactura del Norte',
     img: '/images/ana.png',
     initials: 'AM',
   },
   {
-    quote: 'La integración fue increíblemente simple. En dos días teníamos VIDA funcionando con nuestra nómina. Nuestros empleados lo usan cada mes.',
+    quote: 'La integración fue increíblemente simple. En dos días teníamos Funpay funcionando con nuestra nómina. Nuestros empleados lo usan cada mes.',
     name: 'Roberto Méndez',
     role: 'Gerente de Operaciones · Logística Express',
     img: '/images/roberto.png',
@@ -70,7 +70,7 @@ export function ClosingSection() {
           transition: 'all 0.3s ease',
           minHeight: 200,
         }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 14, opacity: 0.15 }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" style={{ marginBottom: 14, opacity: 0.15 }}>
             <path d="M10 11H6C6 7.5 7 5 10 4V6.5C8.5 7 8 8.5 8 10H10V14H6V11M18 11H14C14 7.5 15 5 18 4V6.5C16.5 7 16 8.5 16 10H18V14H14V11" fill="white"/>
           </svg>
           <p style={{

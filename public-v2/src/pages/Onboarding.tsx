@@ -147,7 +147,7 @@ function PasswordStrengthBar({ password, t }: { password: string; t: (k: string)
 const STEP_CONTEXT: Record<string, { icon: string; title: string; sub: string; trust: string }[]> = {
   employer: [
     { icon: 'briefcase', title: 'Tu empresa', sub: 'Comienza con el nombre de tu empresa.', trust: 'Proceso 100% digital — 10 minutos' },
-    { icon: 'mail', title: 'Datos de contacto', sub: 'Quién administrará la cuenta VIDA.', trust: 'Encriptación punto a punto' },
+    { icon: 'mail', title: 'Datos de contacto', sub: 'Quién administrará la cuenta Funpay.', trust: 'Encriptación punto a punto' },
     { icon: 'file', title: 'Datos fiscales', sub: 'RFC, estado y sector para validación.', trust: 'Cumplimiento CNBV y CONDUSEF' },
     { icon: 'users', title: 'Equipo y nómina', sub: 'Determina créditos para tu equipo.', trust: 'Sin costo para tu empresa' },
     { icon: 'bank', title: 'Datos bancarios', sub: 'CLABE para deducciones de nómina.', trust: 'Conexión bancaria segura' },
@@ -1158,7 +1158,7 @@ export function Onboarding() {
             {kycStatus === 'not_started' && (
               <div className="onb-kyc-card">
                 <div className="onb-kyc-icon">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent, #2d6a4f)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2d6a4f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 12l2 2 4-4" />
                     <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" />
                   </svg>
@@ -1370,16 +1370,16 @@ export function Onboarding() {
       {role && !isFinalStep && (
         <div className="onb-v2-left" style={{
           width: '38%', minWidth: 320,
-          background: 'linear-gradient(170deg, #0f2a2b 0%, #194445 55%, #1d5253 100%)',
+          background: 'linear-gradient(170deg, #0f2a2b 0%, var(--brand) 55%, var(--brand-mid) 100%)',
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
           padding: '40px 44px', position: 'relative', overflow: 'hidden', flexShrink: 0,
         }}>
           <div style={{ position: 'absolute', width: 400, height: 400, top: -100, right: -100, borderRadius: '50%', background: 'radial-gradient(circle, rgba(168,213,208,0.06), transparent 65%)', filter: 'blur(40px)', animation: 'onbMeshDrift 18s ease-in-out infinite', pointerEvents: 'none' }} />
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: 7, color: 'rgba(255,255,255,0.5)' }}>VID<span style={{ color: '#a28657' }}>A</span></div>
+            <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: 7, color: 'rgba(255,255,255,0.5)' }}>VID<span style={{ color: 'var(--gold)' }}>A</span></div>
           </div>
           <div key={step} style={{ position: 'relative', zIndex: 2, animation: 'onbFadeSlideIn 0.5s cubic-bezier(0.22,1,0.36,1)' }}>
-            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(168,213,208,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, color: '#a8d5d0' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(168,213,208,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, color: 'var(--aqua)' }}>
               <StepIcon name={stepCtx.icon} />
             </div>
             <h2 style={{ fontFamily: 'var(--df)', fontSize: 28, color: 'white', lineHeight: 1.15, letterSpacing: '-0.02em', marginBottom: 12 }}>{stepCtx.title}</h2>
@@ -1396,7 +1396,7 @@ export function Onboarding() {
               {Array.from({ length: totalSteps }, (_, i) => (
                 <div key={i} style={{
                   width: step > i + 1 ? 18 : step === i + 1 ? 18 : 7, height: 3, borderRadius: 3,
-                  background: step > i + 1 ? 'rgba(168,213,208,0.35)' : step === i + 1 ? '#a8d5d0' : 'rgba(255,255,255,0.06)',
+                  background: step > i + 1 ? 'rgba(168,213,208,0.35)' : step === i + 1 ? 'var(--aqua)' : 'rgba(255,255,255,0.06)',
                   transition: 'all 0.5s cubic-bezier(0.22,1,0.36,1)',
                 }} />
               ))}
@@ -1415,9 +1415,9 @@ export function Onboarding() {
       <div className="onb-top">
         {!role && (
           <div className="onb-logo">
-            <svg className="vida-logo" viewBox="0 0 80 14" height="14">
-              <text x="0" y="12" fontFamily="var(--df)" fontSize="14" fontWeight="700" fill="var(--t1)">vida</text>
-            </svg>
+            <span className="funpay-logo" aria-label="Funpay">
+              <span className="funpay-logo-text" aria-hidden="true">Funpay</span>
+            </span>
           </div>
         )}
         {role && <div />}
@@ -1441,7 +1441,7 @@ export function Onboarding() {
         <div style={{
           margin: '12px 20px 0', padding: '10px 14px', borderRadius: 10,
           background: 'rgba(168,213,208,0.18)', border: '1px solid rgba(29,82,83,0.25)',
-          color: '#194445', fontSize: 13, textAlign: 'center', position: 'relative', zIndex: 10,
+          color: 'var(--brand)', fontSize: 13, textAlign: 'center', position: 'relative', zIndex: 10,
         }}>
           Has sido invitado por <strong>{inviteEmployerName}</strong>
         </div>

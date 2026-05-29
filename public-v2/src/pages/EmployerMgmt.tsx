@@ -40,16 +40,16 @@ function statusBadge(status: string): { label: string; bg: string; text: string 
   switch (status) {
     case 'pending_verification':
     case 'pending_review':
-      return { label: 'Pending', bg: 'rgba(212,160,60,0.10)', text: '#b08420' };
+      return { label: 'Pending', bg: 'rgba(212,160,60,0.10)', text: 'var(--warning)' };
     case 'active':
     case 'approved':
-      return { label: 'Approved', bg: 'rgba(36,122,110,0.08)', text: '#247a6e' };
+      return { label: 'Approved', bg: 'rgba(36,122,110,0.08)', text: 'var(--brand-light)' };
     case 'rejected':
-      return { label: 'Rejected', bg: 'rgba(220,80,60,0.08)', text: '#dc503c' };
+      return { label: 'Rejected', bg: 'rgba(220,80,60,0.08)', text: 'var(--danger)' };
     case 'suspended':
       return { label: 'Suspended', bg: 'rgba(147,170,169,0.10)', text: '#6b8382' };
     default:
-      return { label: status, bg: 'rgba(147,170,169,0.10)', text: '#4a6364' };
+      return { label: status, bg: 'rgba(147,170,169,0.10)', text: 'var(--t2)' };
   }
 }
 
@@ -135,14 +135,14 @@ export function EmployerMgmt() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '2.2px',
-    color: '#a28657',
+    color: 'var(--gold)',
     marginBottom: 10,
   };
 
   const valueStyle: React.CSSProperties = {
     fontFamily: 'var(--df)',
     fontSize: 36,
-    color: '#0c1e1f',
+    color: 'var(--t1)',
     letterSpacing: '-0.03em',
     fontWeight: 400,
     lineHeight: 1,
@@ -176,10 +176,10 @@ export function EmployerMgmt() {
     <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
           Employer Management
         </h1>
-        <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
+        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
           View all registered employers and manage approval status.
         </p>
       </div>
@@ -192,11 +192,11 @@ export function EmployerMgmt() {
         </div>
         <div style={cardStyle}>
           <div style={labelStyle}>Pending</div>
-          <div style={{ ...valueStyle, color: stats.pending > 0 ? '#b08420' : '#0c1e1f' }}>{stats.pending}</div>
+          <div style={{ ...valueStyle, color: stats.pending > 0 ? 'var(--warning)' : 'var(--t1)' }}>{stats.pending}</div>
         </div>
         <div style={cardStyle}>
           <div style={labelStyle}>Approved</div>
-          <div style={{ ...valueStyle, color: stats.approved > 0 ? '#247a6e' : '#0c1e1f' }}>{stats.approved}</div>
+          <div style={{ ...valueStyle, color: stats.approved > 0 ? 'var(--brand-light)' : 'var(--t1)' }}>{stats.approved}</div>
         </div>
         <div style={cardStyle}>
           <div style={labelStyle}>Employees</div>
@@ -216,7 +216,7 @@ export function EmployerMgmt() {
             width: '100%',
             padding: '12px 16px',
             fontSize: 14,
-            color: '#0c1e1f',
+            color: 'var(--t1)',
             border: '1px solid rgba(25,68,69,0.10)',
             borderRadius: 14,
             background: '#fff',
@@ -235,7 +235,7 @@ export function EmployerMgmt() {
               style={{
                 fontSize: 11,
                 fontWeight: filter === f.key ? 700 : 500,
-                color: filter === f.key ? '#194445' : '#93aaa9',
+                color: filter === f.key ? 'var(--brand)' : 'var(--t3)',
                 background: filter === f.key ? 'rgba(25,68,69,0.06)' : 'transparent',
                 border: '1px solid',
                 borderColor: filter === f.key ? 'rgba(25,68,69,0.12)' : 'rgba(25,68,69,0.06)',
@@ -255,14 +255,14 @@ export function EmployerMgmt() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: '#93aaa9' }}>
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
           <p style={{ fontSize: 14 }}>Loading employers...</p>
         </div>
       )}
 
       {/* Empty */}
       {!loading && filtered.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: '#93aaa9' }}>
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
           <p style={{ fontSize: 14 }}>
             {search || filter !== 'all' ? 'No employers match your filters.' : 'No employers registered yet.'}
           </p>
@@ -287,13 +287,13 @@ export function EmployerMgmt() {
             {/* Top row: company + status */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 600, color: '#0c1e1f', marginBottom: 4 }}>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
                   {emp.companyName}
                 </div>
                 {emp.contactName && (
-                  <div style={{ fontSize: 13, color: '#4a6364', marginBottom: 2 }}>{emp.contactName}</div>
+                  <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 2 }}>{emp.contactName}</div>
                 )}
-                <div style={{ fontSize: 12, color: '#93aaa9' }}>{emp.email}</div>
+                <div style={{ fontSize: 12, color: 'var(--t3)' }}>{emp.email}</div>
               </div>
               <span
                 style={{
@@ -312,12 +312,12 @@ export function EmployerMgmt() {
             </div>
 
             {/* Detail row */}
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: '#93aaa9', marginBottom: pending ? 16 : 0 }}>
-              {emp.tier && <span>Tier: <strong style={{ color: '#4a6364' }}>{emp.tier}</strong></span>}
-              <span>Employees: <strong style={{ color: '#4a6364' }}>{fmt(empCount)}</strong></span>
-              {emp.companySize && <span>Size: <strong style={{ color: '#4a6364' }}>{emp.companySize}</strong></span>}
-              {emp.employerCode && <span>Code: <strong style={{ color: '#4a6364' }}>{emp.employerCode}</strong></span>}
-              <span>Registered: <strong style={{ color: '#4a6364' }}>{formatDate(emp.createdAt)}</strong></span>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--t3)', marginBottom: pending ? 16 : 0 }}>
+              {emp.tier && <span>Tier: <strong style={{ color: 'var(--t2)' }}>{emp.tier}</strong></span>}
+              <span>Employees: <strong style={{ color: 'var(--t2)' }}>{fmt(empCount)}</strong></span>
+              {emp.companySize && <span>Size: <strong style={{ color: 'var(--t2)' }}>{emp.companySize}</strong></span>}
+              {emp.employerCode && <span>Code: <strong style={{ color: 'var(--t2)' }}>{emp.employerCode}</strong></span>}
+              <span>Registered: <strong style={{ color: 'var(--t2)' }}>{formatDate(emp.createdAt)}</strong></span>
             </div>
 
             {/* Actions for pending employers */}
@@ -326,14 +326,14 @@ export function EmployerMgmt() {
                 <button
                   onClick={() => handleDecision(emp.id, true)}
                   disabled={!!actionLoading}
-                  style={pillBtn('#194445', '#fff')}
+                  style={pillBtn('var(--brand)', '#fff')}
                 >
                   {actionLoading === emp.id ? 'Processing...' : 'Approve'}
                 </button>
                 <button
                   onClick={() => handleDecision(emp.id, false)}
                   disabled={!!actionLoading}
-                  style={pillBtn('rgba(220,80,60,0.08)', '#dc503c')}
+                  style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}
                 >
                   Reject
                 </button>

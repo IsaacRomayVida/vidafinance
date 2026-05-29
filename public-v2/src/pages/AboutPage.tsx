@@ -6,7 +6,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 export function AboutPage() {
   const { t } = useTranslation();
   useRevealOnScroll();
-  useDocumentTitle(`VIDA — ${t('pg_about_badge')}`);
+  useDocumentTitle(`Funpay — ${t('pg_about_badge')}`);
 
   return (
     <>

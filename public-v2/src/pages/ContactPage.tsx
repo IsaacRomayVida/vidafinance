@@ -9,7 +9,7 @@ const CHANNELS = ['general', 'employers', 'press', 'investors', 'privacy'] as co
 export function ContactPage() {
   const { t } = useTranslation();
   useRevealOnScroll();
-  useDocumentTitle(`VIDA — ${t('pg_contact_badge')}`);
+  useDocumentTitle(`Funpay — ${t('pg_contact_badge')}`);
 
   return (
     <>

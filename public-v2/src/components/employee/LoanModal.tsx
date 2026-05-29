@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../../lib/firebase';
 import { friendlyError } from '../../lib/errors';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { LOAN_PURPOSES, fmt } from './types';
 
 interface LoanModalProps {
@@ -25,6 +26,7 @@ export function LoanModal({
   onSubmitted,
 }: LoanModalProps) {
   const { t } = useTranslation();
+  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
   const [amount, setAmount] = useState(1000);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -105,8 +107,12 @@ export function LoanModal({
     <div
       className="modal-overlay show"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('modal_request')}
     >
       <motion.div
+        ref={dialogRef}
         className="modal"
         style={{ position: 'relative' }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}

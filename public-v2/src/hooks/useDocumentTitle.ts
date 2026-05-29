@@ -6,7 +6,7 @@ export function useDocumentTitle(title: string) {
       document.title = title;
     }
     return () => {
-      document.title = 'VIDA Finance';
+      document.title = 'Funpay';
     };
   }, [title]);
 }

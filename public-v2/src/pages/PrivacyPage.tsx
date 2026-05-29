@@ -6,7 +6,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 export function PrivacyPage() {
   const { t } = useTranslation();
   useRevealOnScroll();
-  useDocumentTitle(`VIDA — ${t('pg_priv_badge')}`);
+  useDocumentTitle(`Funpay — ${t('pg_priv_badge')}`);
 
   return (
     <>

@@ -40,7 +40,7 @@ export function HeroSection() {
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)', lineHeight: 1.3 }}>
-                12+ empresas ya confían en VIDA
+                12+ empresas ya confían en Funpay
               </div>
               <div style={{ fontSize: 11, color: 'var(--t3)' }}>
                 Manufactura, retail y servicios en México
@@ -62,7 +62,7 @@ export function HeroSection() {
               filter: 'blur(20px)',
               pointerEvents: 'none',
             }} />
-            <img src="/images/worker.png" alt="Trabajador usando VIDA"
+            <img src="/images/worker.png" alt="Trabajador usando Funpay"
               fetchPriority="high"
               style={{
                 width: 340, position: 'relative',
@@ -76,7 +76,7 @@ export function HeroSection() {
 
           <div className="chip chip-1">
             <div className="chip-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5">
                 <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
               </svg>
             </div>
@@ -88,7 +88,7 @@ export function HeroSection() {
 
           <div className="chip chip-2">
             <div className="chip-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-light)" strokeWidth="1.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="1.5">
                 <path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" />
               </svg>
             </div>
@@ -100,7 +100,7 @@ export function HeroSection() {
 
           <div className="chip chip-3">
             <div className="chip-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5">
                 <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
               </svg>
             </div>

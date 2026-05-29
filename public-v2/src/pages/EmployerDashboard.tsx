@@ -459,7 +459,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
             flex: 1,
             padding: '14px 16px',
             borderRadius: 16,
-            border: mode === 'open' ? '2px solid #194445' : '1.5px solid rgba(25,68,69,0.1)',
+            border: mode === 'open' ? '2px solid var(--brand)' : '1.5px solid rgba(25,68,69,0.1)',
             background: mode === 'open' ? 'rgba(25,68,69,0.03)' : '#fff',
             cursor: 'pointer',
             transition: 'all .2s',
@@ -478,7 +478,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
             flex: 1,
             padding: '14px 16px',
             borderRadius: 16,
-            border: mode === 'allowlist' ? '2px solid #194445' : '1.5px solid rgba(25,68,69,0.1)',
+            border: mode === 'allowlist' ? '2px solid var(--brand)' : '1.5px solid rgba(25,68,69,0.1)',
             background: mode === 'allowlist' ? 'rgba(25,68,69,0.03)' : '#fff',
             cursor: 'pointer',
             transition: 'all .2s',
@@ -519,7 +519,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
                 flex: 1,
                 padding: '12px 16px',
                 borderRadius: 12,
-                border: inputError ? '1.5px solid #dc503c' : '1.5px solid rgba(25,68,69,0.1)',
+                border: inputError ? '1.5px solid var(--danger)' : '1.5px solid rgba(25,68,69,0.1)',
                 fontSize: 14,
                 fontFamily: 'monospace',
                 letterSpacing: '0.1em',
@@ -953,7 +953,7 @@ export function EmployerDashboard() {
                               onClick={() => handleLoanAction(loan.id, 'approved')}
                               style={{
                                 padding: '5px 12px', fontSize: 12, fontWeight: 600,
-                                background: 'var(--brand, #194445)', color: '#fff',
+                                background: 'var(--brand, var(--brand))', color: '#fff',
                                 border: 'none', borderRadius: 8, cursor: 'pointer',
                                 opacity: actionLoading === loan.id ? 0.5 : 1,
                               }}

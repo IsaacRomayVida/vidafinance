@@ -66,13 +66,13 @@ function riskColor(level: string): { bg: string; text: string } {
     case 'critical':
       return { bg: 'rgba(180,40,30,0.10)', text: '#a01c14' };
     case 'high':
-      return { bg: 'rgba(220,80,60,0.08)', text: '#dc503c' };
+      return { bg: 'rgba(220,80,60,0.08)', text: 'var(--danger)' };
     case 'medium':
-      return { bg: 'rgba(212,160,60,0.10)', text: '#b08420' };
+      return { bg: 'rgba(212,160,60,0.10)', text: 'var(--warning)' };
     case 'low':
-      return { bg: 'rgba(36,122,110,0.08)', text: '#247a6e' };
+      return { bg: 'rgba(36,122,110,0.08)', text: 'var(--brand-light)' };
     default:
-      return { bg: 'rgba(147,170,169,0.10)', text: '#4a6364' };
+      return { bg: 'rgba(147,170,169,0.10)', text: 'var(--t2)' };
   }
 }
 
@@ -224,14 +224,14 @@ export function ReviewQueue() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '2.2px',
-    color: '#a28657',
+    color: 'var(--gold)',
     marginBottom: 10,
   };
 
   const valueStyle: React.CSSProperties = {
     fontFamily: 'var(--df)',
     fontSize: 36,
-    color: '#0c1e1f',
+    color: 'var(--t1)',
     letterSpacing: '-0.03em',
     fontWeight: 400,
     lineHeight: 1,
@@ -243,7 +243,7 @@ export function ReviewQueue() {
     borderRadius: 10,
     border: '1px solid rgba(25,68,69,0.10)',
     background: '#fff',
-    color: '#0c1e1f',
+    color: 'var(--t1)',
     fontFamily: "'DM Sans',sans-serif",
     outline: 'none',
     cursor: 'pointer',
@@ -255,7 +255,7 @@ export function ReviewQueue() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '1.8px',
-    color: '#93aaa9',
+    color: 'var(--t3)',
     padding: '12px 14px',
     textAlign: 'left',
     borderBottom: '1px solid rgba(25,68,69,0.06)',
@@ -264,7 +264,7 @@ export function ReviewQueue() {
 
   const tdStyle: React.CSSProperties = {
     fontSize: 13,
-    color: '#0c1e1f',
+    color: 'var(--t1)',
     padding: '14px',
     borderBottom: '1px solid rgba(25,68,69,0.04)',
     verticalAlign: 'middle',
@@ -276,10 +276,10 @@ export function ReviewQueue() {
     <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px' }}>
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
           Review Queue
         </h1>
-        <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
+        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
           Loans flagged for Stage 5 manual review. 24-hour SLA per item.
         </p>
       </div>
@@ -292,13 +292,13 @@ export function ReviewQueue() {
         </div>
         <div style={cardStyle}>
           <div style={labelStyle}>High Risk</div>
-          <div style={{ ...valueStyle, color: reviews.some(r => r.risk_level === 'high' || r.risk_level === 'critical') ? '#dc503c' : '#0c1e1f' }}>
+          <div style={{ ...valueStyle, color: reviews.some(r => r.risk_level === 'high' || r.risk_level === 'critical') ? 'var(--danger)' : 'var(--t1)' }}>
             {reviews.filter(r => r.risk_level === 'high' || r.risk_level === 'critical').length}
           </div>
         </div>
         <div style={cardStyle}>
           <div style={labelStyle}>SLA Breach</div>
-          <div style={{ ...valueStyle, color: reviews.some(r => hoursElapsed(r.queuedAt) > 24) ? '#dc503c' : '#0c1e1f' }}>
+          <div style={{ ...valueStyle, color: reviews.some(r => hoursElapsed(r.queuedAt) > 24) ? 'var(--danger)' : 'var(--t1)' }}>
             {reviews.filter(r => hoursElapsed(r.queuedAt) > 24).length}
           </div>
         </div>
@@ -306,7 +306,7 @@ export function ReviewQueue() {
 
       {/* Filters & Sort */}
       <div style={{ ...cardStyle, padding: '16px 20px', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#93aaa9', marginRight: 4 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)', marginRight: 4 }}>
           Filters
         </div>
         <select
@@ -339,7 +339,7 @@ export function ReviewQueue() {
         </select>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#93aaa9' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)' }}>
             Sort
           </span>
           <select
@@ -357,14 +357,14 @@ export function ReviewQueue() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: '#93aaa9' }}>
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
           <p style={{ fontSize: 14 }}>Loading reviews...</p>
         </div>
       )}
 
       {/* Empty */}
       {!loading && reviews.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: '#93aaa9' }}>
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
           <p style={{ fontSize: 14 }}>No pending reviews. All caught up.</p>
         </div>
       )}
@@ -398,21 +398,21 @@ export function ReviewQueue() {
                       style={{
                         cursor: 'pointer',
                         transition: 'background 0.15s',
-                        borderLeft: urg === 'breach' ? '3px solid #dc503c' : urg === 'warning' ? '3px solid #b08420' : '3px solid transparent',
+                        borderLeft: urg === 'breach' ? '3px solid var(--danger)' : urg === 'warning' ? '3px solid var(--warning)' : '3px solid transparent',
                       }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(25,68,69,0.02)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <td style={{ ...tdStyle, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4a6364' }}>
+                      <td style={{ ...tdStyle, fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--t2)' }}>
                         {item.loanId?.slice(0, 8) || '—'}
                       </td>
                       <td style={tdStyle}>
                         <div style={{ fontWeight: 600 }}>{item.applicantName}</div>
                         {item.applicantRfc && (
-                          <div style={{ fontSize: 11, color: '#93aaa9' }}>{item.applicantRfc}</div>
+                          <div style={{ fontSize: 11, color: 'var(--t3)' }}>{item.applicantRfc}</div>
                         )}
                       </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: '#4a6364' }}>
+                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--t2)' }}>
                         {getEmployerName(item)}
                       </td>
                       <td style={{ ...tdStyle, fontWeight: 600 }}>
@@ -432,12 +432,12 @@ export function ReviewQueue() {
                           {item.risk_level}
                         </span>
                       </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: '#4a6364', maxWidth: 180 }}>
+                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--t2)', maxWidth: 180 }}>
                         <span style={{ display: 'inline-block', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {getEscalationReason(item)}
                         </span>
                       </td>
-                      <td style={{ ...tdStyle, fontSize: 12, fontWeight: 600, color: '#4a6364', whiteSpace: 'nowrap' }}>
+                      <td style={{ ...tdStyle, fontSize: 12, fontWeight: 600, color: 'var(--t2)', whiteSpace: 'nowrap' }}>
                         {ageLabel(item.queuedAt)}
                       </td>
                       <td style={tdStyle}>
@@ -447,7 +447,7 @@ export function ReviewQueue() {
                           padding: '3px 10px',
                           borderRadius: 20,
                           background: urg === 'breach' ? 'rgba(220,80,60,0.08)' : urg === 'warning' ? 'rgba(212,160,60,0.10)' : 'rgba(36,122,110,0.06)',
-                          color: urg === 'breach' ? '#dc503c' : urg === 'warning' ? '#b08420' : '#247a6e',
+                          color: urg === 'breach' ? 'var(--danger)' : urg === 'warning' ? 'var(--warning)' : 'var(--brand-light)',
                           whiteSpace: 'nowrap',
                         }}>
                           {slaLabel(item.queuedAt)}
@@ -464,7 +464,7 @@ export function ReviewQueue() {
 
       {/* Filtered count */}
       {!loading && reviews.length > 0 && filteredReviews.length !== reviews.length && (
-        <div style={{ textAlign: 'center', fontSize: 12, color: '#93aaa9', marginTop: 8 }}>
+        <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--t3)', marginTop: 8 }}>
           Showing {filteredReviews.length} of {reviews.length} reviews
         </div>
       )}

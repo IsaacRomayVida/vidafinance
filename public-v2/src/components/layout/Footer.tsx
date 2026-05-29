@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { VidaLogo } from '../shared/VidaLogo';
+import { FunpayLogo } from '../shared/FunpayLogo';
 import { safeSetItem } from '../../lib/safeStorage';
 
 export function Footer() {
@@ -18,7 +18,7 @@ export function Footer() {
       <div className="footer-inner">
         <div className="ft-top">
           <div className="ft-brand">
-            <div className="ft-logo"><VidaLogo variant="footer" /></div>
+            <div className="ft-logo"><FunpayLogo variant="footer" /></div>
             <p className="ft-tag">{t('ft_tagline')}</p>
           </div>
           <div className="ft-col">
@@ -43,9 +43,9 @@ export function Footer() {
           </div>
         </div>
         <div className="ft-btm">
-          <span>&copy; 2026 VIDA</span>
+          <span>&copy; 2026 Funpay</span>
           <div className="ft-btm-links">
-            <button onClick={toggleLang} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit' }}>
+            <button onClick={toggleLang} aria-label={t('a11y_lang_toggle')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit' }}>
               {t('lang_toggle')}
             </button>
             <Link to="/privacy">{t('ft_privacy_policy')}</Link>

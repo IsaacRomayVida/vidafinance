@@ -24,7 +24,7 @@ export function LoanTable({ loans, repaymentsByLoan, loading, onOpenModal, onPay
         </div>
       ) : loans.length === 0 ? (
         <div className="empty-state" style={{ textAlign: 'center', padding: '40px 24px' }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" strokeWidth="1" style={{ marginBottom: 16 }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#93aaa9" strokeWidth="1" style={{ marginBottom: 16 }}>
             <circle cx="12" cy="12" r="10" />
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
           </svg>

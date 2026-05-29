@@ -13,7 +13,7 @@ const arrow = (
 export function EmployerPage() {
   const { t } = useTranslation();
   useRevealOnScroll();
-  useDocumentTitle(`VIDA — ${t('lp_e_badge')}`);
+  useDocumentTitle(`Funpay — ${t('lp_e_badge')}`);
 
   return (
     <>
@@ -37,7 +37,7 @@ export function EmployerPage() {
         </div>
       </section>
 
-      {/* Why VIDA */}
+      {/* Why Funpay */}
       <section className="section">
         <div className="wrap">
           <div className="tag rv">{t('lp_e_why_tag')}</div>

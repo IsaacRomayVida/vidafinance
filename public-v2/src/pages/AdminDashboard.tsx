@@ -139,14 +139,14 @@ export function AdminDashboard() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '2.2px',
-    color: '#a28657',
+    color: 'var(--gold)',
     marginBottom: 10,
   };
 
   const valueStyle: React.CSSProperties = {
     fontFamily: 'var(--df)',
     fontSize: 36,
-    color: '#0c1e1f',
+    color: 'var(--t1)',
     letterSpacing: '-0.03em',
     fontWeight: 400,
     lineHeight: 1,
@@ -170,10 +170,10 @@ export function AdminDashboard() {
     <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
           {t('admin_title')}
         </h1>
-        <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
+        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
           {t('admin_subtitle')}
         </p>
       </div>
@@ -218,10 +218,10 @@ export function AdminDashboard() {
             onClick={() => setTab(tabKey)}
             style={{
               fontSize: 12, fontWeight: tab === tabKey ? 700 : 500,
-              color: tab === tabKey ? '#194445' : '#93aaa9',
+              color: tab === tabKey ? 'var(--brand)' : 'var(--t3)',
               textTransform: 'uppercase', letterSpacing: '0.5px',
               padding: '14px 0', background: 'none', border: 'none',
-              borderBottom: tab === tabKey ? '2px solid #a28657' : '2px solid transparent',
+              borderBottom: tab === tabKey ? '2px solid var(--gold)' : '2px solid transparent',
               cursor: 'pointer', transition: 'all 0.2s',
             }}
           >
@@ -238,23 +238,23 @@ export function AdminDashboard() {
               <div style={{ ...labelStyle, marginBottom: 16 }}>Pending Approval</div>
               {pendingEmployers.map(emp => (
                 <div key={emp.id} style={{ ...cardStyle, padding: '24px 28px' }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#0c1e1f', marginBottom: 6 }}>{emp.companyName}</div>
-                  <div style={{ fontSize: 13, color: '#4a6364', marginBottom: 4 }}>{emp.email}</div>
-                  <div style={{ fontSize: 12, color: '#93aaa9', marginBottom: 16 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--t1)', marginBottom: 6 }}>{emp.companyName}</div>
+                  <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 4 }}>{emp.email}</div>
+                  <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 16 }}>
                     {emp.companySize || '—'} · Code: {emp.employerCode || '—'} · Docs: {emp.docRFC ? 'Uploaded' : 'Missing'}
                   </div>
                   <div style={{ display: 'flex', gap: 12 }}>
                     <button
                       onClick={() => approveEmployer(emp.id, 'approved')}
                       disabled={!!actionLoading}
-                      style={pillBtn('#194445', '#fff')}
+                      style={pillBtn('var(--brand)', '#fff')}
                     >
                       {actionLoading === emp.id ? '...' : t('admin_approve', 'Aprobar')}
                     </button>
                     <button
                       onClick={() => approveEmployer(emp.id, 'rejected')}
                       disabled={!!actionLoading}
-                      style={pillBtn('rgba(220,80,60,0.08)', '#dc503c')}
+                      style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}
                     >
                       Reject
                     </button>
@@ -271,10 +271,10 @@ export function AdminDashboard() {
                 <div key={emp.id} style={{ ...cardStyle, padding: '20px 28px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: '#0c1e1f' }}>{emp.companyName}</div>
-                      <div style={{ fontSize: 12, color: '#93aaa9', marginTop: 4 }}>{emp.email}</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)' }}>{emp.companyName}</div>
+                      <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 4 }}>{emp.email}</div>
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#247a6e', background: 'rgba(36,122,110,0.06)', padding: '4px 12px', borderRadius: 20 }}>{t('status_active', 'Activo')}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-light)', background: 'rgba(36,122,110,0.06)', padding: '4px 12px', borderRadius: 20 }}>{t('status_active', 'Activo')}</div>
                   </div>
                 </div>
               ))}
@@ -282,7 +282,7 @@ export function AdminDashboard() {
           )}
 
           {employers.length === 0 && !loading && (
-            <div style={{ textAlign: 'center', padding: '48px 24px', color: '#93aaa9' }}>
+            <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
               <p style={{ fontSize: 14 }}>No employers registered yet.</p>
             </div>
           )}
@@ -299,25 +299,25 @@ export function AdminDashboard() {
                 <div key={loan.id} style={{ ...cardStyle, padding: '24px 28px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                     <div>
-                      <div style={{ fontSize: 16, fontWeight: 600, color: '#0c1e1f', marginBottom: 4 }}>{loan.employeeName}</div>
-                      <div style={{ fontSize: 13, color: '#4a6364' }}>{loan.employerName}</div>
+                      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>{loan.employeeName}</div>
+                      <div style={{ fontSize: 13, color: 'var(--t2)' }}>{loan.employerName}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: '#0c1e1f' }}>${fmt(loan.amount)}</div>
-                      <div style={{ fontSize: 11, color: '#93aaa9' }}>MXN</div>
+                      <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--t1)' }}>${fmt(loan.amount)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--t3)' }}>MXN</div>
                     </div>
                   </div>
                   {loan.mlCreditScore !== undefined && (
-                    <div style={{ fontSize: 12, color: '#4a6364', marginBottom: 12, display: 'flex', gap: 16 }}>
+                    <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 12, display: 'flex', gap: 16 }}>
                       <span>ML Score: <strong>{loan.mlCreditScore}</strong></span>
                       <span>Default Prob: <strong>{((loan.mlDefaultProb || 0) * 100).toFixed(0)}%</strong></span>
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 12 }}>
-                    <button onClick={() => reviewLoan(loan.id, 'approved')} disabled={!!actionLoading} style={pillBtn('#194445', '#fff')}>
+                    <button onClick={() => reviewLoan(loan.id, 'approved')} disabled={!!actionLoading} style={pillBtn('var(--brand)', '#fff')}>
                       {actionLoading === loan.id ? '...' : t('admin_approve_loan', 'Aprobar Préstamo')}
                     </button>
-                    <button onClick={() => reviewLoan(loan.id, 'rejected')} disabled={!!actionLoading} style={pillBtn('rgba(220,80,60,0.08)', '#dc503c')}>
+                    <button onClick={() => reviewLoan(loan.id, 'rejected')} disabled={!!actionLoading} style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}>
                       Reject
                     </button>
                   </div>
@@ -333,10 +333,10 @@ export function AdminDashboard() {
                 <div key={loan.id} style={{ ...cardStyle, padding: '20px 28px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: '#0c1e1f' }}>{loan.employeeName}</div>
-                      <div style={{ fontSize: 12, color: '#93aaa9', marginTop: 2 }}>{loan.employerName}</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)' }}>{loan.employeeName}</div>
+                      <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{loan.employerName}</div>
                     </div>
-                    <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: '#0c1e1f' }}>${fmt(loan.amount)}</div>
+                    <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>${fmt(loan.amount)}</div>
                   </div>
                 </div>
               ))}
@@ -344,7 +344,7 @@ export function AdminDashboard() {
           )}
 
           {loans.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '48px 24px', color: '#93aaa9' }}>
+            <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
               <p style={{ fontSize: 14 }}>No loan applications yet.</p>
             </div>
           )}

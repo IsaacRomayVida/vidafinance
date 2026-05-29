@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { VidaLogo } from '../components/shared/VidaLogo';
+import { FunpayLogo } from '../components/shared/FunpayLogo';
 
 export function NotFound() {
   const { t } = useTranslation();
@@ -10,7 +10,7 @@ export function NotFound() {
       <div className="auth-card" style={{ textAlign: 'center' }}>
         <div className="nav-logo">
           <Link to="/">
-            <VidaLogo />
+            <FunpayLogo />
           </Link>
         </div>
 

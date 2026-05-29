@@ -12,7 +12,7 @@ function fmt(n: number): string {
 export function EmployeePage() {
   const { t } = useTranslation();
   useRevealOnScroll();
-  useDocumentTitle(`VIDA — ${t('lp_m_badge')}`);
+  useDocumentTitle(`Funpay — ${t('lp_m_badge')}`);
 
   const [salary, setSalary] = useState(15000);
   const credit = Math.min(Math.round(salary * 0.30 / 100) * 100, 5000);

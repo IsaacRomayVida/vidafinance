@@ -6,7 +6,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 export function SecurityPage() {
   const { t } = useTranslation();
   useRevealOnScroll();
-  useDocumentTitle(`VIDA — ${t('pg_sec_badge')}`);
+  useDocumentTitle(`Funpay — ${t('pg_sec_badge')}`);
 
   return (
     <>

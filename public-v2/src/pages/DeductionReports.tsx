@@ -141,10 +141,10 @@ export function DeductionReports() {
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '48px 0 64px' }}>
       <div style={{ marginBottom: 40, padding: '0 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: "#0c1e1f", fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 16 }}>
+          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: "var(--t1)", fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 16 }}>
             {t('ded_title', 'Deducciones de Nómina')}
           </h1>
-          <p style={{ fontSize: 14, color: "#4a6364", lineHeight: 1.7 }}>
+          <p style={{ fontSize: 14, color: "var(--t2)", lineHeight: 1.7 }}>
             {t('ded_subtitle', 'Pagos de préstamos deducidos de la nómina del empleado.')}
           </p>
         </div>
@@ -156,7 +156,7 @@ export function DeductionReports() {
               alignItems: 'center',
               gap: 8,
               padding: '10px 20px',
-              background: 'var(--brand, #194445)',
+              background: 'var(--brand, var(--brand))',
               color: '#fff',
               border: 'none',
               borderRadius: 20,
@@ -219,7 +219,7 @@ export function DeductionReports() {
               <div style={{
                 fontSize: 13,
                 fontWeight: 700,
-                color: 'var(--gold, #a28657)',
+                color: 'var(--gold, var(--gold))',
                 background: 'rgba(162,134,87,0.08)',
                 padding: '6px 14px',
                 borderRadius: 20,

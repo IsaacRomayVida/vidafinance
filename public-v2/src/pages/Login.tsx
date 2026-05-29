@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { VidaLogo } from '../components/shared/VidaLogo';
+import { FunpayLogo } from '../components/shared/FunpayLogo';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 function mapAuthError(code: string): string {
@@ -30,7 +30,7 @@ function mapAuthError(code: string): string {
 export function Login() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  useDocumentTitle(`VIDA — ${t('nav_login')}`);
+  useDocumentTitle(`Funpay — ${t('nav_login')}`);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -134,7 +134,7 @@ export function Login() {
       {/* ── Left branded panel ── */}
       <div className="login-v2-left" style={{
         width: '42%', minWidth: 360,
-        background: 'linear-gradient(170deg, #0f2a2b 0%, #194445 55%, #1d5253 100%)',
+        background: 'linear-gradient(170deg, #0f2a2b 0%, var(--brand) 55%, var(--brand-mid) 100%)',
         display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
         padding: '48px', position: 'relative', overflow: 'hidden',
       }}>
@@ -142,14 +142,14 @@ export function Login() {
         <div style={{ position: 'absolute', width: 300, height: 300, bottom: -100, left: -60, borderRadius: '50%', background: 'radial-gradient(circle, rgba(162,134,87,0.04), transparent 65%)', filter: 'blur(40px)', pointerEvents: 'none' }} />
 
         <div style={{ position: 'relative', zIndex: 2 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: 7, color: 'rgba(255,255,255,0.5)' }}>
-            VID<span style={{ color: '#a28657' }}>A</span>
+          <div style={{ fontFamily: 'var(--df)', fontWeight: 700, fontSize: 22, letterSpacing: 1, color: 'rgba(255,255,255,0.85)' }}>
+            Funpa<span style={{ color: 'var(--gold)' }}>y</span>
           </div>
         </div>
 
         <div style={{ position: 'relative', zIndex: 2 }}>
           <h2 style={{ fontFamily: 'var(--df)', fontSize: 36, color: 'white', lineHeight: 1.12, letterSpacing: '-0.025em', marginBottom: 16 }}>
-            Crédito que<br /><span style={{ fontStyle: 'italic', color: '#a8d5d0' }}>transforma</span> vidas.
+            Crédito que<br /><span style={{ fontStyle: 'italic', color: 'var(--aqua)' }}>transforma</span> vidas.
           </h2>
           <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7, maxWidth: 320 }}>
             Microcréditos inteligentes con respaldo de nómina para los trabajadores de México.
@@ -177,7 +177,7 @@ export function Login() {
       <div className="auth-card" style={{ boxShadow: 'none', border: 'none', maxWidth: 400, width: '100%' }}>
         <div className="nav-logo" style={{ display: 'none' }}>
           <Link to="/">
-            <VidaLogo />
+            <FunpayLogo />
           </Link>
         </div>
 

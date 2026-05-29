@@ -141,21 +141,21 @@ const severityConfig: Record<
 > = {
   critical: {
     bg: 'rgba(220,80,60,0.04)',
-    text: '#dc503c',
-    dot: '#dc503c',
+    text: 'var(--danger)',
+    dot: 'var(--danger)',
     border: 'rgba(220,80,60,0.12)',
     badgeBg: 'rgba(220,80,60,0.08)',
   },
   warning: {
     bg: 'rgba(196,155,65,0.04)',
-    text: '#a28657',
+    text: 'var(--gold)',
     dot: '#c49b41',
     border: 'rgba(196,155,65,0.12)',
     badgeBg: 'rgba(196,155,65,0.08)',
   },
   info: {
     bg: 'rgba(25,68,69,0.03)',
-    text: '#4a6364',
+    text: 'var(--t2)',
     dot: '#4a8fa0',
     border: 'rgba(25,68,69,0.06)',
     badgeBg: 'rgba(74,143,160,0.08)',
@@ -293,7 +293,7 @@ export function AlertsPage() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '2.2px',
-    color: '#a28657',
+    color: 'var(--gold)',
     marginBottom: 10,
   };
 
@@ -305,7 +305,7 @@ export function AlertsPage() {
           style={{
             fontFamily: 'var(--df)',
             fontSize: 26,
-            color: '#0c1e1f',
+            color: 'var(--t1)',
             fontWeight: 400,
             letterSpacing: '-0.02em',
             lineHeight: 1.15,
@@ -314,7 +314,7 @@ export function AlertsPage() {
         >
           Alerts
         </h1>
-        <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
+        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
           System incidents and overdue loan alerts from Firestore.
         </p>
       </div>
@@ -389,7 +389,7 @@ export function AlertsPage() {
             style={{
               fontSize: 12,
               fontWeight: filter === t.key ? 700 : 500,
-              color: filter === t.key ? '#194445' : '#93aaa9',
+              color: filter === t.key ? 'var(--brand)' : 'var(--t3)',
               textTransform: 'uppercase',
               letterSpacing: '0.5px',
               padding: '14px 0',
@@ -397,7 +397,7 @@ export function AlertsPage() {
               border: 'none',
               borderBottom:
                 filter === t.key
-                  ? '2px solid #a28657'
+                  ? '2px solid var(--gold)'
                   : '2px solid transparent',
               cursor: 'pointer',
               transition: 'all 0.2s',
@@ -411,7 +411,7 @@ export function AlertsPage() {
       {/* Loading */}
       {loading && (
         <div
-          style={{ textAlign: 'center', padding: '48px 24px', color: '#93aaa9' }}
+          style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}
         >
           <p style={{ fontSize: 14 }}>Loading alerts...</p>
         </div>
@@ -473,7 +473,7 @@ export function AlertsPage() {
                         style={{
                           fontSize: 11,
                           fontWeight: 600,
-                          color: '#4a6364',
+                          color: 'var(--t2)',
                           background: 'rgba(25,68,69,0.04)',
                           padding: '3px 10px',
                           borderRadius: 20,
@@ -488,7 +488,7 @@ export function AlertsPage() {
                       style={{
                         fontSize: 14,
                         fontWeight: 500,
-                        color: '#0c1e1f',
+                        color: 'var(--t1)',
                         lineHeight: 1.5,
                         marginBottom: 6,
                         wordBreak: 'break-word',
@@ -501,7 +501,7 @@ export function AlertsPage() {
                     <div
                       style={{
                         fontSize: 12,
-                        color: '#93aaa9',
+                        color: 'var(--t3)',
                         display: 'flex',
                         gap: 8,
                       }}
@@ -517,7 +517,7 @@ export function AlertsPage() {
                     disabled={dismissing === key}
                     style={{
                       background: 'rgba(25,68,69,0.06)',
-                      color: '#4a6364',
+                      color: 'var(--t2)',
                       borderRadius: 60,
                       padding: '8px 18px',
                       fontSize: 11,
@@ -541,7 +541,7 @@ export function AlertsPage() {
       {/* Resolved Alerts */}
       {!loading && filtered(resolvedAlerts).length > 0 && (
         <div>
-          <div style={{ ...labelStyle, marginBottom: 16, color: '#93aaa9' }}>
+          <div style={{ ...labelStyle, marginBottom: 16, color: 'var(--t3)' }}>
             Resolved ({filtered(resolvedAlerts).length})
           </div>
           {filtered(resolvedAlerts).map((alert) => {
@@ -576,7 +576,7 @@ export function AlertsPage() {
                         style={{
                           fontSize: 11,
                           fontWeight: 700,
-                          color: '#247a6e',
+                          color: 'var(--brand-light)',
                           background: 'rgba(36,122,110,0.06)',
                           padding: '3px 10px',
                           borderRadius: 20,
@@ -590,7 +590,7 @@ export function AlertsPage() {
                         style={{
                           fontSize: 11,
                           fontWeight: 600,
-                          color: '#4a6364',
+                          color: 'var(--t2)',
                           background: 'rgba(25,68,69,0.04)',
                           padding: '3px 10px',
                           borderRadius: 20,
@@ -604,7 +604,7 @@ export function AlertsPage() {
                       style={{
                         fontSize: 14,
                         fontWeight: 500,
-                        color: '#0c1e1f',
+                        color: 'var(--t1)',
                         lineHeight: 1.5,
                         marginBottom: 6,
                         wordBreak: 'break-word',
@@ -613,7 +613,7 @@ export function AlertsPage() {
                       {getMessage(alert)}
                     </div>
 
-                    <div style={{ fontSize: 12, color: '#93aaa9' }}>
+                    <div style={{ fontSize: 12, color: 'var(--t3)' }}>
                       {fmtDate(getTimestamp(alert))}
                     </div>
                   </div>
@@ -627,7 +627,7 @@ export function AlertsPage() {
       {/* Empty State */}
       {!loading && alerts.length === 0 && (
         <div
-          style={{ textAlign: 'center', padding: '48px 24px', color: '#93aaa9' }}
+          style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}
         >
           <p style={{ fontSize: 14 }}>No alerts recorded.</p>
         </div>
@@ -642,7 +642,7 @@ export function AlertsPage() {
             style={{
               textAlign: 'center',
               padding: '48px 24px',
-              color: '#93aaa9',
+              color: 'var(--t3)',
             }}
           >
             <p style={{ fontSize: 14 }}>

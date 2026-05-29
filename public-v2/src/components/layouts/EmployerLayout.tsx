@@ -18,17 +18,18 @@ export function EmployerLayout() {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg2, #f5f8f7)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg2, var(--bg2))' }}>
       {/* Navbar */}
       <header style={{ background: '#fff', borderBottom: '1px solid rgba(25,68,69,0.04)' }}>
         <div style={{ maxWidth: 920, margin: '0 auto', padding: '0 24px' }}>
           {/* Top row: logo + actions */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 56 }}>
             <Link to="/employer" style={{ fontFamily: 'var(--db)', fontSize: 14, fontWeight: 700, color: 'var(--brand)', textDecoration: 'none', letterSpacing: '6px', textTransform: 'uppercase' as const }}>
-              VIDA
+              Funpay
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <button
+                aria-label={t('a11y_lang_toggle')}
                 onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); safeSetItem('vida_lang', next); }}
                 style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', background: 'none', border: '1px solid rgba(25,68,69,0.08)', borderRadius: 20, padding: '5px 14px', cursor: 'pointer', letterSpacing: '0.5px' }}
               >
@@ -59,7 +60,7 @@ export function EmployerLayout() {
                   color: isActive(path) ? 'var(--brand)' : 'var(--t3)',
                   textDecoration: 'none',
                   padding: '14px 0',
-                  borderBottom: isActive(path) ? '2px solid #a28657' : '2px solid transparent',
+                  borderBottom: isActive(path) ? '2px solid var(--gold)' : '2px solid transparent',
                   letterSpacing: '0.5px',
                   textTransform: 'uppercase',
                   transition: 'all 0.2s',

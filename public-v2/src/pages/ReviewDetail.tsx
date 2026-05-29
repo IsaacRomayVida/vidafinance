@@ -47,10 +47,10 @@ function num(val: unknown): number {
 function riskColor(level: string): { bg: string; text: string } {
   switch (level) {
     case 'critical': return { bg: 'rgba(180,40,30,0.10)', text: '#a01c14' };
-    case 'high': return { bg: 'rgba(220,80,60,0.08)', text: '#dc503c' };
-    case 'medium': return { bg: 'rgba(212,160,60,0.10)', text: '#b08420' };
-    case 'low': return { bg: 'rgba(36,122,110,0.08)', text: '#247a6e' };
-    default: return { bg: 'rgba(147,170,169,0.10)', text: '#4a6364' };
+    case 'high': return { bg: 'rgba(220,80,60,0.08)', text: 'var(--danger)' };
+    case 'medium': return { bg: 'rgba(212,160,60,0.10)', text: 'var(--warning)' };
+    case 'low': return { bg: 'rgba(36,122,110,0.08)', text: 'var(--brand-light)' };
+    default: return { bg: 'rgba(147,170,169,0.10)', text: 'var(--t2)' };
   }
 }
 
@@ -141,7 +141,7 @@ export function ReviewDetail() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '2.2px',
-    color: '#a28657',
+    color: 'var(--gold)',
     marginBottom: 16,
   };
 
@@ -150,13 +150,13 @@ export function ReviewDetail() {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '1.5px',
-    color: '#93aaa9',
+    color: 'var(--t3)',
     marginBottom: 4,
   };
 
   const fieldValue: React.CSSProperties = {
     fontSize: 14,
-    color: '#0c1e1f',
+    color: 'var(--t1)',
     marginBottom: 16,
   };
 
@@ -175,7 +175,7 @@ export function ReviewDetail() {
   });
 
   const jsonBoxStyle: React.CSSProperties = {
-    background: '#f5f8f7',
+    background: 'var(--bg2)',
     borderRadius: 12,
     padding: '16px',
     fontSize: 12,
@@ -193,7 +193,7 @@ export function ReviewDetail() {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px', textAlign: 'center', color: '#93aaa9' }}>
+      <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px', textAlign: 'center', color: 'var(--t3)' }}>
         <p style={{ fontSize: 14 }}>Loading review details...</p>
       </div>
     );
@@ -202,8 +202,8 @@ export function ReviewDetail() {
   if (error || !data) {
     return (
       <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px', textAlign: 'center' }}>
-        <p style={{ fontSize: 14, color: '#dc503c', marginBottom: 16 }}>{error || 'Review not found'}</p>
-        <button onClick={() => navigate('/ops/review-queue')} style={pillBtn('#194445', '#fff')}>
+        <p style={{ fontSize: 14, color: 'var(--danger)', marginBottom: 16 }}>{error || 'Review not found'}</p>
+        <button onClick={() => navigate('/ops/review-queue')} style={pillBtn('var(--brand)', '#fff')}>
           Back to Queue
         </button>
       </div>
@@ -225,7 +225,7 @@ export function ReviewDetail() {
       {/* Back link */}
       <button
         onClick={() => navigate('/ops/review-queue')}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#a28657', fontWeight: 600, marginBottom: 24, padding: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--gold)', fontWeight: 600, marginBottom: 24, padding: 0, display: 'flex', alignItems: 'center', gap: 6 }}
       >
         ← Back to Queue
       </button>
@@ -233,7 +233,7 @@ export function ReviewDetail() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
             {String(review['applicantName'] || 'Review Detail')}
           </h1>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -244,12 +244,12 @@ export function ReviewDetail() {
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
                 background: hoursElapsed(queuedAt) > 24 ? 'rgba(220,80,60,0.08)' : 'rgba(36,122,110,0.06)',
-                color: hoursElapsed(queuedAt) > 24 ? '#dc503c' : '#247a6e',
+                color: hoursElapsed(queuedAt) > 24 ? 'var(--danger)' : 'var(--brand-light)',
               }}>
                 {slaLabel(queuedAt)}
               </span>
             )}
-            <span style={{ fontSize: 12, color: '#93aaa9' }}>
+            <span style={{ fontSize: 12, color: 'var(--t3)' }}>
               Loan: {str(review['loanId']).slice(0, 12)}
             </span>
           </div>
@@ -303,19 +303,19 @@ export function ReviewDetail() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
             <div>
               <div style={fieldLabel}>AML Hit</div>
-              <div style={{ ...fieldValue, color: aml['amlHit'] ? '#dc503c' : '#247a6e', fontWeight: 600 }}>
+              <div style={{ ...fieldValue, color: aml['amlHit'] ? 'var(--danger)' : 'var(--brand-light)', fontWeight: 600 }}>
                 {aml['amlHit'] ? 'Yes' : 'No'}
               </div>
             </div>
             <div>
               <div style={fieldLabel}>Criminal Record</div>
-              <div style={{ ...fieldValue, color: aml['criminalRecordFound'] ? '#dc503c' : '#247a6e', fontWeight: 600 }}>
+              <div style={{ ...fieldValue, color: aml['criminalRecordFound'] ? 'var(--danger)' : 'var(--brand-light)', fontWeight: 600 }}>
                 {aml['criminalRecordFound'] ? 'Found' : 'None'}
               </div>
             </div>
             <div>
               <div style={fieldLabel}>PEP</div>
-              <div style={{ ...fieldValue, color: aml['isPEP'] ? '#dc503c' : '#247a6e', fontWeight: 600 }}>
+              <div style={{ ...fieldValue, color: aml['isPEP'] ? 'var(--danger)' : 'var(--brand-light)', fontWeight: 600 }}>
                 {aml['isPEP'] ? 'Yes' : 'No'}
               </div>
             </div>
@@ -351,29 +351,29 @@ export function ReviewDetail() {
         {/* Bureau */}
         {signals?.bureau ? (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ ...fieldLabel, fontSize: 11, color: '#a28657', marginBottom: 8 }}>Bureau Report Summary</div>
+            <div style={{ ...fieldLabel, fontSize: 11, color: 'var(--gold)', marginBottom: 8 }}>Bureau Report Summary</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 8 }}>
               <div>
                 <div style={fieldLabel}>Score</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: (signals.bureau['score'] as number) < 400 ? '#dc503c' : '#0c1e1f' }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: (signals.bureau['score'] as number) < 400 ? 'var(--danger)' : 'var(--t1)' }}>
                   {signals.bureau['score'] != null ? String(signals.bureau['score']) : '—'}
                 </div>
               </div>
               <div>
                 <div style={fieldLabel}>Active Defaults</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: (signals.bureau['activeDefaults'] as number) > 0 ? '#dc503c' : '#247a6e' }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: (signals.bureau['activeDefaults'] as number) > 0 ? 'var(--danger)' : 'var(--brand-light)' }}>
                   {signals.bureau['activeDefaults'] != null ? String(signals.bureau['activeDefaults']) : '—'}
                 </div>
               </div>
               <div>
                 <div style={fieldLabel}>Open Accounts</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#0c1e1f' }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--t1)' }}>
                   {signals.bureau['openAccounts'] != null ? String(signals.bureau['openAccounts']) : '—'}
                 </div>
               </div>
             </div>
             <details>
-              <summary style={{ fontSize: 12, color: '#a28657', cursor: 'pointer', fontWeight: 600, marginBottom: 8 }}>Full bureau data</summary>
+              <summary style={{ fontSize: 12, color: 'var(--gold)', cursor: 'pointer', fontWeight: 600, marginBottom: 8 }}>Full bureau data</summary>
               <div style={jsonBoxStyle}>{JSON.stringify(signals.bureau, null, 2)}</div>
             </details>
           </div>
@@ -382,17 +382,17 @@ export function ReviewDetail() {
         {/* RiskSeal */}
         {signals?.riskseal ? (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ ...fieldLabel, fontSize: 11, color: '#a28657', marginBottom: 8 }}>RiskSeal Digital Footprint</div>
+            <div style={{ ...fieldLabel, fontSize: 11, color: 'var(--gold)', marginBottom: 8 }}>RiskSeal Digital Footprint</div>
             <div style={{ display: 'flex', gap: 24, marginBottom: 8 }}>
               <div>
                 <div style={fieldLabel}>Score</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: (signals.riskseal['score'] as number) < 30 ? '#dc503c' : '#0c1e1f' }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: (signals.riskseal['score'] as number) < 30 ? 'var(--danger)' : 'var(--t1)' }}>
                   {signals.riskseal['score'] != null ? String(signals.riskseal['score']) : '—'}
                 </div>
               </div>
               <div>
                 <div style={fieldLabel}>Risk Level</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#4a6364' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t2)' }}>
                   {str(signals.riskseal['risk_level'])}
                 </div>
               </div>
@@ -413,18 +413,18 @@ export function ReviewDetail() {
         {/* Loan details in signals */}
         {signals?.loan ? (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ ...fieldLabel, fontSize: 11, color: '#a28657', marginBottom: 8 }}>Loan Metrics</div>
+            <div style={{ ...fieldLabel, fontSize: 11, color: 'var(--gold)', marginBottom: 8 }}>Loan Metrics</div>
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
               {num(signals.loan['amount']) > 0 ? (
                 <div>
                   <div style={fieldLabel}>Amount</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f' }}>${fmt(num(signals.loan['amount']))} MXN</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>${fmt(num(signals.loan['amount']))} MXN</div>
                 </div>
               ) : null}
               {num(signals.loan['loanToSalaryRatio']) > 0 ? (
                 <div>
                   <div style={fieldLabel}>LTI Ratio</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f' }}>{(num(signals.loan['loanToSalaryRatio']) * 100).toFixed(1)}%</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>{(num(signals.loan['loanToSalaryRatio']) * 100).toFixed(1)}%</div>
                 </div>
               ) : null}
             </div>
@@ -447,18 +447,18 @@ export function ReviewDetail() {
                   .slice(0, 5)
                   .map(([feature, value]) => (
                     <div key={feature} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <span style={{ fontSize: 12, color: '#4a6364', minWidth: 160 }}>{feature}</span>
+                      <span style={{ fontSize: 12, color: 'var(--t2)', minWidth: 160 }}>{feature}</span>
                       <div style={{ flex: 1, height: 8, background: '#f0f3f2', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
                         <div style={{
                           position: 'absolute',
                           left: value >= 0 ? '50%' : `${50 + (value / 2) * 100}%`,
                           width: `${Math.min(Math.abs(value) * 50, 50)}%`,
                           height: '100%',
-                          background: value > 0 ? '#dc503c' : '#247a6e',
+                          background: value > 0 ? 'var(--danger)' : 'var(--brand-light)',
                           borderRadius: 4,
                         }} />
                       </div>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: value > 0 ? '#dc503c' : '#247a6e', minWidth: 50, textAlign: 'right' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: value > 0 ? 'var(--danger)' : 'var(--brand-light)', minWidth: 50, textAlign: 'right' }}>
                         {value > 0 ? '+' : ''}{value.toFixed(3)}
                       </span>
                     </div>
@@ -475,21 +475,21 @@ export function ReviewDetail() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr>
-                      <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: '#93aaa9', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Feature</th>
-                      <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: '#93aaa9', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Bin</th>
-                      <th style={{ textAlign: 'right', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: '#93aaa9', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>WoE</th>
-                      <th style={{ textAlign: 'right', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: '#93aaa9', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Points</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Feature</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Bin</th>
+                      <th style={{ textAlign: 'right', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>WoE</th>
+                      <th style={{ textAlign: 'right', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Points</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(mlDecision['woeBins'] as Record<string, unknown>[]).map((bin, i) => (
                       <tr key={i}>
-                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', color: '#4a6364' }}>{String(bin['feature'])}</td>
-                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', color: '#4a6364' }}>{String(bin['bin'])}</td>
-                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', textAlign: 'right', fontWeight: 600, color: (bin['woe'] as number) > 0 ? '#dc503c' : '#247a6e' }}>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', color: 'var(--t2)' }}>{String(bin['feature'])}</td>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', color: 'var(--t2)' }}>{String(bin['bin'])}</td>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', textAlign: 'right', fontWeight: 600, color: (bin['woe'] as number) > 0 ? 'var(--danger)' : 'var(--brand-light)' }}>
                           {(bin['woe'] as number)?.toFixed(3) || '—'}
                         </td>
-                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', textAlign: 'right', fontWeight: 600, color: '#0c1e1f' }}>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', textAlign: 'right', fontWeight: 600, color: 'var(--t1)' }}>
                           {(bin['points'] as number)?.toFixed(0) || '—'}
                         </td>
                       </tr>
@@ -505,13 +505,13 @@ export function ReviewDetail() {
             {mlDecision['creditScore'] != null ? (
               <div>
                 <div style={fieldLabel}>ML Credit Score</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#0c1e1f' }}>{String(mlDecision['creditScore'])}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--t1)' }}>{String(mlDecision['creditScore'])}</div>
               </div>
             ) : null}
             {mlDecision['defaultProb'] != null ? (
               <div>
                 <div style={fieldLabel}>Default Probability</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: (mlDecision['defaultProb'] as number) > 0.5 ? '#dc503c' : '#0c1e1f' }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: (mlDecision['defaultProb'] as number) > 0.5 ? 'var(--danger)' : 'var(--t1)' }}>
                   {((mlDecision['defaultProb'] as number) * 100).toFixed(1)}%
                 </div>
               </div>
@@ -520,7 +520,7 @@ export function ReviewDetail() {
 
           {/* Full ML decision JSON */}
           <details style={{ marginTop: 16 }}>
-            <summary style={{ fontSize: 12, color: '#a28657', cursor: 'pointer', fontWeight: 600, marginBottom: 8 }}>Full ML decision data</summary>
+            <summary style={{ fontSize: 12, color: 'var(--gold)', cursor: 'pointer', fontWeight: 600, marginBottom: 8 }}>Full ML decision data</summary>
             <div style={jsonBoxStyle}>{JSON.stringify(mlDecision, null, 2)}</div>
           </details>
         </div>
@@ -536,7 +536,7 @@ export function ReviewDetail() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                 <div>
                   <div style={fieldLabel}>Salary Confirmed</div>
-                  <div style={{ ...fieldValue, fontWeight: 600, color: cashFlow['salaryConfirmed'] ? '#247a6e' : '#dc503c' }}>
+                  <div style={{ ...fieldValue, fontWeight: 600, color: cashFlow['salaryConfirmed'] ? 'var(--brand-light)' : 'var(--danger)' }}>
                     {cashFlow['salaryConfirmed'] ? 'Yes' : 'No'}
                   </div>
                 </div>
@@ -560,12 +560,12 @@ export function ReviewDetail() {
           <div style={sectionLabel}>Audit Trail</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {auditHistory.map((entry, i) => (
-              <div key={i} style={{ padding: '12px 16px', background: '#f5f8f7', borderRadius: 12, fontSize: 13 }}>
+              <div key={i} style={{ padding: '12px 16px', background: 'var(--bg2)', borderRadius: 12, fontSize: 13 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600, color: '#0c1e1f' }}>{String(entry['action'])}</span>
-                  <span style={{ fontSize: 11, color: '#93aaa9' }}>{formatDate(entry['timestamp'])}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--t1)' }}>{String(entry['action'])}</span>
+                  <span style={{ fontSize: 11, color: 'var(--t3)' }}>{formatDate(entry['timestamp'])}</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#4a6364' }}>
+                <div style={{ fontSize: 12, color: 'var(--t2)' }}>
                   by {String(entry['actorUid'])} ({String(entry['actorRole'])})
                   {(() => {
                     const meta = entry['meta'] as Record<string, unknown> | undefined;
@@ -592,7 +592,7 @@ export function ReviewDetail() {
               minHeight: 48,
               padding: '10px 14px',
               fontSize: 13,
-              color: '#0c1e1f',
+              color: 'var(--t1)',
               border: '1px solid rgba(25,68,69,0.10)',
               borderRadius: 12,
               resize: 'vertical',
@@ -607,28 +607,28 @@ export function ReviewDetail() {
             <button
               onClick={() => submitDecision('approved')}
               disabled={actionLoading}
-              style={pillBtn('#194445', '#fff')}
+              style={pillBtn('var(--brand)', '#fff')}
             >
               {actionLoading ? 'Processing...' : 'Approve'}
             </button>
             <button
               onClick={() => setShowDenyModal(true)}
               disabled={actionLoading}
-              style={pillBtn('rgba(220,80,60,0.08)', '#dc503c')}
+              style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}
             >
               Deny
             </button>
             <button
               onClick={() => submitDecision('request_info')}
               disabled={actionLoading}
-              style={pillBtn('rgba(162,134,87,0.10)', '#a28657')}
+              style={pillBtn('rgba(162,134,87,0.10)', 'var(--gold)')}
             >
               Request More Info
             </button>
             <button
               onClick={() => submitDecision('escalate')}
               disabled={actionLoading}
-              style={pillBtn('rgba(147,170,169,0.10)', '#4a6364')}
+              style={pillBtn('rgba(147,170,169,0.10)', 'var(--t2)')}
             >
               Escalate to Senior
             </button>
@@ -639,7 +639,7 @@ export function ReviewDetail() {
       {/* Non-actionable status */}
       {!isActionable && (
         <div style={{ ...cardStyle, textAlign: 'center' }}>
-          <div style={{ fontSize: 14, color: '#93aaa9' }}>
+          <div style={{ fontSize: 14, color: 'var(--t3)' }}>
             This review has status: <strong>{String(review['status'])}</strong>
           </div>
         </div>
@@ -652,7 +652,7 @@ export function ReviewDetail() {
         }}>
           <div style={{ background: '#fff', borderRadius: 20, padding: '28px', maxWidth: 440, width: '90%' }}>
             <div style={sectionLabel}>Deny Reason</div>
-            <p style={{ fontSize: 13, color: '#4a6364', marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 16 }}>
               Please provide a reason for denying this application.
             </p>
             <textarea
@@ -666,7 +666,7 @@ export function ReviewDetail() {
                 minHeight: 80,
                 padding: '10px 14px',
                 fontSize: 13,
-                color: '#0c1e1f',
+                color: 'var(--t1)',
                 border: '1px solid rgba(25,68,69,0.10)',
                 borderRadius: 12,
                 resize: 'vertical',
@@ -678,8 +678,8 @@ export function ReviewDetail() {
               }}
             />
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowDenyModal(false)} style={pillBtn('rgba(147,170,169,0.10)', '#4a6364')}>Cancel</button>
-              <button onClick={handleDeny} style={pillBtn('rgba(220,80,60,0.08)', '#dc503c')}>Confirm Deny</button>
+              <button onClick={() => setShowDenyModal(false)} style={pillBtn('rgba(147,170,169,0.10)', 'var(--t2)')}>Cancel</button>
+              <button onClick={handleDeny} style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}>Confirm Deny</button>
             </div>
           </div>
         </div>
@@ -698,10 +698,10 @@ function LlmNarrativeSection({ llm, cardStyle, fieldLabel }: {
   if (!llm) return null;
   return (
     <div style={cardStyle}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2.2px', color: '#a28657', marginBottom: 16 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2.2px', color: 'var(--gold)', marginBottom: 16 }}>
         LLM Risk Narrative
       </div>
-      <div style={{ fontSize: 13, color: '#4a6364', lineHeight: 1.7, marginBottom: 14, padding: '14px 18px', background: '#f5f8f7', borderRadius: 12 }}>
+      <div style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.7, marginBottom: 14, padding: '14px 18px', background: 'var(--bg2)', borderRadius: 12 }}>
         {llm.summary || '—'}
       </div>
       {llm.key_signals && llm.key_signals.length > 0 && (
@@ -709,7 +709,7 @@ function LlmNarrativeSection({ llm, cardStyle, fieldLabel }: {
           <div style={fieldLabel}>Key Signals</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {llm.key_signals.map((sig, i) => (
-              <span key={i} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 16, background: 'rgba(25,68,69,0.04)', color: '#4a6364' }}>
+              <span key={i} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 16, background: 'rgba(25,68,69,0.04)', color: 'var(--t2)' }}>
                 {sig}
               </span>
             ))}
@@ -719,11 +719,11 @@ function LlmNarrativeSection({ llm, cardStyle, fieldLabel }: {
       <div style={{ display: 'flex', gap: 24 }}>
         <div>
           <div style={fieldLabel}>Recommendation</div>
-          <div style={{ fontSize: 13, color: '#0c1e1f', fontWeight: 600 }}>{llm.recommendation || '—'}</div>
+          <div style={{ fontSize: 13, color: 'var(--t1)', fontWeight: 600 }}>{llm.recommendation || '—'}</div>
         </div>
         <div>
           <div style={fieldLabel}>Confidence</div>
-          <div style={{ fontSize: 13, color: '#0c1e1f', fontWeight: 600 }}>{((llm.confidence ?? 0) * 100).toFixed(0)}%</div>
+          <div style={{ fontSize: 13, color: 'var(--t1)', fontWeight: 600 }}>{((llm.confidence ?? 0) * 100).toFixed(0)}%</div>
         </div>
       </div>
     </div>
@@ -740,9 +740,9 @@ function StageSection({ title, data, fieldLabel, jsonBoxStyle }: {
 }) {
   return (
     <div style={{ marginBottom: 20 }}>
-      <div style={{ ...fieldLabel, fontSize: 11, color: '#a28657', marginBottom: 8 }}>{title}</div>
+      <div style={{ ...fieldLabel, fontSize: 11, color: 'var(--gold)', marginBottom: 8 }}>{title}</div>
       <details>
-        <summary style={{ fontSize: 12, color: '#4a6364', cursor: 'pointer', fontWeight: 600, marginBottom: 8 }}>View stage data</summary>
+        <summary style={{ fontSize: 12, color: 'var(--t2)', cursor: 'pointer', fontWeight: 600, marginBottom: 8 }}>View stage data</summary>
         <div style={jsonBoxStyle}>{JSON.stringify(data, null, 2)}</div>
       </details>
     </div>
