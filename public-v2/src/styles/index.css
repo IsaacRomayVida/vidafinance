@@ -475,11 +475,26 @@ button:focus-visible,
   position: relative;
   border-radius: 22px;
   overflow: hidden;
-  border: 6px solid #fff;
   box-shadow: 0 30px 80px rgba(25, 68, 69, 0.22);
   aspect-ratio: 16 / 9;
   background: var(--brand, #194445);
   z-index: 3;
+}
+/* Coming-soon variant: full-bleed section band, square corners (homepage Trust banner keeps its rounded card) */
+.cs-showcase.cs-showcase--video {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.cs-showcase.cs-showcase--video .cs-showcase-overlay {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--mx, 1200px);
+  padding: clamp(24px, 5vw, 48px);
 }
 .cs-showcase-video {
   position: absolute;
@@ -537,7 +552,7 @@ button:focus-visible,
   max-width: 56ch;
 }
 @media (max-width: 640px) {
-  .cs-showcase--video { aspect-ratio: 4 / 5; border-width: 4px; border-radius: 16px; }
+  .cs-showcase--video { aspect-ratio: 4 / 5; border-radius: 16px; }
   .cs-showcase-overlay { padding: 24px; }
   .cs-showcase-scrim {
     background: linear-gradient(

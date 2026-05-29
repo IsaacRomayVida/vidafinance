@@ -84,6 +84,23 @@ export function ComingSoon() {
           </div>
         </section>
 
+        {/* For companies */}
+        <section className="section cs-section">
+          <div className="wrap">
+            <div className="tag">{t('cs_emp_tag')}</div>
+            <h2 className="cs-h2">{t('cs_emp_h2')}</h2>
+            <p className="cs-lead">{t('cs_emp_p')}</p>
+            <div className="cs-grid">
+              {EMP_ITEMS.map((n) => (
+                <div className="cs-card" key={`emp-${n}`}>
+                  <div className="cs-card-t">{t(`cs_emp_${n}_t`)}</div>
+                  <div className="cs-card-d">{t(`cs_emp_${n}_d`)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Showcase — looping video with text overlay */}
         <div className="cs-showcase cs-showcase--video">
           <video
@@ -105,23 +122,6 @@ export function ComingSoon() {
             <p className="cs-showcase-sub">{t('cs_showcase_sub')}</p>
           </div>
         </div>
-
-        {/* For companies */}
-        <section className="section cs-section">
-          <div className="wrap">
-            <div className="tag">{t('cs_emp_tag')}</div>
-            <h2 className="cs-h2">{t('cs_emp_h2')}</h2>
-            <p className="cs-lead">{t('cs_emp_p')}</p>
-            <div className="cs-grid">
-              {EMP_ITEMS.map((n) => (
-                <div className="cs-card" key={`emp-${n}`}>
-                  <div className="cs-card-t">{t(`cs_emp_${n}_t`)}</div>
-                  <div className="cs-card-d">{t(`cs_emp_${n}_d`)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
 
         {/* For workers */}
         <section className="section tinted cs-section">
