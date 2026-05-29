@@ -53,10 +53,10 @@ export function HeroSection() {
               ))}
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)', lineHeight: 1.3 }}>
+              <div className="hero-social-title">
                 12+ empresas ya confían en Funpay
               </div>
-              <div style={{ fontSize: 11, color: 'var(--t3)' }}>
+              <div className="hero-social-sub">
                 Manufactura, retail y servicios en México
               </div>
             </div>

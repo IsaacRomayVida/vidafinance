@@ -84,15 +84,26 @@ export function ComingSoon() {
           </div>
         </section>
 
-        {/* Hero showcase image */}
-        <div className="cs-showcase">
-          <img
-            src="/images/worker-group.jpg"
-            alt="Empleados usando Funpay"
-            loading="lazy"
-            width={1200}
-            height={654}
-          />
+        {/* Showcase — looping video with text overlay */}
+        <div className="cs-showcase cs-showcase--video">
+          <video
+            className="cs-showcase-video"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="none"
+            poster="/video/showcase-poster.jpg"
+            aria-hidden="true"
+          >
+            <source src="/video/showcase.mp4" type="video/mp4" />
+          </video>
+          <div className="cs-showcase-scrim" aria-hidden="true" />
+          <div className="cs-showcase-overlay">
+            <p className="cs-showcase-kicker">{t('cs_showcase_kicker')}</p>
+            <h2 className="cs-showcase-title"><RichText html={t('cs_showcase_title')} /></h2>
+            <p className="cs-showcase-sub">{t('cs_showcase_sub')}</p>
+          </div>
         </div>
 
         {/* For companies */}

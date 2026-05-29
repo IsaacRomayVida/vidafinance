@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { RichText } from '../shared/RichText';
 
 const items = [
   { key: '1', icon: <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 12h8M12 8v8" strokeLinecap="round" /></> },
@@ -17,8 +18,27 @@ export function TrustSection() {
         <div className="tag rv">{t('trust_tag')}</div>
         <h2 className="sh rv d1">{t('trust_h2')}</h2>
         <p className="sp rv d2" style={{ marginBottom: 56 }}>{t('trust_p')}</p>
-        <div className="rv d2" style={{ marginBottom: 48, maxWidth: 1100, margin: '0 auto 48px', position: 'relative', overflow: 'hidden', borderRadius: 28 }}>
-          <img loading="lazy" src="/images/worker-group.jpg" alt="Empleados usando Funpay" style={{ width: '100%', display: 'block', filter: 'drop-shadow(0 12px 32px rgba(25,68,69,0.08))' }} />
+        <div className="rv d2" style={{ maxWidth: 1100, margin: '0 auto 48px' }}>
+          <div className="cs-showcase--video">
+            <video
+              className="cs-showcase-video"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="none"
+              poster="/video/showcase-poster.jpg"
+              aria-hidden="true"
+            >
+              <source src="/video/showcase.mp4" type="video/mp4" />
+            </video>
+            <div className="cs-showcase-scrim" aria-hidden="true" />
+            <div className="cs-showcase-overlay">
+              <p className="cs-showcase-kicker">{t('cs_showcase_kicker')}</p>
+              <div className="cs-showcase-title"><RichText html={t('cs_showcase_title')} /></div>
+              <p className="cs-showcase-sub">{t('cs_showcase_sub')}</p>
+            </div>
+          </div>
         </div>
         <div className="trust-grid rv d3">
           {items.map((item) => (

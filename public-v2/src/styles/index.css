@@ -469,6 +469,93 @@ button:focus-visible,
   .cs-showcase { margin-top: -36px; padding: 0 16px; }
   .cs-showcase img { border-width: 4px; border-radius: 16px; }
 }
+
+/* Showcase — looping video with text overlay */
+.cs-showcase--video {
+  position: relative;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 6px solid #fff;
+  box-shadow: 0 30px 80px rgba(25, 68, 69, 0.22);
+  aspect-ratio: 16 / 9;
+  background: var(--brand, #194445);
+  z-index: 3;
+}
+.cs-showcase-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cs-showcase-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(11, 40, 41, 0.15) 0%,
+    rgba(11, 40, 41, 0.35) 45%,
+    rgba(11, 40, 41, 0.82) 100%
+  );
+}
+.cs-showcase-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 48px;
+  color: #fff;
+  max-width: 720px;
+}
+.cs-showcase-kicker {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #e7b765;
+  margin: 0 0 10px;
+}
+.cs-showcase-title {
+  font-size: clamp(28px, 4.4vw, 48px);
+  line-height: 1.06;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+  color: #fff;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+}
+.cs-showcase-title em {
+  font-style: normal;
+  color: #e7b765;
+}
+.cs-showcase-sub {
+  font-size: clamp(15px, 1.8vw, 18px);
+  line-height: 1.5;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  max-width: 56ch;
+}
+@media (max-width: 640px) {
+  .cs-showcase--video { aspect-ratio: 4 / 5; border-width: 4px; border-radius: 16px; }
+  .cs-showcase-overlay { padding: 24px; }
+  .cs-showcase-scrim {
+    background: linear-gradient(
+      180deg,
+      rgba(11, 40, 41, 0.25) 0%,
+      rgba(11, 40, 41, 0.5) 40%,
+      rgba(11, 40, 41, 0.88) 100%
+    );
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cs-showcase-video { display: none; }
+  .cs-showcase--video {
+    background-image: url('/video/showcase-poster.jpg');
+    background-size: cover;
+    background-position: center;
+  }
+}
 .cs-badge {
   display: inline-flex;
   align-items: center;
