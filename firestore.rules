@@ -129,10 +129,23 @@ service cloud.firestore {
     }
 
     // =============================================
-    // CONTACT — PUBLIC SUBMIT, ADMIN READ/MANAGE
+    // CONTACT — PUBLIC SUBMIT (validated), ADMIN READ/MANAGE
+    // Public marketing forms (coming-soon page + /contact) write here directly.
+    // Validation keeps create open but bounds the shape to curb spam/abuse.
     // =============================================
     match /contact/{docId} {
-      allow create: if true;
+      allow create: if request.resource.data.keys().hasOnly(
+                         ['name', 'email', 'type', 'message', 'company', 'phone', 'source', 'lang', 'createdAt'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() >= 2
+                    && request.resource.data.name.size() <= 100
+                    && request.resource.data.email is string
+                    && request.resource.data.email.size() >= 3
+                    && request.resource.data.email.size() <= 200
+                    && request.resource.data.message is string
+                    && request.resource.data.message.size() <= 2000
+                    && request.resource.data.type is string
+                    && request.resource.data.type.size() <= 40;
       allow read, update, delete: if isAdmin();
     }
 

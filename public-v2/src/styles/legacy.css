@@ -76,6 +76,26 @@ input,select,textarea{font-family:var(--db)}
 @keyframes bd2{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-15px)}}
 @keyframes bd3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-15px,18px) scale(1.06)}}
 
+/* Hero video background — a subtle living backdrop behind the light hero */
+.hero-video-wrap{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.hero-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42}
+.hero-video-scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.80) 0%,rgba(255,255,255,.60) 35%,rgba(255,255,255,.80) 72%,rgba(255,255,255,.96) 100%)}
+@media (prefers-reduced-motion: reduce){.hero-video{display:none}}
+
+/* Splash intro — one-time full-bleed cinematic entrance */
+.splash{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;background:var(--brand);opacity:1;transition:opacity .85s ease;cursor:pointer}
+.splash--leaving{opacity:0;pointer-events:none}
+.splash-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.splash-scrim{position:absolute;inset:0;background:radial-gradient(ellipse 120% 100% at 50% 50%,rgba(11,40,41,.35) 0%,rgba(11,40,41,.72) 70%,rgba(11,40,41,.88) 100%)}
+.splash-content{position:relative;z-index:2;text-align:center;padding:0 24px;animation:splashIn 1.15s cubic-bezier(.16,1,.3,1) both}
+.splash-logo{display:block;font-family:var(--df);font-weight:400;font-size:clamp(52px,12vw,116px);line-height:1;letter-spacing:-.035em;color:#fff}
+.splash-logo .g{color:var(--gold)}
+.splash-tagline{display:block;margin-top:20px;font-size:11px;font-weight:700;letter-spacing:3.5px;text-transform:uppercase;color:rgba(255,255,255,.55);animation:fu 1s ease .5s both}
+.splash-skip{position:absolute;bottom:28px;right:28px;z-index:3;padding:10px 20px;border-radius:100px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);color:rgba(255,255,255,.85);font-size:13px;font-weight:600;cursor:pointer;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:all .25s}
+.splash-skip:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.4)}
+.splash-skip:focus-visible{outline:2px solid #fff;outline-offset:2px}
+@keyframes splashIn{from{opacity:0;transform:translateY(18px) scale(.98)}to{opacity:1;transform:none}}
+
 .hero-inner{max-width:var(--mx);margin:0 auto;padding:0 64px;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;position:relative;z-index:2}
 
 .hero-badge{display:inline-flex;align-items:center;gap:8px;margin-bottom:36px;opacity:0;animation:fu .8s ease .15s forwards;position:relative}

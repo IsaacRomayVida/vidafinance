@@ -18,7 +18,7 @@ export function TrustSection() {
         <h2 className="sh rv d1">{t('trust_h2')}</h2>
         <p className="sp rv d2" style={{ marginBottom: 56 }}>{t('trust_p')}</p>
         <div className="rv d2" style={{ marginBottom: 48, maxWidth: 1100, margin: '0 auto 48px', position: 'relative', overflow: 'hidden', borderRadius: 28 }}>
-          <img loading="lazy" src="/images/worker-group.png" alt="Empleados usando Funpay" style={{ width: '100%', display: 'block', filter: 'drop-shadow(0 12px 32px rgba(25,68,69,0.08))' }} />
+          <img loading="lazy" src="/images/worker-group.jpg" alt="Empleados usando Funpay" style={{ width: '100%', display: 'block', filter: 'drop-shadow(0 12px 32px rgba(25,68,69,0.08))' }} />
         </div>
         <div className="trust-grid rv d3">
           {items.map((item) => (

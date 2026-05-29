@@ -7,6 +7,20 @@ export function HeroSection() {
 
   return (
     <section className="hero">
+      <div className="hero-video-wrap" aria-hidden="true">
+        <video
+          className="hero-video"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          poster="/video/hero-poster.jpg"
+        >
+          <source src="/video/hero.mp4" type="video/mp4" />
+        </video>
+        <div className="hero-video-scrim" />
+      </div>
       <div className="hero-blob b1" />
       <div className="hero-blob b2" />
       <div className="hero-blob b3" />

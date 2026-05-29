@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { HeroSection } from '../components/marketing/HeroSection';
 import { BenefitsBar } from '../components/marketing/BenefitsBar';
+import { SplashIntro } from '../components/marketing/SplashIntro';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
@@ -21,6 +22,7 @@ export function HomePage() {
 
   return (
     <>
+      <SplashIntro />
       <HeroSection />
       <BenefitsBar />
       <Suspense fallback={null}>

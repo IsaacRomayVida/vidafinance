@@ -8,7 +8,9 @@
     "lint": "eslint src",
     "preview": "vite preview",
     "test": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run",
-    "test:watch": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest"
+    "test:watch": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest",
+    "gen:images": "node scripts/generate-images.mjs",
+    "gen:video": "node scripts/generate-video.mjs"
   },
   "keywords": [],
   "author": "",
@@ -31,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@fal-ai/client": "^1.10.1",
     "@tailwindcss/vite": "^4.1.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -44,6 +47,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "jsdom": "^29.0.2",
+    "openai": "^6.39.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.0",
     "vite": "^8.0.1",

@@ -40,6 +40,14 @@ const AlertsPage = React.lazy(() => import('./pages/AlertsPage').then(m => ({ de
 const SystemHealth = React.lazy(() => import('./pages/SystemHealth').then(m => ({ default: m.SystemHealth })));
 const Onboarding = React.lazy(() => import('./pages/Onboarding').then(m => ({ default: m.Onboarding })));
 const NotFound = React.lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
+const ComingSoon = React.lazy(() => import('./pages/ComingSoon').then(m => ({ default: m.ComingSoon })));
+
+// Pre-launch gate. When 'coming-soon' (the fail-safe default when the env var
+// is unset), all public/marketing URLs render the ComingSoon page; /login and
+// the role-guarded portals stay reachable by direct URL for internal testing.
+// At launch, build with VITE_LAUNCH_MODE=live to expose the full marketing site.
+const LAUNCH_MODE = import.meta.env.VITE_LAUNCH_MODE ?? 'coming-soon';
+const IS_COMING_SOON = LAUNCH_MODE === 'coming-soon';
 
 const PageSpinner = () => (
   <div className="loading-page">
@@ -53,20 +61,24 @@ export default function App() {
     <AuthProvider>
     <BrowserRouter>
       <Routes>
-        {/* Marketing pages */}
-        <Route element={<ErrorBoundary><MarketingLayout /></ErrorBoundary>}>
-          <Route path="/" element={<Suspense fallback={<PageSpinner />}><HomePage /></Suspense>} />
-          <Route path="/employers" element={<Suspense fallback={<PageSpinner />}><EmployerPage /></Suspense>} />
-          <Route path="/employees" element={<Suspense fallback={<PageSpinner />}><EmployeePage /></Suspense>} />
-          <Route path="/about" element={<Suspense fallback={<PageSpinner />}><AboutPage /></Suspense>} />
-          <Route path="/security" element={<Suspense fallback={<PageSpinner />}><SecurityPage /></Suspense>} />
-          <Route path="/privacy" element={<Suspense fallback={<PageSpinner />}><PrivacyPage /></Suspense>} />
-          <Route path="/terms" element={<Suspense fallback={<PageSpinner />}><TermsPage /></Suspense>} />
-          <Route path="/partners" element={<Suspense fallback={<PageSpinner />}><PartnersPage /></Suspense>} />
-          <Route path="/investors" element={<Suspense fallback={<PageSpinner />}><InvestorsPage /></Suspense>} />
-          <Route path="/contact" element={<Suspense fallback={<PageSpinner />}><ContactPage /></Suspense>} />
-          <Route path="/press" element={<Suspense fallback={<PageSpinner />}><PressPage /></Suspense>} />
-        </Route>
+        {/* Marketing pages — gated by VITE_LAUNCH_MODE */}
+        {IS_COMING_SOON ? (
+          <Route path="/" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}><ComingSoon /></Suspense></ErrorBoundary>} />
+        ) : (
+          <Route element={<ErrorBoundary><MarketingLayout /></ErrorBoundary>}>
+            <Route path="/" element={<Suspense fallback={<PageSpinner />}><HomePage /></Suspense>} />
+            <Route path="/employers" element={<Suspense fallback={<PageSpinner />}><EmployerPage /></Suspense>} />
+            <Route path="/employees" element={<Suspense fallback={<PageSpinner />}><EmployeePage /></Suspense>} />
+            <Route path="/about" element={<Suspense fallback={<PageSpinner />}><AboutPage /></Suspense>} />
+            <Route path="/security" element={<Suspense fallback={<PageSpinner />}><SecurityPage /></Suspense>} />
+            <Route path="/privacy" element={<Suspense fallback={<PageSpinner />}><PrivacyPage /></Suspense>} />
+            <Route path="/terms" element={<Suspense fallback={<PageSpinner />}><TermsPage /></Suspense>} />
+            <Route path="/partners" element={<Suspense fallback={<PageSpinner />}><PartnersPage /></Suspense>} />
+            <Route path="/investors" element={<Suspense fallback={<PageSpinner />}><InvestorsPage /></Suspense>} />
+            <Route path="/contact" element={<Suspense fallback={<PageSpinner />}><ContactPage /></Suspense>} />
+            <Route path="/press" element={<Suspense fallback={<PageSpinner />}><PressPage /></Suspense>} />
+          </Route>
+        )}
 
         {/* Get-started and onboarding redirect to contact */}
         <Route path="/get-started" element={<Navigate to="/contact" replace />} />
@@ -117,8 +129,8 @@ export default function App() {
         <Route path="/admin" element={<Navigate to="/ops" replace />} />
         <Route path="/admin/*" element={<Navigate to="/ops" replace />} />
 
-        {/* 404 catch-all */}
-        <Route path="*" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}><NotFound /></Suspense></ErrorBoundary>} />
+        {/* Catch-all: pre-launch shows ComingSoon, post-launch the 404 page */}
+        <Route path="*" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}>{IS_COMING_SOON ? <ComingSoon /> : <NotFound />}</Suspense></ErrorBoundary>} />
       </Routes>
     </BrowserRouter>
     </AuthProvider>

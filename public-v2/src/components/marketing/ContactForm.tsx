@@ -4,7 +4,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 export function ContactForm() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -15,11 +15,13 @@ export function ContactForm() {
     setSubmitting(true);
 
     try {
-      await addDoc(collection(db, 'contacts'), {
-        name: data.get('name'),
-        email: data.get('email'),
-        type: data.get('type'),
-        message: data.get('message'),
+      await addDoc(collection(db, 'contact'), {
+        name: String(data.get('name') ?? ''),
+        email: String(data.get('email') ?? ''),
+        type: String(data.get('type') ?? 'general'),
+        message: String(data.get('message') ?? ''),
+        source: 'contact-page',
+        lang: i18n.language,
         createdAt: serverTimestamp(),
       });
       setSent(true);

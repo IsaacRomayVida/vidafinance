@@ -47,7 +47,7 @@ export function ROICalculator() {
                 background: 'radial-gradient(circle, rgba(162,134,87,0.06) 0%, transparent 65%)',
                 filter: 'blur(12px)', pointerEvents: 'none',
               }} />
-              <img loading="lazy" src="/images/calculator-person.png" alt="Empleada calculando" style={{
+              <img loading="lazy" src="/images/calculator-person.jpg" alt="Empleada calculando" style={{
                 width: 380, position: 'relative',
                 filter: 'drop-shadow(0 20px 44px rgba(25,68,69,0.12))',
               }} />
