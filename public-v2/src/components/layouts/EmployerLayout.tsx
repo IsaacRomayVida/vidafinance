@@ -1,4 +1,5 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { PageTransition } from '../ui/PageTransition';
 import { useTranslation } from 'react-i18next';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
@@ -23,19 +24,19 @@ export function EmployerLayout() {
         <div style={{ maxWidth: 920, margin: '0 auto', padding: '0 24px' }}>
           {/* Top row: logo + actions */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 56 }}>
-            <Link to="/employer" style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 700, color: '#194445', textDecoration: 'none', letterSpacing: '6px', textTransform: 'uppercase' as const }}>
+            <Link to="/employer" style={{ fontFamily: 'var(--db)', fontSize: 14, fontWeight: 700, color: 'var(--brand)', textDecoration: 'none', letterSpacing: '6px', textTransform: 'uppercase' as const }}>
               VIDA
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <button
                 onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); safeSetItem('vida_lang', next); }}
-                style={{ fontSize: 11, fontWeight: 700, color: '#93aaa9', background: 'none', border: '1px solid rgba(25,68,69,0.08)', borderRadius: 20, padding: '5px 14px', cursor: 'pointer', letterSpacing: '0.5px' }}
+                style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', background: 'none', border: '1px solid rgba(25,68,69,0.08)', borderRadius: 20, padding: '5px 14px', cursor: 'pointer', letterSpacing: '0.5px' }}
               >
                 {i18n.language === 'es' ? 'EN' : 'ES'}
               </button>
               <button
                 onClick={handleSignOut}
-                style={{ fontSize: 12, fontWeight: 500, color: '#93aaa9', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.2s' }}
+                style={{ fontSize: 12, fontWeight: 500, color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.2s' }}
               >
                 {t('dash_signout')}
               </button>
@@ -55,7 +56,7 @@ export function EmployerLayout() {
                 style={{
                   fontSize: 12,
                   fontWeight: isActive(path) ? 700 : 500,
-                  color: isActive(path) ? '#194445' : '#93aaa9',
+                  color: isActive(path) ? 'var(--brand)' : 'var(--t3)',
                   textDecoration: 'none',
                   padding: '14px 0',
                   borderBottom: isActive(path) ? '2px solid #a28657' : '2px solid transparent',
@@ -73,7 +74,7 @@ export function EmployerLayout() {
 
       {/* Content */}
       <main style={{ maxWidth: 920, margin: '0 auto', padding: '36px 24px 60px' }}>
-        <Outlet />
+        <PageTransition><Outlet /></PageTransition>
       </main>
     </div>
   );

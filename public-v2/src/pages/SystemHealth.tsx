@@ -52,7 +52,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 const sectionTitleStyle: React.CSSProperties = {
-  fontFamily: "'DM Serif Display',Georgia,serif",
+  fontFamily: 'var(--df)',
   fontSize: 22,
   fontWeight: 400,
   color: colors.dark,
@@ -215,7 +215,7 @@ export function SystemHealth() {
       {/* Page header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
         <div>
-          <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 28, fontWeight: 400, color: colors.dark, margin: 0 }}>
+          <h1 style={{ fontFamily: 'var(--df)', fontSize: 28, fontWeight: 400, color: colors.dark, margin: 0 }}>
             System Health
           </h1>
           <p style={{ fontSize: 13, color: colors.mid, margin: '4px 0 0 0' }}>

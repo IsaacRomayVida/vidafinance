@@ -31,15 +31,10 @@ export function HeroSection() {
             opacity: 0, animation: 'fu .9s ease .7s forwards',
           }}>
             {/* Avatar stack */}
-            <div style={{ display: 'flex', marginRight: -4 }}>
-              {['#194445','#247a6e','#a28657','#a8d5d0'].map((c, i) => (
-                <div key={i} style={{
-                  width: 28, height: 28, borderRadius: '50%', background: c,
-                  border: '2px solid #fff', marginLeft: i > 0 ? -8 : 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 10, color: '#fff', fontWeight: 700, zIndex: 4 - i,
-                }}>
-                  {['M','G','A','R'][i]}
+            <div className="avatar-stack" aria-hidden="true">
+              {['M', 'G', 'A', 'R'].map((initial) => (
+                <div key={initial} className="avatar-stack__item">
+                  {initial}
                 </div>
               ))}
             </div>

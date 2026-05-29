@@ -20,7 +20,7 @@ export function AdminLayout() {
       <header style={{ background: '#0c1e1f' }}>
         <div style={{ maxWidth: 920, margin: '0 auto', padding: '0 24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 56 }}>
-            <Link to="/ops" style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 24, fontWeight: 400, color: '#fff', textDecoration: 'none', letterSpacing: '-0.02em' }}>
+            <Link to="/ops" style={{ fontFamily: 'var(--df)', fontSize: 24, fontWeight: 400, color: '#fff', textDecoration: 'none', letterSpacing: '-0.02em' }}>
               VIDA <span style={{ fontSize: 9, fontWeight: 700, color: '#a28657', letterSpacing: 3, textTransform: 'uppercase' as const, marginLeft: 6, verticalAlign: 'middle' }}>OPS</span>
             </Link>
             <button

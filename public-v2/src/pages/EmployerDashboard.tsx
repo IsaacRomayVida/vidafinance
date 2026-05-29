@@ -8,6 +8,7 @@ import { auth, db, storage } from '../lib/firebase';
 import { classifyError, friendlyError } from '../lib/errors';
 import { useAuth } from '../hooks/useAuth';
 import { signOut } from 'firebase/auth';
+import { SkeletonRows } from '../components/ui/SkeletonLine';
 
 interface Loan {
   id: string;
@@ -134,7 +135,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
             <path d="M20 6L9 17l-5-5" />
           </svg>
         </div>
-        <h2 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 24, color: '#194445', fontWeight: 400 }}>{t('dash_doc_banner_success')}</h2>
+        <h2 style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--brand)', fontWeight: 400 }}>{t('dash_doc_banner_success')}</h2>
       </div>
     );
   }
@@ -144,9 +145,9 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
       {/* Header section */}
       <div style={{ marginBottom: 40 }}>
         <h2 style={{
-          fontFamily: "'DM Serif Display',Georgia,serif",
+          fontFamily: 'var(--df)',
           fontSize: 26,
-          color: '#194445',
+          color: 'var(--brand)',
           fontWeight: 400,
           letterSpacing: '-0.02em',
           lineHeight: 1.15,
@@ -156,7 +157,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
         </h2>
         <p style={{
           fontSize: 14,
-          color: '#4a6364',
+          color: 'var(--t2)',
           lineHeight: 1.7,
           maxWidth: 380,
         }}>
@@ -206,7 +207,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                   <div style={{
                     fontSize: 15,
                     fontWeight: 600,
-                    color: '#0c1e1f',
+                    color: 'var(--t1)',
                     marginBottom: 6,
                     letterSpacing: '-0.01em',
                   }}>
@@ -214,12 +215,12 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                   </div>
                   <div style={{
                     fontSize: 12,
-                    color: '#93aaa9',
+                    color: 'var(--t3)',
                     lineHeight: 1.4,
                   }}>
                     {t('onb_e_step4_formats')}
                   </div>
-                  {error && <div style={{ fontSize: 12, color: '#dc503c', marginTop: 6 }}>{error}</div>}
+                  {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
                 </div>
               </div>
 
@@ -240,8 +241,8 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                 onClick={() => fileRefs.current[slot.key]?.click()}
                 style={{
                   width: '100%',
-                  background: done ? 'rgba(36,122,110,0.04)' : '#194445',
-                  color: done ? '#247a6e' : '#fff',
+                  background: done ? 'rgba(36,122,110,0.04)' : 'var(--brand)',
+                  color: done ? 'var(--success)' : '#fff',
                   borderRadius: 60,
                   padding: '14px 24px',
                   fontSize: 13,
@@ -446,7 +447,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
   return (
     <div className="card" style={{ marginBottom: 24 }}>
       <div className="card-title">{t('curp_config_title')}</div>
-      <p style={{ fontSize: 13, color: '#4a6364', lineHeight: 1.6, marginBottom: 24 }}>
+      <p style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.6, marginBottom: 24 }}>
         {t('curp_config_desc')}
       </p>
 
@@ -464,10 +465,10 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
             transition: 'all .2s',
           }}
         >
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', marginBottom: 4 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
             {t('curp_config_mode_open')}
           </div>
-          <div style={{ fontSize: 12, color: '#93aaa9', lineHeight: 1.4 }}>
+          <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.4 }}>
             {t('curp_config_mode_open_desc')}
           </div>
         </button>
@@ -483,10 +484,10 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
             transition: 'all .2s',
           }}
         >
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', marginBottom: 4 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
             {t('curp_config_mode_allowlist')}
           </div>
-          <div style={{ fontSize: 12, color: '#93aaa9', lineHeight: 1.4 }}>
+          <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.4 }}>
             {t('curp_config_mode_allowlist_desc')}
           </div>
         </button>
@@ -495,7 +496,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
       {/* Prefix list (only shown when mode is allowlist) */}
       {mode === 'allowlist' && (
         <div style={{ marginBottom: 24 }}>
-          <label htmlFor="curp-prefix-input" style={{ fontSize: 13, fontWeight: 600, color: '#0c1e1f', display: 'block', marginBottom: 8 }}>
+          <label htmlFor="curp-prefix-input" style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)', display: 'block', marginBottom: 8 }}>
             {t('curp_config_prefixes_label')}
           </label>
 
@@ -531,7 +532,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
               style={{
                 padding: '12px 20px',
                 borderRadius: 12,
-                background: '#194445',
+                background: 'var(--brand)',
                 color: '#fff',
                 border: 'none',
                 fontSize: 13,
@@ -543,7 +544,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
               {t('curp_config_add')}
             </button>
           </div>
-          {inputError && <div style={{ fontSize: 12, color: '#dc503c', marginBottom: 8 }}>{inputError}</div>}
+          {inputError && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{inputError}</div>}
 
           {/* Prefix chips */}
           {prefixes.length > 0 ? (
@@ -561,7 +562,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
                     fontSize: 13,
                     fontFamily: 'monospace',
                     fontWeight: 600,
-                    color: '#194445',
+                    color: 'var(--brand)',
                     letterSpacing: '0.05em',
                   }}
                 >
@@ -574,7 +575,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
                       cursor: 'pointer',
                       padding: 0,
                       lineHeight: 1,
-                      color: '#93aaa9',
+                      color: 'var(--t3)',
                       fontSize: 16,
                     }}
                     aria-label={`Remove ${p}`}
@@ -585,7 +586,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
               ))}
             </div>
           ) : (
-            <p style={{ fontSize: 12, color: '#93aaa9', fontStyle: 'italic' }}>
+            <p style={{ fontSize: 12, color: 'var(--t3)', fontStyle: 'italic' }}>
               {t('curp_config_no_prefixes')}
             </p>
           )}
@@ -593,7 +594,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
       )}
 
       {/* Save button */}
-      {error && <div style={{ fontSize: 12, color: '#dc503c', marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12 }}>{error}</div>}
       <button
         onClick={handleSave}
         disabled={saving}
@@ -601,8 +602,8 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
           width: '100%',
           padding: '14px 24px',
           borderRadius: 60,
-          background: saved ? 'rgba(36,122,110,0.04)' : '#194445',
-          color: saved ? '#247a6e' : '#fff',
+          background: saved ? 'rgba(36,122,110,0.04)' : 'var(--brand)',
+          color: saved ? 'var(--success)' : '#fff',
           border: 'none',
           fontSize: 13,
           fontWeight: 600,
@@ -862,13 +863,13 @@ export function EmployerDashboard() {
               }}>
                 {stat.icon}
               </div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const, color: '#a28657', marginBottom: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const, color: 'var(--gold)', marginBottom: 8 }}>
                 {stat.label}
               </div>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 36, color: '#0c1e1f', letterSpacing: '-0.03em', lineHeight: 1 }}>
+              <div style={{ fontFamily: 'var(--df)', fontSize: 36, color: 'var(--t1)', letterSpacing: '-0.03em', lineHeight: 1 }}>
                 {stat.value}
               </div>
-              {stat.sub && <div style={{ fontSize: 11, color: '#93aaa9', marginTop: 4 }}>{stat.sub}</div>}
+              {stat.sub && <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>{stat.sub}</div>}
             </div>
           ))}
         </div>
@@ -905,22 +906,7 @@ export function EmployerDashboard() {
 
           {loading ? (
             <div style={{ padding: 20 }}>
-              {/* Skeleton loading */}
-              {[1,2,3].map(i => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0',
-                  borderBottom: '1px solid rgba(25,68,69,0.04)',
-                  animation: 'skeletonPulse 1.5s ease-in-out infinite',
-                  animationDelay: i * 0.15 + 's',
-                }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(25,68,69,0.04)' }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ width: '60%', height: 12, borderRadius: 6, background: 'rgba(25,68,69,0.04)', marginBottom: 8 }} />
-                    <div style={{ width: '40%', height: 10, borderRadius: 6, background: 'rgba(25,68,69,0.03)' }} />
-                  </div>
-                  <div style={{ width: 60, height: 24, borderRadius: 12, background: 'rgba(25,68,69,0.04)' }} />
-                </div>
-              ))}
+              <SkeletonRows rows={3} />
             </div>
           ) : filteredLoans.length === 0 ? (
             <div className="empty-state">
@@ -979,7 +965,7 @@ export function EmployerDashboard() {
                               onClick={() => handleLoanAction(loan.id, 'rejected')}
                               style={{
                                 padding: '5px 12px', fontSize: 12, fontWeight: 600,
-                                background: 'transparent', color: '#c1121f',
+                                background: 'transparent', color: 'var(--danger)',
                                 border: '1px solid #c1121f', borderRadius: 8, cursor: 'pointer',
                                 opacity: actionLoading === loan.id ? 0.5 : 1,
                               }}

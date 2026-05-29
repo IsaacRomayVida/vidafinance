@@ -144,7 +144,7 @@ export function AdminDashboard() {
   };
 
   const valueStyle: React.CSSProperties = {
-    fontFamily: "'DM Serif Display',Georgia,serif",
+    fontFamily: 'var(--df)',
     fontSize: 36,
     color: '#0c1e1f',
     letterSpacing: '-0.03em',
@@ -170,7 +170,7 @@ export function AdminDashboard() {
     <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
           {t('admin_title')}
         </h1>
         <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
@@ -303,7 +303,7 @@ export function AdminDashboard() {
                       <div style={{ fontSize: 13, color: '#4a6364' }}>{loan.employerName}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 24, color: '#0c1e1f' }}>${fmt(loan.amount)}</div>
+                      <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: '#0c1e1f' }}>${fmt(loan.amount)}</div>
                       <div style={{ fontSize: 11, color: '#93aaa9' }}>MXN</div>
                     </div>
                   </div>
@@ -336,7 +336,7 @@ export function AdminDashboard() {
                       <div style={{ fontSize: 15, fontWeight: 600, color: '#0c1e1f' }}>{loan.employeeName}</div>
                       <div style={{ fontSize: 12, color: '#93aaa9', marginTop: 2 }}>{loan.employerName}</div>
                     </div>
-                    <div style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 20, color: '#0c1e1f' }}>${fmt(loan.amount)}</div>
+                    <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: '#0c1e1f' }}>${fmt(loan.amount)}</div>
                   </div>
                 </div>
               ))}

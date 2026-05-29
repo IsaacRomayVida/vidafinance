@@ -1382,7 +1382,7 @@ export function Onboarding() {
             <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(168,213,208,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, color: '#a8d5d0' }}>
               <StepIcon name={stepCtx.icon} />
             </div>
-            <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: 'white', lineHeight: 1.15, letterSpacing: '-0.02em', marginBottom: 12 }}>{stepCtx.title}</h2>
+            <h2 style={{ fontFamily: 'var(--df)', fontSize: 28, color: 'white', lineHeight: 1.15, letterSpacing: '-0.02em', marginBottom: 12 }}>{stepCtx.title}</h2>
             <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7, maxWidth: 280 }}>{stepCtx.sub}</p>
           </div>
           <div style={{ position: 'relative', zIndex: 2 }}>

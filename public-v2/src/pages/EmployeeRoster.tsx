@@ -68,7 +68,7 @@ type KycFilter = 'all' | 'pending' | 'approved' | 'rejected';
 /* ── KYC badge ───────────────────────────────────────────── */
 
 const KYC_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  approved: { bg: 'rgba(36,122,110,0.10)', text: '#247a6e', label: 'Aprobado' },
+  approved: { bg: 'rgba(36,122,110,0.10)', text: 'var(--success)', label: 'Aprobado' },
   pending:  { bg: 'rgba(202,168,60,0.12)', text: '#9a7b1c', label: 'Pendiente' },
   rejected: { bg: 'rgba(180,60,60,0.10)',   text: '#a83232', label: 'Rechazado' },
 };
@@ -96,7 +96,7 @@ function KycBadge({ status }: { status?: string }) {
 /* ── Invite status badge ─────────────────────────────────── */
 
 const INVITE_COLORS: Record<InviteState, { bg: string; text: string }> = {
-  active:  { bg: 'rgba(36,122,110,0.10)', text: '#247a6e' },
+  active:  { bg: 'rgba(36,122,110,0.10)', text: 'var(--success)' },
   invited: { bg: 'rgba(42,102,160,0.10)', text: '#2a66a0' },
   pending: { bg: 'rgba(147,170,169,0.15)', text: '#6b8382' },
 };
@@ -130,11 +130,11 @@ const card = {
 } as const;
 
 const heading = {
-  fontFamily: "'DM Serif Display',Georgia,serif",
+  fontFamily: 'var(--df)',
   fontWeight: 400,
   letterSpacing: '-0.02em',
   lineHeight: 1.15,
-  color: '#0c1e1f',
+  color: 'var(--t1)',
 } as const;
 
 /* ── component ───────────────────────────────────────────── */
@@ -383,7 +383,7 @@ export function EmployeeRoster() {
         <h1 style={{ ...heading, fontSize: 26, marginBottom: 8 }}>
           {t('dash_employees', 'Empleados')}
         </h1>
-        <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
+        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
           {t('roster_invite_desc', 'Comparte el código de invitación con tus empleados para que puedan registrarse.')}
         </p>
       </div>
@@ -392,7 +392,7 @@ export function EmployeeRoster() {
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         {/* Total employees */}
         <div style={{ ...card, padding: '24px 28px', flex: '1 1 180px', minWidth: 160 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '2px', color: '#a28657', marginBottom: 8 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '2px', color: 'var(--gold)', marginBottom: 8 }}>
             {t('roster_stat_total', 'Total Empleados')}
           </div>
           <div style={{ ...heading, fontSize: 32 }}>{employees.length}</div>
@@ -400,7 +400,7 @@ export function EmployeeRoster() {
 
         {/* Active loans */}
         <div style={{ ...card, padding: '24px 28px', flex: '1 1 180px', minWidth: 160 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '2px', color: '#a28657', marginBottom: 8 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '2px', color: 'var(--gold)', marginBottom: 8 }}>
             {t('roster_stat_loans', 'Préstamos Activos')}
           </div>
           <div style={{ ...heading, fontSize: 32 }}>{activeLoansCount}</div>
@@ -410,7 +410,7 @@ export function EmployeeRoster() {
         {!loading && employerCode && (
           <div style={{ ...card, padding: '24px 28px', flex: '1 1 260px', minWidth: 220, display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '2px', color: '#a28657', marginBottom: 8 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '2px', color: 'var(--gold)', marginBottom: 8 }}>
                 {t('roster_invite_title', 'Código de Invitación')}
               </div>
               <div style={{ ...heading, fontSize: 24, letterSpacing: '0.15em' }}>{employerCode}</div>
@@ -418,7 +418,7 @@ export function EmployeeRoster() {
             <button
               onClick={handleCopy}
               style={{
-                background: copied ? '#247a6e' : '#194445',
+                background: copied ? 'var(--success)' : 'var(--brand)',
                 color: '#fff',
                 borderRadius: 60,
                 padding: '10px 18px',
@@ -474,9 +474,9 @@ export function EmployeeRoster() {
               border: '1px solid rgba(25,68,69,0.10)',
               borderRadius: 12,
               fontSize: 13,
-              color: '#0c1e1f',
+              color: 'var(--t1)',
               outline: 'none',
-              background: '#fafaf8',
+              background: 'var(--bg2)',
             }}
           />
         </div>
@@ -495,8 +495,8 @@ export function EmployeeRoster() {
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                background: kycFilter === tab.key ? '#194445' : 'rgba(25,68,69,0.05)',
-                color: kycFilter === tab.key ? '#fff' : '#4a6364',
+                background: kycFilter === tab.key ? 'var(--brand)' : 'rgba(25,68,69,0.05)',
+                color: kycFilter === tab.key ? '#fff' : 'var(--t2)',
               }}
             >
               {tab.label}
@@ -516,8 +516,8 @@ export function EmployeeRoster() {
             border: 'none',
             cursor: bulkSending || pendingEmployees.length === 0 ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s',
-            background: pendingEmployees.length === 0 ? 'rgba(25,68,69,0.08)' : '#a28657',
-            color: pendingEmployees.length === 0 ? '#93aaa9' : '#fff',
+            background: pendingEmployees.length === 0 ? 'rgba(25,68,69,0.08)' : 'var(--gold)',
+            color: pendingEmployees.length === 0 ? 'var(--t3)' : '#fff',
             opacity: bulkSending ? 0.7 : 1,
             whiteSpace: 'nowrap',
           }}
@@ -543,9 +543,9 @@ export function EmployeeRoster() {
               toast.kind === 'error'   ? 'rgba(180,60,60,0.10)' :
                                          'rgba(25,68,69,0.06)',
             color:
-              toast.kind === 'success' ? '#247a6e' :
+              toast.kind === 'success' ? 'var(--success)' :
               toast.kind === 'error'   ? '#a83232' :
-                                         '#4a6364',
+                                         'var(--t2)',
           }}
         >
           {toast.msg}
@@ -556,7 +556,7 @@ export function EmployeeRoster() {
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: '48px 28px', textAlign: 'center' }}>
-            <p style={{ fontSize: 14, color: '#93aaa9' }}>
+            <p style={{ fontSize: 14, color: 'var(--t3)' }}>
               {t('roster_loading', 'Cargando empleados…')}
             </p>
           </div>
@@ -575,7 +575,7 @@ export function EmployeeRoster() {
                 <path d="M16 3.13a4 4 0 010 7.75" />
               </svg>
             </div>
-            <p style={{ fontSize: 14, color: '#93aaa9', lineHeight: 1.6, maxWidth: 300, margin: '0 auto' }}>
+            <p style={{ fontSize: 14, color: 'var(--t3)', lineHeight: 1.6, maxWidth: 300, margin: '0 auto' }}>
               {search || kycFilter !== 'all'
                 ? t('roster_no_results', 'No se encontraron empleados con estos filtros.')
                 : t('roster_empty', 'Aún no hay empleados registrados. Comparte tu código de invitación para comenzar.')}
@@ -589,7 +589,7 @@ export function EmployeeRoster() {
               gridTemplateColumns: '1.8fr 1.3fr 1.2fr 0.9fr 0.7fr 0.5fr 1.3fr',
               padding: '14px 24px',
               borderBottom: '1px solid rgba(25,68,69,0.06)',
-              background: '#fafaf8',
+              background: 'var(--bg2)',
             }}>
               {[
                 t('roster_col_name', 'Nombre'),
@@ -600,7 +600,7 @@ export function EmployeeRoster() {
                 t('roster_col_loans', 'Prést.'),
                 t('roster_col_status', 'Estado'),
               ].map((h) => (
-                <div key={h} style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '1.5px', color: '#93aaa9' }}>
+                <div key={h} style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '1.5px', color: 'var(--t3)' }}>
                   {h}
                 </div>
               ))}
@@ -622,29 +622,29 @@ export function EmployeeRoster() {
                   alignItems: 'center',
                   transition: 'background 0.15s',
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#fafaf8'; }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg2)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
               >
                 {/* Name */}
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', lineHeight: 1.4 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', lineHeight: 1.4 }}>
                     {emp.name ?? '—'}
                   </div>
                 </div>
 
                 {/* CURP */}
-                <div style={{ fontSize: 12.5, color: '#4a6364', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
+                <div style={{ fontSize: 12.5, color: 'var(--t2)', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
                   {emp.curp ?? '—'}
                 </div>
 
                 {/* Contact */}
                 <div>
-                  <div style={{ fontSize: 12.5, color: '#4a6364', lineHeight: 1.5 }}>{emp.email ?? '—'}</div>
-                  <div style={{ fontSize: 12, color: '#93aaa9' }}>{emp.phone ?? ''}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--t2)', lineHeight: 1.5 }}>{emp.email ?? '—'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--t3)' }}>{emp.phone ?? ''}</div>
                 </div>
 
                 {/* Joined */}
-                <div style={{ fontSize: 12.5, color: '#4a6364' }}>
+                <div style={{ fontSize: 12.5, color: 'var(--t2)' }}>
                   {fmtDate(emp.createdAt)}
                 </div>
 
@@ -654,7 +654,7 @@ export function EmployeeRoster() {
                 </div>
 
                 {/* Loan count */}
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', textAlign: 'center' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', textAlign: 'center' }}>
                   {loanCountMap[emp.id] ?? 0}
                 </div>
 
@@ -676,7 +676,7 @@ export function EmployeeRoster() {
                           fontWeight: 600,
                           border: '1px solid rgba(25,68,69,0.12)',
                           background: '#fff',
-                          color: resendReady && !isSending ? '#194445' : '#93aaa9',
+                          color: resendReady && !isSending ? 'var(--brand)' : 'var(--t3)',
                           cursor: isSending || !resendReady || bulkSending ? 'not-allowed' : 'pointer',
                           opacity: isSending || !resendReady ? 0.6 : 1,
                         }}
@@ -699,7 +699,7 @@ export function EmployeeRoster() {
                           fontSize: 11,
                           fontWeight: 600,
                           border: 'none',
-                          background: '#194445',
+                          background: 'var(--brand)',
                           color: '#fff',
                           cursor: isSending || bulkSending ? 'not-allowed' : 'pointer',
                           opacity: isSending || bulkSending ? 0.6 : 1,

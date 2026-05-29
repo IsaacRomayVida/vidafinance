@@ -83,7 +83,7 @@ input,select,textarea{font-family:var(--db)}
 .badge-text{font-size:10.5px;font-weight:700;letter-spacing:2.2px;text-transform:uppercase;color:var(--brand);opacity:.5}
 
 .hero h1{font-family:var(--df);font-size:clamp(40px,7vw,72px);font-weight:400;color:var(--t1);line-height:.96;letter-spacing:-.045em;margin-bottom:24px;opacity:0;animation:fu .9s ease .3s forwards;overflow:visible}
-.hero h1 em{font-style:italic;background:linear-gradient(135deg,var(--brand-light) 0%,var(--gold) 40%,var(--gold) 60%,var(--brand-light) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;padding-right:0.12em}
+.hero h1 em{font-style:italic;color:var(--brand-light);padding-right:0.12em}
 .hero-sub{font-size:18px;color:var(--t2);line-height:1.6;margin-bottom:44px;max-width:380px;opacity:0;animation:fu .9s ease .45s forwards}
 
 .hero-actions{display:flex;gap:14px;opacity:0;animation:fu .9s ease .55s forwards}
@@ -939,6 +939,29 @@ table tr:last-child td{border-bottom:none}
   .dash-tab-btn{padding:6px 10px;font-size:11px;white-space:nowrap}
 }
 
+/* Mobile loans table → stacked card list */
+@media (max-width: 600px) {
+  .table-wrap{overflow-x:visible}
+  .table-wrap table{display:block}
+  .table-wrap thead{display:none}
+  .table-wrap tbody{display:flex;flex-direction:column;gap:12px}
+  .table-wrap tr{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--bg2);border-radius:14px;padding:16px;border:1px solid rgba(25,68,69,0.05)}
+  .table-wrap td{display:block;padding:0;border-bottom:none;font-size:13px;color:var(--t1);line-height:1.4}
+  .table-wrap tr:last-child td{border-bottom:none}
+  /* Amount: first cell, prominent */
+  .table-wrap td:first-child{font-size:16px;font-weight:700;color:var(--t1);width:100%}
+  /* Term + Repayment: inline pair */
+  .table-wrap td:nth-child(2){color:var(--t3);font-size:12px}
+  .table-wrap td:nth-child(3){color:var(--t3);font-size:12px}
+  /* Status badge: full width */
+  .table-wrap td:nth-child(4){width:100%}
+  /* Date: full width, subdued */
+  .table-wrap td:nth-child(5){color:var(--t3);font-size:12px;width:100%}
+  /* Action button: full width */
+  .table-wrap td:nth-child(6){width:100%}
+  .table-wrap td:nth-child(6) .btn-sm{width:100%;text-align:center;padding:10px}
+}
+
 .employer-card{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid rgba(25,68,69,.06)}
 .ml-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
 .ml-badge.tier-1{background:#edf7f0;color:#1a5e3a}
@@ -954,6 +977,15 @@ table tr:last-child td{border-bottom:none}
 @media (max-width: 480px){
   .loan-status-active-grid{grid-template-columns:1fr !important;justify-items:center;text-align:center}
 }
+
+/* Social-proof avatar stack */
+.avatar-stack{display:flex;align-items:center;gap:0}
+.avatar-stack__item{width:28px;height:28px;border-radius:50%;border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;position:relative}
+.avatar-stack__item+.avatar-stack__item{margin-left:-8px}
+.avatar-stack__item:nth-child(1){background:var(--brand);z-index:4}
+.avatar-stack__item:nth-child(2){background:var(--success);z-index:3}
+.avatar-stack__item:nth-child(3){background:var(--gold);z-index:2}
+.avatar-stack__item:nth-child(4){background:var(--aqua);color:var(--brand);z-index:1}
 
 /* Staggered mobile menu reveal */
 @keyframes menuLinkIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}

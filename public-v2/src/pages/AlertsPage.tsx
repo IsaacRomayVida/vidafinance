@@ -303,7 +303,7 @@ export function AlertsPage() {
       <div style={{ marginBottom: 32 }}>
         <h1
           style={{
-            fontFamily: "'DM Serif Display',Georgia,serif",
+            fontFamily: 'var(--df)',
             fontSize: 26,
             color: '#0c1e1f',
             fontWeight: 400,
@@ -362,7 +362,7 @@ export function AlertsPage() {
             </span>
             <span
               style={{
-                fontFamily: "'DM Serif Display',Georgia,serif",
+                fontFamily: 'var(--df)',
                 fontSize: 16,
                 color: severityConfig[sev].text,
               }}

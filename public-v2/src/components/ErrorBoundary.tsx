@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
             </svg>
           </div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#0c1e1f', marginBottom: 8, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#0c1e1f', marginBottom: 8, fontFamily: 'var(--df)' }}>
             Algo salió mal
           </h2>
           <p style={{ fontSize: 14, color: '#4a6364', marginBottom: 24, textAlign: 'center', maxWidth: 360 }}>

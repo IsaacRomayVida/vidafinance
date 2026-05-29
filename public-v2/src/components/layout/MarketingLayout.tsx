@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import { useHashScroll } from '../../hooks/useHashScroll';
+import { PageTransition } from '../ui/PageTransition';
 
 interface MarketingLayoutProps {
   ctaLabel?: string;
@@ -14,7 +15,7 @@ export function MarketingLayout({ ctaLabel, ctaHref }: MarketingLayoutProps) {
   return (
     <>
       <Navbar ctaLabel={ctaLabel} ctaHref={ctaHref} />
-      <Outlet />
+      <PageTransition><Outlet /></PageTransition>
       <Footer />
     </>
   );

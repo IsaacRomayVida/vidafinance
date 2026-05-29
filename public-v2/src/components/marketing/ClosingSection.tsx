@@ -74,7 +74,7 @@ export function ClosingSection() {
             <path d="M10 11H6C6 7.5 7 5 10 4V6.5C8.5 7 8 8.5 8 10H10V14H6V11M18 11H14C14 7.5 15 5 18 4V6.5C16.5 7 16 8.5 16 10H18V14H14V11" fill="white"/>
           </svg>
           <p style={{
-            fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20,
+            fontFamily: 'var(--df)', fontSize: 20,
             color: 'rgba(255,255,255,0.85)', lineHeight: 1.55, fontStyle: 'italic', marginBottom: 20,
           }}>
             {curr.quote}

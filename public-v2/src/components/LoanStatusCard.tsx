@@ -180,7 +180,7 @@ function ProgressRing({ percent, size = 120 }: { percent: number; size?: number 
         position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
       }}>
-        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: size * 0.28, color: '#0c1e1f', lineHeight: 1 }}>
+        <div style={{ fontFamily: 'var(--df)', fontSize: size * 0.28, color: '#0c1e1f', lineHeight: 1 }}>
           {Math.round(percent)}%
         </div>
         <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#93aaa9', marginTop: 4 }}>
@@ -397,7 +397,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#93aaa9', marginBottom: 4 }}>
               {t('dash_th_amount', 'Monto')}
             </div>
-            <div style={{ fontFamily: "'DM Serif Display'", fontSize: 20, color: 'var(--t1)' }}>
+            <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
               ${fmt(loan.amount)}
             </div>
           </div>
@@ -405,7 +405,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#93aaa9', marginBottom: 4 }}>
               {t('modal_total', 'Total a pagar')}
             </div>
-            <div style={{ fontFamily: "'DM Serif Display'", fontSize: 20, color: 'var(--t1)' }}>
+            <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
               ${fmt(totalOwed)}
             </div>
           </div>
@@ -446,7 +446,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#93aaa9', marginBottom: 4 }}>
               {t('dash_th_amount', 'Monto')}
             </div>
-            <div style={{ fontFamily: "'DM Serif Display'", fontSize: 20, color: 'var(--t1)' }}>
+            <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
               ${fmt(loan.amount)}
             </div>
           </div>
@@ -484,7 +484,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#93aaa9', marginBottom: 4 }}>
                 {t('pay_remaining', 'Saldo restante')}
               </div>
-              <div style={{ fontFamily: "'DM Serif Display'", fontSize: 24, color: 'var(--t1)' }}>
+              <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--t1)' }}>
                 ${fmt(remaining)} <span style={{ fontSize: 12, color: '#93aaa9', fontFamily: "'DM Sans'" }}>MXN</span>
               </div>
             </div>
@@ -540,7 +540,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
           textAlign: 'center', padding: '24px 16px', borderRadius: 12,
           background: 'linear-gradient(135deg, #edf7f0 0%, #e8f6f6 100%)',
         }}>
-          <div style={{ fontFamily: "'DM Serif Display'", fontSize: 24, color: 'var(--success)', marginBottom: 8 }}>
+          <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--success)', marginBottom: 8 }}>
             {t('ls_repaid_congrats', '!Felicidades!')}
           </div>
           <div style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.5, marginBottom: 20 }}>

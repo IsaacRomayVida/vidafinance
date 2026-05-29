@@ -186,7 +186,7 @@ export function AnalyticsPage() {
   };
 
   const valueStyle: React.CSSProperties = {
-    fontFamily: "'DM Serif Display',Georgia,serif",
+    fontFamily: 'var(--df)',
     fontSize: 36,
     color: '#0c1e1f',
     letterSpacing: '-0.03em',
@@ -215,7 +215,7 @@ export function AnalyticsPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }}>
         <div>
-          <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
             Employer Analytics
           </h1>
           <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>
@@ -340,7 +340,7 @@ export function AnalyticsPage() {
               >
                 <div style={{ fontSize: 13, fontWeight: 500, color: '#0c1e1f' }}>{m.label}</div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#4a6364', textAlign: 'right' }}>{fmt(m.count)}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', textAlign: 'right', fontFamily: "'DM Serif Display',Georgia,serif" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#0c1e1f', textAlign: 'right', fontFamily: 'var(--df)' }}>
                   {fmtCurrency(m.volume)}
                 </div>
               </div>

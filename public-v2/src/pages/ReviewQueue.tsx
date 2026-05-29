@@ -229,7 +229,7 @@ export function ReviewQueue() {
   };
 
   const valueStyle: React.CSSProperties = {
-    fontFamily: "'DM Serif Display',Georgia,serif",
+    fontFamily: 'var(--df)',
     fontSize: 36,
     color: '#0c1e1f',
     letterSpacing: '-0.03em',
@@ -276,7 +276,7 @@ export function ReviewQueue() {
     <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px' }}>
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: '#0c1e1f', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
           Review Queue
         </h1>
         <p style={{ fontSize: 14, color: '#4a6364', lineHeight: 1.7 }}>

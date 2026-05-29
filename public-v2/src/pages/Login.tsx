@@ -148,7 +148,7 @@ export function Login() {
         </div>
 
         <div style={{ position: 'relative', zIndex: 2 }}>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 36, color: 'white', lineHeight: 1.12, letterSpacing: '-0.025em', marginBottom: 16 }}>
+          <h2 style={{ fontFamily: 'var(--df)', fontSize: 36, color: 'white', lineHeight: 1.12, letterSpacing: '-0.025em', marginBottom: 16 }}>
             Crédito que<br /><span style={{ fontStyle: 'italic', color: '#a8d5d0' }}>transforma</span> vidas.
           </h2>
           <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7, maxWidth: 320 }}>
@@ -164,7 +164,7 @@ export function Login() {
               { val: '$5K', label: 'Máximo' },
             ].map((s, i) => (
               <div key={i}>
-                <div style={{ fontFamily: "'DM Serif Display'", fontSize: 22, color: 'rgba(255,255,255,0.7)' }}>{s.val}</div>
+                <div style={{ fontFamily: 'var(--df)', fontSize: 22, color: 'rgba(255,255,255,0.7)' }}>{s.val}</div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2, letterSpacing: 0.5 }}>{s.label}</div>
               </div>
             ))}

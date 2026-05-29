@@ -141,7 +141,7 @@ export function DeductionReports() {
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '48px 0 64px' }}>
       <div style={{ marginBottom: 40, padding: '0 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 26, color: "#0c1e1f", fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 16 }}>
+          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: "#0c1e1f", fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 16 }}>
             {t('ded_title', 'Deducciones de Nómina')}
           </h1>
           <p style={{ fontSize: 14, color: "#4a6364", lineHeight: 1.7 }}>
@@ -254,7 +254,7 @@ export function DeductionReports() {
                           {t(`status_${loan.status}`, loan.status)}
                         </span>
                       </td>
-                      <td style={{ fontSize: 12, fontFamily: 'monospace', color: '#4a6364' }}>
+                      <td style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--t2)' }}>
                         {loan.softcreditoDeductionId || '—'}
                       </td>
                     </tr>
