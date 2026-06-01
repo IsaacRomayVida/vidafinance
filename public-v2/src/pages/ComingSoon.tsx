@@ -186,6 +186,10 @@ export function ComingSoon() {
           </div>
           <div className="cs-footer-legal">
             <span>&copy; 2026 Funpay. {t('cs_footer_rights')}</span>
+            <a href="https://suena.ch/en" target="_blank" rel="noopener noreferrer" className="ft-venture">
+              <span className="ft-venture-label">{t('ft_venture')}</span>
+              <span className="ft-venture-mark">Suena</span>
+            </a>
           </div>
         </div>
       </footer>

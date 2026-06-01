@@ -704,7 +704,7 @@ button:focus-visible,
 .cs-footer-links a:hover { color: #fff; text-decoration: underline; }
 .cs-footer .cs-lang-btn { color: #fff; border-color: rgba(255, 255, 255, 0.25); }
 .cs-footer .cs-lang-btn:hover { background: rgba(255, 255, 255, 0.1); }
-.cs-footer-legal { font-size: 13px; color: rgba(255, 255, 255, 0.5); }
+.cs-footer-legal { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: rgba(255, 255, 255, 0.5); }
 
 @media (min-width: 768px) {
   .cs-grid { grid-template-columns: repeat(3, 1fr); gap: 24px; }

@@ -56,6 +56,10 @@ export function Footer() {
             <a href="tel:018009998080">01 800 999 8080</a>
           </div>
         </div>
+        <a href="https://suena.ch/en" target="_blank" rel="noopener noreferrer" className="ft-venture" style={{ marginTop: 16 }}>
+          <span className="ft-venture-label">{t('ft_venture')}</span>
+          <span className="ft-venture-mark">Suena</span>
+        </a>
       </div>
     </footer>
   );
