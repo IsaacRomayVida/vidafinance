@@ -31,12 +31,14 @@ export const _mockStore: {
   users: Record<string, { exists: boolean; data?: Record<string, unknown> }>;
   auditLogs: Array<Record<string, unknown>>;
   transactionCalls: Array<string>;
+  docUpdates: Array<{ collection: string; id: string; data: Record<string, unknown> }>;
 } = {
   loans: {},
   employers: {},
   users: {},
   auditLogs: [],
   transactionCalls: [],
+  docUpdates: [],
 };
 
 const makeTxn = () => ({
@@ -62,7 +64,9 @@ const makeDocRef = (collection: string, id: string) => ({
       data: () => entry.data ?? null,
     };
   }),
-  update: jest.fn(async () => {}),
+  update: jest.fn(async (data: Record<string, unknown>) => {
+    _mockStore.docUpdates.push({ collection, id, data });
+  }),
   set: jest.fn(async () => {}),
 });
 

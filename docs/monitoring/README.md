@@ -19,7 +19,7 @@ Each Railway service on `observant-miracle` exposes:
 
 - **vida_http_request_duration_seconds** — histogram, per route + method + status code
 - **vida_business_events_total** — counter: `loan_disbursed`, `loan_repaid`, `disbursement_failed`, etc.
-- **vida_external_provider_duration_seconds** — Belvo, SoftCredito, MetaMap, Conekta, Mifiel latency
+- **vida_external_provider_duration_seconds** — Belvo, SoftCredito, MetaMap, Conekta latency
 - **vida_queue_depth** — BullMQ queue stats (waiting, active, failed)
 - **vida_circuit_breaker_state** — 0=closed, 1=half-open, 2=open
 - **vida_process_resident_memory_bytes** — Node RSS

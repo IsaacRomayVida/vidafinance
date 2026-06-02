@@ -291,7 +291,7 @@ export const requestLoan = onCall(
         const active = await db
           .collection('loans')
           .where('employeeId', '==', uid)
-          .where('status', 'in', ['pending', 'approved', 'active'])
+          .where('status', 'in', ['pending', 'under_review', 'approved', 'disbursement_queued', 'active'])
           .limit(1)
           .get();
         if (!active.empty)
@@ -360,8 +360,33 @@ export const requestLoan = onCall(
           logger.warn('ML unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
+        // Apply the underwriting pipeline decision to the loan's initial status.
+        //   rejected      → rejected (no credit hold; show denial in UI)
+        //   pending_review → under_review (Stage 5 already wrote a review_queue entry)
+        //   approved       → approved (rare in pilot; ML_MODE=manual_review_all routes
+        //                    everything non-rejected to review). NOTE: a loan created
+        //                    directly as 'approved' does not fire onLoanApproved (that
+        //                    trigger is on the pending→approved transition); the
+        //                    ops/employer approval flow performs the transition that
+        //                    triggers disbursement.
+        //   null (UW down) → pending (legacy behavior preserved)
+        let initialStatus = 'pending';
+        const decisionExtra: Record<string, unknown> = {};
+        if (uwDecision === 'rejected') {
+          initialStatus = 'rejected';
+          decisionExtra['denialReason'] =
+            (uwResult?.['reason'] as string) ||
+            'Tu solicitud no cumple los criterios de aprobación en este momento.';
+          decisionExtra['deniedAt'] = FieldValue.serverTimestamp();
+        } else if (uwDecision === 'approved') {
+          initialStatus = 'approved';
+        } else if (uwDecision === 'pending_review') {
+          initialStatus = 'under_review';
+        }
+        const holdCredit = initialStatus !== 'rejected';
+
         await db.runTransaction(async (tx) => {
-          tx.update(empRef, { availableCredit: FieldValue.increment(-amount) });
+          if (holdCredit) tx.update(empRef, { availableCredit: FieldValue.increment(-amount) });
           tx.set(db.collection('loans').doc(loanId), {
             employeeId: uid,
             employeeName: emp['name'],
@@ -374,7 +399,7 @@ export const requestLoan = onCall(
             fee,
             total: amount + fee,
             term: 30,
-            status: 'pending',
+            status: initialStatus,
             dueDate,
             disbursedAt: null,
             disbursementRef: null,
@@ -390,6 +415,7 @@ export const requestLoan = onCall(
             contractUrl: null,
             receiptUrl: null,
             ...loanExtra,
+            ...decisionExtra,
             uwCorrelationId: uwResult?.['correlationId'] ?? null,
             uwDecision: uwDecision ?? null,
             uwLastStage: uwResult?.['lastStage'] ?? null,
@@ -402,7 +428,7 @@ export const requestLoan = onCall(
           await auditLog(db, { action: 'loan.requested', actorUid: uid, actorRole: 'employee', targetId: loanId });
         } catch (_) { /* non-critical */ }
 
-        return { loanId, status: 'pending', total: amount + fee, dueDate: dueDate.toDate().toISOString() };
+        return { loanId, status: initialStatus, total: amount + fee, dueDate: dueDate.toDate().toISOString() };
       })
   )
 );
@@ -1207,42 +1233,64 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       logger.info('Loan disbursed via SoftCrédito', { loanId, ref: result.ref, service: 'functions' });
       await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId });
     } catch (e: unknown) {
-      logger.warn('SoftCrédito disbursement failed, falling back to stub', { error: (e as Error).message, loanId, service: 'functions' });
-      sendSlackAlert('Disbursement failed for loan ' + loanId, 'critical').catch(() => {});
-      // Fallback to stub on failure
+      logger.error('SoftCrédito disbursement failed', { error: (e as Error).message, loanId, service: 'functions' });
+      sendSlackAlert('Disbursement FAILED for loan ' + loanId + ' — manual intervention required', 'critical').catch(() => {});
+      // Never mark the loan active on failure: doing so would report funds as sent
+      // when no SPEI transfer occurred. Surface the failure for ops retry instead.
+      try {
+        await db.collection('loans').doc(loanId).update({
+          status: 'disbursement_failed',
+          disbursementError: (e as Error).message,
+          disbursementFailedAt: FieldValue.serverTimestamp(),
+        });
+        await db.collection('disbursement_queue').doc(loanId).update({
+          status: 'failed',
+          error: (e as Error).message,
+          failedAt: FieldValue.serverTimestamp(),
+        });
+        await auditLog(db, { action: 'loan.disbursement_failed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { error: (e as Error).message } });
+      } catch (markErr: unknown) {
+        logger.error('Failed to mark disbursement_failed', { error: (markErr as Error).message, loanId, service: 'functions' });
+      }
+    }
+  } else {
+    // Adapter not configured. Only simulate a disbursement when explicitly opted in
+    // (local/dev/test). In any real environment this is a misconfiguration and must
+    // NOT mark the loan active with a fake reference.
+    if (process.env['ALLOW_STUB_DISBURSEMENT'] === 'true') {
       try {
         await db.collection('loans').doc(loanId).update({
           status: 'active',
           disbursedAt: FieldValue.serverTimestamp(),
           disbursementRef: 'STUB-' + loanId.slice(0, 8).toUpperCase(),
-          disbursementError: (e as Error).message,
         });
         await db.collection('disbursement_queue').doc(loanId).update({
           status: 'completed',
           completedAt: FieldValue.serverTimestamp(),
         });
-        logger.info('Loan auto-disbursed (stub fallback)', { loanId, service: 'functions' });
-        await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { mode: 'stub_fallback', error: (e as Error).message } });
-      } catch (stubErr: unknown) {
-        logger.warn('Stub fallback error', { error: (stubErr as Error).message, loanId, service: 'functions' });
+        logger.info('Loan auto-disbursed (stub mode — ALLOW_STUB_DISBURSEMENT)', { loanId, service: 'functions' });
+        await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { mode: 'stub' } });
+      } catch (e: unknown) {
+        logger.warn('Stub disbursement error', { error: (e as Error).message, loanId, service: 'functions' });
       }
-    }
-  } else {
-    // Stub mode: no adapter URL or secret configured
-    try {
-      await db.collection('loans').doc(loanId).update({
-        status: 'active',
-        disbursedAt: FieldValue.serverTimestamp(),
-        disbursementRef: 'STUB-' + loanId.slice(0, 8).toUpperCase(),
-      });
-      await db.collection('disbursement_queue').doc(loanId).update({
-        status: 'completed',
-        completedAt: FieldValue.serverTimestamp(),
-      });
-      logger.info('Loan auto-disbursed (stub mode)', { loanId, service: 'functions' });
-      await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { mode: 'stub' } });
-    } catch (e: unknown) {
-      logger.warn('Stub disbursement error', { error: (e as Error).message, loanId, service: 'functions' });
+    } else {
+      logger.error('SOFTCREDITO_ADAPTER_URL / INTERNAL_SECRET not configured — cannot disburse', { loanId, service: 'functions' });
+      sendSlackAlert('Disbursement BLOCKED for loan ' + loanId + ' — adapter not configured', 'critical').catch(() => {});
+      try {
+        await db.collection('loans').doc(loanId).update({
+          status: 'disbursement_failed',
+          disbursementError: 'SOFTCREDITO_ADAPTER_URL or INTERNAL_SECRET not configured',
+          disbursementFailedAt: FieldValue.serverTimestamp(),
+        });
+        await db.collection('disbursement_queue').doc(loanId).update({
+          status: 'failed',
+          error: 'adapter_not_configured',
+          failedAt: FieldValue.serverTimestamp(),
+        });
+        await auditLog(db, { action: 'loan.disbursement_failed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { reason: 'adapter_not_configured' } });
+      } catch (e: unknown) {
+        logger.error('Failed to mark disbursement_failed', { error: (e as Error).message, loanId, service: 'functions' });
+      }
     }
   }
 

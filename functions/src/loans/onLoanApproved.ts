@@ -1,3 +1,8 @@
+// DEPRECATED / NOT DEPLOYED. The canonical, deployed `onLoanApproved` lives inline in
+// functions/src/index.ts (the only one re-exported). This richer variant (adds PDF
+// contract + notifications) is retained as the reference for the planned merge, but it
+// is not wired into index.ts exports. Keep its disbursement-failure handling in sync
+// with index.ts until the two are consolidated.
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -73,26 +78,26 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
       });
       logger.info('Loan disbursed via SoftCrédito', { loanId, ref: result.ref, service: 'functions' });
     } catch (e: unknown) {
-      logger.warn('SoftCrédito disbursement failed, falling back to stub', { error: (e as Error).message, loanId, service: 'functions' });
-      // Fallback to stub on failure
+      logger.error('SoftCrédito disbursement failed', { error: (e as Error).message, loanId, service: 'functions' });
+      // Never mark the loan active on failure: that would report funds as sent
+      // when no SPEI transfer occurred. Surface the failure for ops retry instead.
       try {
         await db.collection('loans').doc(loanId).update({
-          status: 'active',
-          disbursedAt: FieldValue.serverTimestamp(),
-          disbursementRef: 'STUB-' + loanId.slice(0, 8).toUpperCase(),
+          status: 'disbursement_failed',
           disbursementError: (e as Error).message,
+          disbursementFailedAt: FieldValue.serverTimestamp(),
         });
         await db.collection('disbursement_queue').doc(loanId).update({
-          status: 'completed',
-          completedAt: FieldValue.serverTimestamp(),
+          status: 'failed',
+          error: (e as Error).message,
+          failedAt: FieldValue.serverTimestamp(),
         });
-        logger.info('Loan auto-disbursed (stub fallback)', { loanId, service: 'functions' });
-      } catch (stubErr: unknown) {
-        logger.warn('Stub fallback error', { error: (stubErr as Error).message, loanId, service: 'functions' });
+      } catch (markErr: unknown) {
+        logger.error('Failed to mark disbursement_failed', { error: (markErr as Error).message, loanId, service: 'functions' });
       }
     }
-  } else {
-    // Stub mode: no adapter URL or secret configured
+  } else if (process.env['ALLOW_STUB_DISBURSEMENT'] === 'true') {
+    // Simulated disbursement — local/dev/test only, explicitly opted in.
     try {
       await db.collection('loans').doc(loanId).update({
         status: 'active',
@@ -103,9 +108,26 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         status: 'completed',
         completedAt: FieldValue.serverTimestamp(),
       });
-      logger.info('Loan auto-disbursed (stub mode)', { loanId, service: 'functions' });
+      logger.info('Loan auto-disbursed (stub mode — ALLOW_STUB_DISBURSEMENT)', { loanId, service: 'functions' });
     } catch (e: unknown) {
       logger.warn('Stub disbursement error', { error: (e as Error).message, loanId, service: 'functions' });
+    }
+  } else {
+    // Misconfiguration in a real environment — do not fake a disbursement.
+    logger.error('SOFTCREDITO_ADAPTER_URL / INTERNAL_SECRET not configured — cannot disburse', { loanId, service: 'functions' });
+    try {
+      await db.collection('loans').doc(loanId).update({
+        status: 'disbursement_failed',
+        disbursementError: 'SOFTCREDITO_ADAPTER_URL or INTERNAL_SECRET not configured',
+        disbursementFailedAt: FieldValue.serverTimestamp(),
+      });
+      await db.collection('disbursement_queue').doc(loanId).update({
+        status: 'failed',
+        error: 'adapter_not_configured',
+        failedAt: FieldValue.serverTimestamp(),
+      });
+    } catch (e: unknown) {
+      logger.error('Failed to mark disbursement_failed', { error: (e as Error).message, loanId, service: 'functions' });
     }
   }
 

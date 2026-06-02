@@ -76,7 +76,7 @@
 1. Check BullMQ queue `vida-pdfs` — max concurrency is 2
 2. Common issues:
    - **Puppeteer crash** → Usually memory — scale up Railway instance
-   - **Mifiel e-signature failure** → Verify `MIFIEL_APP_ID` and `MIFIEL_APP_SECRET`
+   - **MetaMap e-signature failure** → Verify the `METAMAP_*` signing credentials on pdf-generator
    - **Template rendering error** → Check Handlebars template syntax in logs
 3. If Puppeteer keeps crashing, restart service to clear leaked Chrome processes
 4. Failed PDFs can be retried safely (idempotent)

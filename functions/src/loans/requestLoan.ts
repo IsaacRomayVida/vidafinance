@@ -1,3 +1,7 @@
+// DEPRECATED / NOT DEPLOYED. The canonical, deployed `requestLoan` lives inline in
+// functions/src/index.ts (it is the only one re-exported). This BullMQ-based variant
+// is kept for its test suite and as the reference for a future queue-based migration,
+// but it is not wired into index.ts exports. Do not assume this runs in production.
 import { randomUUID } from 'crypto';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';

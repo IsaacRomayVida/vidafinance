@@ -88,17 +88,10 @@ async function runIdentityValidation(applicant, priorResults, { logger, db } = {
     };
   }
 
-  // SAT provider error → escalate to manual review
-  if (satResult.skipped) {
-    log.warn({ stage: "stage1", rfc: applicant.rfc, error: satResult.error }, "SAT check failed — escalating to manual review");
-    return {
-      pass: false,
-      escalateToStage: 5,
-      reason: "PROVIDER_ERROR_SAT",
-      data,
-      cost: costItems,
-    };
-  }
+  // NOTE: the individual SAT taxpayer-status check was intentionally removed
+  // (MetaMap's government check in Stage 4 covers individual SAT; employer SAT
+  // status is inferred from EFOS + Art. 69 in Employer Stage A). The former
+  // `satResult` escalation block lived here and referenced an undefined variable.
 
   // 5. CNBV sector risk (informational — uses Firestore)
   let cnbvResult = { pass: true, skipped: true };
