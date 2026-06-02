@@ -160,31 +160,64 @@ jobs:
             --only hosting,firestore:rules,firestore:indexes,storage \
             --project "$PROJECT" --non-interactive
 
-          # 2) Functions in small batches. A full deploy creates a new Cloud
-          #    Run revision for every gen2 function simultaneously; during
-          #    migration each holds ~2x CPU, which exceeds the project's
-          #    "total allowable CPU per project per region" quota. Deploying
-          #    ~5 at a time (service-callers first) with a pause keeps us under
-          #    quota and lets old revisions be reclaimed between batches.
+          # 2) Functions in small batches. Changing shared env (e.g. a secret)
+          #    forces a new Cloud Run revision for EVERY gen2 function at once;
+          #    each new revision transiently holds CPU during health-check, which
+          #    blows the project's "total allowable CPU per project per region"
+          #    quota. Deploy 3 at a time (service-callers first) with retries and
+          #    cooldowns so we stay under quota and recover from transient blips.
           #    KEEP IN SYNC with the exported functions in functions/src/index.ts.
           BATCHES=(
-            "requestLoan onLoanApproved generatePaymentLink markLoanDisbursed metamapWebhook"
-            "getSystemHealth systemHealthCheck queueHealthCheck processPayroll satBlacklistRefresh"
-            "refreshSatBlacklists api checkEmailAvailability validateCURP updateLoanStatus"
-            "approveEmployer getPortfolioReport getAdminDashboard getEmployerDashboard submitReviewDecision"
-            "getReviewDetail updateEmployerTier setEmployerClaims updateEmployerCurpConfig getContractDownloadUrl"
-            "setAdminClaim revokeAdminClaim sendVerificationEmail sendEmployeeInvite lookupInvite"
-            "acceptInvite onContactCreated onEmployerDocCreated onLoanStatusChange onEmployeeDocCreated"
-            "autoVerifyOnEmployerCreate autoVerifyOnEmployeeCreate dailyLoanCheck weeklyPortfolioSnapshot"
+            "requestLoan onLoanApproved generatePaymentLink"
+            "markLoanDisbursed metamapWebhook getSystemHealth"
+            "systemHealthCheck queueHealthCheck processPayroll"
+            "satBlacklistRefresh refreshSatBlacklists api"
+            "checkEmailAvailability validateCURP updateLoanStatus"
+            "approveEmployer getPortfolioReport getAdminDashboard"
+            "getEmployerDashboard submitReviewDecision getReviewDetail"
+            "updateEmployerTier setEmployerClaims updateEmployerCurpConfig"
+            "getContractDownloadUrl setAdminClaim revokeAdminClaim"
+            "sendVerificationEmail sendEmployeeInvite lookupInvite"
+            "acceptInvite onContactCreated onEmployerDocCreated"
+            "onLoanStatusChange onEmployeeDocCreated autoVerifyOnEmployerCreate"
+            "autoVerifyOnEmployeeCreate dailyLoanCheck weeklyPortfolioSnapshot"
           )
+
+          deploy_batch() {
+            local only="$1" label="$2" attempt
+            for attempt in 1 2 3; do
+              echo "::group::${label} (attempt ${attempt}/3)"
+              if firebase deploy --only "$only" --project "$PROJECT" --non-interactive --force; then
+                echo "::endgroup::"
+                return 0
+              fi
+              echo "::endgroup::"
+              echo "Batch failed on attempt ${attempt}; backing off before retry…"
+              sleep $((attempt * 90))
+            done
+            return 1
+          }
+
+          FAILED=()
           n=${#BATCHES[@]}
           for i in "${!BATCHES[@]}"; do
             only=""
             for f in ${BATCHES[$i]}; do only="${only}functions:${f},"; done
             only="${only%,}"
-            echo "::group::Functions batch $((i+1))/$n — ${BATCHES[$i]}"
-            firebase deploy --only "$only" --project "$PROJECT" --non-interactive --force
-            echo "::endgroup::"
-            if [ $((i+1)) -lt "$n" ]; then echo "Cooling down 60s before next batch…"; sleep 60; fi
+            if deploy_batch "$only" "Functions batch $((i+1))/$n — ${BATCHES[$i]}"; then
+              :
+            else
+              echo "::warning::Batch $((i+1)) did not deploy after retries: ${BATCHES[$i]}"
+              FAILED+=("${BATCHES[$i]}")
+            fi
+            if [ $((i+1)) -lt "$n" ]; then echo "Cooling down 30s before next batch…"; sleep 30; fi
           done
+
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo "::error::${#FAILED[@]} function batch(es) failed to deploy after retries:"
+            printf '  - %s\n' "${FAILED[@]}"
+            echo "Re-run this job after confirming the Cloud Run CPU quota; already-deployed functions are skipped automatically."
+            exit 1
+          fi
+          echo "All ${n} function batches deployed successfully."
 
