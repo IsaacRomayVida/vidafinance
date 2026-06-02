@@ -144,19 +144,47 @@ jobs:
         with:
           credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
 
-      - name: Deploy to Firebase (Staging)
-        if: github.ref == 'refs/heads/develop'
+      - name: Deploy to Firebase
+        if: github.event_name == 'push'
         run: |
-          firebase deploy \
-            --only hosting,functions,firestore:rules,firestore:indexes,storage \
-            --project ${{ secrets.FIREBASE_PROJECT_ID_STAGING }} \
-            --non-interactive
+          set -euo pipefail
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            PROJECT="${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }}"
+          else
+            PROJECT="${{ secrets.FIREBASE_PROJECT_ID_STAGING }}"
+          fi
+          echo "Deploying to $PROJECT"
 
-      - name: Deploy to Firebase (Production)
-        if: github.ref == 'refs/heads/main'
-        run: |
+          # 1) Non-function targets first (hosting, rules, indexes, storage).
           firebase deploy \
-            --only hosting,functions,firestore:rules,firestore:indexes,storage \
-            --project ${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }} \
-            --non-interactive
+            --only hosting,firestore:rules,firestore:indexes,storage \
+            --project "$PROJECT" --non-interactive
+
+          # 2) Functions in small batches. A full deploy creates a new Cloud
+          #    Run revision for every gen2 function simultaneously; during
+          #    migration each holds ~2x CPU, which exceeds the project's
+          #    "total allowable CPU per project per region" quota. Deploying
+          #    ~5 at a time (service-callers first) with a pause keeps us under
+          #    quota and lets old revisions be reclaimed between batches.
+          #    KEEP IN SYNC with the exported functions in functions/src/index.ts.
+          BATCHES=(
+            "requestLoan onLoanApproved generatePaymentLink markLoanDisbursed metamapWebhook"
+            "getSystemHealth systemHealthCheck queueHealthCheck processPayroll satBlacklistRefresh"
+            "refreshSatBlacklists api checkEmailAvailability validateCURP updateLoanStatus"
+            "approveEmployer getPortfolioReport getAdminDashboard getEmployerDashboard submitReviewDecision"
+            "getReviewDetail updateEmployerTier setEmployerClaims updateEmployerCurpConfig getContractDownloadUrl"
+            "setAdminClaim revokeAdminClaim sendVerificationEmail sendEmployeeInvite lookupInvite"
+            "acceptInvite onContactCreated onEmployerDocCreated onLoanStatusChange onEmployeeDocCreated"
+            "autoVerifyOnEmployerCreate autoVerifyOnEmployeeCreate dailyLoanCheck weeklyPortfolioSnapshot"
+          )
+          n=${#BATCHES[@]}
+          for i in "${!BATCHES[@]}"; do
+            only=""
+            for f in ${BATCHES[$i]}; do only="${only}functions:${f},"; done
+            only="${only%,}"
+            echo "::group::Functions batch $((i+1))/$n — ${BATCHES[$i]}"
+            firebase deploy --only "$only" --project "$PROJECT" --non-interactive --force
+            echo "::endgroup::"
+            if [ $((i+1)) -lt "$n" ]; then echo "Cooling down 60s before next batch…"; sleep 60; fi
+          done
 
