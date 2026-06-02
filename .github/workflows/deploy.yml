@@ -160,64 +160,66 @@ jobs:
             --only hosting,firestore:rules,firestore:indexes,storage \
             --project "$PROJECT" --non-interactive
 
-          # 2) Functions in small batches. Changing shared env (e.g. a secret)
-          #    forces a new Cloud Run revision for EVERY gen2 function at once;
-          #    each new revision transiently holds CPU during health-check, which
-          #    blows the project's "total allowable CPU per project per region"
-          #    quota. Deploy 3 at a time (service-callers first) with retries and
-          #    cooldowns so we stay under quota and recover from transient blips.
+          # 2) Functions ONE AT A TIME. Changing shared env (e.g. a secret)
+          #    forces a new Cloud Run revision for EVERY gen2 function; each new
+          #    revision holds ~1 CPU during its health-check. The project's
+          #    "total allowable CPU per project per region" quota is low and
+          #    cannot be raised, so we deploy a single function at a time and let
+          #    its instance scale back to zero before the next one. Retries with
+          #    backoff absorb any leftover warm instances still occupying CPU.
+          #    Functions are ordered service-callers FIRST so the INTERNAL_SECRET
+          #    auth path (requestLoan / onLoanApproved / generatePaymentLink …) is
+          #    fixed early even if later, non-critical functions need a re-run.
           #    KEEP IN SYNC with the exported functions in functions/src/index.ts.
-          BATCHES=(
-            "requestLoan onLoanApproved generatePaymentLink"
-            "markLoanDisbursed metamapWebhook getSystemHealth"
-            "systemHealthCheck queueHealthCheck processPayroll"
-            "satBlacklistRefresh refreshSatBlacklists api"
-            "checkEmailAvailability validateCURP updateLoanStatus"
-            "approveEmployer getPortfolioReport getAdminDashboard"
-            "getEmployerDashboard submitReviewDecision getReviewDetail"
-            "updateEmployerTier setEmployerClaims updateEmployerCurpConfig"
-            "getContractDownloadUrl setAdminClaim revokeAdminClaim"
-            "sendVerificationEmail sendEmployeeInvite lookupInvite"
-            "acceptInvite onContactCreated onEmployerDocCreated"
-            "onLoanStatusChange onEmployeeDocCreated autoVerifyOnEmployerCreate"
-            "autoVerifyOnEmployeeCreate dailyLoanCheck weeklyPortfolioSnapshot"
-          )
+          FUNCTIONS="
+            requestLoan onLoanApproved generatePaymentLink markLoanDisbursed
+            metamapWebhook getSystemHealth systemHealthCheck queueHealthCheck
+            processPayroll satBlacklistRefresh refreshSatBlacklists
+            api checkEmailAvailability validateCURP updateLoanStatus
+            approveEmployer getPortfolioReport getAdminDashboard getEmployerDashboard
+            submitReviewDecision getReviewDetail updateEmployerTier setEmployerClaims
+            updateEmployerCurpConfig getContractDownloadUrl setAdminClaim revokeAdminClaim
+            sendVerificationEmail sendEmployeeInvite lookupInvite acceptInvite
+            onContactCreated onEmployerDocCreated onLoanStatusChange onEmployeeDocCreated
+            autoVerifyOnEmployerCreate autoVerifyOnEmployeeCreate dailyLoanCheck
+            weeklyPortfolioSnapshot
+          "
 
-          deploy_batch() {
-            local only="$1" label="$2" attempt
-            for attempt in 1 2 3; do
-              echo "::group::${label} (attempt ${attempt}/3)"
-              if firebase deploy --only "$only" --project "$PROJECT" --non-interactive --force; then
+          deploy_one() {
+            local fn="$1" attempt
+            for attempt in 1 2 3 4; do
+              echo "::group::Deploy ${fn} (attempt ${attempt}/4)"
+              if firebase deploy --only "functions:${fn}" --project "$PROJECT" --non-interactive --force; then
                 echo "::endgroup::"
                 return 0
               fi
               echo "::endgroup::"
-              echo "Batch failed on attempt ${attempt}; backing off before retry…"
-              sleep $((attempt * 90))
+              echo "  ${fn} failed (attempt ${attempt}); backing off so CPU can free up…"
+              sleep $((attempt * 60))
             done
             return 1
           }
 
-          FAILED=()
-          n=${#BATCHES[@]}
-          for i in "${!BATCHES[@]}"; do
-            only=""
-            for f in ${BATCHES[$i]}; do only="${only}functions:${f},"; done
-            only="${only%,}"
-            if deploy_batch "$only" "Functions batch $((i+1))/$n — ${BATCHES[$i]}"; then
-              :
+          total=0; for fn in $FUNCTIONS; do total=$((total+1)); done
+          idx=0; ok=0; FAILED=""
+          for fn in $FUNCTIONS; do
+            idx=$((idx+1))
+            echo "=== [${idx}/${total}] ${fn} ==="
+            if deploy_one "$fn"; then
+              ok=$((ok+1))
             else
-              echo "::warning::Batch $((i+1)) did not deploy after retries: ${BATCHES[$i]}"
-              FAILED+=("${BATCHES[$i]}")
+              echo "::warning::${fn} did not deploy after retries"
+              FAILED="${FAILED} ${fn}"
             fi
-            if [ $((i+1)) -lt "$n" ]; then echo "Cooling down 30s before next batch…"; sleep 30; fi
+            # brief settle so the new revision can scale to zero before the next
+            [ "$idx" -lt "$total" ] && sleep 30
           done
 
-          if [ ${#FAILED[@]} -gt 0 ]; then
-            echo "::error::${#FAILED[@]} function batch(es) failed to deploy after retries:"
-            printf '  - %s\n' "${FAILED[@]}"
-            echo "Re-run this job after confirming the Cloud Run CPU quota; already-deployed functions are skipped automatically."
+          echo "Deployed ${ok}/${total} functions."
+          if [ -n "$FAILED" ]; then
+            echo "::error::Functions that failed after retries:${FAILED}"
+            echo "Re-run this job — already-deployed functions are skipped, so it converges."
             exit 1
           fi
-          echo "All ${n} function batches deployed successfully."
+          echo "All ${total} functions deployed successfully."
 
