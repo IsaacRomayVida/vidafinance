@@ -1,0 +1,17 @@
+# gitleaks config for vidafinance. Extends the default ruleset.
+#
+# Allowlist is scoped to exact fingerprints, not broad path/rule exemptions --
+# each entry is a client-side value that is public-by-design (Firebase web
+# config, meant to ship in the browser bundle; security is enforced via
+# Firestore rules + App Check, not secrecy of these values) or not a
+# credential at all (a localStorage key string flagged by entropy heuristics).
+# Mirrors the same pattern already in use in the sibling vidatravel repo.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-safe client-side values, not credentials"
+regexes = [
+  '''AIzaSyD5FFDHe2mAtqfBBw6vz4-V2WflvTxCTEw''', # Firebase web apiKey, public by design
+  '''funpay_splash_seen_v1''',                    # localStorage key, not a credential
+]

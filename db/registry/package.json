@@ -1,0 +1,19 @@
+{
+  "name": "vida-registry-ledger",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Identity registry + hash-chained receipts ledger (Postgres) for vidafinance",
+  "main": "src/index.js",
+  "scripts": {
+    "migrate:up": "node-pg-migrate up -m migrations",
+    "migrate:down": "node-pg-migrate down -m migrations",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "node-pg-migrate": "^7.6.0"
+  }
+}

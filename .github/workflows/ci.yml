@@ -55,6 +55,45 @@ jobs:
       - name: Typecheck + Build
         run: cd public-v2 && npm run build
 
+  registry-ledger:
+    name: Registry & Ledger (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vida_registry_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: db/registry/package-lock.json
+
+      - name: Install deps
+        run: cd db/registry && npm ci
+
+      - name: Run migrations against ephemeral Postgres
+        run: cd db/registry && npm run migrate:up
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/vida_registry_test
+
+      - name: Test (hash-chain verification, trigger, idempotency)
+        run: cd db/registry && npm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/vida_registry_test
+
   health-check:
     name: Verify production endpoints
     runs-on: ubuntu-latest

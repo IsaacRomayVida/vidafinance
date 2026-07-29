@@ -314,6 +314,25 @@ loans/{loanId}
   └── payment_failures (via payment_failures.loanId)
 ```
 
+## Registry & Ledger (Postgres, additive)
+
+A small Postgres database on Railway (`db/registry/`) sits alongside Firestore — additive only,
+nothing above is migrated away. It holds:
+
+| Table | Purpose |
+|---|---|
+| `entities` | One durable UUID per real-world thing (worker, employer, agent, loan, ...) |
+| `entity_refs` | Maps external IDs (CURP, RFC, IMSS NSS, firebase uid, CLABE, ...) to one `entities.id` |
+| `relationships` / `relationship_members` | N-ary facts (e.g. a credit decision) linking multiple entities by role |
+| `receipts` | Append-only, hash-chained ledger — one row per consequential action, `idempotency_key` is the idempotency record |
+| `authority_rules` | Deny-by-default rules for the `authorize()` gate (schema only for now, not yet enforced) |
+
+`receipts` blocks `UPDATE`/`DELETE` at the trigger level; the hash chain itself is computed by a
+single writer path (`db/registry/src/hashChain.js`) so it stays gap-free under concurrent writers.
+Migrations: `cd db/registry && npm run migrate:up` (reversible via `migrate:down`).
+
+---
+
 ## Security Model
 
 - **Firestore Security Rules** enforce client-side access (see `firestore.rules`)
