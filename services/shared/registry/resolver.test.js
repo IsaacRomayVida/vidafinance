@@ -2,6 +2,7 @@
 
 const { Pool } = require('pg');
 const { resolveEntity, resolveOrCreateEntity, addExternalRef } = require('./resolver');
+const { resetLedgerTestState } = require('./testUtils');
 
 const DATABASE_URL =
   process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/vida_registry_test';
@@ -17,9 +18,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await pool.query(
-    'TRUNCATE receipts, relationship_members, relationships, entity_refs, entities RESTART IDENTITY CASCADE'
-  );
+  await resetLedgerTestState(pool);
 });
 
 test('creates one entity for a new external ref and reuses it on repeat calls', async () => {
@@ -99,4 +98,15 @@ test('addExternalRef attaches a second ref to the same entity', async () => {
 test('resolveEntity returns null for an unknown ref', async () => {
   const found = await resolveEntity(pool, 'firebase', 'no-such-uid');
   expect(found).toBeNull();
+});
+
+test('resolveOrCreateEntity outside a transaction throws instead of silently dropping serialization', async () => {
+  const client = await pool.connect();
+  try {
+    await expect(
+      resolveOrCreateEntity(client, { system: 'firebase', externalId: 'uid-no-tx', kind: 'worker' })
+    ).rejects.toThrow(/must be called inside an open transaction/);
+  } finally {
+    client.release();
+  }
 });

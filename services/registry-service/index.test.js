@@ -10,15 +10,14 @@ process.env.INTERNAL_SECRET = 'test-secret';
 
 const request = require('supertest');
 const { app, pool } = require('./index');
+const { resetLedgerTestState } = require('../shared/registry/testUtils');
 
 afterAll(async () => {
   await pool.end();
 });
 
 beforeEach(async () => {
-  await pool.query(
-    'TRUNCATE receipts, relationship_members, relationships, entity_refs, entities RESTART IDENTITY CASCADE'
-  );
+  await resetLedgerTestState(pool);
 });
 
 test('rejects requests without the internal secret', async () => {
