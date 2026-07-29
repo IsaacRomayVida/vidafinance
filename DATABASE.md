@@ -328,8 +328,21 @@ nothing above is migrated away. It holds:
 | `authority_rules` | Deny-by-default rules for the `authorize()` gate (schema only for now, not yet enforced) |
 
 `receipts` blocks `UPDATE`/`DELETE` at the trigger level; the hash chain itself is computed by a
-single writer path (`db/registry/src/hashChain.js`) so it stays gap-free under concurrent writers.
-Migrations: `cd db/registry && npm run migrate:up` (reversible via `migrate:down`).
+single writer path (`services/shared/registry/hashChain.js`) so it stays gap-free under concurrent
+writers. Migrations: `cd db/registry && npm run migrate:up` (reversible via `migrate:down`).
+
+**Identity resolution:** `services/registry-service` is the only thing that talks to this database
+directly. It exposes `POST /internal/entities/resolve` (resolve-or-create an entity for a
+`(system, externalId)` pair, e.g. `firebase:{uid}`) and `POST /internal/entities/:id/refs` (attach
+an additional ref, e.g. an employer's `rfc` alongside their firebase uid), both gated by
+`x-internal-secret` — same pattern Cloud Functions already use to call `underwriting-service` and
+`softcredito-adapter`. Calls from `functions/` are shadow-write only right now: best-effort, wrapped
+in try/catch, never block or fail the real Firestore operation. `services/registry-service/scripts/backfill.js`
+seeds the registry from existing `employers/{uid}` docs (dry-run and apply modes).
+
+Not yet backfilled: workers/employees. Funpay currently writes employee data to two different
+Firestore shapes (`employees/{uid}` flat vs `employers/{id}/employees/{docId}` subcollection) —
+that needs reconciling first so one real worker doesn't become two registry entities.
 
 ---
 

@@ -79,9 +79,11 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: db/registry/package-lock.json
+          cache-dependency-path: |
+            db/registry/package-lock.json
+            services/registry-service/package-lock.json
 
-      - name: Install deps
+      - name: Install migration tool deps
         run: cd db/registry && npm ci
 
       - name: Run migrations against ephemeral Postgres
@@ -89,8 +91,11 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/vida_registry_test
 
-      - name: Test (hash-chain verification, trigger, idempotency)
-        run: cd db/registry && npm test
+      - name: Install registry-service deps
+        run: cd services/registry-service && npm ci
+
+      - name: Test (hash-chain, resolver, identity endpoints)
+        run: cd services/registry-service && npm test
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/vida_registry_test
 

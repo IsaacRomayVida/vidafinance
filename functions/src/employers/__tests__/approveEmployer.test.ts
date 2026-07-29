@@ -119,6 +119,13 @@ jest.mock('../../utils/rateLimiter', () => ({
   checkRateLimit: jest.fn().mockResolvedValue(true),
 }));
 
+const mockResolveEntity = jest.fn().mockResolvedValue('entity-uuid-123');
+const mockAddEntityRef = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../utils/registryClient', () => ({
+  resolveEntity: (...args: unknown[]) => mockResolveEntity(...args),
+  addEntityRef: (...args: unknown[]) => mockAddEntityRef(...args),
+}));
+
 // ── Imports (after mocks) ──────────────────────────────────────────────────────
 
 import {
@@ -492,6 +499,26 @@ describe('approveEmployer', () => {
       expect(result.success).toBe(true);
     });
 
+    it('shadow-writes an employer entity to the registry with its RFC ref', async () => {
+      const req = makeRequest({ data: { employerId: 'emp-123', decision: 'approved' } });
+      await approveEmployerHandler(req);
+
+      expect(mockResolveEntity).toHaveBeenCalledWith(
+        expect.objectContaining({ system: 'firebase', externalId: 'emp-123', kind: 'employer' })
+      );
+      expect(mockAddEntityRef).toHaveBeenCalledWith('entity-uuid-123', 'rfc', 'ACM123456789');
+    });
+
+    it('handles registry shadow-write failure gracefully', async () => {
+      mockResolveEntity.mockRejectedValueOnce(new Error('registry unreachable'));
+
+      const req = makeRequest({ data: { employerId: 'emp-123', decision: 'approved' } });
+      const result = await approveEmployerHandler(req);
+
+      expect(result.success).toBe(true); // registry shadow-write failure must not block approval
+      expect(mockAddEntityRef).not.toHaveBeenCalled();
+    });
+
     it('includes notes in audit log metadata', async () => {
       const req = makeRequest({
         data: { employerId: 'emp-123', decision: 'approved', notes: 'Verified via phone' },
@@ -525,6 +552,16 @@ describe('approveEmployer', () => {
       expect(result.employerCode).toBeUndefined();
       expect(result.message).toContain('Employer rejected');
       expect(result.message).toContain('admin@acme.mx');
+    });
+
+    it('does not shadow-write a registry entity for a rejected employer', async () => {
+      const req = makeRequest({
+        data: { employerId: 'emp-123', decision: 'rejected', rejectionReason: 'RFC mismatch' },
+      });
+      await approveEmployerHandler(req);
+
+      expect(mockResolveEntity).not.toHaveBeenCalled();
+      expect(mockAddEntityRef).not.toHaveBeenCalled();
     });
 
     it('writes rejection fields in transaction update', async () => {
