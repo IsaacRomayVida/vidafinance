@@ -504,9 +504,13 @@ describe('approveEmployer', () => {
       await approveEmployerHandler(req);
 
       expect(mockResolveEntity).toHaveBeenCalledWith(
-        expect.objectContaining({ system: 'firebase', externalId: 'emp-123', kind: 'employer' })
+        expect.objectContaining({
+          system: 'firebase',
+          externalId: 'emp-123',
+          kind: 'employer',
+          refs: [{ system: 'rfc', externalId: 'ACM123456789' }],
+        })
       );
-      expect(mockAddEntityRef).toHaveBeenCalledWith('entity-uuid-123', 'rfc', 'ACM123456789');
     });
 
     it('handles registry shadow-write failure gracefully', async () => {

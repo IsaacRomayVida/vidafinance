@@ -5,7 +5,7 @@ require('dotenv').config();
 const { alert5xx } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 const { getPool } = require('../shared/registry/pool');
-const { resolveOrCreateEntity, addExternalRef } = require('../shared/registry/resolver');
+const { resolveOrCreateEntity, addExternalRef, RefConflictError } = require('../shared/registry/resolver');
 
 // Fail closed: this service exists only to talk to the registry DB and gate
 // on INTERNAL_SECRET. Missing either at boot means it cannot do its job.
@@ -40,6 +40,27 @@ const requireInternal = (req, res, next) => {
   next();
 };
 
+// normalizeExternalId (resolver.js) calls externalId.trim() -- a caller
+// sending a JSON number/object for system or externalId must 400 here,
+// not TypeError into a generic 500 three layers down.
+const isNonEmptyString = (v) => typeof v === 'string' && v.length > 0;
+
+// Shared by both routes below: a RefConflictError means the request is
+// well-formed but collides with an existing, different identity -- that's
+// a 409 (client can act on entity ids in the body), never a 500.
+function sendRegistryError(res, err, genericMessage) {
+  if (err instanceof RefConflictError) {
+    return res.status(409).json({
+      error: 'ref_conflict',
+      system: err.system,
+      externalId: err.externalId,
+      existingEntityId: err.existingEntityId,
+      requestedEntityId: err.requestedEntityId,
+    });
+  }
+  return res.status(500).json({ error: genericMessage, message: err.message });
+}
+
 // This service has no browser-facing routes -- every route below is called
 // server-to-server (Cloud Functions, other Railway services), same pattern
 // as underwriting-service's /riskseal/smoke and softcredito-adapter's
@@ -59,24 +80,41 @@ app.get('/metrics', async (req, res) => {
 });
 
 // POST /internal/entities/resolve
-// body: { system, externalId, kind, displayName?, attrs? }
+// body: { system, externalId, kind, displayName?, attrs?, refs?: [{system, externalId}] }
 // Resolves the entity behind (system, externalId), creating it if this is
 // the first time this external identity has been seen. Idempotent.
+//
+// `refs` optionally attaches additional external refs (e.g. a worker's RFC
+// alongside their firebase uid) in the SAME transaction as the resolve --
+// one request, one round trip, one commit, instead of a resolve call
+// followed by N separate /refs calls each paying their own network + tx
+// overhead (that pattern was costing approveEmployer up to ~16s in the
+// worst case with two 8s-timeout sequential calls).
 app.post('/internal/entities/resolve', requireInternal, async (req, res) => {
-  const { system, externalId, kind, displayName, attrs } = req.body ?? {};
-  if (!system || !externalId || !kind) {
+  const { system, externalId, kind, displayName, attrs, refs } = req.body ?? {};
+  if (!isNonEmptyString(system) || !isNonEmptyString(externalId) || !kind) {
     return res.status(400).json({ error: 'system, externalId, and kind are required' });
+  }
+  if (
+    refs !== undefined &&
+    (!Array.isArray(refs) ||
+      refs.some((r) => !r || !isNonEmptyString(r.system) || !isNonEmptyString(r.externalId)))
+  ) {
+    return res.status(400).json({ error: 'refs must be an array of {system, externalId} strings' });
   }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const entityId = await resolveOrCreateEntity(client, { system, externalId, kind, displayName, attrs });
+    for (const ref of refs ?? []) {
+      await addExternalRef(client, entityId, ref.system, ref.externalId);
+    }
     await client.query('COMMIT');
     res.json({ entityId });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: 'resolve failed', message: err.message });
+    sendRegistryError(res, err, 'resolve failed');
   } finally {
     client.release();
   }
@@ -89,7 +127,7 @@ app.post('/internal/entities/resolve', requireInternal, async (req, res) => {
 app.post('/internal/entities/:entityId/refs', requireInternal, async (req, res) => {
   const { entityId } = req.params;
   const { system, externalId } = req.body ?? {};
-  if (!system || !externalId) {
+  if (!isNonEmptyString(system) || !isNonEmptyString(externalId)) {
     return res.status(400).json({ error: 'system and externalId are required' });
   }
 
@@ -101,7 +139,7 @@ app.post('/internal/entities/:entityId/refs', requireInternal, async (req, res) 
     res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: 'add ref failed', message: err.message });
+    sendRegistryError(res, err, 'add ref failed');
   } finally {
     client.release();
   }

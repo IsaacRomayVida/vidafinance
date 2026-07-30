@@ -7,7 +7,7 @@ import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 
 import { checkRateLimit } from '../utils/rateLimiter';
-import { resolveEntity, addEntityRef } from '../utils/registryClient';
+import { resolveEntity } from '../utils/registryClient';
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
@@ -294,15 +294,13 @@ export async function approveEmployerHandler(
   // failure here must never affect the approval itself.
   if (decision === 'approved') {
     try {
-      const entityId = await resolveEntity({
+      await resolveEntity({
         system: 'firebase',
         externalId: employerId,
         kind: 'employer',
         displayName: employer.companyName,
+        refs: employer.rfc ? [{ system: 'rfc', externalId: employer.rfc }] : undefined,
       });
-      if (employer.rfc) {
-        await addEntityRef(entityId, 'rfc', employer.rfc);
-      }
     } catch (e: unknown) {
       logger.warn('Registry shadow-write failed', { error: (e as Error).message, employerId, service: 'functions' });
     }
