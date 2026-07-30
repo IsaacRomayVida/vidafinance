@@ -218,7 +218,12 @@ jobs:
           echo "Deployed ${ok}/${total} functions."
           if [ -n "$FAILED" ]; then
             echo "::error::Functions that failed after retries:${FAILED}"
-            echo "Re-run this job — already-deployed functions are skipped, so it converges."
+            echo "Re-running this job retries only the functions above (already-deployed ones are skipped)."
+            echo "That converges for TRANSIENT failures (e.g. CPU quota contention from a warm instance)."
+            echo "It will NOT converge for a function whose trigger type changed (e.g. HTTPS -> Firestore/Pub-Sub)"
+            echo "vs. what's live in production -- Firebase CLI cannot swap a trigger type in place. That case"
+            echo "needs the stale function deleted first: firebase functions:delete <name> --project \"\$PROJECT\" --force"
+            echo "then re-run this job so it gets created fresh."
             exit 1
           fi
           echo "All ${total} functions deployed successfully."
