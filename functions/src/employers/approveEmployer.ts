@@ -7,6 +7,7 @@ import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 
 import { checkRateLimit } from '../utils/rateLimiter';
+import { resolveEntity } from '../utils/registryClient';
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
@@ -285,6 +286,25 @@ export async function approveEmployerHandler(
     txn.update(employerRef, newFields as FirebaseFirestore.UpdateData<EmployerDocument>);
     txn.set(logRef, logEntry);
   });
+
+  // ── 5b. Shadow-write to the identity registry (Phase A, non-blocking) ──────
+  // Only on approval: the entity rule is "signs, pays, gets paid, or is
+  // sold" -- a rejected employer never does any of those. Best-effort only:
+  // this is additive registry-building, not the source of truth yet, so a
+  // failure here must never affect the approval itself.
+  if (decision === 'approved') {
+    try {
+      await resolveEntity({
+        system: 'firebase',
+        externalId: employerId,
+        kind: 'employer',
+        displayName: employer.companyName,
+        refs: employer.rfc ? [{ system: 'rfc', externalId: employer.rfc }] : undefined,
+      });
+    } catch (e: unknown) {
+      logger.warn('Registry shadow-write failed', { error: (e as Error).message, employerId, service: 'functions' });
+    }
+  }
 
   // ── 6. Trigger notification to employer ────────────────────────────────────
   try {

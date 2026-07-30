@@ -1,19 +1,14 @@
 {
-  "name": "vida-registry-ledger",
+  "name": "vida-registry-migrations",
   "private": true,
   "version": "1.0.0",
-  "description": "Identity registry + hash-chained receipts ledger (Postgres) for vidafinance",
-  "main": "src/index.js",
+  "description": "Migrations for the identity registry + hash-chained receipts ledger (Postgres) for vidafinance. Runtime library lives in services/shared/registry/ so every Railway service can require it.",
   "scripts": {
     "migrate:up": "node-pg-migrate up -m migrations",
-    "migrate:down": "node-pg-migrate down -m migrations",
-    "test": "jest --runInBand"
-  },
-  "dependencies": {
-    "pg": "^8.13.0"
+    "migrate:down": "node-pg-migrate down -m migrations"
   },
   "devDependencies": {
-    "jest": "^30.3.0",
-    "node-pg-migrate": "^7.6.0"
+    "node-pg-migrate": "^7.6.0",
+    "pg": "^8.13.0"
   }
 }
