@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 const FOCUSABLE = [
   'a[href]',
@@ -21,7 +21,9 @@ const FOCUSABLE = [
 export function useFocusTrap<T extends HTMLElement>(onClose: () => void) {
   const ref = useRef<T>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     const el = ref.current;

@@ -3,6 +3,24 @@ import { useTranslation } from 'react-i18next';
 
 const SESSION_KEY = 'funpay_splash_seen_v1';
 
+function initialPhase(): 'hidden' | 'showing' {
+  if (typeof window === 'undefined') return 'hidden';
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let seen = false;
+  try {
+    seen = sessionStorage.getItem(SESSION_KEY) === '1';
+  } catch {
+    /* sessionStorage unavailable — show once */
+  }
+  if (seen || reduce) return 'hidden';
+  try {
+    sessionStorage.setItem(SESSION_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+  return 'showing';
+}
+
 /**
  * Full-screen cinematic intro that plays the Seedance hero clip once per session,
  * then dissolves to reveal the homepage. Skipped entirely for users who prefer
@@ -10,30 +28,12 @@ const SESSION_KEY = 'funpay_splash_seen_v1';
  */
 export function SplashIntro() {
   const { t } = useTranslation();
-  const [phase, setPhase] = useState<'hidden' | 'showing' | 'leaving'>('hidden');
+  const [phase, setPhase] = useState<'hidden' | 'showing' | 'leaving'>(initialPhase);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let seen = false;
-    try {
-      seen = sessionStorage.getItem(SESSION_KEY) === '1';
-    } catch {
-      /* sessionStorage unavailable — show once */
-    }
-    if (seen || reduce) return;
-    try {
-      sessionStorage.setItem(SESSION_KEY, '1');
-    } catch {
-      /* ignore */
-    }
-    setPhase('showing');
-    document.body.style.overflow = 'hidden';
-  }, []);
-
-  useEffect(() => {
     if (phase !== 'showing') return;
+    document.body.style.overflow = 'hidden';
     const auto = window.setTimeout(() => setPhase('leaving'), 4600);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPhase('leaving');
