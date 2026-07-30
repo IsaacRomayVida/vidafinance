@@ -5,7 +5,12 @@ require('dotenv').config();
 const { alert5xx } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 const { getPool } = require('../shared/registry/pool');
-const { resolveOrCreateEntity, addExternalRef, RefConflictError } = require('../shared/registry/resolver');
+const {
+  resolveOrCreateEntity,
+  addExternalRef,
+  RefConflictError,
+  InvalidExternalIdError,
+} = require('../shared/registry/resolver');
 
 // Fail closed: this service exists only to talk to the registry DB and gate
 // on INTERNAL_SECRET. Missing either at boot means it cannot do its job.
@@ -56,6 +61,13 @@ function sendRegistryError(res, err, genericMessage) {
       externalId: err.externalId,
       existingEntityId: err.existingEntityId,
       requestedEntityId: err.requestedEntityId,
+    });
+  }
+  if (err instanceof InvalidExternalIdError) {
+    return res.status(400).json({
+      error: 'invalid_external_id',
+      system: err.system,
+      externalId: err.externalId,
     });
   }
   return res.status(500).json({ error: genericMessage, message: err.message });

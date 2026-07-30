@@ -205,3 +205,40 @@ test('400s on the refs route when system or externalId is not a string', async (
     .send({ system: 'rfc', externalId: { nested: 'object' } });
   expect(res.status).toBe(400);
 });
+
+test('400s when a clabe externalId normalizes to empty (e.g. "N/A")', async () => {
+  const res = await request(app)
+    .post('/internal/entities/resolve')
+    .set('x-internal-secret', 'test-secret')
+    .send({ system: 'clabe', externalId: 'N/A', kind: 'employer' });
+  expect(res.status).toBe(400);
+  expect(res.body.error).toBe('invalid_external_id');
+});
+
+test('400s when an rfc externalId is whitespace-only after trim', async () => {
+  const res = await request(app)
+    .post('/internal/entities/resolve')
+    .set('x-internal-secret', 'test-secret')
+    .send({ system: 'rfc', externalId: '   ', kind: 'worker' });
+  expect(res.status).toBe(400);
+  expect(res.body.error).toBe('invalid_external_id');
+});
+
+test('an invalid externalId inside the refs[] batch rolls back the whole resolve -- no entity created', async () => {
+  const res = await request(app)
+    .post('/internal/entities/resolve')
+    .set('x-internal-secret', 'test-secret')
+    .send({
+      system: 'firebase',
+      externalId: 'uid-batch-invalid-ref',
+      kind: 'worker',
+      refs: [{ system: 'clabe', externalId: 'N/A' }],
+    });
+  expect(res.status).toBe(400);
+  expect(res.body.error).toBe('invalid_external_id');
+
+  const lookup = await pool.query(
+    "SELECT count(*)::int AS n FROM entity_refs WHERE system = 'firebase' AND external_id = 'uid-batch-invalid-ref'"
+  );
+  expect(lookup.rows[0].n).toBe(0);
+});

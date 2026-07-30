@@ -6,6 +6,7 @@ const {
   resolveOrCreateEntity,
   addExternalRef,
   RefConflictError,
+  InvalidExternalIdError,
 } = require('./resolver');
 const { resetLedgerTestState } = require('./testUtils');
 
@@ -217,6 +218,62 @@ test('clabe normalization dedupes dash/space-formatted variants to the digits-on
 
     const { rows } = await pool.query('SELECT count(*)::int AS n FROM entities');
     expect(rows[0].n).toBe(1);
+  } finally {
+    client.release();
+  }
+});
+
+test('resolveOrCreateEntity throws InvalidExternalIdError when a clabe normalizes to empty', async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let caught;
+    try {
+      await resolveOrCreateEntity(client, { system: 'clabe', externalId: 'N/A', kind: 'employer' });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(InvalidExternalIdError);
+    expect(caught.system).toBe('clabe');
+    expect(caught.externalId).toBe('N/A');
+    await client.query('ROLLBACK');
+
+    const { rows } = await pool.query('SELECT count(*)::int AS n FROM entities');
+    expect(rows[0].n).toBe(0);
+  } finally {
+    client.release();
+  }
+});
+
+test('resolveOrCreateEntity throws InvalidExternalIdError when an rfc/curp normalizes to empty', async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await expect(
+      resolveOrCreateEntity(client, { system: 'rfc', externalId: '   ', kind: 'worker' })
+    ).rejects.toBeInstanceOf(InvalidExternalIdError);
+    await client.query('ROLLBACK');
+  } finally {
+    client.release();
+  }
+});
+
+test('addExternalRef throws InvalidExternalIdError when the ref normalizes to empty', async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const entityId = await resolveOrCreateEntity(client, {
+      system: 'firebase',
+      externalId: 'uid-invalid-ref',
+      kind: 'worker',
+    });
+    await expect(addExternalRef(client, entityId, 'curp', '   ')).rejects.toBeInstanceOf(
+      InvalidExternalIdError
+    );
+    await client.query('ROLLBACK');
+
+    const { rows } = await pool.query('SELECT count(*)::int AS n FROM entities');
+    expect(rows[0].n).toBe(0);
   } finally {
     client.release();
   }

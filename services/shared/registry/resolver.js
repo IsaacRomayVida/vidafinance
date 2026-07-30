@@ -19,6 +19,27 @@ class RefConflictError extends Error {
   }
 }
 
+// Thrown by normalizeExternalId when a non-empty raw value normalizes away
+// to nothing (e.g. clabe 'N/A' -> '', rfc '   ' -> ''). Deliberately checked
+// here, not at HTTP-layer input validation, so every caller -- registry-
+// service's routes AND scripts/backfill.js, which calls the resolver
+// directly -- is covered by one guard. Without this, two different garbage
+// values collapse to the SAME normalized ref (e.g. clabe:''), so the second
+// caller silently resolves to whichever entity got there first -- a silent
+// identity merge, not a visible failure, and it bypasses RefConflictError
+// entirely because from the DB's point of view it's the same ref.
+class InvalidExternalIdError extends Error {
+  constructor({ system, externalId }) {
+    super(
+      `invalid externalId for system '${system}': normalizes to the empty string ` +
+        `(raw value: ${JSON.stringify(externalId)}) -- refusing to create an ambiguous ref`
+    );
+    this.name = 'InvalidExternalIdError';
+    this.system = system;
+    this.externalId = externalId;
+  }
+}
+
 // Every external ID is a pointer to exactly one entity, never a competing
 // copy of it. All functions here must run inside a transaction the caller
 // already opened (BEGIN before, COMMIT/ROLLBACK after) -- the advisory lock
@@ -33,15 +54,22 @@ class RefConflictError extends Error {
 // extensions, etc.) -- a hand-rolled regex here would confidently
 // mis-normalize real numbers, which is worse than not normalizing.
 function normalizeExternalId(system, externalId) {
+  let normalized;
   switch (system) {
     case 'rfc':
     case 'curp':
-      return externalId.trim().toUpperCase();
+      normalized = externalId.trim().toUpperCase();
+      break;
     case 'clabe':
-      return externalId.replace(/\D/g, '');
+      normalized = externalId.replace(/\D/g, '');
+      break;
     default:
-      return externalId;
+      normalized = externalId;
   }
+  if (normalized === '') {
+    throw new InvalidExternalIdError({ system, externalId });
+  }
+  return normalized;
 }
 
 async function lockRef(client, system, externalId, callerName) {
@@ -121,4 +149,5 @@ module.exports = {
   addExternalRef,
   normalizeExternalId,
   RefConflictError,
+  InvalidExternalIdError,
 };
