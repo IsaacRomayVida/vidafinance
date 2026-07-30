@@ -132,7 +132,15 @@ exports.down = (pgm) => {
   pgm.sql(`
     REVOKE ALL ON entities, entity_refs, relationships, relationship_members, receipts, authority_rules FROM registry_app;
     REVOKE USAGE ON SCHEMA public FROM registry_app;
-    DROP ROLE IF EXISTS registry_app;
+
+    DO $$
+    BEGIN
+      DROP ROLE IF EXISTS registry_app;
+    EXCEPTION WHEN dependent_objects_still_exist THEN
+      RAISE NOTICE 'registry_app still referenced by other databases in this cluster; leaving role in place';
+    END
+    $$;
+
     DROP TABLE IF EXISTS authority_rules;
     DROP TRIGGER IF EXISTS receipts_no_truncate ON receipts;
     DROP TRIGGER IF EXISTS receipts_no_update_delete ON receipts;
