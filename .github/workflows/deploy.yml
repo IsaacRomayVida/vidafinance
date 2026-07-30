@@ -218,7 +218,11 @@ jobs:
           echo "Deployed ${ok}/${total} functions."
           if [ -n "$FAILED" ]; then
             echo "::error::Functions that failed after retries:${FAILED}"
-            echo "Re-run this job — already-deployed functions are skipped, so it converges."
+            echo "Re-run this job to retry TRANSIENT failures (e.g. CPU-quota backoff) — already-deployed functions are skipped, so those converge."
+            echo "EXCEPTION: a trigger-type change (e.g. HTTPS -> Firestore/other event trigger) never converges via re-run, no matter how many times."
+            echo "Firebase refuses to change a deployed function's trigger type in place; check the per-function error above for"
+            echo "'is not allowed. Please delete your function and create a new one instead.' -- if present, re-running just wastes another cycle."
+            echo "That function must be deleted first (firebase functions:delete <name> --region <region> --project <id>), then the next deploy recreates it."
             exit 1
           fi
           echo "All ${total} functions deployed successfully."
