@@ -119,6 +119,7 @@ jobs:
           NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
+          REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
           SENTRY_DSN=${{ secrets.SENTRY_DSN }}
           SENTRY_RELEASE=${{ github.sha }}
           ENVEOF

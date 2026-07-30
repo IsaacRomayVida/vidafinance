@@ -52,6 +52,7 @@ jobs:
           NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL_STAGING }}
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL_STAGING }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_STAGING }}
+          REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
           ENVEOF
 
       - name: Write functions .env (Production)
@@ -66,6 +67,7 @@ jobs:
           NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL_PRODUCTION }}
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL_PRODUCTION }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_PRODUCTION }}
+          REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
           ENVEOF
 
       - name: Authenticate to Google Cloud
