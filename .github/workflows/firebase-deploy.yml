@@ -52,7 +52,7 @@ jobs:
           NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL_STAGING }}
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL_STAGING }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_STAGING }}
-          REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
+          REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL_STAGING }}
           ENVEOF
 
       - name: Write functions .env (Production)
