@@ -107,6 +107,11 @@ function buildMockDb({
   activeLoans = [] as Array<Record<string, unknown>>,
   employee = mockEmployee as Record<string, unknown> | null,
   employer = mockEmployer as Record<string, unknown> | null,
+  // The config/loan document backing getLoanConfigValues() (#389's async seam).
+  // `null` means the document does not exist yet, so getLoanConfigValues()
+  // returns the compile-time seed (feeRate 0.3) — matching production
+  // behavior for an unconfigured deployment.
+  configData = null as Record<string, unknown> | null,
 } = {}) {
   const loansQuery = makeQuery({
     empty: activeLoans.length === 0,
@@ -114,6 +119,7 @@ function buildMockDb({
   });
 
   const transactionCalls: Array<{ op: string; data?: unknown }> = [];
+  let currentConfigData = configData;
 
   return {
     collection: jest.fn().mockImplementation((name: string) => {
@@ -137,6 +143,18 @@ function buildMockDb({
       if (name === 'audit_log') {
         return { add: jest.fn().mockResolvedValue({ id: 'audit-1' }) };
       }
+      if (name === 'config') {
+        return {
+          doc: jest.fn().mockReturnValue({
+            get: jest.fn().mockImplementation(() =>
+              Promise.resolve({
+                exists: currentConfigData !== null,
+                data: () => currentConfigData ?? undefined,
+              })
+            ),
+          }),
+        };
+      }
       throw new Error(`Unexpected collection: ${name}`);
     }),
     runTransaction: jest.fn(async (fn: (txn: { update: jest.Mock; set: jest.Mock }) => Promise<void>) => {
@@ -148,6 +166,12 @@ function buildMockDb({
       return transactionCalls;
     }),
     _transactionCalls: transactionCalls,
+    // Lets a test simulate an admin approving a config change (#389's propose
+    // /approve flow) mid-test, i.e. between two requestLoan calls, without
+    // reaching into module internals.
+    _setConfigData: (data: Record<string, unknown> | null) => {
+      currentConfigData = data;
+    },
   };
 }
 
@@ -237,26 +261,21 @@ describe('requestLoan (deployed handler in index.ts)', () => {
   });
 
   it('persists feeRate at creation time; a later config change never reprices an already-created loan', async () => {
-    let liveFeeRate = 0.3;
-    jest.doMock('../config/loanConfig', () => {
-      const actual = jest.requireActual('../config/loanConfig');
-      return {
-        ...actual,
-        get LOAN_FEE_RATE() {
-          return liveFeeRate;
-        },
-      };
-    });
-
     const { requestLoan } = await import('../index');
     const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
 
-    // Loan #1 is created while the fee rate is 30%.
+    // Loan #1 is created while the fee rate is 30% (no config/loan document
+    // yet, i.e. the ratified compile-time seed is in force).
     await fn({ auth, data: realClientPayload });
 
-    // The rate changes (e.g. an admin edits the config) before loan #2 is
-    // requested by the same borrower.
-    liveFeeRate = 0.5;
+    // The rate changes (an admin proposes+approves a config change via
+    // config/loanConfigAdmin.ts) before loan #2 is requested by the same
+    // borrower — simulated at the actual async seam: the config/loan document
+    // getLoanConfigValues() reads, not a mocked module export. 0.32 is a
+    // valid in-bounds rate (MAX_ALLOWED_FEE_RATE is 0.35); an out-of-bounds
+    // value would correctly be rejected by assertValidFeeRate, which is not
+    // what this test is exercising.
+    mockDb._setConfigData({ feeRate: 0.32 });
     await fn({ auth, data: realClientPayload });
 
     const loanWrites = mockDb._transactionCalls.filter((c) => c.op === 'set') as Array<{
@@ -271,8 +290,8 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     expect(firstLoanWrite.data['fee']).toBe(300);
 
     // Loan #2 picks up the new rate in force at ITS creation time.
-    expect(secondLoanWrite.data['feeRate']).toBe(0.5);
-    expect(secondLoanWrite.data['fee']).toBe(500);
+    expect(secondLoanWrite.data['feeRate']).toBe(0.32);
+    expect(secondLoanWrite.data['fee']).toBe(320);
   });
 
   describe('underwriting condition breakdown (E5c)', () => {
@@ -373,10 +392,18 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 // files on disk (not the compiled/mocked module) so a hardcoded literal can't
 // hide behind a mock.
 describe('fee-rate literal guardrail (P0-2 regression)', () => {
-  it('index.ts computes the loan fee only via LOAN_FEE_RATE — no hardcoded fee-rate literal', () => {
+  it('index.ts computes the loan fee only via the config seam (getLoanConfigValues) — no hardcoded fee-rate literal', () => {
     const src = fs.readFileSync(path.join(__dirname, '../index.ts'), 'utf8');
 
-    expect(src).toMatch(/const fee = Math\.round\(amount \* LOAN_FEE_RATE\)/);
+    // As of #389 the rate is admin-editable and lives in Firestore, read via
+    // getLoanConfigValues() — LOAN_FEE_RATE is no longer a module-level
+    // constant requestLoan can read directly, only the seed value that
+    // function falls back to. The fee MUST be derived from that single async
+    // read (the same value persisted as `feeRate` on the loan and returned by
+    // getLoanConfig), never from a second, independently-editable literal.
+    expect(src).toMatch(/const loanConfig = await getLoanConfigValues\(\)/);
+    expect(src).toMatch(/const fee = Math\.round\(amount \* loanConfig\.feeRate\)/);
+    expect(src).toMatch(/feeRate:\s*loanConfig\.feeRate/);
     // Catches any hardcoded numeric fee rate multiplied against the loan amount
     // (e.g. `amount * 0.08` or `amount * 0.3`) reappearing in the handler.
     expect(src).not.toMatch(/amount\s*\*\s*0\.\d+/);
