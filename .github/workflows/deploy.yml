@@ -318,18 +318,34 @@ jobs:
           #    design, so a deploy CAN reach this point with no positive proof of
           #    write capability — which is exactly the state that produces the
           #    half-applied production we are trying to prevent. It also closes
-          #    the (small) race between the preflight step and this one. So the
-          #    rules/indexes/storage deploy below is gated on a canary that
-          #    returned 200, in every path.
+          #    the (small) race between the preflight step and this one. So every
+          #    write below — functions, rules, indexes, hosting — is gated on a
+          #    canary that returned 200, in every path.
           #
           #    ATOMICITY DISCLAIMER — READ BEFORE TRUSTING THIS: this is
           #    best-effort ordering, NOT a transaction. It guarantees that
-          #    NOTHING is applied when the project is known to refuse writes. It
-          #    does NOT guarantee all-or-nothing: if the functions loop below
-          #    fails MIDWAY for an unrelated reason (CPU quota, a bad build, a
-          #    trigger-type change), rules and indexes are already live against a
-          #    partially-updated backend. That residual window is real,
-          #    out of scope here, and deliberately named rather than papered over.
+          #    NOTHING is applied when the project is known to refuse writes, and
+          #    that each stage is applied only after its own preconditions are
+          #    live. It does NOT guarantee all-or-nothing. What a mid-deploy
+          #    failure now leaves behind, by stage:
+          #      functions loop  → some functions new, some old; rules, indexes
+          #                        and hosting all still on the previous release.
+          #                        The deployed frontend is unchanged, so it only
+          #                        calls callables that already existed.
+          #      rules           → backend new, rules/hosting old. On the paths
+          #                        the old frontend uses, the old rules are the
+          #                        MORE permissive ones (#385 delete lockdown,
+          #                        #391 employer-list lockdown both tighten), so
+          #                        this is a security gap to close, not an outage.
+          #                        The reads the new rules newly ALLOW (audit_log)
+          #                        are only issued by the new console, which is
+          #                        still behind this failure.
+          #      indexes         → backend + rules new, hosting old. The old
+          #                        frontend does not issue the queries the new
+          #                        indexes serve.
+          #    In every case production is left coherent-but-older, which is the
+          #    property the previous ordering did not have: it could leave new
+          #    rules enforcing against an old frontend, which IS an outage.
           if [ "${CANARY_WRITE_OK:-0}" = "1" ]; then
             echo "Write canary already confirmed in preflight (HTTP 200); proceeding."
           else
@@ -355,21 +371,36 @@ jobs:
             fi
           fi
 
-          # 1) Rules, indexes and storage first — these are backward-compatible
-          #    and must be in place before the functions that rely on them.
-          #    They run ONLY after a canary returned 200 (or was inconclusive and
-          #    explicitly logged as such); a 403 exits above, untouched.
-          #    HOSTING IS DEPLOYED LAST, in a separate step, and ONLY if every
-          #    function deployed. Releasing hosting before functions is what
-          #    broke production on 2026-08-02: the new frontend went live
-          #    calling `getLoanConfig`, the functions deploy then failed on a
-          #    billing 403, and the loan wizard fail-closed for every borrower
-          #    against a callable that had never been deployed.
-          firebase deploy \
-            --only firestore:rules,firestore:indexes,storage \
-            --project "$PROJECT" --non-interactive
+          # DEPLOY ORDER — functions, then rules, then indexes, then hosting.
+          #
+          # Rules used to go FIRST, on the claim that they are "backward-compatible
+          # and must be in place before the functions that rely on them". Both
+          # halves of that claim are false, and the run on 2026-08-02T18:04Z proved
+          # the cost of believing them:
+          #
+          #  a) Functions use the Admin SDK, which bypasses firestore.rules
+          #     entirely. NO function has ever relied on a rule being deployed.
+          #  b) The rules are NOT backward-compatible with the currently-deployed
+          #     frontend. #391 locks `/employers` list access to ops-only, on the
+          #     understanding that clients switch to the `lookupEmployerByCode`
+          #     callable. Ship the rules first and, for the whole ~40-function
+          #     deploy loop below, production is old frontend + new rules =
+          #     employee onboarding is DOWN. Ship the rules and then fail the
+          #     loop, and it stays down until someone notices.
+          #
+          # So: rules go out AFTER the backend they assume, and BEFORE the
+          # frontend that they govern. Each stage is a precondition of the next,
+          # and a failure at any stage leaves production coherent-but-older
+          # rather than incoherent-and-newer.
+          #
+          # HOSTING IS STILL LAST, in its own step, and only on a fully
+          # successful backend. Releasing hosting before functions is what broke
+          # production on 2026-08-02: the new frontend went live calling
+          # `getLoanConfig`, the functions deploy then failed on a billing 403,
+          # and the loan wizard fail-closed for every borrower against a callable
+          # that had never been deployed.
 
-          # 2) Functions ONE AT A TIME. Changing shared env (e.g. a secret)
+          # 1) Functions ONE AT A TIME. Changing shared env (e.g. a secret)
           #    forces a new Cloud Run revision for EVERY gen2 function; each new
           #    revision holds ~1 CPU during its health-check. The project's
           #    "total allowable CPU per project per region" quota is low and
@@ -465,7 +496,51 @@ jobs:
           fi
           echo "All ${total} functions deployed successfully."
 
-      # Hosting goes LAST and only on a fully successful functions deploy, so a
+          # 2) Rules + storage, now that the backend they assume is live.
+          #    Fatal: these are the security surface (#385 delete lockdown, #391
+          #    employer-list lockdown). A failure here must go red and must stop
+          #    hosting, because the new frontend is written against these rules.
+          echo "=== Deploying firestore rules + storage rules ==="
+          firebase deploy \
+            --only firestore:rules,storage \
+            --project "$PROJECT" --non-interactive
+
+      # 3) Indexes are additive — creating one never breaks an existing query —
+      #    so they come after the rules. They still gate hosting: the admin
+      #    console's server-side action filter (#402) throws FAILED_PRECONDITION
+      #    against a missing composite index, so releasing the frontend without
+      #    them ships a broken console.
+      #
+      #    Split into its own step because it is the ONE stage with a distinct
+      #    IAM requirement — index creation needs datastore.indexes.create, which
+      #    is NOT implied by the Cloud Functions / rules permissions the canary
+      #    proves. On 2026-08-02T18:04Z the canary returned 200 and this call
+      #    still returned 403, and because it was bundled with the rules deploy
+      #    the error surfaced as a bare CLI stack trace with no owner and no fix.
+      - name: Deploy Firestore indexes
+        run: |
+          set -uo pipefail
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            PROJECT="${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }}"
+          else
+            PROJECT="${{ secrets.FIREBASE_PROJECT_ID_STAGING }}"
+          fi
+          echo "Deploying firestore indexes to $PROJECT"
+          set +e
+          out="$(firebase deploy --only firestore:indexes --project "$PROJECT" --non-interactive 2>&1)"
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+          if [ "$rc" -ne 0 ]; then
+            if printf '%s' "$out" | grep -qiE 'HTTP Error: 403|PERMISSION_DENIED|caller does not have permission'; then
+              echo "::error::Firestore index deploy was REFUSED (403) by ${PROJECT}. Functions and rules DID deploy; only indexes and hosting are behind. This is an IAM gap, not billing — the write canary passed on the same credentials in this run. The deploy service account needs index-write permission, which roles/firebase.developAdmin and roles/datastore.user do NOT include. FIX: gcloud projects add-iam-policy-binding ${PROJECT} --member=serviceAccount:<deploy-sa> --role=roles/datastore.indexAdmin   (see https://console.cloud.google.com/iam-admin/iam?project=${PROJECT}), then re-run this job."
+            else
+              echo "::error::Firestore index deploy failed on ${PROJECT}. Functions and rules DID deploy; hosting is held back. See the CLI output above."
+            fi
+            exit 1
+          fi
+
+      # Hosting goes LAST and only on a fully successful backend deploy, so a
       # backend failure can never leave production serving a frontend that calls
       # callables which were never deployed.
       - name: Deploy Hosting (only after all functions succeeded)
