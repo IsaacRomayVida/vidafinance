@@ -623,6 +623,50 @@ describe('audit_log collection', () => {
     const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
     await assertFails(getDoc(doc(ctx.firestore(), 'audit_log/log1')));
   });
+
+  // P2-2: role grant/revoke used to be written to `auditLogs`, which had no rule
+  // and therefore fell through to deny-all — privilege-escalation history was
+  // write-only. Both the new home and the legacy one must be ops-readable.
+  it('ops can read a role-grant record', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'audit_log/grant1'), {
+        action: 'admin.setRole',
+        actorUid: 'admin1',
+        targetId: 'victim',
+        after: { role: 'admin' },
+      });
+    });
+
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'audit_log/grant1')));
+  });
+
+  it('ops can read historical records left in the legacy auditLogs collection', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'auditLogs/legacy1'), {
+        action: 'admin.setRole',
+        performedBy: 'admin1',
+        entityId: 'victim',
+      });
+    });
+
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'auditLogs/legacy1')));
+  });
+
+  it('legacy auditLogs remains non-writable and non-readable by employees', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'auditLogs/legacy1'), { action: 'admin.setRole' });
+    });
+
+    const admin = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(
+      setDoc(doc(admin.firestore(), 'auditLogs/legacy1'), { action: 'malicious.rewrite' })
+    );
+
+    const employee = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(getDoc(doc(employee.firestore(), 'auditLogs/legacy1')));
+  });
 });
 
 // ── users collection ─────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { validateInput } from '../utils/validateInput';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 
 const UpdateLoanStatusSchema = z.object({
   loanId: z.string().min(1),
@@ -67,7 +68,7 @@ export const updateLoanStatus = onCall(
         );
       }
 
-      const logRef = db.collection('auditLogs').doc();
+      const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
 
       await db.runTransaction(async (txn) => {
         txn.update(loanRef, {
@@ -81,18 +82,22 @@ export const updateLoanStatus = onCall(
             reason: input.reason,
           }),
         });
-        txn.set(logRef, {
-          logId: logRef.id,
-          action: 'loan.status_update',
-          entityType: 'loan',
-          entityId: input.loanId,
-          performedBy: auth.uid,
-          performedByEmail: auth.email,
-          previousState: { status: previousStatus },
-          newState: { status: input.newStatus },
-          metadata: { reason: input.reason, notes: input.notes ?? null },
-          timestamp: now,
-        });
+        txn.set(
+          logRef,
+          buildAuditLogDocument(
+            {
+              action: 'loan.status_update',
+              actorUid: auth.uid,
+              actorRole: auth.role,
+              actorEmail: auth.email ?? null,
+              targetId: input.loanId,
+              before: { status: previousStatus },
+              after: { status: input.newStatus },
+              meta: { entityType: 'loan', reason: input.reason, notes: input.notes ?? null },
+            },
+            now
+          )
+        );
       });
 
       return {

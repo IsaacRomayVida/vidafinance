@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
+import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 
 const AdminClaimSchema = z.object({
   targetUid: z.string().min(1),
@@ -43,25 +44,37 @@ export const setAdminClaim = onCall(
           throw new HttpsError('failed-precondition', 'Cannot change your own role');
         }
 
-        await getAuth().setCustomUserClaims(targetUid, { role });
-
         const db = getFirestore();
         const now = Timestamp.now();
 
-        await db.collection('users').doc(targetUid).update({
-          role,
-          updatedAt: now,
+        const userRef = db.collection('users').doc(targetUid);
+        const previousRole = (await userRef.get()).data()?.['role'] ?? null;
+
+        // Record the grant BEFORE the claim is minted, atomically with the role
+        // field on the user document. If the audit write fails the transaction
+        // aborts and setCustomUserClaims is never reached — no privilege is
+        // escalated without a durable record of who escalated it.
+        await db.runTransaction(async (txn) => {
+          txn.update(userRef, { role, updatedAt: now });
+          txn.set(
+            db.collection(AUDIT_LOG_COLLECTION).doc(),
+            buildAuditLogDocument(
+              {
+                action: 'admin.setRole',
+                actorUid: auth.uid,
+                actorRole: auth.role,
+                actorEmail: auth.email ?? null,
+                targetId: targetUid,
+                before: { role: previousRole },
+                after: { role },
+                meta: { entityType: 'user', newRole: role },
+              },
+              now
+            )
+          );
         });
 
-        await db.collection('auditLogs').add({
-          action: 'admin.setRole',
-          entityType: 'user',
-          entityId: targetUid,
-          performedBy: auth.uid,
-          performedByEmail: auth.email,
-          metadata: { newRole: role },
-          timestamp: now,
-        });
+        await getAuth().setCustomUserClaims(targetUid, { role });
 
         return { success: true, targetUid, role };
       })
@@ -87,25 +100,36 @@ export const revokeAdminClaim = onCall(
           throw new HttpsError('failed-precondition', 'Cannot revoke your own admin role');
         }
 
-        await getAuth().setCustomUserClaims(targetUid, { role: 'employee' });
-
         const db = getFirestore();
         const now = Timestamp.now();
 
-        await db.collection('users').doc(targetUid).update({
-          role: 'employee',
-          updatedAt: now,
+        const userRef = db.collection('users').doc(targetUid);
+        const previousRole = (await userRef.get()).data()?.['role'] ?? null;
+
+        // Same ordering as setAdminClaim: the audit record commits atomically with
+        // the role field, and only then is the claim changed. A revoke that cannot
+        // be logged does not happen.
+        await db.runTransaction(async (txn) => {
+          txn.update(userRef, { role: 'employee', updatedAt: now });
+          txn.set(
+            db.collection(AUDIT_LOG_COLLECTION).doc(),
+            buildAuditLogDocument(
+              {
+                action: 'admin.revokeRole',
+                actorUid: auth.uid,
+                actorRole: auth.role,
+                actorEmail: auth.email ?? null,
+                targetId: targetUid,
+                before: { role: previousRole },
+                after: { role: 'employee' },
+                meta: { entityType: 'user', newRole: 'employee' },
+              },
+              now
+            )
+          );
         });
 
-        await db.collection('auditLogs').add({
-          action: 'admin.revokeRole',
-          entityType: 'user',
-          entityId: targetUid,
-          performedBy: auth.uid,
-          performedByEmail: auth.email,
-          metadata: { previousRole: 'admin', newRole: 'employee' },
-          timestamp: now,
-        });
+        await getAuth().setCustomUserClaims(targetUid, { role: 'employee' });
 
         return { success: true, targetUid, role: 'employee' };
       })

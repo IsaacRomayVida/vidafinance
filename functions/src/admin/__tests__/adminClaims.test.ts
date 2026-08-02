@@ -1,5 +1,5 @@
 import { setAdminClaim, revokeAdminClaim } from '../adminClaims';
-import { _mockStore } from '../../__mocks__/firebase-admin/firestore';
+import { _mockStore, mockDb } from '../../__mocks__/firebase-admin/firestore';
 import { mockSetCustomUserClaims } from '../../__mocks__/firebase-admin/auth';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
@@ -20,7 +20,7 @@ const superAdminAuth = {
 beforeEach(() => {
   jest.clearAllMocks();
   _mockStore.users = {};
-  _mockStore.auditLogs = [];
+  _mockStore.auditLog = [];
   mockSetCustomUserClaims.mockResolvedValue(undefined);
 });
 
@@ -120,12 +120,24 @@ describe('setAdminClaim', () => {
       expect(result.role).toBe('employee');
     });
 
-    it('writes audit log to auditLogs collection', async () => {
+    it('writes audit log to the readable audit_log collection', async () => {
       await setFn({ auth: adminAuth, data: { targetUid: 'user-2', role: 'ops' } });
-      expect(_mockStore.auditLogs.length).toBeGreaterThanOrEqual(1);
-      const log = _mockStore.auditLogs[0] as Record<string, unknown>;
+      expect(_mockStore.auditLog.length).toBeGreaterThanOrEqual(1);
+      const log = _mockStore.auditLog[0] as Record<string, unknown>;
       expect(log['action']).toBe('admin.setRole');
-      expect(log['entityId']).toBe('user-2');
+      expect(log['targetId']).toBe('user-2');
+      expect(log['actorUid']).toBe('admin-uid');
+      expect(log['actorEmail']).toBe('admin@test.com');
+      expect(log['targetCollection']).toBe('admin');
+      expect(log['after']).toEqual({ role: 'ops' });
+    });
+
+    it('does not grant the claim when the audit write fails', async () => {
+      mockDb.runTransaction.mockRejectedValueOnce(new Error('audit write failed'));
+      await expect(
+        setFn({ auth: adminAuth, data: { targetUid: 'user-2', role: 'ops' } })
+      ).rejects.toMatchObject({ code: 'internal' });
+      expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
     });
 
     it('propagates setCustomUserClaims errors as internal', async () => {
@@ -201,12 +213,23 @@ describe('revokeAdminClaim', () => {
       expect(result.role).toBe('employee');
     });
 
-    it('writes audit log to auditLogs collection', async () => {
+    it('writes audit log to the readable audit_log collection', async () => {
       await revokeFn({ auth: adminAuth, data: { targetUid: 'user-2' } });
-      expect(_mockStore.auditLogs.length).toBeGreaterThanOrEqual(1);
-      const log = _mockStore.auditLogs[0] as Record<string, unknown>;
+      expect(_mockStore.auditLog.length).toBeGreaterThanOrEqual(1);
+      const log = _mockStore.auditLog[0] as Record<string, unknown>;
       expect(log['action']).toBe('admin.revokeRole');
-      expect(log['entityId']).toBe('user-2');
+      expect(log['targetId']).toBe('user-2');
+      expect(log['actorUid']).toBe('admin-uid');
+      expect(log['targetCollection']).toBe('admin');
+      expect(log['after']).toEqual({ role: 'employee' });
+    });
+
+    it('does not revoke the claim when the audit write fails', async () => {
+      mockDb.runTransaction.mockRejectedValueOnce(new Error('audit write failed'));
+      await expect(
+        revokeFn({ auth: adminAuth, data: { targetUid: 'user-2' } })
+      ).rejects.toMatchObject({ code: 'internal' });
+      expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
     });
 
     it('propagates setCustomUserClaims errors as internal', async () => {

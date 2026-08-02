@@ -9,6 +9,7 @@ import { Queue } from 'bullmq';
 
 import { checkRateLimit } from '../utils/rateLimiter';
 import { resolveEntity } from '../utils/registryClient';
+import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
@@ -58,19 +59,9 @@ export interface EmployerDocument {
   updatedAt: Timestamp;
 }
 
-export interface AuditLogEntry {
-  logId: string;
-  action: string;
-  entityType: 'employer' | 'loan' | 'user';
-  entityId: string;
-  performedBy: string;
-  performedByEmail: string;
-  previousState: Partial<EmployerDocument>;
-  newState: Partial<EmployerDocument>;
-  metadata: Record<string, unknown>;
-  timestamp: Timestamp;
-  ipAddress?: string;
-}
+// The audit document shape lives in utils/auditLog.ts (AuditLogEntry /
+// buildAuditLogDocument). A local copy here is what let this module drift onto a
+// second, unreadable collection in the first place — do not re-add one.
 
 export interface ApproveEmployerResult {
   success: boolean;
@@ -269,19 +260,20 @@ export async function approveEmployerHandler(
           updatedAt: now,
         };
 
-  const logRef = db.collection('auditLogs').doc();
-  const logEntry: AuditLogEntry = {
-    logId: logRef.id,
-    action: `employer.${decision}`,
-    entityType: 'employer',
-    entityId: employerId,
-    performedBy: adminUid,
-    performedByEmail: adminEmail,
-    previousState,
-    newState: newFields,
-    metadata: { notes: notes ?? null, creditLimit: creditLimit ?? null },
-    timestamp: now,
-  };
+  const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
+  const logEntry = buildAuditLogDocument(
+    {
+      action: `employer.${decision}`,
+      actorUid: adminUid,
+      actorRole: (request.auth.token['role'] as string | undefined) ?? 'admin',
+      actorEmail: adminEmail,
+      targetId: employerId,
+      before: previousState as Record<string, unknown>,
+      after: newFields as Record<string, unknown>,
+      meta: { entityType: 'employer', notes: notes ?? null, creditLimit: creditLimit ?? null },
+    },
+    now
+  );
 
   await db.runTransaction(async (txn) => {
     txn.update(employerRef, newFields as FirebaseFirestore.UpdateData<EmployerDocument>);

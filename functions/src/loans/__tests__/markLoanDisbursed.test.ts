@@ -45,7 +45,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   _mockStore.loans = {};
   _mockStore.employers = {};
-  _mockStore.auditLogs = [];
+  _mockStore.auditLog = [];
   _mockStore.transactionCalls = [];
   mockRedis.lpush.mockResolvedValue(1);
 });
