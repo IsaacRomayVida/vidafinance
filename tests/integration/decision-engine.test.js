@@ -313,10 +313,10 @@ function runDecisionPipeline(applicant) {
     result.stagesReached.push("stage_5_full_underwriting");
 
     // AML watchlist check
-    const truoraRaw = mockAML(applicant.rfc);
-    const truoraDecision = parseAMLResult(truoraRaw);
+    const amlRaw = mockAML(applicant.rfc);
+    const amlDecision = parseAMLResult(amlRaw);
 
-    if (truoraDecision.hard_reject) {
+    if (amlDecision.hard_reject) {
       result.decision = "rejected";
       result.reason = "aml_hard_reject";
       result.firestoreUpdate = { status: "rejected", rejectionReason: result.reason, stage: 5 };
@@ -324,7 +324,7 @@ function runDecisionPipeline(applicant) {
       return result;
     }
 
-    if (truoraDecision.requires_human_review) {
+    if (amlDecision.requires_human_review) {
       result.decision = "human_review";
       result.reason = "aml_fuzzy_match_review";
       result.firestoreUpdate = { status: "under_review", stage: 5, requiresHumanReview: true };
@@ -656,9 +656,9 @@ describe("End-to-End Integration: Decision Engine (18 Decision Paths)", () => {
       expect(bureauDecision.escalateToStage).toBe(4);
 
       // Directly test KYC mock for XXX seed
-      const incodeResult = mockKYC("GARL900101XXX");
-      expect(incodeResult.overall).toBe("DECLINED");
-      expect(incodeResult.idValidation.pass).toBe(false);
+      const kycResult = mockKYC("GARL900101XXX");
+      expect(kycResult.overall).toBe("DECLINED");
+      expect(kycResult.idValidation.pass).toBe(false);
     });
 
     test("15. AML hit → flag for human review at Stage 5", () => {

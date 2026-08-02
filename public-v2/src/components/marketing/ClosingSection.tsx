@@ -8,21 +8,24 @@ const testimonials = [
     quote: 'Funpay nos permitió ofrecer un beneficio real a nuestros empleados sin ningún costo ni riesgo. La adopción fue inmediata.',
     name: 'Carlos Rodríguez',
     role: 'Director de RRHH · Manufactura del Norte',
-    img: '/images/carlosheadshot.jpg',
+    img: '/images/carlosheadshot.webp',
+    imgFallback: '/images/carlosheadshot.jpg',
     initials: 'CR',
   },
   {
     quote: 'Cuando mi hijo se enfermó, Funpay me salvó. Sin este beneficio, habría tenido que pedir un préstamo con intereses altísimos. Recibí el dinero en 24 horas.',
     name: 'Ana Martínez',
     role: 'Operadora · Manufactura del Norte',
-    img: '/images/ana.jpg',
+    img: '/images/ana.webp',
+    imgFallback: '/images/ana.jpg',
     initials: 'AM',
   },
   {
     quote: 'La integración fue increíblemente simple. En dos días teníamos Funpay funcionando con nuestra nómina. Nuestros empleados lo usan cada mes.',
     name: 'Roberto Méndez',
     role: 'Gerente de Operaciones · Logística Express',
-    img: '/images/roberto.jpg',
+    img: '/images/roberto.webp',
+    imgFallback: '/images/roberto.jpg',
     initials: 'RM',
   },
 ];
@@ -81,11 +84,14 @@ export function ClosingSection() {
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {curr.img ? (
-              <img loading="lazy" src={curr.img} alt={curr.name} style={{
-                width: 72, height: 72, borderRadius: '50%', objectFit: 'cover',
-                objectPosition: 'center 15%',
-                border: '2px solid rgba(255,255,255,0.15)',
-              }} />
+              <picture style={{ display: 'block' }}>
+                <source srcSet={curr.img} type="image/webp" />
+                <img loading="lazy" src={curr.imgFallback} alt={curr.name} style={{
+                  width: 72, height: 72, borderRadius: '50%', objectFit: 'cover',
+                  objectPosition: 'center 15%',
+                  border: '2px solid rgba(255,255,255,0.15)',
+                }} />
+              </picture>
             ) : (
               <div style={{
                 width: 72, height: 72, borderRadius: '50%',
