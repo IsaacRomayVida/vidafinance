@@ -36,7 +36,7 @@ jobs:
       - name: Lint (functions)
         run: cd functions && npm run lint
 
-      - name: Unit tests (functions) — 273/273, this is a hard gate
+      - name: Unit tests (functions) — 275/275, this is a hard gate
         run: cd functions && npm run test:ci
 
   underwriting-service:

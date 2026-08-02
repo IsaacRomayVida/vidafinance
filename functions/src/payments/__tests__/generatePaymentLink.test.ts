@@ -40,7 +40,7 @@ const mockFetchResponse = (ok: boolean, body: unknown) => ({
 beforeEach(() => {
   jest.clearAllMocks();
   _mockStore.loans = {};
-  _mockStore.auditLogs = [];
+  _mockStore.auditLog = [];
   process.env['PAYMENT_SERVER_URL'] = 'https://payment-server.internal';
   process.env['INTERNAL_SECRET'] = 'test-secret';
 });

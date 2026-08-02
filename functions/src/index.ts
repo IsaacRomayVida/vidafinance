@@ -18,6 +18,7 @@ import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
 import { getLoanConfigValues, LOAN_FEE_RATE, ALLOWED_LOAN_TERM_DAYS, DEFAULT_LOAN_TERM_DAYS, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from './config/loanConfig';
 import { allowTestBypass } from './utils/environment';
+import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
 
 initSentry();
 
@@ -57,28 +58,8 @@ function getQueue(name: string): Queue {
 
 // ── Internal utilities ───────────────────────────────────────────────────────
 
-interface AuditLogEntry {
-  action: string;
-  actorUid: string;
-  actorRole: string;
-  targetId: string;
-  before?: Record<string, unknown> | null;
-  after?: Record<string, unknown> | null;
-  meta?: Record<string, unknown>;
-}
-
 async function auditLog(database: FirebaseFirestore.Firestore, entry: AuditLogEntry): Promise<void> {
-  await database.collection('audit_log').add({
-    action: entry.action,
-    actorUid: entry.actorUid,
-    actorRole: entry.actorRole,
-    targetCollection: entry.action.split('.')[0],
-    targetId: entry.targetId,
-    before: entry.before ?? null,
-    after: entry.after ?? null,
-    meta: entry.meta ?? {},
-    timestamp: FieldValue.serverTimestamp(),
-  });
+  await database.collection(AUDIT_LOG_COLLECTION).add(buildAuditLogDocument(entry));
 }
 
 async function callML(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -1076,6 +1057,18 @@ export const onEmployerDocCreated = onDocumentCreated('employers/{uid}', async (
     return null;
   }
 
+  // This trigger mints employer_admin and previously left no trace at all — the
+  // grant was invisible to ops even after audit_log became readable. Log first so
+  // a failed audit write aborts (and retries) the grant instead of hiding it.
+  await auditLog(db, {
+    action: 'employer.claimGrantedOnCreate',
+    actorUid: 'system',
+    actorRole: 'system',
+    targetId: uid,
+    after: { role: 'employer_admin' },
+    meta: { trigger: 'onEmployerDocCreated', status },
+  });
+
   await admin.auth().setCustomUserClaims(uid, { role: 'employer_admin' });
   logger.info('Set employer_admin claim', { uid, status, service: 'functions' });
   return null;
@@ -1106,17 +1099,19 @@ export const setEmployerClaims = onCall(
         const empDoc = await db.collection('employers').doc(uid).get();
         if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
 
-        await admin.auth().setCustomUserClaims(uid, { role: 'employer_admin' });
+        // Privilege escalation: log first, mint the claim second, and let an audit
+        // failure propagate. An employer_admin claim granted with no record of who
+        // granted it is exactly the hole this path used to have.
+        await auditLog(db, {
+          action: 'employer.setCustomClaims',
+          actorUid: auth.uid,
+          actorRole: auth.role,
+          actorEmail: auth.email ?? null,
+          targetId: uid,
+          after: { role: 'employer_admin' },
+        });
 
-        try {
-          await auditLog(db, {
-            action: 'employer.setCustomClaims',
-            actorUid: auth.uid,
-            actorRole: auth.role,
-            targetId: uid,
-            after: { role: 'employer_admin' },
-          });
-        } catch (_) { /* non-critical */ }
+        await admin.auth().setCustomUserClaims(uid, { role: 'employer_admin' });
 
         return { success: true, uid };
       })

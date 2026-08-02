@@ -41,7 +41,7 @@ const mockCollection = jest.fn().mockImplementation((name: string) => {
   if (name === 'users') {
     return { doc: jest.fn().mockReturnValue(mockUserRef) };
   }
-  if (name === 'auditLogs') {
+  if (name === 'audit_log') {
     return mockAuditLogCollection;
   }
   return { doc: jest.fn().mockReturnValue({ get: jest.fn(), update: jest.fn() }) };
@@ -412,10 +412,10 @@ describe('approveEmployer', () => {
         mockAuditLogRef,
         expect.objectContaining({
           action: 'employer.approved',
-          entityType: 'employer',
-          entityId: 'emp-123',
-          performedBy: 'admin-uid-001',
-          performedByEmail: 'admin@example.com',
+          targetCollection: 'employer',
+          targetId: 'emp-123',
+          actorUid: 'admin-uid-001',
+          actorEmail: 'admin@example.com',
         })
       );
     });
@@ -523,7 +523,7 @@ describe('approveEmployer', () => {
       expect(mockAddEntityRef).not.toHaveBeenCalled();
     });
 
-    it('includes notes in audit log metadata', async () => {
+    it('includes notes in audit log meta', async () => {
       const req = makeRequest({
         data: { employerId: 'emp-123', decision: 'approved', notes: 'Verified via phone' },
       });
@@ -532,7 +532,7 @@ describe('approveEmployer', () => {
       expect(mockTransactionSet).toHaveBeenCalledWith(
         mockAuditLogRef,
         expect.objectContaining({
-          metadata: expect.objectContaining({ notes: 'Verified via phone' }),
+          meta: expect.objectContaining({ notes: 'Verified via phone' }),
         })
       );
     });
@@ -709,27 +709,25 @@ describe('approveEmployer', () => {
   // ── Audit log structure ────────────────────────────────────────────────────
 
   describe('audit log', () => {
-    it('captures previousState with status and updatedAt', async () => {
+    it('captures before-state with status and updatedAt', async () => {
       const req = makeRequest({ data: { employerId: 'emp-123', decision: 'approved' } });
       await approveEmployerHandler(req);
 
       expect(mockTransactionSet).toHaveBeenCalledWith(
         mockAuditLogRef,
         expect.objectContaining({
-          previousState: expect.objectContaining({ status: 'pending_review' }),
-          newState: expect.objectContaining({ status: 'approved' }),
+          before: expect.objectContaining({ status: 'pending_review' }),
+          after: expect.objectContaining({ status: 'approved' }),
         })
       );
     });
 
-    it('sets logId from the document reference id', async () => {
+    it('writes to the ops-readable audit_log collection', async () => {
       const req = makeRequest({ data: { employerId: 'emp-123', decision: 'approved' } });
       await approveEmployerHandler(req);
 
-      expect(mockTransactionSet).toHaveBeenCalledWith(
-        mockAuditLogRef,
-        expect.objectContaining({ logId: 'log-abc-123' })
-      );
+      expect(mockCollection).toHaveBeenCalledWith('audit_log');
+      expect(mockCollection).not.toHaveBeenCalledWith('auditLogs');
     });
 
     it('includes timestamp in audit log', async () => {
@@ -829,7 +827,7 @@ describe('approveEmployer', () => {
       // audit log email falls back to 'unknown'
       expect(mockTransactionSet).toHaveBeenCalledWith(
         mockAuditLogRef,
-        expect.objectContaining({ performedByEmail: 'unknown' })
+        expect.objectContaining({ actorEmail: 'unknown' })
       );
     });
   });

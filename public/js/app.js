@@ -2588,13 +2588,35 @@ function renderAuditTab(container) {
 
   container.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-end"><div style="flex:1;min-width:180px"><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Buscar</label><input type="text" id="auditSearch" placeholder="UID, email, ID..." style="width:100%;padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Acción</label><select id="auditAction" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"><option value="">Todas</option></select></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Desde</label><input type="date" id="auditFrom" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><div><label style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hasta</label><input type="date" id="auditTo" style="padding:8px 12px;border:1px solid rgba(25,68,69,.12);border-radius:8px;font-size:13px;outline:none"></div><button class="btn-sm btn-approve" id="auditExport" style="height:36px">Export CSV</button></div><div class="table-wrap" id="auditTable"><div style="padding:40px;text-align:center"><span class="spinner"></span></div></div>`;
 
-  db.collection('audit_log').orderBy('timestamp', 'desc').limit(200).get().then(snap => {
-    allLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const actions = [...new Set(allLogs.map(l => l.action).filter(Boolean))];
-    const sel = document.getElementById('auditAction');
-    if (sel) actions.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; sel.appendChild(o); });
-    renderAuditTable();
-  });
+  // Privilege-escalation actions must be selectable even when none of them fall
+  // inside the most recent 200 events, otherwise the only way to see who granted
+  // admin is to get lucky with the window.
+  const SECURITY_ACTIONS = ['admin.setRole', 'admin.revokeRole', 'employer.setCustomClaims', 'employer.claimGrantedOnCreate'];
+
+  // Selecting an action re-queries server-side rather than filtering the local
+  // window. Backed by the audit_log (action ASC, timestamp DESC) composite index
+  // in firestore.indexes.json — without it this throws failed-precondition.
+  function loadLogs() {
+    const el = document.getElementById('auditTable');
+    if (el) el.innerHTML = '<div style="padding:40px;text-align:center"><span class="spinner"></span></div>';
+    let q = db.collection('audit_log');
+    if (filters.action) q = q.where('action', '==', filters.action);
+    return q.orderBy('timestamp', 'desc').limit(200).get().then(snap => {
+      allLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const sel = document.getElementById('auditAction');
+      if (sel && !sel.dataset.seeded) {
+        const actions = [...new Set([...SECURITY_ACTIONS, ...allLogs.map(l => l.action).filter(Boolean)])];
+        actions.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; sel.appendChild(o); });
+        sel.dataset.seeded = '1';
+      }
+      renderAuditTable();
+    }).catch(err => {
+      const t = document.getElementById('auditTable');
+      if (t) t.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">No se pudo cargar el registro: ' + (err && err.message ? err.message : err) + '</div>';
+    });
+  }
+
+  loadLogs();
 
   function filterLogs() {
     return allLogs.filter(l => {
@@ -2629,7 +2651,7 @@ function renderAuditTab(container) {
   }
 
   document.getElementById('auditSearch')?.addEventListener('input', (e) => { filters.search = e.target.value; renderAuditTable(); });
-  document.getElementById('auditAction')?.addEventListener('change', (e) => { filters.action = e.target.value; renderAuditTable(); });
+  document.getElementById('auditAction')?.addEventListener('change', (e) => { filters.action = e.target.value; loadLogs(); });
   document.getElementById('auditFrom')?.addEventListener('change', (e) => { filters.dateFrom = e.target.value; renderAuditTable(); });
   document.getElementById('auditTo')?.addEventListener('change', (e) => { filters.dateTo = e.target.value; renderAuditTable(); });
 

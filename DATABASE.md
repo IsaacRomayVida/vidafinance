@@ -161,21 +161,36 @@ Completed repayment records. Immutable after creation.
 
 ### `audit_log/{docId}`
 
-Immutable audit trail for all business-critical actions.
+Immutable audit trail for all business-critical actions. **This is the only audit
+collection.** Writers must go through `functions/src/utils/auditLog.ts`
+(`buildAuditLogDocument`) so the shape cannot drift per call site.
 
 | Field | Type | Description |
 |---|---|---|
-| `action` | string | Action identifier (e.g., `loan.requested`, `employer.approved`) |
+| `action` | string | Action identifier (e.g., `loan.requested`, `employer.approved`, `admin.setRole`) |
 | `actorUid` | string | UID of the actor |
 | `actorRole` | string | Role of the actor |
+| `actorEmail` | string \| null | Email of the actor when known; rendered by the ops audit tab |
 | `targetCollection` | string | Derived from action prefix |
 | `targetId` | string | Target document ID |
 | `before` | map \| null | State before change |
 | `after` | map \| null | State after change |
 | `meta` | map | Additional metadata |
-| `timestamp` | timestamp | Server timestamp |
+| `timestamp` | timestamp | Server timestamp (or the transaction's `Timestamp` for transactional writers) |
 
-**Indexes:** `actorUid` + `timestamp` desc, `targetId` + `timestamp` desc
+**Indexes:** `actorUid` + `timestamp` desc, `targetId` + `timestamp` desc,
+`action` + `timestamp` desc, `targetCollection` + `timestamp` desc
+
+**Durability:** audit writes on privilege-escalation paths (`admin.setRole`,
+`admin.revokeRole`, `employer.setCustomClaims`, `employer.claimGrantedOnCreate`)
+are fail-hard — the mutation does not happen if the record cannot be written.
+Audit writes on lower-risk paths are still best-effort, so this log is
+*investigable*, not *tamper-evident*: do not describe it as compliance-grade.
+
+### `auditLogs/{docId}` — legacy, read-only
+
+Retired camelCase collection. It has no writers; records created before the
+consolidation still live here and remain ops-readable. No data migration was run.
 
 ---
 

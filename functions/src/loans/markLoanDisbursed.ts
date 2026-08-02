@@ -7,6 +7,7 @@ import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { getRedis } from '../utils/redis';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 import { calculateNextPayrollDate } from './calculateNextPayrollDate';
 
 const MarkLoanDisbursedSchema = z.object({
@@ -82,7 +83,7 @@ export const markLoanDisbursed = onCall(
           const employerId = loan['employerId'] as string;
           const principalAmount = (loan['principalAmount'] as number | undefined) ?? (loan['amount'] as number);
 
-          const logRef = db.collection('auditLogs').doc();
+          const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
 
           await db.runTransaction(async (txn) => {
             txn.update(loanRef, {
@@ -106,17 +107,26 @@ export const markLoanDisbursed = onCall(
               updatedAt: now,
             });
 
-            txn.set(logRef, {
-              action: 'loan.disbursed',
-              entityType: 'loan',
-              entityId: input.loanId,
-              performedBy: auth.uid,
-              timestamp: now,
-              metadata: {
-                stpTransactionId: input.stpTransactionId,
-                disbursedAmount: input.disbursedAmount,
-              },
-            });
+            txn.set(
+              logRef,
+              buildAuditLogDocument(
+                {
+                  action: 'loan.disbursed',
+                  actorUid: auth.uid,
+                  actorRole: auth.role,
+                  actorEmail: auth.email ?? null,
+                  targetId: input.loanId,
+                  before: { status: 'approved' },
+                  after: { status: 'disbursed' },
+                  meta: {
+                    entityType: 'loan',
+                    stpTransactionId: input.stpTransactionId,
+                    disbursedAmount: input.disbursedAmount,
+                  },
+                },
+                now
+              )
+            );
           });
 
           try {

@@ -29,29 +29,38 @@ export const _mockStore: {
   loans: Record<string, { exists: boolean; data?: Record<string, unknown> }>;
   employers: Record<string, { exists: boolean; data?: Record<string, unknown> }>;
   users: Record<string, { exists: boolean; data?: Record<string, unknown> }>;
-  auditLogs: Array<Record<string, unknown>>;
+  /** Every write landing in the `audit_log` collection, via add() or txn.set(). */
+  auditLog: Array<Record<string, unknown>>;
   transactionCalls: Array<string>;
   docUpdates: Array<{ collection: string; id: string; data: Record<string, unknown> }>;
 } = {
   loans: {},
   employers: {},
   users: {},
-  auditLogs: [],
+  auditLog: [],
   transactionCalls: [],
   docUpdates: [],
 };
+
+const AUDIT_COLLECTION = 'audit_log';
 
 const makeTxn = () => ({
   update: jest.fn((_ref: unknown, _data: unknown) => {
     _mockStore.transactionCalls.push('update');
   }),
-  set: jest.fn((_ref: unknown, _data: unknown) => {
+  set: jest.fn((ref: unknown, data: unknown) => {
     _mockStore.transactionCalls.push('set');
+    // Audit records are written transactionally on the security-critical paths,
+    // so the store has to see txn.set too or those writes look like no-ops.
+    if ((ref as { _collection?: string } | undefined)?._collection === AUDIT_COLLECTION) {
+      _mockStore.auditLog.push(data as Record<string, unknown>);
+    }
   }),
 });
 
 const makeDocRef = (collection: string, id: string) => ({
   id,
+  _collection: collection,
   get: jest.fn(async () => {
     const store = _mockStore[collection as keyof typeof _mockStore] as Record<
       string,
@@ -73,8 +82,8 @@ const makeDocRef = (collection: string, id: string) => ({
 const makeCollectionRef = (name: string) => ({
   doc: jest.fn((id: string) => makeDocRef(name, id)),
   add: jest.fn(async (data: unknown) => {
-    if (name === 'auditLogs') {
-      _mockStore.auditLogs.push(data as Record<string, unknown>);
+    if (name === AUDIT_COLLECTION) {
+      _mockStore.auditLog.push(data as Record<string, unknown>);
     }
     return { id: 'new-doc-id' };
   }),

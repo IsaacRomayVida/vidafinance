@@ -204,6 +204,10 @@ service cloud.firestore {
     // All writes go through Cloud Functions (Admin SDK).
     // =============================================
     match /audit_log/{docId}         { allow read: if isOps();    allow write: if false; }
+    // Legacy collection, no writer remains (everything is consolidated onto
+    // audit_log). Records written before the consolidation still live here and
+    // are the only copy of that role grant/revoke history, so ops keeps read.
+    match /auditLogs/{docId}         { allow read: if isOps();    allow write: if false; }
     match /overdue_log/{d}           { allow read: if isAdmin();  allow write: if false; }
     match /spei_log/{d}              { allow read: if isAdmin();  allow write: if false; }
     match /payment_failures/{d}      { allow read: if isAdmin();  allow write: if false; }
