@@ -160,7 +160,7 @@ jobs:
       # HARD gate as of 2026-08-02. This was soft while two real firestore.rules
       # bugs failed (loan and employer delete permitted for ops despite the
       # tests — and the rules' own comments — requiring deny). Both are fixed
-      # (#385) and the suite is 88/88. These rules are the last line of defence
+      # (#385) and the suite is 92/92. These rules are the last line of defence
       # on tenant isolation and on the loan audit trail, so a regression here
       # must block the merge rather than show green with a red log.
       - name: Rules tests (Firestore emulator)

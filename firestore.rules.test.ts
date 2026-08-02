@@ -505,6 +505,20 @@ describe('employees collection', () => {
     );
   });
 
+  // #385 tightened /loans and /employers to `allow delete: if false` but left
+  // /employees on `if isOps()`, even though an employee document is exactly what
+  // a loan's employeeId points at. Deleting one orphans its loans and writes no
+  // audit record, since audit_log has no client writer.
+  it('employee delete is always denied, even for ops', async () => {
+    await seedEmployee('employee1', 'employer1');
+
+    const ops = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+    await assertFails(deleteDoc(doc(ops.firestore(), 'employees/employee1')));
+
+    const owner = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(deleteDoc(doc(owner.firestore(), 'employees/employee1')));
+  });
+
   // ── P1-1: the credit line cannot be self-assigned at registration ──────────
   // Onboarding.tsx used to compute creditLimit/availableCredit on the client and
   // write them into employees/{uid} on create. `allow create: if isOwner(...)`
