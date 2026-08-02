@@ -657,11 +657,45 @@ jobs:
           printf '%s\n' "$out"
           if [ "$rc" -ne 0 ]; then
             if printf '%s' "$out" | grep -qiE 'HTTP Error: 403|PERMISSION_DENIED|caller does not have permission'; then
-              echo "::error::Firestore index deploy was REFUSED (403) by ${PROJECT}. Functions and rules DID deploy; only indexes and hosting are behind. This is an IAM gap, not billing — the write canary passed on the same credentials in this run. The deploy service account needs index-write permission, which roles/firebase.developAdmin and roles/datastore.user do NOT include. FIX: gcloud projects add-iam-policy-binding ${PROJECT} --member=serviceAccount:<deploy-sa> --role=roles/datastore.indexAdmin   (see https://console.cloud.google.com/iam-admin/iam?project=${PROJECT}), then re-run this job."
+              # ── WHY A 403 HERE NO LONGER BLOCKS HOSTING ──────────────────
+              # Measured 2026-08-02T20:06Z on run 30761707373: all 42 functions
+              # and the rules deployed successfully, and then THIS step's
+              # `exit 1` stopped the job before hosting. Every main deploy since
+              # 2026-07-31T00:21Z died the same way, so production had been
+              # serving a two-day-old frontend against fresh functions — which
+              # is precisely the split-brain the hosting-last ordering exists to
+              # prevent, arrived at from the other direction.
+              #
+              # The hosting-last rule guards against serving a frontend that
+              # calls callables which were never deployed. A missing INDEX is
+              # not that: the callables are live, and a stale index degrades
+              # specific composite queries (currently only the ops-console
+              # audit-history read) rather than breaking the borrower flow.
+              # Holding the frontend back is strictly worse than shipping it.
+              #
+              # So: ship hosting, then fail the run at the end (see "Fail the
+              # run if Firestore indexes were skipped"). The run still goes RED
+              # so the IAM gap keeps alerting — it just stops taking the
+              # frontend hostage while it does.
+              echo "::warning::Firestore index deploy was REFUSED (403) by ${PROJECT}. Functions and rules DID deploy, and hosting will now proceed — a stale index degrades specific composite queries, it does not break deployed callables. This run will still be marked FAILED at the end so the gap stays visible. This is an IAM gap, not billing — the write canary passed on the same credentials in this run. The deploy service account needs index-write permission, which roles/firebase.developAdmin and roles/datastore.user do NOT include. FIX: gcloud projects add-iam-policy-binding ${PROJECT} --member=serviceAccount:<deploy-sa> --role=roles/datastore.indexAdmin   (see https://console.cloud.google.com/iam-admin/iam?project=${PROJECT}), then re-run this job."
+              {
+                echo "### ⚠️ Firestore indexes NOT deployed (403)"
+                echo ""
+                echo "Functions, rules and hosting **did** deploy. Composite indexes are stale."
+                echo ""
+                echo '```'
+                echo "gcloud projects add-iam-policy-binding ${PROJECT} \\"
+                echo "  --member=serviceAccount:<deploy-sa> --role=roles/datastore.indexAdmin"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "INDEX_DEPLOY_SKIPPED=1" >> "$GITHUB_ENV"
             else
+              # Any non-permission failure is still fatal before hosting: it may
+              # mean a malformed firestore.indexes.json or a project-level
+              # refusal whose blast radius we have not characterised.
               echo "::error::Firestore index deploy failed on ${PROJECT}. Functions and rules DID deploy; hosting is held back. See the CLI output above."
+              exit 1
             fi
-            exit 1
           fi
 
       # Hosting goes LAST and only on a fully successful backend deploy, so a
@@ -677,4 +711,15 @@ jobs:
           fi
           echo "Releasing hosting to $PROJECT"
           firebase deploy --only hosting --project "$PROJECT" --non-interactive
+
+      # Deliberately AFTER hosting. The index 403 is a real defect and the run
+      # must be red for it, but going red must not cost us the frontend release
+      # — so we ship first and fail second. Without this the pipeline would go
+      # green on a partial deploy, which is the silent rot the rest of this file
+      # is written to avoid.
+      - name: Fail the run if Firestore indexes were skipped
+        if: env.INDEX_DEPLOY_SKIPPED == '1'
+        run: |
+          echo "::error::Deploy shipped functions, rules and hosting, but Firestore indexes were REFUSED (403). Grant roles/datastore.indexAdmin to the deploy service account and re-run. Failing the run so this does not go unnoticed."
+          exit 1
 
