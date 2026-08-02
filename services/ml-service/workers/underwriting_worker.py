@@ -1,10 +1,16 @@
 """
 BullMQ consumer for the 'vida-underwriting' queue.
 
-Processes 'underwrite_loan' jobs dispatched by the requestLoan Firebase
-Function. Each job runs both the champion (WoE scorecard) and challenger
-(XGBoost) models, writes the champion's decision to Firestore, logs the
-challenger's prediction for shadow comparison, and pushes follow-up jobs.
+NOT currently on the live decision path (see #428,
+outputs/ADR-004-underwriting-worker-not-the-decision-path.md). Nothing in
+this repo enqueues jobs onto 'vida-underwriting', and this module's
+__main__ / start_worker() is never invoked in production: the ml-service
+Dockerfile only runs `uvicorn main:app`. The live, synchronous decision path
+is functions/src/index.ts -> services/underwriting-service (decision-engine.js).
+
+If it were running, a job would run both the champion (WoE scorecard) and
+challenger (XGBoost) models, write the champion's decision to Firestore, log
+the challenger's prediction for shadow comparison, and push follow-up jobs.
 
 Queue name matches shared/queues.js: QUEUES.UNDERWRITING = 'vida-underwriting'
 """
