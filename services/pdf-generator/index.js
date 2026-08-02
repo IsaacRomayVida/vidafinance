@@ -43,6 +43,29 @@ const CONTRACT_TPL = Handlebars.compile(
 const fmt = (n) =>
   Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2 });
 
+/**
+ * Derive the disclosed commission rate, term and CAT from the loan document.
+ *
+ * These MUST come from the loan itself, never from a constant in this file.
+ * The contract template previously hardcoded "Comisión (30%)" and "30 días"
+ * next to a dynamic amount, so any loan written at a different rate or term
+ * would have printed a label contradicting its own figures — and the CAT is a
+ * regulated disclosure, not decoration.
+ *
+ * `feeRate` is persisted on the loan at creation (see functions requestLoan).
+ * Older loans predate that field, so fall back to deriving it from the amounts.
+ */
+function contractTerms(loan) {
+  const termDays = Number(loan.term) || 30;
+  const feeRate =
+    typeof loan.feeRate === "number" ? loan.feeRate : loan.fee / loan.amount;
+  const cat = (
+    (Math.pow(1 + loan.fee / loan.amount, 365 / termDays) - 1) *
+    100
+  ).toFixed(0);
+  return { feePct: Math.round(feeRate * 100), termDays, cat };
+}
+
 /* ─── Puppeteer helpers ─── */
 
 let browser;
@@ -85,10 +108,7 @@ const worker = new Worker(
 
     if (type === "loan_contract") {
       const loan = (await db.collection("loans").doc(loanId).get()).data();
-      const cat = (
-        (Math.pow(1 + loan.fee / loan.amount, 365 / 30) - 1) *
-        100
-      ).toFixed(0);
+      const { feePct, termDays, cat } = contractTerms(loan);
       const html = CONTRACT_TPL({
         loanId: loanId.slice(0, 8).toUpperCase(),
         issuedDate: new Date().toLocaleDateString("es-MX"),
@@ -97,6 +117,8 @@ const worker = new Worker(
         employerName: loan.employerName,
         amount: fmt(loan.amount),
         fee: fmt(loan.fee),
+        feePct,
+        termDays,
         total: fmt(loan.total),
         cat,
         sofomRfc: process.env.SOFOM_RFC || "VIDA240101XXX",
@@ -214,9 +236,7 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
     const loan = (await db.collection("loans").doc(loanId).get()).data();
     if (!loan) return res.status(404).json({ error: "Loan not found" });
 
-    const cat = (
-      (Math.pow(1 + loan.fee / loan.amount, 365 / 30) - 1) * 100
-    ).toFixed(0);
+    const { feePct, termDays, cat } = contractTerms(loan);
     const html = CONTRACT_TPL({
       loanId: loanId.slice(0, 8).toUpperCase(),
       issuedDate: new Date().toLocaleDateString("es-MX"),
@@ -225,6 +245,8 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
       employerName: loan.employerName,
       amount: fmt(loan.amount),
       fee: fmt(loan.fee),
+      feePct,
+      termDays,
       total: fmt(loan.total),
       cat,
       sofomRfc: process.env.SOFOM_RFC || "VIDA240101XXX",

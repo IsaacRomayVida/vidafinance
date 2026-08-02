@@ -173,7 +173,7 @@ jobs:
           #    fixed early even if later, non-critical functions need a re-run.
           #    KEEP IN SYNC with the exported functions in functions/src/index.ts.
           FUNCTIONS="
-            requestLoan onLoanApproved generatePaymentLink markLoanDisbursed
+            requestLoan getLoanConfig onLoanApproved generatePaymentLink markLoanDisbursed
             metamapWebhook getSystemHealth systemHealthCheck queueHealthCheck
             processPayroll satBlacklistRefresh refreshSatBlacklists
             api checkEmailAvailability validateCURP updateLoanStatus
