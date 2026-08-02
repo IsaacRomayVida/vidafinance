@@ -18,6 +18,22 @@
 //   onLoanApproved() → what is registered with SoftCrédito and actually collected
 //
 // and asserts the three describe one schedule.
+
+// Marks this file as a MODULE. Do not delete — it is load-bearing.
+//
+// Everything here is imported lazily (see the note immediately below), so this
+// file would otherwise carry no top-level import or export, and TypeScript
+// would treat it as a SCRIPT whose top-level declarations land in the global
+// scope. `submitReviewDecision.test.ts` is written the same way and declares
+// the same four names — `mockLogger`, `MockTimestamp`, `mockFieldValue`,
+// `mockDb` — so the two collide with TS2300/TS2451 as soon as both are
+// type-checked in one program.
+//
+// This does not reproduce against a warm ts-jest cache, which is exactly how it
+// passed locally and failed in CI. Any future test file here that mocks
+// firebase-admin this way needs this line too.
+export {};
+
 // Imported lazily inside each test, not at module scope: a static import here
 // would evaluate the firebase-admin/firestore mock factory below before its
 // helper consts exist. Also keeps the module instance in step with the
