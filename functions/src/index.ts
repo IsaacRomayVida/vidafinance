@@ -16,6 +16,7 @@ import { checkRateLimit } from './utils/rateLimiter';
 import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
+import { getLoanConfigValues, LOAN_FEE_RATE, ALLOWED_LOAN_TERM_DAYS, DEFAULT_LOAN_TERM_DAYS, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from './config/loanConfig';
 
 initSentry();
 
@@ -248,11 +249,26 @@ export const validateCURP = onCall(
   }
 );
 
+// ── getLoanConfig — employee only; the single place the UI reads pricing/term rules ──
+// LoanWizard.tsx must call this rather than hardcoding the fee rate or term
+// options, so the borrower-facing quote can never drift from what requestLoan
+// actually charges (see config/loanConfig.ts).
+
+export const getLoanConfig = onCall(
+  { cors: true, enforceAppCheck: true },
+  withAuth<Record<string, never>, ReturnType<typeof getLoanConfigValues>>(
+    ['employee'],
+    async () => getLoanConfigValues()
+  )
+);
+
 // ── requestLoan — employee only ──────────────────────────────────────────────
 
 interface RequestLoanData {
   amount: number;
-  term: number;
+  // The deployed UI (LoanWizard.tsx) sends `termDays`, not `term`. Keep this
+  // in sync with the payload shape it actually sends — see loanConfig.ts.
+  termDays?: number;
 }
 
 export const requestLoan = onCall(
@@ -262,7 +278,8 @@ export const requestLoan = onCall(
     ['employee'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'requestLoan', uid: auth.uid }, async () => {
-        const { amount, term } = data;
+        const { amount } = data;
+        const term = data.termDays ?? DEFAULT_LOAN_TERM_DAYS;
         const uid = auth.uid;
 
         // Rate limit: max 3 requests per day via Redis
@@ -274,9 +291,9 @@ export const requestLoan = onCall(
           logger.warn('Redis rate limit unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
-        if (typeof amount !== 'number' || amount < 500 || amount > 5000)
+        if (typeof amount !== 'number' || amount < MIN_LOAN_AMOUNT || amount > MAX_LOAN_AMOUNT)
           throw new HttpsError('invalid-argument', 'El monto debe estar entre $500 y $5,000 MXN');
-        if (term !== 30) throw new HttpsError('invalid-argument', 'Plazo inválido');
+        if (!ALLOWED_LOAN_TERM_DAYS.includes(term)) throw new HttpsError('invalid-argument', 'Plazo inválido');
 
         const empRef = db.collection('employees').doc(uid);
         const emplDoc = await empRef.get();
@@ -304,8 +321,8 @@ export const requestLoan = onCall(
           throw new HttpsError('failed-precondition', VidaErrorCode.EMPLOYER_NOT_APPROVED);
 
         const loanId = nanoid();
-        const fee = Math.round(amount * 0.3);
-        const dueDate = Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+        const fee = Math.round(amount * LOAN_FEE_RATE);
+        const dueDate = Timestamp.fromDate(new Date(Date.now() + term * 24 * 60 * 60 * 1000));
 
         // Try full underwriting pipeline first
         const uwUrl = process.env['UNDERWRITING_SERVICE_URL'];
@@ -398,7 +415,7 @@ export const requestLoan = onCall(
             amount,
             fee,
             total: amount + fee,
-            term: 30,
+            term,
             status: initialStatus,
             dueDate,
             disbursedAt: null,
