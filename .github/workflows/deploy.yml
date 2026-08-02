@@ -150,6 +150,98 @@ jobs:
         with:
           credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION || secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
 
+      # ── WHY THIS STEP EXISTS — DO NOT DELETE AS "REDUNDANT" ──────────────
+      # The deploy below is a COUPLED change: rules + functions + hosting must
+      # land together. But they have different prerequisites — rules/indexes/
+      # storage deploy fine with billing OFF, while Cloud Functions require an
+      # active billing account. Without this gate a push to main happily writes
+      # NEW FIRESTORE RULES to production and then fails on the functions loop,
+      # leaving prod enforcing new rules against the OLD frontend and the OLD
+      # functions. That is exactly what broke production on 2026-08-02.
+      # The per-function is_fatal() check further down aborts too LATE: by then
+      # the rules are already live. This step aborts BEFORE anything deploys.
+      - name: Preflight — project can accept a full deploy (billing gate)
+        if: github.event_name == 'push'
+        run: |
+          # NOTE: `set +e` is deliberate. GitHub's default shell is `bash -e {0}`,
+          # and this step inspects exit codes / HTTP statuses itself to decide
+          # what is fatal vs. transient — inherited -e would abort on a merely
+          # inconclusive probe, i.e. fail closed on transient noise.
+          set -uo pipefail
+          set +e
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            PROJECT="${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }}"
+          else
+            PROJECT="${{ secrets.FIREBASE_PROJECT_ID_STAGING }}"
+          fi
+          echo "Preflight: checking that $PROJECT can accept Cloud Functions writes…"
+
+          # Reuse the credentials from "Authenticate to Google Cloud". That step
+          # exports GOOGLE_APPLICATION_CREDENTIALS; gcloud may or may not have
+          # the SA in its own credential store, so activate it if needed.
+          # No new secrets, no new IAM permissions: listing functions needs no
+          # more access than deploying them.
+          TOKEN="$(gcloud auth print-access-token 2>/dev/null)"
+          if [ -z "${TOKEN:-}" ] && [ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
+            gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null 2>&1
+            TOKEN="$(gcloud auth print-access-token 2>/dev/null)"
+          fi
+          if [ -z "${TOKEN:-}" ]; then
+            # Cannot check ≠ known-bad. Warn and let the deploy proceed.
+            echo "::warning::Preflight could not mint an access token; skipping the billing check (treated as transient, not fatal)."
+            exit 0
+          fi
+
+          API="https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/-/functions?pageSize=1"
+          CODE=""; BODY=""
+          for attempt in 1 2 3; do
+            RESP="$(curl -sS -m 30 -w $'\n%{http_code}' -H "Authorization: Bearer ${TOKEN}" "$API" 2>&1)"
+            CODE="$(printf '%s' "$RESP" | tail -n 1)"
+            BODY="$(printf '%s' "$RESP" | sed '$d')"
+            # A definitive answer from the API — stop retrying.
+            case "$CODE" in
+              200|401|403|404) break ;;
+            esac
+            echo "Preflight attempt ${attempt}/3: no definitive HTTP status (got '${CODE:-none}'); retrying…"
+            sleep $((attempt * 5))
+          done
+
+          # ABORTS THE DEPLOY (fail closed): HTTP 403 whose body names billing /
+          # SERVICE_DISABLED / billingNotEnabled. That is deterministic — the
+          # functions loop below cannot possibly succeed, so nothing may deploy.
+          if [ "$CODE" = "403" ] && printf '%s' "$BODY" | grep -qiE \
+              'billing|billingNotEnabled|SERVICE_DISABLED|has not been used in project'; then
+            echo "::error::DEPLOY ABORTED BEFORE ANY CHANGE WAS APPLIED — GCP billing is disabled on project ${PROJECT}."
+            echo ""
+            echo "=================================================================="
+            echo " GCP BILLING IS DISABLED ON PROJECT: ${PROJECT}"
+            echo ""
+            echo " Cloud Functions cannot deploy while billing is off, but Firestore"
+            echo " rules CAN — so continuing would push new rules to production and"
+            echo " leave them enforcing against the OLD functions and OLD frontend."
+            echo " Aborting BEFORE any deploy so production is not left half-updated."
+            echo ""
+            echo " FIX: re-enable billing, then re-run this job:"
+            echo "   https://console.cloud.google.com/billing/linkedaccount?project=${PROJECT}"
+            echo "=================================================================="
+            echo ""
+            echo "API response (HTTP ${CODE}):"
+            printf '%s\n' "$BODY"
+            exit 1
+          fi
+
+          # DOES NOT ABORT (fail open): network timeouts, empty/garbage status,
+          # 5xx, and 401/404/403s that do NOT mention billing (e.g. the service
+          # account simply lacks cloudfunctions.list). None of those prove the
+          # project is undeployable, and blocking on them would wedge every
+          # deploy forever. The real deploy still fails loudly if they matter.
+          if [ "$CODE" = "200" ]; then
+            echo "Preflight OK: ${PROJECT} accepts Cloud Functions API calls; proceeding with deploy."
+          else
+            echo "::warning::Preflight inconclusive (HTTP ${CODE:-none}, no billing signal in the response). Proceeding with the deploy."
+            printf '%s\n' "$BODY" | head -n 20
+          fi
+
       - name: Deploy to Firebase
         if: github.event_name == 'push'
         run: |
