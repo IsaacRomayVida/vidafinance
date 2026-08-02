@@ -315,7 +315,7 @@ jobs:
             processPayroll satBlacklistRefresh refreshSatBlacklists
             api checkEmailAvailability validateCURP updateLoanStatus
             approveEmployer getPortfolioReport getAdminDashboard getEmployerDashboard
-            submitReviewDecision getReviewDetail updateEmployerTier setEmployerClaims
+            submitReviewDecision getReviewDetail getReviewQueue updateEmployerTier setEmployerClaims
             updateEmployerCurpConfig getContractDownloadUrl setAdminClaim revokeAdminClaim
             sendVerificationEmail sendEmployeeInvite lookupInvite acceptInvite
             onContactCreated onEmployerDocCreated onLoanStatusChange onEmployeeDocCreated
