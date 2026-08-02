@@ -34,6 +34,30 @@ jobs:
       - name: Unit tests (functions) — 235/235, this is a hard gate
         run: cd functions && npm run test:ci
 
+  underwriting-service:
+    name: "Underwriting Service Tests (SOFT gate — see TODO)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: services/underwriting-service/package-lock.json
+
+      - name: Install underwriting-service dependencies
+        run: cd services/underwriting-service && npm ci
+
+      # TODO(fix/uw-test-suite): flip this to a hard gate (remove
+      # continue-on-error) once branch fix/uw-test-suite merges. As of
+      # 2026-08-02 this suite is heavily red, so failing the build on it
+      # would block every unrelated PR — but it must still run on every
+      # PR so the red count is visible and doesn't silently regress further.
+      - name: Unit tests (underwriting-service) — currently red, non-blocking
+        continue-on-error: true
+        run: cd services/underwriting-service && npm test
+
   frontend:
     name: Frontend Lint, Typecheck & Build
     runs-on: ubuntu-latest
