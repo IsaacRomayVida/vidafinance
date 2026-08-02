@@ -161,6 +161,104 @@ describe("Decision Engine — MetaMap integration", () => {
     ]);
   });
 
+  // Regression: `POST /underwrite` receives the principal as a sibling of
+  // `applicant` (`loanAmount`), but every stage reads it as
+  // `applicant.principalAmount`. The endpoint destructured `loanAmount` and then
+  // never passed it on, so the pipeline underwrote every borrower as if they had
+  // requested 0 MXN — silently disabling the Stage 3 LTI gate, the Stage 3
+  // escalation threshold, and the Stage 0 amount-to-salary fraud feature.
+  describe("loan amount reaches the pipeline", () => {
+    const quietLog = () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() });
+    const applicantWithoutAmount = () => {
+      const { principalAmount, ...rest } = APPLICANT;
+      return rest;
+    };
+    const happyPathFetch = () => {
+      const fetch = require("node-fetch");
+      fetch.mockImplementation((url) => {
+        if (typeof url === "string" && url.includes("/bureau/query")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ bureau_score: 720, has_bureau_record: true, active_defaults: 0, competitor_loans: 0 }),
+          });
+        }
+        if (typeof url === "string" && url.includes("/score")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ underwritingScore: 0.82, probability: 0.18, default_probability: 0.18 }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ is_fraud: false, anomaly_score: 10 }) });
+      });
+    };
+
+    it("threads a sibling loanAmount through to the Stage 2 LTI calculation", async () => {
+      happyPathFetch();
+      const result = await runPipeline(
+        { applicant: applicantWithoutAmount(), employer: EMPLOYER, loanAmount: 3000 },
+        { logger: quietLog() }
+      );
+      // 3000 / 22000 salary = 13.64%, not the 0% a dropped amount would produce.
+      expect(result.stages.stage2.data.lti.principalAmount).toBe(3000);
+      expect(result.stages.stage2.data.lti.value).toBeCloseTo(13.64, 1);
+    });
+
+    it("lets the LTI gate actually fail on an unaffordable loan", async () => {
+      happyPathFetch();
+      const result = await runPipeline(
+        { applicant: applicantWithoutAmount(), employer: EMPLOYER, loanAmount: 12000 },
+        { logger: quietLog() }
+      );
+      // 12000 / 22000 = 54.55%, far past the 25% ceiling. Before the fix this
+      // borrower cleared the gate, because it only ever saw 0.
+      const lti = result.stages.stage3.data.conditions.find((c) => c.name === "lti");
+      expect(lti.value).toBeCloseTo(54.55, 1);
+      expect(lti.pass).toBe(false);
+      expect(result.stages.stage3.data.allPass).toBe(false);
+      expect(result.decision).not.toBe("approved");
+    });
+
+    it("still accepts the principal supplied on the applicant", async () => {
+      happyPathFetch();
+      const result = await runPipeline(
+        { applicant: APPLICANT, employer: EMPLOYER },
+        { logger: quietLog() }
+      );
+      expect(result.stages.stage2.data.lti.principalAmount).toBe(3000);
+    });
+
+    it("prefers an explicit loanAmount over a stale applicant.principalAmount", async () => {
+      happyPathFetch();
+      const result = await runPipeline(
+        { applicant: APPLICANT, employer: EMPLOYER, loanAmount: 5000 },
+        { logger: quietLog() }
+      );
+      expect(result.stages.stage2.data.lti.principalAmount).toBe(5000);
+    });
+
+    it.each([
+      ["omitted", undefined],
+      ["zero", 0],
+      ["negative", -500],
+      ["a string", "3000"],
+      ["NaN", NaN],
+    ])("refuses to underwrite when the amount is %s", async (_label, loanAmount) => {
+      await expect(
+        runPipeline(
+          { applicant: applicantWithoutAmount(), employer: EMPLOYER, loanAmount },
+          { logger: quietLog() }
+        )
+      ).rejects.toThrow("MISSING_LOAN_AMOUNT");
+    });
+
+    it("does not mutate the caller's applicant object", async () => {
+      happyPathFetch();
+      const applicant = applicantWithoutAmount();
+      await runPipeline({ applicant, employer: EMPLOYER, loanAmount: 3000 }, { logger: quietLog() });
+      expect(applicant.principalAmount).toBeUndefined();
+    });
+  });
+
   it("sumCosts aggregates across stages", () => {
     const results = {
       stage0: { cost: [{ api: "riskseal", mxn: 1.5 }] },

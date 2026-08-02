@@ -44,18 +44,42 @@ function sumCosts(results) {
  * @param {object} input
  * @param {object} input.applicant - Employee/borrower data
  * @param {object} input.employer  - Employer data (RFC, company name, etc.)
+ * @param {number} [input.loanAmount] - Principal requested, MXN. May instead be
+ *   supplied as `applicant.principalAmount`; one of the two is REQUIRED.
  * @param {object} [options]
  * @param {object} [options.logger]  - Structured logger (pino/bunyan compatible)
  * @param {object} [options.db]      - Firestore instance (for CNBV sector lookup)
  * @param {string} [options.correlationId] - Override correlation ID
  * @returns {Promise<object>} Pipeline result with decision, stages, cost
+ * @throws {Error} MISSING_LOAN_AMOUNT when no usable principal was supplied
  */
-async function runPipeline({ applicant, employer }, options = {}) {
+async function runPipeline({ applicant, employer, loanAmount }, options = {}) {
   const log = options.logger || console;
   const correlationId = options.correlationId || generateCorrelationId();
   const startTime = Date.now();
 
-  log.info({ correlationId, rfc: applicant.rfc }, "Pipeline started");
+  // The principal is a mandatory underwriting input, not an optional enrichment.
+  // Callers pass it as a sibling of `applicant` (`loanAmount`), but every stage
+  // reads it off the applicant as `principalAmount`, so it has to be merged in
+  // here — the pipeline owns its own input contract rather than trusting each
+  // caller to have shaped the applicant correctly.
+  //
+  // This is fail-closed on purpose. Defaulting a missing principal to 0 silently
+  // disables the affordability controls that depend on it: the Stage 3 LTI gate
+  // (`0 <= 25` always passes), the Stage 3 escalation threshold
+  // (`principalAmount > 2000` never fires, so large loans skip the stricter
+  // path), and the Stage 0 fraud model's amount-to-salary feature. A pipeline
+  // that cannot see the amount cannot underwrite it, so it must refuse rather
+  // than approve blind.
+  const principalAmount = loanAmount ?? applicant?.principalAmount;
+  if (typeof principalAmount !== "number" || !Number.isFinite(principalAmount) || principalAmount <= 0) {
+    const err = new Error("MISSING_LOAN_AMOUNT");
+    err.code = "MISSING_LOAN_AMOUNT";
+    throw err;
+  }
+  applicant = { ...applicant, principalAmount };
+
+  log.info({ correlationId, rfc: applicant.rfc, principalAmount }, "Pipeline started");
 
   const results = {};
   const stageOpts = { logger: log, db: options.db };
