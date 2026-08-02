@@ -45,6 +45,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   _mockStore.loans = {};
   _mockStore.employers = {};
+  _mockStore.employees = {};
   _mockStore.auditLog = [];
   _mockStore.transactionCalls = [];
   mockRedis.lpush.mockResolvedValue(1);
@@ -207,14 +208,73 @@ describe('markLoanDisbursed', () => {
       });
     });
 
-    it('uses monthly payroll date when borrowerSnapshot is missing', async () => {
-      _mockStore.loans['loan-abc'] = {
-        exists: true,
-        data: { ...approvedLoan.data, borrowerSnapshot: undefined },
+    // The block below pins #431: the due date has to come from the borrower's
+    // real payroll cadence. Nothing writes borrowerSnapshot onto a loan, so the
+    // first case is the one every production disbursement hits — it used to
+    // silently schedule month-end for everybody.
+    //
+    // The clock is pinned deliberately. Written against the real clock these
+    // tests passed under the OLD behaviour too, because the month-end they were
+    // supposed to reject (31 Aug 2026) happens to fall on a Monday, which is
+    // exactly what the weekly assertion looks for. 15 Sep 2026 is a Tuesday and
+    // its month-end (30 Sep) is a Wednesday, so weekly and monthly cannot
+    // coincide and the assertions distinguish them.
+    describe('payroll cadence (#431)', () => {
+      const PINNED_NOW = new Date('2026-09-15T10:00:00.000Z');
+
+      beforeEach(() => {
+        jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+        jest.setSystemTime(PINNED_NOW);
+      });
+
+      afterEach(() => {
+        jest.useRealTimers();
+      });
+
+      const dueDateOf = async () => {
+        const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
+        return new Date(result.dueDate as string);
       };
-      const result = await fn({ auth: opsAuth, data: validInput }) as Record<string, unknown>;
-      expect(result.success).toBe(true);
-      expect(typeof result.dueDate).toBe('string');
+
+      const isMonthEnd = (d: Date) => {
+        const dayAfter = new Date(d);
+        dayAfter.setDate(d.getDate() + 1);
+        return dayAfter.getDate() === 1;
+      };
+
+      it('reads the borrower record for the cadence when the loan carries no snapshot', async () => {
+        _mockStore.loans['loan-abc'] = {
+          exists: true,
+          data: { ...approvedLoan.data, borrowerSnapshot: undefined },
+        };
+        _mockStore.employees['emp-456'] = { exists: true, data: { payFrequency: 'weekly' } };
+
+        const due = await dueDateOf();
+
+        expect(due.getDay()).toBe(1); // next Monday
+        expect(isMonthEnd(due)).toBe(false); // NOT the old month-end default
+      });
+
+      it('assumes month-end only when the borrower record has no cadence either', async () => {
+        _mockStore.loans['loan-abc'] = {
+          exists: true,
+          data: { ...approvedLoan.data, borrowerSnapshot: undefined },
+        };
+
+        const due = await dueDateOf();
+
+        expect(isMonthEnd(due)).toBe(true);
+      });
+
+      it('still honours a loan snapshot cadence over the borrower record', async () => {
+        _mockStore.loans['loan-abc'] = approvedLoan; // snapshot says monthly
+        _mockStore.employees['emp-456'] = { exists: true, data: { payFrequency: 'weekly' } };
+
+        const due = await dueDateOf();
+
+        expect(isMonthEnd(due)).toBe(true);
+        expect(due.getDay()).not.toBe(1);
+      });
     });
   });
 
