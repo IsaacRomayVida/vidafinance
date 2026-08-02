@@ -145,6 +145,15 @@ jobs:
       - name: Install root deps (jest, ts-jest, @firebase/rules-unit-testing)
         run: npm ci
 
+      # The Firestore emulator is a Java process. firebase-tools dropped support
+      # for JDK versions before 21 and the ubuntu-latest default is older, so
+      # without this the emulator refuses to start and this gate fails for a
+      # reason that has nothing to do with the rules.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
