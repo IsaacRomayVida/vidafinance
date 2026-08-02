@@ -2,7 +2,7 @@
 
 jest.mock("belvo");
 
-const { extractBelvoError } = require("./belvo-client");
+const { extractBelvoError, resolveBelvoBaseUrl, getClient } = require("./belvo-client");
 
 describe("extractBelvoError", () => {
   it("captures message, code, and detail from Belvo SDK error", () => {
@@ -65,5 +65,65 @@ describe("extractBelvoError", () => {
 
     const result = extractBelvoError(err, "getIMSSEmployment");
     expect(result.code).toBe("ECONNREFUSED");
+  });
+});
+
+describe("resolveBelvoBaseUrl", () => {
+  const ORIGINAL_BASE_URL = process.env.BELVO_BASE_URL;
+  const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.BELVO_BASE_URL = ORIGINAL_BASE_URL;
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+  });
+
+  it("uses explicit BELVO_BASE_URL when set, regardless of environment", () => {
+    process.env.BELVO_BASE_URL = "https://api.belvo.com";
+    process.env.NODE_ENV = "production";
+    expect(resolveBelvoBaseUrl()).toBe("https://api.belvo.com");
+  });
+
+  it("defaults to sandbox when BELVO_BASE_URL is unset and NODE_ENV is not production", () => {
+    delete process.env.BELVO_BASE_URL;
+    process.env.NODE_ENV = "staging";
+    expect(resolveBelvoBaseUrl()).toBe("https://sandbox.belvo.com");
+  });
+
+  it("also defaults to sandbox when NODE_ENV is unset entirely", () => {
+    delete process.env.BELVO_BASE_URL;
+    delete process.env.NODE_ENV;
+    expect(resolveBelvoBaseUrl()).toBe("https://sandbox.belvo.com");
+  });
+
+  it("fails loudly instead of defaulting to sandbox when BELVO_BASE_URL is unset in production", () => {
+    delete process.env.BELVO_BASE_URL;
+    process.env.NODE_ENV = "production";
+    expect(() => resolveBelvoBaseUrl()).toThrow(/BELVO_BASE_URL/);
+  });
+});
+
+describe("belvo-client: getClient", () => {
+  const ORIGINAL_BASE_URL = process.env.BELVO_BASE_URL;
+  const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.BELVO_BASE_URL = ORIGINAL_BASE_URL;
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+    require("belvo").default.mockClear();
+  });
+
+  it("wires the resolved base URL into the Belvo SDK client", async () => {
+    process.env.BELVO_SECRET_ID = "test-id";
+    process.env.BELVO_SECRET_PASSWORD = "test-pass";
+    process.env.BELVO_BASE_URL = "https://sandbox.belvo.com";
+    process.env.NODE_ENV = "staging";
+
+    await getClient();
+
+    expect(require("belvo").default).toHaveBeenCalledWith(
+      "test-id",
+      "test-pass",
+      "https://sandbox.belvo.com"
+    );
   });
 });

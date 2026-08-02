@@ -21,6 +21,7 @@ const {
   pollVerification,
   STAGE_4_MODULES,
 } = require("../metamap-client");
+const { resolveBelvoBaseUrl } = require("../belvo-client");
 
 const ML_SERVICE_URL = () =>
   process.env.ML_SERVICE_URL || "http://localhost:8000";
@@ -255,7 +256,7 @@ async function runBelvoCashFlow(bankConnection, applicant) {
     client = new BelvoClient(
       process.env.BELVO_SECRET_ID,
       process.env.BELVO_SECRET_PASSWORD,
-      process.env.BELVO_BASE_URL
+      resolveBelvoBaseUrl()
     );
     await client.connect();
   } catch (err) {
