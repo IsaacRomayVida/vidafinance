@@ -85,7 +85,7 @@ def mock_riskseal(rfc):
     return {"score": 72, "risk_level": "medium", "pass": True}
 
 
-def mock_truora(rfc):
+def mock_metamap_criminal(rfc):
     seed = (rfc or "")[-3:]
     if seed == "XXX":
         return {
@@ -108,7 +108,7 @@ def mock_truora(rfc):
     }
 
 
-def parse_truora_result(result):
+def parse_metamap_criminal_result(result):
     confirmed = any(h["match_type"] == "CONFIRMED" for h in (result.get("aml_watchlists") or []))
     fuzzy = any(h["match_type"] == "FUZZY" for h in (result.get("aml_watchlists") or []))
     return {
@@ -118,7 +118,7 @@ def parse_truora_result(result):
     }
 
 
-def mock_incode(rfc):
+def mock_metamap_identity(rfc):
     seed = (rfc or "")[-3:]
     if seed == "XXX":
         return {
@@ -142,7 +142,7 @@ def mock_incode(rfc):
     }
 
 
-def mock_sardine(session_key):
+def mock_metamap_device(session_key):
     seed = (session_key or "")[-3:]
     if seed == "BAD":
         return {"risk_level": "very_high", "score": 95, "pass": False}
@@ -223,7 +223,7 @@ def run_decision_pipeline(applicant):
 
     # Stage 3: Auto-approve gate
     if current_stage == 3 and emp_score["risk_tier"] == 1:
-        kyc = mock_incode(applicant.get("rfc", ""))
+        kyc = mock_metamap_identity(applicant.get("rfc", ""))
         result["stagesReached"].append("stage_3_kyc")
         if kyc["overall"] == "APPROVED":
             result["decision"] = "approved"
@@ -245,8 +245,8 @@ def run_decision_pipeline(applicant):
     # Stage 4: Enhanced verification
     if current_stage == 4:
         result["stagesReached"].append("stage_4_verification")
-        kyc = mock_incode(applicant.get("rfc", ""))
-        behavioral = mock_sardine(applicant.get("sardineSessionKey", "default"))
+        kyc = mock_metamap_identity(applicant.get("rfc", ""))
+        behavioral = mock_metamap_device(applicant.get("metamapDeviceSessionKey", "default"))
         ob_clean = applicant.get("openBankingClean", True)
         riskseal = mock_riskseal(applicant.get("rfc", ""))
 
@@ -275,17 +275,17 @@ def run_decision_pipeline(applicant):
     # Stage 5: Full underwriting
     if current_stage == 5:
         result["stagesReached"].append("stage_5_full_underwriting")
-        truora_raw = mock_truora(applicant.get("rfc", ""))
-        truora = parse_truora_result(truora_raw)
+        criminal_raw = mock_metamap_criminal(applicant.get("rfc", ""))
+        criminal = parse_metamap_criminal_result(criminal_raw)
 
-        if truora["hard_reject"]:
+        if criminal["hard_reject"]:
             result["decision"] = "rejected"
             result["reason"] = "aml_hard_reject"
             result["firestoreUpdate"] = {"status": "rejected", "rejectionReason": result["reason"], "stage": 5}
             result["queuePush"].append({"queue": "jobs:notifications", "type": "loan_rejected"})
             return result
 
-        if truora["requires_human_review"]:
+        if criminal["requires_human_review"]:
             result["decision"] = "human_review"
             result["reason"] = "aml_fuzzy_match_review"
             result["firestoreUpdate"] = {"status": "under_review", "stage": 5, "requiresHumanReview": True}
@@ -345,7 +345,7 @@ BASE_APPLICANT = {
     "employer": GOOD_EMPLOYER_TIER1,
     "bureauResponse": GOOD_BUREAU,
     "loanAmount": 1500,
-    "sardineSessionKey": "session-default-OK",
+    "metamapDeviceSessionKey": "session-default-OK",
     "openBankingClean": True,
 }
 
@@ -483,16 +483,16 @@ class TestRejectionPaths:
         assert "stage_2_imss" in result["stagesReached"]
 
     def test_14_document_verification_failed_reject_stage4(self):
-        # Incode XXX → DECLINED, but RiskSeal XXX → score 12 escalates to Stage 5 first
+        # MetaMap Identity XXX → DECLINED, but RiskSeal XXX → score 12 escalates to Stage 5 first
         # Test the mock directly for document rejection
-        incode = mock_incode("GARL900101XXX")
-        assert incode["overall"] == "DECLINED"
-        assert incode["idValidation"]["pass"] is False
+        identity = mock_metamap_identity("GARL900101XXX")
+        assert identity["overall"] == "DECLINED"
+        assert identity["idValidation"]["pass"] is False
 
     def test_15a_aml_fuzzy_match_human_review(self):
         result = run_decision_pipeline({
             **BASE_APPLICANT,
-            "rfc": "GARL900101YYY",  # Truora fuzzy match
+            "rfc": "GARL900101YYY",  # MetaMap Criminal fuzzy match
             "bureauResponse": {"cdc": {"score": 350, "diasAtraso": 0, "carteraVencida": False}, "bdc": {}},
         })
         assert result["decision"] == "human_review"
@@ -502,7 +502,7 @@ class TestRejectionPaths:
     def test_15b_aml_confirmed_hard_reject(self):
         result = run_decision_pipeline({
             **BASE_APPLICANT,
-            "rfc": "GARL900101XXX",  # Truora OFAC confirmed
+            "rfc": "GARL900101XXX",  # MetaMap Criminal OFAC confirmed
             "bureauResponse": {"cdc": {"score": 350, "diasAtraso": 0, "carteraVencida": False}, "bdc": {}},
         })
         assert result["decision"] == "rejected"
@@ -514,14 +514,14 @@ class TestEdgeCases:
     """Timeout fallback, queue unavailability, idempotency."""
 
     def test_16_kyc_manual_review_escalation(self):
-        """Incode MANUAL_REVIEW at Stage 4 — liveness passes so approved."""
+        """MetaMap Identity MANUAL_REVIEW at Stage 4 — liveness passes so approved."""
         result = run_decision_pipeline({
             **BASE_APPLICANT,
-            "rfc": "GARL900101YYY",  # Incode MANUAL_REVIEW, RiskSeal score=38 (pass)
+            "rfc": "GARL900101YYY",  # MetaMap Identity MANUAL_REVIEW, RiskSeal score=38 (pass)
             "bureauResponse": {"cdc": {"score": 550, "diasAtraso": 0, "carteraVencida": False}, "bdc": {}},
         })
         assert "stage_4_verification" in result["stagesReached"]
-        # YYY: liveness passes, RiskSeal >= 30, Sardine passes → approved
+        # YYY: liveness passes, RiskSeal >= 30, MetaMap Device passes → approved
         assert result["decision"] == "approved"
 
     def test_17_queue_push_independent_of_decision(self):
@@ -668,23 +668,23 @@ class TestMockAPIDeterminism:
         assert mock_riskseal("RFC123YYY")["score"] == 38
         assert mock_riskseal("RFC123ABC")["score"] == 72
 
-    def test_truora_seeds(self):
-        xxx = parse_truora_result(mock_truora("RFC123XXX"))
+    def test_metamap_criminal_seeds(self):
+        xxx = parse_metamap_criminal_result(mock_metamap_criminal("RFC123XXX"))
         assert xxx["hard_reject"] is True
-        yyy = parse_truora_result(mock_truora("RFC123YYY"))
+        yyy = parse_metamap_criminal_result(mock_metamap_criminal("RFC123YYY"))
         assert yyy["requires_human_review"] is True
-        clean = parse_truora_result(mock_truora("RFC123ABC"))
+        clean = parse_metamap_criminal_result(mock_metamap_criminal("RFC123ABC"))
         assert clean["pass"] is True
 
-    def test_incode_seeds(self):
-        assert mock_incode("RFC123XXX")["overall"] == "DECLINED"
-        assert mock_incode("RFC123YYY")["overall"] == "MANUAL_REVIEW"
-        assert mock_incode("RFC123ABC")["overall"] == "APPROVED"
+    def test_metamap_identity_seeds(self):
+        assert mock_metamap_identity("RFC123XXX")["overall"] == "DECLINED"
+        assert mock_metamap_identity("RFC123YYY")["overall"] == "MANUAL_REVIEW"
+        assert mock_metamap_identity("RFC123ABC")["overall"] == "APPROVED"
 
-    def test_sardine_seeds(self):
-        assert mock_sardine("sessionBAD")["pass"] is False
-        assert mock_sardine("sessionMED")["pass"] is False
-        assert mock_sardine("sessionOK")["pass"] is True
+    def test_metamap_device_seeds(self):
+        assert mock_metamap_device("sessionBAD")["pass"] is False
+        assert mock_metamap_device("sessionMED")["pass"] is False
+        assert mock_metamap_device("sessionOK")["pass"] is True
 
     def test_69b_seeds(self):
         assert mock_69b("RFC123DEF")["hardReject"] is True
