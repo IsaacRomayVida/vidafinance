@@ -153,14 +153,15 @@ jobs:
       # ── WHY THIS STEP EXISTS — DO NOT DELETE AS "REDUNDANT" ──────────────
       # The deploy below is a COUPLED change: rules + functions + hosting must
       # land together. But they have different prerequisites — rules/indexes/
-      # storage deploy fine with billing OFF, while Cloud Functions require an
-      # active billing account. Without this gate a push to main happily writes
+      # storage still deploy on a project that refuses Cloud Functions writes
+      # (whatever the cause: closed/suspended billing account, missing IAM, a
+      # disabled API). Without this gate a push to main happily writes
       # NEW FIRESTORE RULES to production and then fails on the functions loop,
       # leaving prod enforcing new rules against the OLD frontend and the OLD
       # functions. That is exactly what broke production on 2026-08-02.
       # The per-function is_fatal() check further down aborts too LATE: by then
       # the rules are already live. This step aborts BEFORE anything deploys.
-      - name: Preflight — project can accept a full deploy (billing gate)
+      - name: Preflight — write canary (can this project accept a deploy?)
         if: github.event_name == 'push'
         run: |
           # NOTE: `set +e` is deliberate. GitHub's default shell is `bash -e {0}`,
@@ -174,104 +175,126 @@ jobs:
           else
             PROJECT="${{ secrets.FIREBASE_PROJECT_ID_STAGING }}"
           fi
-          echo "Preflight: checking the billing state of $PROJECT…"
+          # Must match the region the functions loop below actually deploys to.
+          # No setGlobalOptions()/region() anywhere in functions/src, so
+          # firebase-functions uses its default region. KEEP IN SYNC.
+          REGION="us-central1"
+          echo "Preflight: probing whether ${PROJECT} accepts Cloud Functions writes…"
 
           # Reuse the credentials from "Authenticate to Google Cloud". That step
           # exports GOOGLE_APPLICATION_CREDENTIALS; gcloud may or may not have
           # the SA in its own credential store, so activate it if needed.
-          # No new secrets and no new IAM grants are REQUIRED: if the service
-          # account cannot read billingInfo the probe falls through to the
-          # fail-open branch below.
+          # No new secrets and NO new IAM grants are required: this is the same
+          # SA and the same API call `firebase deploy --only functions` makes as
+          # its first write, so if it can deploy at all it can run this probe.
           TOKEN="$(gcloud auth print-access-token 2>/dev/null)"
           if [ -z "${TOKEN:-}" ] && [ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
             gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null 2>&1
             TOKEN="$(gcloud auth print-access-token 2>/dev/null)"
           fi
           if [ -z "${TOKEN:-}" ]; then
-            # Cannot check ≠ known-bad. Warn and let the deploy proceed.
-            echo "::warning::Preflight could not mint an access token; skipping the billing check (treated as transient, not fatal)."
+            # Cannot check ≠ known-bad. Warn and let the deploy proceed; the
+            # "Deploy to Firebase" step re-probes because CANARY_WRITE_OK != 1.
+            echo "CANARY_WRITE_OK=0" >> "${GITHUB_ENV:-/dev/null}"
+            echo "::warning::Preflight could not mint an access token; skipping the write canary (treated as transient, not fatal)."
             exit 0
           fi
 
-          # ── DO NOT REPLACE THIS WITH A cloudfunctions.list PROBE ────────────
-          # The first version of this gate (PR #396) probed
-          #   GET cloudfunctions.googleapis.com/v2/projects/$P/locations/-/functions
-          # on the theory that "if we can talk to the Functions API we can deploy".
-          # That is FALSE: *reading* the Functions API does not require an active
-          # billing account, only writes/deploys do. On run 30755911112 (main,
-          # 2026-08-02 16:11Z) that probe returned HTTP 200 on a project whose
-          # billing was definitively disabled, printed "Preflight OK", and let the
-          # deploy proceed to redeploy firestore rules + indexes + storage before
-          # dying on the functions loop — i.e. it produced exactly the half-applied
-          # production state this gate exists to prevent. It is a false negative by
-          # construction. Ask the billing API about billing instead.
-          API="https://cloudbilling.googleapis.com/v1/projects/${PROJECT}/billingInfo"
+          # ══ TWO PREVIOUS PROBES WERE BOTH WRONG. DO NOT GO BACK TO EITHER. ══
+          #
+          # DEAD PROBE 1 (PR #396) — GET .../v2/projects/$P/locations/-/functions
+          #   Theory: "if we can talk to the Functions API we can deploy."
+          #   FALSE: *reading* the Functions API never required an active billing
+          #   account; only writes do. Run 30755911112 (main, 2026-08-02 16:11Z)
+          #   returned HTTP 200 on a project that could not deploy, printed
+          #   "Preflight OK", and let firestore rules + indexes + storage ship
+          #   before the functions loop died. It probed the wrong verb.
+          #
+          # DEAD PROBE 2 (PR #397) — GET cloudbilling/v1/projects/$P/billingInfo
+          #   Theory: "ask the billing API about billing."
+          #   ALSO FALSE. Run 30756695646 (main, 2026-08-02 16:28Z) printed
+          #   "Preflight OK: billing is enabled on <project>" — billingEnabled was
+          #   genuinely true — and the very next step got HTTP 403 "Write access
+          #   to project '<P>' was denied: please check billing account associated
+          #   and retry" from functions:generateUploadUrl. A billing account can
+          #   report as *linked* while being closed, suspended or delinquent, so
+          #   billingEnabled=true does not imply writes are accepted. It probed
+          #   the wrong resource.
+          #
+          # Both were indirect proxies for "can this project accept a deploy",
+          # and both were false negatives. So stop proxying: probe the exact
+          # operation that fails. functions:generateUploadUrl is the ideal
+          # canary — it is the FIRST real write `firebase deploy --only
+          # functions` performs, it is idempotent, and it persists nothing: it
+          # just mints a short-lived signed upload URL that we throw away.
+          # HTTP 200 here is positive PROOF of write capability, not an inference.
+          CANARY="https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/functions:generateUploadUrl"
           CODE=""; BODY=""
           for attempt in 1 2 3; do
-            RESP="$(curl -sS -m 30 -w $'\n%{http_code}' -H "Authorization: Bearer ${TOKEN}" "$API" 2>&1)"
+            RESP="$(curl -sS -m 30 -X POST \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d '{}' \
+              -w $'\n%{http_code}' "$CANARY" 2>&1)"
             CODE="$(printf '%s' "$RESP" | tail -n 1)"
             BODY="$(printf '%s' "$RESP" | sed '$d')"
-            # A definitive answer from the API — stop retrying.
+            # A definitive answer about write capability — stop retrying.
             case "$CODE" in
               200|401|403|404) break ;;
             esac
+            # 429 / 5xx / curl timeout (000) / empty status: transient noise.
             echo "Preflight attempt ${attempt}/3: no definitive HTTP status (got '${CODE:-none}'); retrying…"
             sleep $((attempt * 5))
           done
 
-          # ABORTS THE DEPLOY (fail closed), case 1 — the authoritative answer:
-          # HTTP 200 from the billing API with "billingEnabled": false. There is
-          # no ambiguity in this response; the functions loop below cannot
-          # possibly succeed, so nothing may deploy.
-          # Parsed with grep rather than jq deliberately: jq is not guaranteed on
-          # every runner image, and a missing jq must not turn a definitive
-          # answer into an inconclusive one.
-          if [ "$CODE" = "200" ] && printf '%s' "$BODY" \
-              | grep -qE '"billingEnabled"[[:space:]]*:[[:space:]]*false'; then
-            BILLING_VERDICT="billingEnabled=false reported by the Cloud Billing API"
-          # ABORTS THE DEPLOY (fail closed), case 2 — the pre-existing signal,
-          # kept because it is still correct whenever it fires: an HTTP 403 whose
-          # body actually names billing. Note this branch is what a *disabled*
-          # cloudbilling API surface also looks like.
-          elif [ "$CODE" = "403" ] && printf '%s' "$BODY" | grep -qiE \
-              'billingNotEnabled|SERVICE_DISABLED|requires billing to be enabled|check billing account'; then
-            BILLING_VERDICT="HTTP 403 naming billing (${CODE})"
-          else
-            BILLING_VERDICT=""
-          fi
-
-          if [ -n "$BILLING_VERDICT" ]; then
-            echo "::error::DEPLOY ABORTED BEFORE ANY CHANGE WAS APPLIED — GCP billing is disabled on project ${PROJECT}."
+          # ABORTS THE DEPLOY (fail closed) — HTTP 403 on the write canary.
+          # This is the only fatal branch, and it is unambiguous: the project
+          # refused the first write the deploy makes, so the functions loop
+          # cannot possibly succeed. Deliberately NOT conditioned on the body
+          # naming billing — a 403 from missing cloudfunctions write IAM is
+          # equally undeployable, and body-matching is how probe 2 got fooled.
+          if [ "$CODE" = "403" ]; then
+            echo "::error::DEPLOY ABORTED BEFORE ANY CHANGE WAS APPLIED — project ${PROJECT} refused a Cloud Functions write (HTTP 403)."
             echo ""
             echo "=================================================================="
-            echo " GCP BILLING IS DISABLED ON PROJECT: ${PROJECT}"
+            echo " PROJECT REJECTS CLOUD FUNCTIONS WRITES: ${PROJECT}"
             echo ""
-            echo " Cloud Functions cannot deploy while billing is off, but Firestore"
+            echo " Measured directly: POST functions:generateUploadUrl returned 403."
+            echo " That is the first write a functions deploy performs, so this"
+            echo " deploy cannot succeed. Note this says nothing about whether the"
+            echo " billing API reports billing as enabled — it did report enabled"
+            echo " on run 30756695646 while writes were being denied. A linked"
+            echo " billing account can still be closed, suspended or delinquent."
+            echo " The other cause of a 403 here is the deploy service account"
+            echo " lacking Cloud Functions write permission."
+            echo ""
+            echo " Cloud Functions cannot deploy in this state, but Firestore"
             echo " rules CAN — so continuing would push new rules to production and"
             echo " leave them enforcing against the OLD functions and OLD frontend."
             echo " Aborting BEFORE any deploy so production is not left half-updated."
             echo ""
-            echo " FIX: re-enable billing, then re-run this job:"
+            echo " FIX: check the linked billing account (closed/suspended/past due)"
+            echo " and the deploy service account's roles, then re-run this job:"
             echo "   https://console.cloud.google.com/billing/linkedaccount?project=${PROJECT}"
             echo "=================================================================="
             echo ""
-            echo "Signal: ${BILLING_VERDICT}"
-            echo "API response (HTTP ${CODE}):"
+            echo "Full canary response (HTTP ${CODE}):"
             printf '%s\n' "$BODY"
             exit 1
           fi
 
-          # DOES NOT ABORT (fail open): network timeouts, empty/garbage status,
-          # 5xx, 404, 401, and 403s that do NOT name billing (most importantly:
-          # the service account simply lacking cloudbilling read access). None of
-          # those prove the project is undeployable, and blocking on them would
-          # wedge every deploy forever. The real deploy still fails loudly if
-          # they matter — this gate only exists to stop the *half*-applied case.
-          if [ "$CODE" = "200" ] && printf '%s' "$BODY" \
-              | grep -qE '"billingEnabled"[[:space:]]*:[[:space:]]*true'; then
-            echo "Preflight OK: billing is enabled on ${PROJECT}; proceeding with deploy."
+          # DOES NOT ABORT (fail open): 401, 404, 429, 5xx, curl timeouts and
+          # empty/garbage statuses. None of those prove the project is
+          # undeployable, and failing closed on them would wedge every deploy on
+          # transient noise. 401 in particular is a credential problem — the real
+          # deploy will fail loudly and correctly on its own. This gate exists
+          # only to stop the *half*-applied case, not to be a second deploy.
+          if [ "$CODE" = "200" ]; then
+            echo "CANARY_WRITE_OK=1" >> "${GITHUB_ENV:-/dev/null}"
+            echo "Preflight OK: ${PROJECT} accepted a Cloud Functions write probe (HTTP 200); proceeding with deploy."
           else
-            echo "::warning::Preflight inconclusive (HTTP ${CODE:-none}, no definitive billingEnabled value). Proceeding with the deploy."
+            echo "CANARY_WRITE_OK=0" >> "${GITHUB_ENV:-/dev/null}"
+            echo "::warning::Preflight write canary inconclusive (HTTP ${CODE:-none}). Proceeding; the deploy step re-probes once before applying anything."
             printf '%s\n' "$BODY" | head -n 20
           fi
 
@@ -284,10 +307,58 @@ jobs:
           else
             PROJECT="${{ secrets.FIREBASE_PROJECT_ID_STAGING }}"
           fi
+          REGION="us-central1"   # KEEP IN SYNC with the preflight canary above
           echo "Deploying to $PROJECT"
+
+          # ── 0) LAST-CHANCE WRITE CANARY — nothing above this line has mutated
+          #    anything, and nothing below may run until this passes.
+          #
+          #    Why this exists even though the preflight step already ran: that
+          #    step fails OPEN on transient noise (401/429/5xx/timeout), by
+          #    design, so a deploy CAN reach this point with no positive proof of
+          #    write capability — which is exactly the state that produces the
+          #    half-applied production we are trying to prevent. It also closes
+          #    the (small) race between the preflight step and this one. So the
+          #    rules/indexes/storage deploy below is gated on a canary that
+          #    returned 200, in every path.
+          #
+          #    ATOMICITY DISCLAIMER — READ BEFORE TRUSTING THIS: this is
+          #    best-effort ordering, NOT a transaction. It guarantees that
+          #    NOTHING is applied when the project is known to refuse writes. It
+          #    does NOT guarantee all-or-nothing: if the functions loop below
+          #    fails MIDWAY for an unrelated reason (CPU quota, a bad build, a
+          #    trigger-type change), rules and indexes are already live against a
+          #    partially-updated backend. That residual window is real,
+          #    out of scope here, and deliberately named rather than papered over.
+          if [ "${CANARY_WRITE_OK:-0}" = "1" ]; then
+            echo "Write canary already confirmed in preflight (HTTP 200); proceeding."
+          else
+            echo "Preflight canary did not confirm write access; re-probing once before applying anything…"
+            set +e
+            TOKEN="$(gcloud auth print-access-token 2>/dev/null)"
+            RESP="$(curl -sS -m 30 -X POST \
+              -H "Authorization: Bearer ${TOKEN:-}" \
+              -H "Content-Type: application/json" \
+              -d '{}' \
+              -w $'\n%{http_code}' \
+              "https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/functions:generateUploadUrl" 2>&1)"
+            set -e
+            CODE="$(printf '%s' "$RESP" | tail -n 1)"
+            if [ "$CODE" = "403" ]; then
+              echo "::error::DEPLOY ABORTED BEFORE ANY CHANGE WAS APPLIED — project ${PROJECT} refused a Cloud Functions write (HTTP 403). No rules, indexes, storage, functions or hosting were touched. Check the linked billing account (it can report as enabled while closed/suspended/delinquent) and the deploy service account's Cloud Functions permissions: https://console.cloud.google.com/billing/linkedaccount?project=${PROJECT}"
+              printf '%s\n' "$RESP" | sed '$d'
+              exit 1
+            elif [ "$CODE" = "200" ]; then
+              echo "Re-probe OK: ${PROJECT} accepted a Cloud Functions write (HTTP 200)."
+            else
+              echo "::warning::Re-probe still inconclusive (HTTP ${CODE:-none}); proceeding — see the atomicity disclaimer above."
+            fi
+          fi
 
           # 1) Rules, indexes and storage first — these are backward-compatible
           #    and must be in place before the functions that rely on them.
+          #    They run ONLY after a canary returned 200 (or was inconclusive and
+          #    explicitly logged as such); a 403 exits above, untouched.
           #    HOSTING IS DEPLOYED LAST, in a separate step, and ONLY if every
           #    function deployed. Releasing hosting before functions is what
           #    broke production on 2026-08-02: the new frontend went live
