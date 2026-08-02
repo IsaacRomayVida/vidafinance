@@ -93,6 +93,27 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, integration-test]
     if: github.event_name == 'push'
+    # ── WHY THIS IS ON THE JOB AND NOT THE WORKFLOW ──────────────────────
+    # Two pushes to main close together produce two runs that reach this job
+    # at the same time and deploy the SAME Firebase project concurrently.
+    # Observed 2026-08-02 18:14Z/18:17Z: runs 30760666827 (50d340e) and
+    # 30760796507 (0600a47) were both mid-`firebase deploy` against
+    # production. That is last-writer-wins on ~40 functions, the rules file
+    # and the hosting bundle — and the writers finish out of order, because
+    # the loop's duration depends on which functions changed, not on which
+    # commit is newer. The older run can therefore release OLD rules over
+    # the newer run's, silently reverting a merged security fix.
+    #
+    # cancel-in-progress is deliberately FALSE. Cancelling a running deploy
+    # is the one thing worse than racing: it stops the loop partway and
+    # leaves production with some functions new and some old, which is the
+    # incoherent state the #404 ordering exists to prevent. Queue instead.
+    #
+    # Job-level, not workflow-level, so PR validation runs (which skip this
+    # job entirely) are never made to queue behind a production deploy.
+    concurrency:
+      group: deploy-firebase-${{ github.ref }}
+      cancel-in-progress: false
     # Without this the job runs to the 6h runner limit and is reported as
     # "cancelled" rather than "failed" — which raises no alert. See the
     # 2026-08-02 incident: three consecutive main deploys burned 6h each on a
