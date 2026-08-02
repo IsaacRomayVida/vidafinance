@@ -53,6 +53,18 @@ interface ReviewQueueRow {
   employerId: string | null;
   employerName: string | null;
   amount: number | null;
+  // The money owed, read from the loan document — NEVER recomputed from the live
+  // config. `feeRate` is admin-editable (#389) and each loan persists the rate in
+  // force when it was signed, so recomputing here would reprice a signed loan in
+  // the reviewer's view. Two rows in the same list may legitimately show different
+  // rates; that is the contract, not a bug.
+  //
+  // Null (not 0, not a client-side product) when the loan is missing these fields:
+  // an orphan review, or a loan predating the field. The console renders null as
+  // "—". 0 would assert this loan costs nothing.
+  feeAmount: number | null;
+  feeRate: number | null;
+  totalDue: number | null;
   requestedAt: unknown;
   status: string;
   underwritingDecision: UnderwritingSummary | null;
@@ -65,6 +77,12 @@ interface GetReviewQueueResult {
   // missing count must render as "unknown", never as 0. 0 is a claim about work.
   counts: Record<string, number> | null;
   nextCursor: string | null;
+}
+
+// A money field is either a real number or unknown. NaN/Infinity are neither, and
+// must not reach a currency cell as "NaN" — they degrade to null like a missing field.
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 // Fail-soft: loans created before PR #393 shipped have no `underwritingDecision`
@@ -156,7 +174,10 @@ export const getReviewQueue = onCall(
             employeeName: (loan?.['employeeName'] as string) ?? (review['applicantName'] as string) ?? null,
             employerId: (loan?.['employerId'] as string) ?? null,
             employerName: (loan?.['employerName'] as string) ?? null,
-            amount: typeof loan?.['amount'] === 'number' ? (loan['amount'] as number) : null,
+            amount: num(loan?.['amount']),
+            feeAmount: num(loan?.['fee']),
+            feeRate: num(loan?.['feeRate']),
+            totalDue: num(loan?.['total']),
             requestedAt: review['queuedAt'] ?? null,
             status: review['status'] as string,
             underwritingDecision: summarizeUnderwriting(loan),
