@@ -16,7 +16,7 @@ import { checkRateLimit } from './utils/rateLimiter';
 import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
-import { getLoanConfigValues, LOAN_FEE_RATE, ALLOWED_LOAN_TERM_DAYS, DEFAULT_LOAN_TERM_DAYS, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from './config/loanConfig';
+import { getLoanConfigValues, type LoanConfig, ALLOWED_LOAN_TERM_DAYS, DEFAULT_LOAN_TERM_DAYS, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from './config/loanConfig';
 import { allowTestBypass } from './utils/environment';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
 
@@ -34,6 +34,7 @@ export { sendEmployeeInvite, lookupInvite, acceptInvite } from './invites';
 export { metamapWebhook } from './webhooks';
 export { onContactCreated } from './contact/onContactCreated';
 export { lookupEmployerByCode } from './employers/lookupEmployerByCode';
+export { proposeLoanConfigChange, approveLoanConfigChange } from './config/loanConfigAdmin';
 
 
 initializeApp();
@@ -246,12 +247,16 @@ export const validateCURP = onCall(
 // options, so the borrower-facing quote can never drift from what requestLoan
 // actually charges (see config/loanConfig.ts).
 
+// As of #389 the fee rate is read from the admin-editable config document, so
+// this can now FAIL. That is intentional and must stay that way: LoanWizard.tsx
+// treats a getLoanConfig rejection as an eligibility error and refuses to show
+// the wizard at all (verified — the Promise.all in its load effect is inside
+// the try whose catch sets eligibilityError, and the eligibilityError branch
+// returns before any pricing is rendered). A borrower seeing "try again later"
+// is the correct outcome; a borrower seeing a rate nobody approved is not.
 export const getLoanConfig = onCall(
   { cors: true, enforceAppCheck: true },
-  withAuth<Record<string, never>, ReturnType<typeof getLoanConfigValues>>(
-    ['employee'],
-    async () => getLoanConfigValues()
-  )
+  withAuth<Record<string, never>, LoanConfig>(['employee'], async () => getLoanConfigValues())
 );
 
 // ── requestLoan — employee only ──────────────────────────────────────────────
@@ -312,8 +317,14 @@ export const requestLoan = onCall(
         if (employer['status'] !== 'active' && employer['status'] !== 'pending_verification')
           throw new HttpsError('failed-precondition', VidaErrorCode.EMPLOYER_NOT_APPROVED);
 
+        // Read the live, admin-approved rate. Fails closed (#389): if the config
+        // document is unreadable or out of bounds this THROWS and no loan is
+        // created, rather than pricing one at a rate nobody chose. Read here —
+        // after validation, before the loan exists — so the failure costs the
+        // borrower an error, never a mispriced obligation.
+        const loanConfig = await getLoanConfigValues();
         const loanId = nanoid();
-        const fee = Math.round(amount * LOAN_FEE_RATE);
+        const fee = Math.round(amount * loanConfig.feeRate);
         const dueDate = Timestamp.fromDate(new Date(Date.now() + term * 24 * 60 * 60 * 1000));
 
         // Try full underwriting pipeline first
@@ -422,12 +433,12 @@ export const requestLoan = onCall(
             employerCode: employer['employerCode'],
             amount,
             fee,
-            // The rate IN FORCE at creation, persisted on the loan itself. Once
-            // the fee rate becomes admin-editable (#389), a later change must
+            // The rate IN FORCE at creation, persisted on the loan itself. The
+            // fee rate is admin-editable as of #389, and a later change must
             // never reprice a loan the borrower has already signed — every
             // downstream consumer (contract PDF, CAT disclosure, statements)
             // reads this field, not the live config.
-            feeRate: LOAN_FEE_RATE,
+            feeRate: loanConfig.feeRate,
             total: amount + fee,
             term,
             status: initialStatus,

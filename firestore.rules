@@ -231,6 +231,28 @@ service cloud.firestore {
     match /system_health/{d}         { allow read: if true;       allow write: if false; }
 
     // =============================================
+    // PLATFORM CONFIG (#389) — NO CLIENT ACCESS AT ALL
+    // config/loan holds the live loan fee rate; config/loan/proposals/* holds
+    // pending two-person change proposals. Both are reachable ONLY through the
+    // Admin SDK (getLoanConfigValues, proposeLoanConfigChange,
+    // approveLoanConfigChange), which bypasses these rules.
+    //
+    // Deny is spelled out rather than left to the catch-all at the bottom of
+    // this file. The fall-through gives the same answer today, but this is the
+    // document that prices every loan: the day someone adds a broader match
+    // above the catch-all, the difference between an explicit deny and an
+    // absent rule is the difference between a config read failing and a client
+    // rewriting the fee rate. Read is denied too — the borrower-facing rate
+    // comes from the getLoanConfig callable, so no client has any reason to
+    // read this path, and denying it keeps pending pricing proposals private.
+    // {document=**} so the proposals subcollection is covered, not just the
+    // top-level documents.
+    // =============================================
+    match /config/{document=**} {
+      allow read, write: if false;
+    }
+
+    // =============================================
     // INTERNAL QUEUES — DENY ALL CLIENT ACCESS
     // Only accessed by Cloud Functions via Admin SDK.
     // =============================================

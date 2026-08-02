@@ -1,3 +1,5 @@
+import { getFirestore } from 'firebase-admin/firestore';
+
 // ── Loan pricing & term configuration — SINGLE SOURCE OF TRUTH ────────────────
 // requestLoan(), the borrower-facing quote (getLoanConfig, consumed by
 // LoanWizard.tsx), and the contract PDF (services/pdf-generator) must all
@@ -11,13 +13,13 @@
 // consumer-protection exposure, not just a bug. That 8% is now deleted, not
 // kept as a fallback: a second constant is how the drift started.
 //
-// This constant is the SEED value. Issue #389 replaces the body of
-// getLoanConfigValues() with a read from an admin-editable config document
-// (two-person approval, effective-from semantics, server-enforced bounds,
-// append-only audit). Callers must keep reading through getLoanConfigValues()
-// so that swap stays a one-line change. The rate in force at loan creation is
-// persisted ON the loan document — a later change must never reprice a loan a
-// borrower has already signed.
+// This constant is the SEED value (#389): it is what getLoanConfigValues()
+// returns until an admin has proposed AND a second admin has approved a change
+// (see config/loanConfigAdmin.ts). It is NOT a fallback — once the config
+// document exists, an unreadable or out-of-bounds value throws rather than
+// silently reverting here. The rate in force at loan creation is persisted ON
+// the loan document — a later change must never reprice a loan a borrower has
+// already signed.
 export const LOAN_FEE_RATE = 0.3;
 
 // Only a 30-day term is supported end-to-end today: underwriting risk
@@ -39,12 +41,125 @@ export interface LoanConfig {
   maxAmount: number;
 }
 
-export function getLoanConfigValues(): LoanConfig {
+// ── The admin-editable slice (#389) ───────────────────────────────────────────
+// Exactly ONE field is editable: feeRate. Terms, min and max stay code-owned —
+// changing the allowed term list is not a config change, it is a change to what
+// underwriting, the deduction schedule and the contract PDF's CAT calculation
+// are verified to support (see ALLOWED_LOAN_TERM_DAYS above).
+export const LOAN_CONFIG_COLLECTION = 'config';
+export const LOAN_CONFIG_DOC_ID = 'loan';
+export const LOAN_CONFIG_DOC_PATH = `${LOAN_CONFIG_COLLECTION}/${LOAN_CONFIG_DOC_ID}`;
+
+// Hard server-side bounds on the fee rate. These are COMPILE-TIME constants and
+// are deliberately not represented anywhere in Firestore: no API, no callable
+// and no admin can widen them, so a fat-fingered `3.0` (300%) is impossible
+// rather than merely unlikely. Raising the ceiling is a code change that goes
+// through review. Enforced on write (proposeLoanConfigChange /
+// approveLoanConfigChange) AND again on read, because a value that reached the
+// document by any other route — a console edit, a restore from a backup taken
+// under older bounds, a compromised service account — must still not be able to
+// price a loan.
+export const MIN_ALLOWED_FEE_RATE = 0;
+export const MAX_ALLOWED_FEE_RATE = 0.35;
+
+/** Thrown by the read path when the stored config cannot be trusted. */
+export class LoanConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LoanConfigError';
+  }
+}
+
+/**
+ * The compile-time seed. Returned verbatim when the config document does not
+ * exist yet, and used by the propose/approve callables as the "before" value in
+ * that same case.
+ */
+export function getSeedLoanConfigValues(): LoanConfig {
   return {
     feeRate: LOAN_FEE_RATE,
     allowedTermDays: [...ALLOWED_LOAN_TERM_DAYS],
     defaultTermDays: DEFAULT_LOAN_TERM_DAYS,
     minAmount: MIN_LOAN_AMOUNT,
     maxAmount: MAX_LOAN_AMOUNT,
+  };
+}
+
+/**
+ * Bounds check shared by the read and write paths. Returns the rate so it can
+ * be used inline; throws LoanConfigError on anything that is not a finite
+ * number inside [MIN_ALLOWED_FEE_RATE, MAX_ALLOWED_FEE_RATE].
+ *
+ * NaN and Infinity are rejected explicitly: `NaN >= 0` is false so they would
+ * fall out of the range comparison anyway, but relying on that is the kind of
+ * accident that stops being true when someone "simplifies" the condition.
+ */
+export function assertValidFeeRate(rate: unknown, context: string): number {
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) {
+    throw new LoanConfigError(
+      `${context}: feeRate must be a finite number, got ${JSON.stringify(rate)}`
+    );
+  }
+  if (rate < MIN_ALLOWED_FEE_RATE || rate > MAX_ALLOWED_FEE_RATE) {
+    throw new LoanConfigError(
+      `${context}: feeRate ${rate} is outside the permitted range ` +
+        `[${MIN_ALLOWED_FEE_RATE}, ${MAX_ALLOWED_FEE_RATE}]`
+    );
+  }
+  return rate;
+}
+
+/**
+ * The single read path for loan pricing. Every quote and every priced loan goes
+ * through here.
+ *
+ * FAILS CLOSED, deliberately (same failure class as P1-4). There are exactly
+ * three outcomes:
+ *
+ *   1. The document does not exist       -> return the compile-time seed.
+ *   2. The document exists and is valid  -> return the stored feeRate.
+ *   3. Anything else — the read threw, the document is malformed, the stored
+ *      rate is out of bounds             -> THROW.
+ *
+ * There is no fourth branch that returns a default. A borrower must never be
+ * quoted, and a loan must never be priced at, a rate nobody chose: silently
+ * substituting 30% when the stored value is unreadable would print a number on
+ * a CONDUSEF-regulated contract that no admin ever approved. A hard failure is
+ * a visible outage; a silent fallback is a mispriced loan book.
+ *
+ * Async as of #389 — callers must await. Firestore's client caches this read,
+ * so the per-request cost is a local lookup in the warm case.
+ */
+export async function getLoanConfigValues(): Promise<LoanConfig> {
+  const seed = getSeedLoanConfigValues();
+
+  let snapshot: FirebaseFirestore.DocumentSnapshot;
+  try {
+    snapshot = await getFirestore()
+      .collection(LOAN_CONFIG_COLLECTION)
+      .doc(LOAN_CONFIG_DOC_ID)
+      .get();
+  } catch (err) {
+    // Unreadable != unset. We cannot tell whether an admin-approved rate is
+    // sitting behind this error, so we refuse to price anything.
+    throw new LoanConfigError(
+      `Loan config at ${LOAN_CONFIG_DOC_PATH} could not be read: ` +
+        (err instanceof Error ? err.message : String(err))
+    );
+  }
+
+  if (!snapshot.exists) {
+    // Never been configured. The seed IS the chosen value (ADR-002), not a guess.
+    return seed;
+  }
+
+  const data = snapshot.data();
+  if (!data || typeof data !== 'object') {
+    throw new LoanConfigError(`Loan config at ${LOAN_CONFIG_DOC_PATH} exists but has no data`);
+  }
+
+  return {
+    ...seed,
+    feeRate: assertValidFeeRate(data['feeRate'], `Loan config at ${LOAN_CONFIG_DOC_PATH}`),
   };
 }
