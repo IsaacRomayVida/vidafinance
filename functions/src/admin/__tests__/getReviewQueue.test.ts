@@ -41,6 +41,18 @@ interface QueryState {
   startAfterId: string | null;
 }
 
+// Flipped by the fail-soft test to make the count() aggregation throw.
+let countShouldFail = false;
+
+function matchesWheres(d: FakeDoc, state: QueryState): boolean {
+  return state.wheres.every(({ field, op, value }) => {
+    const v = d.data[field];
+    if (op === '==') return v === value;
+    if (op === 'in') return Array.isArray(value) && (value as unknown[]).includes(v);
+    return true;
+  });
+}
+
 function createQueryable(state: QueryState): Record<string, unknown> {
   return {
     where: (field: string, op: string, value: unknown) =>
@@ -49,15 +61,15 @@ function createQueryable(state: QueryState): Record<string, unknown> {
       createQueryable({ ...state, orderField: field, orderDir: dir }),
     limit: (n: number) => createQueryable({ ...state, limitN: n }),
     startAfter: (docSnap: { id: string }) => createQueryable({ ...state, startAfterId: docSnap.id }),
+    count: () => ({
+      get: async () => {
+        if (countShouldFail) throw new Error('aggregation unavailable');
+        const total = reviewQueueDocs.filter((d) => matchesWheres(d, state)).length;
+        return { data: () => ({ count: total }) };
+      },
+    }),
     get: async () => {
-      let items = reviewQueueDocs.filter((d) =>
-        state.wheres.every(({ field, op, value }) => {
-          const v = d.data[field];
-          if (op === '==') return v === value;
-          if (op === 'in') return Array.isArray(value) && (value as unknown[]).includes(v);
-          return true;
-        })
-      );
+      let items = reviewQueueDocs.filter((d) => matchesWheres(d, state));
       if (state.orderField) {
         const field = state.orderField;
         items = [...items].sort((a, b) => {
@@ -150,6 +162,7 @@ beforeEach(() => {
   mockCheckRateLimit.mockResolvedValue(true);
   reviewQueueDocs = [];
   loanDocs = {};
+  countShouldFail = false;
 });
 
 describe('getReviewQueue', () => {
@@ -296,6 +309,61 @@ describe('getReviewQueue', () => {
           'underwritingDecision',
         ].sort()
       );
+    });
+  });
+
+  describe('status counts', () => {
+    it('counts the whole collection per status, independent of the page', async () => {
+      // 30 pending — more than the 25-row default page — plus other buckets.
+      for (let i = 0; i < 30; i++) {
+        seedReview(`p${i}`, { queuedAt: `2026-08-01T00:${String(i).padStart(2, '0')}:00.000Z` });
+        seedLoan(`loan-p${i}`);
+      }
+      seedReview('pr1', { status: 'pending_review' });
+      seedLoan('loan-pr1');
+      seedReview('ir1', { status: 'info_requested' });
+      seedLoan('loan-ir1');
+      seedReview('ok1', { status: 'approved' });
+      seedLoan('loan-ok1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const counts = result.counts as Record<string, number>;
+
+      expect((result.reviews as unknown[]).length).toBe(25);
+      expect(counts).toEqual({ pending: 30, pending_review: 1, info_requested: 1, escalated: 0 });
+    });
+
+    it('reports zero for a status with no documents rather than omitting it', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+
+      expect(result.counts).toEqual({ pending: 1, pending_review: 0, info_requested: 0, escalated: 0 });
+    });
+
+    it('is unaffected by the status filter applied to the list', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1');
+      seedReview('e1', { status: 'escalated' });
+      seedLoan('loan-e1');
+
+      const result = (await fn({ auth: opsAuth, data: { status: 'escalated' } })) as Record<string, unknown>;
+
+      expect((result.reviews as unknown[]).length).toBe(1);
+      expect((result.counts as Record<string, number>)['pending']).toBe(1);
+    });
+
+    it('returns counts: null (never 0) when the aggregation fails, and still serves the list', async () => {
+      countShouldFail = true;
+      seedReview('r1');
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+
+      expect(result.counts).toBeNull();
+      expect((result.reviews as unknown[]).length).toBe(1);
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
   });
 

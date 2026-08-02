@@ -13,6 +13,11 @@ const OPEN_STATUSES = ['pending', 'pending_review'];
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 
+// Statuses the console shows as filter pills. Counted with server-side aggregation
+// (billed at ~1/1000 of reading the documents), so the header can answer "how many
+// are waiting on a human" without any client paging over the collection.
+const COUNTED_STATUSES = ['pending', 'pending_review', 'info_requested', 'escalated'];
+
 interface GetReviewQueueData {
   status?: string;
   limit?: number;
@@ -46,6 +51,10 @@ interface ReviewQueueRow {
 
 interface GetReviewQueueResult {
   reviews: ReviewQueueRow[];
+  // Collection-wide totals per status — NOT a total for the page in `reviews`.
+  // Null when the aggregation failed: the list is still useful without it, and a
+  // missing count must render as "unknown", never as 0. 0 is a claim about work.
+  counts: Record<string, number> | null;
   nextCursor: string | null;
 }
 
@@ -147,7 +156,25 @@ export const getReviewQueue = onCall(
 
         const nextCursor = reviewDocs.length === limit ? reviewDocs[reviewDocs.length - 1].id : null;
 
-        return { reviews, nextCursor };
+        // Fail-soft: a broken aggregation must not take down the queue itself.
+        let counts: Record<string, number> | null = null;
+        try {
+          const countSnaps = await Promise.all(
+            COUNTED_STATUSES.map((s) =>
+              db.collection('review_queue').where('status', '==', s).count().get()
+            )
+          );
+          counts = Object.fromEntries(
+            COUNTED_STATUSES.map((s, i) => [s, countSnaps[i].data().count])
+          );
+        } catch (e: unknown) {
+          logger.warn('Review queue counts unavailable', {
+            error: (e as Error).message,
+            service: 'functions',
+          });
+        }
+
+        return { reviews, counts, nextCursor };
       })
   )
 );
