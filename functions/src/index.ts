@@ -17,6 +17,7 @@ import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
 import { getLoanConfigValues, LOAN_FEE_RATE, ALLOWED_LOAN_TERM_DAYS, DEFAULT_LOAN_TERM_DAYS, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from './config/loanConfig';
+import { allowTestBypass } from './utils/environment';
 
 initSentry();
 
@@ -184,8 +185,10 @@ export const validateCURP = onCall(
       throw new HttpsError('invalid-argument', 'Invalid CURP format');
     }
 
-    // Test-mode bypass: if expectedName contains @vida-test.com email context, auto-approve
-    if (curp.toUpperCase().startsWith('VIDA') || (email && email.endsWith('@vida-test.com'))) {
+    // Test-mode bypass. Gated on the environment, not on the CURP prefix or the
+    // email suffix — the caller picks both of those, so on their own they are a
+    // self-service way to skip identity validation entirely.
+    if (allowTestBypass() && (curp.toUpperCase().startsWith('VIDA') || (email && email.endsWith('@vida-test.com')))) {
       logger.info('Test-mode CURP bypass', { curp });
       return {
         valid: true,
@@ -1382,6 +1385,10 @@ export const onEmployeeDocCreated = onDocumentCreated('employees/{uid}', async (
 });
 
 export const autoVerifyOnEmployerCreate = onDocumentCreated('employers/{uid}', async (event) => {
+  // Environment gate first: '@vida-test.com' is a suffix the signer-upper
+  // chooses, so on production it would let anyone skip email verification and
+  // auto-activate their own employer.
+  if (!allowTestBypass()) return;
   const data = event.data?.data();
   if (!data?.email) return;
   if (!data.email.endsWith('@vida-test.com')) return;
@@ -1402,6 +1409,8 @@ export const autoVerifyOnEmployerCreate = onDocumentCreated('employers/{uid}', a
 });
 
 export const autoVerifyOnEmployeeCreate = onDocumentCreated('employees/{uid}', async (event) => {
+  // Environment gate first — see autoVerifyOnEmployerCreate.
+  if (!allowTestBypass()) return;
   const data = event.data?.data();
   if (!data?.email) return;
   if (!data.email.endsWith('@vida-test.com')) return;
