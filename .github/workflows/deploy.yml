@@ -174,13 +174,14 @@ jobs:
           else
             PROJECT="${{ secrets.FIREBASE_PROJECT_ID_STAGING }}"
           fi
-          echo "Preflight: checking that $PROJECT can accept Cloud Functions writes…"
+          echo "Preflight: checking the billing state of $PROJECT…"
 
           # Reuse the credentials from "Authenticate to Google Cloud". That step
           # exports GOOGLE_APPLICATION_CREDENTIALS; gcloud may or may not have
           # the SA in its own credential store, so activate it if needed.
-          # No new secrets, no new IAM permissions: listing functions needs no
-          # more access than deploying them.
+          # No new secrets and no new IAM grants are REQUIRED: if the service
+          # account cannot read billingInfo the probe falls through to the
+          # fail-open branch below.
           TOKEN="$(gcloud auth print-access-token 2>/dev/null)"
           if [ -z "${TOKEN:-}" ] && [ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
             gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null 2>&1
@@ -192,7 +193,19 @@ jobs:
             exit 0
           fi
 
-          API="https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/-/functions?pageSize=1"
+          # ── DO NOT REPLACE THIS WITH A cloudfunctions.list PROBE ────────────
+          # The first version of this gate (PR #396) probed
+          #   GET cloudfunctions.googleapis.com/v2/projects/$P/locations/-/functions
+          # on the theory that "if we can talk to the Functions API we can deploy".
+          # That is FALSE: *reading* the Functions API does not require an active
+          # billing account, only writes/deploys do. On run 30755911112 (main,
+          # 2026-08-02 16:11Z) that probe returned HTTP 200 on a project whose
+          # billing was definitively disabled, printed "Preflight OK", and let the
+          # deploy proceed to redeploy firestore rules + indexes + storage before
+          # dying on the functions loop — i.e. it produced exactly the half-applied
+          # production state this gate exists to prevent. It is a false negative by
+          # construction. Ask the billing API about billing instead.
+          API="https://cloudbilling.googleapis.com/v1/projects/${PROJECT}/billingInfo"
           CODE=""; BODY=""
           for attempt in 1 2 3; do
             RESP="$(curl -sS -m 30 -w $'\n%{http_code}' -H "Authorization: Bearer ${TOKEN}" "$API" 2>&1)"
@@ -206,11 +219,28 @@ jobs:
             sleep $((attempt * 5))
           done
 
-          # ABORTS THE DEPLOY (fail closed): HTTP 403 whose body names billing /
-          # SERVICE_DISABLED / billingNotEnabled. That is deterministic — the
-          # functions loop below cannot possibly succeed, so nothing may deploy.
-          if [ "$CODE" = "403" ] && printf '%s' "$BODY" | grep -qiE \
-              'billing|billingNotEnabled|SERVICE_DISABLED|has not been used in project'; then
+          # ABORTS THE DEPLOY (fail closed), case 1 — the authoritative answer:
+          # HTTP 200 from the billing API with "billingEnabled": false. There is
+          # no ambiguity in this response; the functions loop below cannot
+          # possibly succeed, so nothing may deploy.
+          # Parsed with grep rather than jq deliberately: jq is not guaranteed on
+          # every runner image, and a missing jq must not turn a definitive
+          # answer into an inconclusive one.
+          if [ "$CODE" = "200" ] && printf '%s' "$BODY" \
+              | grep -qE '"billingEnabled"[[:space:]]*:[[:space:]]*false'; then
+            BILLING_VERDICT="billingEnabled=false reported by the Cloud Billing API"
+          # ABORTS THE DEPLOY (fail closed), case 2 — the pre-existing signal,
+          # kept because it is still correct whenever it fires: an HTTP 403 whose
+          # body actually names billing. Note this branch is what a *disabled*
+          # cloudbilling API surface also looks like.
+          elif [ "$CODE" = "403" ] && printf '%s' "$BODY" | grep -qiE \
+              'billingNotEnabled|SERVICE_DISABLED|requires billing to be enabled|check billing account'; then
+            BILLING_VERDICT="HTTP 403 naming billing (${CODE})"
+          else
+            BILLING_VERDICT=""
+          fi
+
+          if [ -n "$BILLING_VERDICT" ]; then
             echo "::error::DEPLOY ABORTED BEFORE ANY CHANGE WAS APPLIED — GCP billing is disabled on project ${PROJECT}."
             echo ""
             echo "=================================================================="
@@ -225,20 +255,23 @@ jobs:
             echo "   https://console.cloud.google.com/billing/linkedaccount?project=${PROJECT}"
             echo "=================================================================="
             echo ""
+            echo "Signal: ${BILLING_VERDICT}"
             echo "API response (HTTP ${CODE}):"
             printf '%s\n' "$BODY"
             exit 1
           fi
 
           # DOES NOT ABORT (fail open): network timeouts, empty/garbage status,
-          # 5xx, and 401/404/403s that do NOT mention billing (e.g. the service
-          # account simply lacks cloudfunctions.list). None of those prove the
-          # project is undeployable, and blocking on them would wedge every
-          # deploy forever. The real deploy still fails loudly if they matter.
-          if [ "$CODE" = "200" ]; then
-            echo "Preflight OK: ${PROJECT} accepts Cloud Functions API calls; proceeding with deploy."
+          # 5xx, 404, 401, and 403s that do NOT name billing (most importantly:
+          # the service account simply lacking cloudbilling read access). None of
+          # those prove the project is undeployable, and blocking on them would
+          # wedge every deploy forever. The real deploy still fails loudly if
+          # they matter — this gate only exists to stop the *half*-applied case.
+          if [ "$CODE" = "200" ] && printf '%s' "$BODY" \
+              | grep -qE '"billingEnabled"[[:space:]]*:[[:space:]]*true'; then
+            echo "Preflight OK: billing is enabled on ${PROJECT}; proceeding with deploy."
           else
-            echo "::warning::Preflight inconclusive (HTTP ${CODE:-none}, no billing signal in the response). Proceeding with the deploy."
+            echo "::warning::Preflight inconclusive (HTTP ${CODE:-none}, no definitive billingEnabled value). Proceeding with the deploy."
             printf '%s\n' "$BODY" | head -n 20
           fi
 
