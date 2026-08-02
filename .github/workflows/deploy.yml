@@ -508,18 +508,20 @@ jobs:
             return 1
           }
 
-          # Deploys a batch (comma-separated function list) with the same
-          # 4-attempt retry + backoff the old single-function loop used.
+          # Deploys a batch with the same 4-attempt retry + backoff the old
+          # single-function loop used. Takes an ALREADY-BUILT --only selector
+          # (see the construction below — every function carries its own
+          # `functions:` prefix; this is load-bearing, not stylistic).
           # Returns 0 if the WHOLE batch deployed in one shot; 1 otherwise —
           # either FATAL=1 was set (non-retryable), or all 4 attempts were
           # exhausted and the caller should fall back to deploy_one per
           # function.
           deploy_batch() {
-            local csv="$1" label="$2" attempt out rc
+            local only_arg="$1" label="$2" attempt out rc
             for attempt in 1 2 3 4; do
-              echo "::group::Deploy batch [${label}] (attempt ${attempt}/4): ${csv}"
+              echo "::group::Deploy batch [${label}] (attempt ${attempt}/4): ${only_arg}"
               set +e
-              out="$(firebase deploy --only "functions:${csv}" --project "$PROJECT" --non-interactive --force 2>&1)"
+              out="$(firebase deploy --only "${only_arg}" --project "$PROJECT" --non-interactive --force 2>&1)"
               rc=$?
               set -e
               printf '%s\n' "$out"
@@ -546,9 +548,32 @@ jobs:
           while [ "$i" -lt "$total" ]; do
             batch_num=$((batch_num+1))
             batch=("${FUNCTIONS_ARR[@]:$i:$BATCH_SIZE}")
-            csv="$(IFS=,; echo "${batch[*]}")"
-            echo "=== batch ${batch_num}/${num_batches} (functions $((i+1))-$((i+${#batch[@]}))/${total}): ${csv} ==="
-            if deploy_batch "$csv" "${batch_num}/${num_batches}"; then
+
+            # EVERY function needs its own `functions:` prefix:
+            #   --only functions:a,functions:b,functions:c
+            #
+            # NOT `--only functions:a,b,c`. That form looks correct and is
+            # silently, dangerously wrong. firebase-tools splits --only on
+            # commas and keeps only the selectors that literally start with
+            # "functions:" (deploy/functions/functionsDeployHelper.js,
+            # getEndpointFilters). So `functions:a,b,c` yields a filter for `a`
+            # ALONE; `b` and `c` are dropped with no warning. filterTargets
+            # still resolves the "functions" target from the first selector, so
+            # the CLI exits 0 and the batch is counted as fully deployed.
+            #
+            # The failure mode that produces is the worst one this workflow has:
+            # 1 of every 6 functions actually deploys, the run reports
+            # "Deployed 40/40 functions", and hosting — which is gated on that
+            # count — releases the new frontend against 33 stale functions. A
+            # green check on an incoherent production state, which is precisely
+            # what the ordering in this file exists to prevent.
+            only_arg=""
+            for fn in "${batch[@]}"; do
+              only_arg="${only_arg:+${only_arg},}functions:${fn}"
+            done
+
+            echo "=== batch ${batch_num}/${num_batches} (functions $((i+1))-$((i+${#batch[@]}))/${total}): ${batch[*]} ==="
+            if deploy_batch "$only_arg" "${batch_num}/${num_batches}"; then
               ok=$((ok+${#batch[@]}))
             elif [ "$FATAL" = "1" ]; then
               echo "::error::Aborting after a non-retryable failure in batch ${batch_num}. Deployed ${ok}/${total} before the abort; hosting will NOT be released."
