@@ -17,6 +17,8 @@ import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
 import { getLoanConfigValues, type LoanConfig, ALLOWED_LOAN_TERM_DAYS, DEFAULT_LOAN_TERM_DAYS, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from './config/loanConfig';
+import { calculateNextPayrollDate, type PayFrequency } from './loans/calculateNextPayrollDate';
+import { resolvePayFrequency, type PayFrequencySource } from './loans/resolvePayFrequency';
 import { allowTestBypass } from './utils/environment';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
 
@@ -261,9 +263,39 @@ export const validateCURP = onCall(
 // borrower gets an in-place retry. The guarantee this callable depends on is
 // unchanged and is pinned by LoanWizard.test.tsx: a rate that failed to load
 // can never reach a quote or a submission.
+// The quote also has to say WHEN the money comes out, and that is per-borrower
+// rather than per-config: it is the borrower's next payroll date. It ships on
+// this payload rather than its own callable so it inherits the same single
+// loading/error state as the prices — a deduction date that failed to load must
+// disappear from the quote exactly like a fee that failed to load, never render
+// blank next to real figures (a blank date reads as "today").
+//
+// `estimatedDeductionDate` is named for what it is. The booked date is computed
+// at disbursement (markLoanDisbursed), against the clock at that moment, and a
+// loan waits for human review in between — so if disbursement crosses the
+// payroll date predicted here, the real deduction falls in the NEXT cycle. This
+// is a good-faith prediction, not a commitment, and the UI must not state it as
+// one. `payFrequencySource` says how much to trust it: 'default_monthly' means
+// we could not read the borrower's cadence and assumed one (#431), which must
+// not be presented with the same confidence as a known date (#424).
+export interface LoanQuoteConfig extends LoanConfig {
+  estimatedDeductionDate: string;
+  payFrequency: PayFrequency;
+  payFrequencySource: PayFrequencySource;
+}
+
 export const getLoanConfig = onCall(
   { cors: true, enforceAppCheck: true },
-  withAuth<Record<string, never>, LoanConfig>(['employee'], async () => getLoanConfigValues())
+  withAuth<Record<string, never>, LoanQuoteConfig>(['employee'], async (_data, auth) => {
+    const config = await getLoanConfigValues();
+    const { frequency, source } = await resolvePayFrequency(auth.uid);
+    return {
+      ...config,
+      estimatedDeductionDate: calculateNextPayrollDate(frequency).toDate().toISOString(),
+      payFrequency: frequency,
+      payFrequencySource: source,
+    };
+  })
 );
 
 // ── requestLoan — employee only ──────────────────────────────────────────────

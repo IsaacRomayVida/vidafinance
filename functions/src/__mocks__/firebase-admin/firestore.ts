@@ -28,6 +28,7 @@ export class Timestamp {
 export const _mockStore: {
   loans: Record<string, { exists: boolean; data?: Record<string, unknown> }>;
   employers: Record<string, { exists: boolean; data?: Record<string, unknown> }>;
+  employees: Record<string, { exists: boolean; data?: Record<string, unknown> }>;
   users: Record<string, { exists: boolean; data?: Record<string, unknown> }>;
   /** Every write landing in the `audit_log` collection, via add() or txn.set(). */
   auditLog: Array<Record<string, unknown>>;
@@ -36,6 +37,7 @@ export const _mockStore: {
 } = {
   loans: {},
   employers: {},
+  employees: {},
   users: {},
   auditLog: [],
   transactionCalls: [],

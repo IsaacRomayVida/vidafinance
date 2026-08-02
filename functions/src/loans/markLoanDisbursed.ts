@@ -9,6 +9,7 @@ import { getRedis } from '../utils/redis';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 import { calculateNextPayrollDate } from './calculateNextPayrollDate';
+import { resolvePayFrequency } from './resolvePayFrequency';
 
 const MarkLoanDisbursedSchema = z.object({
   loanId: z.string().min(1),
@@ -76,9 +77,25 @@ export const markLoanDisbursed = onCall(
             );
           }
 
+          // The borrower's own pay frequency decides when this is deducted. It
+          // used to be read from `loan.borrowerSnapshot`, which nothing writes
+          // (#431) — so this always fell through to 'monthly' and scheduled
+          // every borrower for month-end, a date that for a weekly- or
+          // biweekly-paid employee need not be a payday at all.
           const borrowerSnapshot = loan['borrowerSnapshot'] as Record<string, unknown> | undefined;
-          const payFrequency = (borrowerSnapshot?.['payFrequency'] as string | undefined) ?? 'monthly';
+          const borrowerUid =
+            (loan['userId'] as string | undefined) ?? (loan['employeeId'] as string | undefined);
+          const { frequency: payFrequency, source: payFrequencySource } =
+            await resolvePayFrequency(borrowerUid, borrowerSnapshot);
           const dueDate = calculateNextPayrollDate(payFrequency);
+
+          if (payFrequencySource === 'default_monthly') {
+            logger.warn('Disbursing with an assumed monthly pay frequency', {
+              loanId: input.loanId,
+              uid: borrowerUid,
+              service: 'functions',
+            });
+          }
 
           const employerId = loan['employerId'] as string;
           const principalAmount = (loan['principalAmount'] as number | undefined) ?? (loan['amount'] as number);

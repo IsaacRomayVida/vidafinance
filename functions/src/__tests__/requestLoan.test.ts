@@ -246,6 +246,66 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     expect(config.allowedTermDays).toEqual([30]);
   });
 
+  // The quote also has to say WHEN the money comes out, and that date is
+  // per-borrower (their payroll cadence), not per-config. It ships on this
+  // payload so it shares the prices' single loading/error state.
+  describe('getLoanConfig deduction date (#424 / #431)', () => {
+    const importGetLoanConfig = async () => {
+      const { getLoanConfig } = await import('../index');
+      return getLoanConfig as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{
+        estimatedDeductionDate: string;
+        payFrequency: string;
+        payFrequencySource: string;
+      }>;
+    };
+
+    it('derives the date from the borrower record when it carries a cadence', async () => {
+      mockDb = buildMockDb({ employee: { ...mockEmployee, payFrequency: 'weekly' } });
+      const fn = await importGetLoanConfig();
+
+      const config = await fn({ auth, data: {} });
+
+      expect(config.payFrequency).toBe('weekly');
+      expect(config.payFrequencySource).toBe('employee_record');
+      expect(new Date(config.estimatedDeductionDate).getDay()).toBe(1); // next Monday
+    });
+
+    it('marks the date as assumed when the borrower record has no cadence', async () => {
+      // mockEmployee deliberately has no payFrequency — the state most real
+      // borrower records are in. The date must still be served (the quote
+      // cannot go blank) but must be labelled so the UI can render it with
+      // less confidence than a known one.
+      const fn = await importGetLoanConfig();
+
+      const config = await fn({ auth, data: {} });
+
+      expect(config.payFrequencySource).toBe('default_monthly');
+      expect(config.payFrequency).toBe('monthly');
+      expect(Number.isNaN(Date.parse(config.estimatedDeductionDate))).toBe(false);
+    });
+
+    it('never returns a deduction date in the past', async () => {
+      const fn = await importGetLoanConfig();
+
+      const config = await fn({ auth, data: {} });
+
+      // A date that has already passed would read as "we took it already".
+      expect(new Date(config.estimatedDeductionDate).getTime()).toBeGreaterThan(
+        Date.now() - 24 * 60 * 60 * 1000
+      );
+    });
+
+    it('still serves prices when the deduction date cannot be personalised', async () => {
+      mockDb = buildMockDb({ employee: null });
+      const fn = await importGetLoanConfig();
+
+      const config = (await fn({ auth, data: {} })) as unknown as Record<string, unknown>;
+
+      expect(config['feeRate']).toBe(0.3);
+      expect(config['payFrequencySource']).toBe('default_monthly');
+    });
+  });
+
   it('applies the server default term when the client omits termDays', async () => {
     const { requestLoan } = await import('../index');
     const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
