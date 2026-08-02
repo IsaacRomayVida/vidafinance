@@ -183,6 +183,42 @@ describe('getReviewQueue', () => {
     });
   });
 
+  describe('ordering', () => {
+    // A work queue, not an activity feed: the longest-waiting review is the most
+    // urgent. Newest-first plus cursor pagination would bury it on the last page.
+    it('returns the oldest review first', async () => {
+      seedReview('newest', { queuedAt: '2026-08-01T12:00:00.000Z' });
+      seedReview('oldest', { queuedAt: '2026-07-01T12:00:00.000Z' });
+      seedReview('middle', { queuedAt: '2026-07-15T12:00:00.000Z' });
+      ['newest', 'oldest', 'middle'].forEach((id) => seedLoan(`loan-${id}`));
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const rows = result.reviews as Array<Record<string, unknown>>;
+      expect(rows.map((r) => r.id)).toEqual(['oldest', 'middle', 'newest']);
+    });
+
+    it('pages oldest-first, so the first page holds the longest-waiting work', async () => {
+      for (let i = 0; i < 30; i++) {
+        seedReview(`r${String(i).padStart(2, '0')}`, {
+          queuedAt: `2026-08-01T00:${String(i).padStart(2, '0')}:00.000Z`,
+        });
+        seedLoan(`loan-r${String(i).padStart(2, '0')}`);
+      }
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const rows = result.reviews as Array<Record<string, unknown>>;
+      expect(rows[0].id).toBe('r00');
+      expect(rows[rows.length - 1].id).toBe('r24');
+    });
+
+    it('sorts flat by age, not grouped by status', async () => {
+      seedReview('escalated-old', { status: 'escalated', queuedAt: '2026-07-01T00:00:00.000Z' });
+      seedReview('pending-new', { status: 'pending_review', queuedAt: '2026-08-01T00:00:00.000Z' });
+      ['escalated-old', 'pending-new'].forEach((id) => seedLoan(`loan-${id}`));
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const rows = result.reviews as Array<Record<string, unknown>>;
+      expect(rows.map((r) => r.id)).toEqual(['escalated-old', 'pending-new']);
+    });
+  });
+
   describe('pagination', () => {
     it('defaults to 25 when no limit given', async () => {
       for (let i = 0; i < 30; i++) {

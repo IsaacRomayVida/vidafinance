@@ -116,7 +116,16 @@ export const getReviewQueue = onCall(
         let query = status
           ? db.collection('review_queue').where('status', '==', status)
           : db.collection('review_queue').where('status', 'in', OPEN_STATUSES);
-        query = query.orderBy('queuedAt', 'desc').limit(limit);
+        // Oldest first. This is a work queue, not an activity feed: the review that
+        // has waited longest is the most urgent one, and with cursor pagination a
+        // newest-first order buries it on the last page nobody scrolls to.
+        //
+        // Flat by age, deliberately not tiered by status — Firestore would order
+        // `status` lexically (approved < escalated < info_requested < pending <
+        // pending_review), which is not a priority order, and faking one needs a
+        // stored sort key. The status column and the filter pills already answer
+        // "what kind of work is this"; the sort answers "what has waited longest".
+        query = query.orderBy('queuedAt', 'asc').limit(limit);
 
         if (data?.startAfter) {
           const cursorSnap = await db.collection('review_queue').doc(data.startAfter).get();
