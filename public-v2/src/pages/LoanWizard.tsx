@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   doc,
   getDoc,
+  getDocs,
   collection,
   query,
   where,
@@ -62,6 +63,137 @@ function fmt(n: number): string {
   });
 }
 
+/** Lifecycle of the server-held pricing config, tracked separately from
+ *  eligibility: a rate we failed to READ is a technical fault, not a verdict on
+ *  the borrower, and must never render in the eligibility-rejection chrome. */
+type ConfigStatus = 'loading' | 'ready' | 'error';
+
+// ── Price slots ───────────────────────────────────────────────────────────────
+// Every figure on the quote is priced by the server-held fee rate (getLoanConfig
+// → config/loanConfig.ts). When that rate cannot be read, each figure is `null`
+// and renders through one of these two slots. A price slot must NEVER fall back
+// to 0: a zero comisión quotes a free loan, and a zero CAT is a false statement
+// in a disclosure the law requires us to make. Blank is honest; zero is a claim.
+
+/** Placeholder while the rate is in flight — a bar, never a digit or a "$". */
+function PriceShimmer({ width = 72 }: { width?: number }) {
+  return (
+    <span
+      aria-busy="true"
+      data-testid="price-shimmer"
+      style={{
+        display: 'inline-block',
+        width,
+        height: '1em',
+        verticalAlign: 'middle',
+        borderRadius: 4,
+        background: 'rgba(25,68,69,0.08)',
+      }}
+    />
+  );
+}
+
+/**
+ * One money (or CAT) value on the quote. `value === null` means the rate is
+ * unavailable: shimmer while loading, neutral "no disponible" on failure. The
+ * failure copy is deliberately NOT --danger — the red belongs to the one banner
+ * that explains the failure, so a transient pricing outage does not render as a
+ * card full of broken fields, or as a rejection.
+ */
+function PriceValue({
+  value,
+  status,
+  prefix = '$',
+  suffix = '',
+  shimmerWidth,
+  style,
+}: {
+  value: number | string | null;
+  status: ConfigStatus;
+  prefix?: string;
+  suffix?: string;
+  shimmerWidth?: number;
+  style?: React.CSSProperties;
+}) {
+  const { t } = useTranslation();
+  if (value === null) {
+    if (status === 'loading') return <PriceShimmer width={shimmerWidth} />;
+    return (
+      <span data-testid="price-unavailable" style={{ color: 'var(--t3)', ...style }}>
+        {t('wiz_price_unavailable')}
+      </span>
+    );
+  }
+  return (
+    <span style={style}>
+      {prefix}
+      {typeof value === 'number' ? fmt(value) : value}
+      {suffix}
+    </span>
+  );
+}
+
+/**
+ * The single red element on the screen when pricing cannot be read. It carries
+ * the whole explanation so that the value slots can stay neutral, and it says
+ * plainly that nothing was charged and nothing about the borrower's application
+ * changed — this is our fault, not a decision about them.
+ */
+function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div
+      role="alert"
+      data-testid="pricing-error-banner"
+      style={{
+        background: 'var(--danger-bg)',
+        border: '1px solid var(--danger)',
+        borderRadius: 12,
+        padding: '14px 16px',
+        marginBottom: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13.5,
+          fontWeight: 700,
+          color: 'var(--danger-text)',
+          marginBottom: 4,
+        }}
+      >
+        {t('wiz_price_error_title')}
+      </div>
+      <p
+        style={{
+          fontSize: 12.5,
+          color: 'var(--danger-text)',
+          margin: '0 0 12px',
+          lineHeight: 1.5,
+        }}
+      >
+        {t('wiz_price_error_body')}
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        style={{
+          padding: '8px 16px',
+          borderRadius: 10,
+          border: '1.5px solid var(--danger)',
+          background: 'transparent',
+          color: 'var(--danger-text)',
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: 'var(--db)',
+          cursor: 'pointer',
+        }}
+      >
+        {t('wiz_price_retry')}
+      </button>
+    </div>
+  );
+}
+
 export function LoanWizard() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -72,6 +204,8 @@ export function LoanWizard() {
   const [eligibilityError, setEligibilityError] = useState('');
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
   const [loanConfig, setLoanConfig] = useState<LoanConfig | null>(null);
+  const [configStatus, setConfigStatus] = useState<ConfigStatus>('loading');
+  const [configAttempt, setConfigAttempt] = useState(0);
 
   // Wizard state
   const [step, setStep] = useState(1);
@@ -94,23 +228,43 @@ export function LoanWizard() {
   const cappedMax = Math.max(effectiveMax, MIN_AMOUNT);
 
   // Calculations
-  const feeRate = loanConfig?.feeRate ?? 0;
-  const feeRatePct = Math.round(feeRate * 100);
-  const fee = Math.round(amount * feeRate);
-  const total = amount + fee;
+  // `null` here means "we could not read the rate", and it propagates all the
+  // way to the screen. It must not degrade to 0 anywhere along this chain —
+  // see the PriceValue comment above for why zero is the dangerous value.
+  const feeRate = loanConfig?.feeRate ?? null;
+  const feeRatePct = feeRate === null ? null : Math.round(feeRate * 100);
+  const fee = feeRate === null ? null : Math.round(amount * feeRate);
+  const total = fee === null ? null : amount + fee;
   const biweeklyPeriods = Math.ceil(termDays / 15);
-  const biweeklyDeduction = Math.ceil(total / biweeklyPeriods);
+  const biweeklyDeduction = total === null ? null : Math.ceil(total / biweeklyPeriods);
   const dueDate = new Date(Date.now() + termDays * 24 * 60 * 60 * 1000);
   const cat =
-    amount > 0
-      ? ((Math.pow(1 + fee / amount, 365 / termDays) - 1) * 100).toFixed(0)
-      : '0';
+    fee === null || amount <= 0
+      ? null
+      : ((Math.pow(1 + fee / amount, 365 / termDays) - 1) * 100).toFixed(0);
+  const pricingReady = configStatus === 'ready' && feeRate !== null;
   const sliderPct = ((amount - MIN_AMOUNT) / (cappedMax - MIN_AMOUNT)) * 100;
 
-  // ── Fetch employee data & check eligibility ──
+  // ── Fetch pricing config ──────────────────────────────────────────────────
+  // Deliberately SEPARATE from the eligibility fetch below. Bundling the two (as
+  // this did until now) meant a transient failure to read the fee rate was
+  // reported to the borrower in the eligibility-rejection card — the same chrome
+  // as "you are not verified" and "you already have an active loan". A pricing
+  // outage is our fault and is retryable; a rejection is neither. They cannot
+  // share a failure path.
+  //
+  // Failing to read the rate still blocks submission (see `pricingReady`): the
+  // rule that a borrower must never see a rate nobody approved is unchanged.
+  // What changes is that they now see *no* rate and a retry, instead of a
+  // dead end that reads like a denial.
+  const uid = user?.uid;
   useEffect(() => {
-    if (!user) return;
+    // Keyed on the uid, not the user object: a re-render that hands back an
+    // equal-but-new user must not re-fetch pricing.
+    if (!uid) return;
+    let cancelled = false;
 
+    setConfigStatus('loading');
     (async () => {
       try {
         const functions = getFunctions();
@@ -118,13 +272,39 @@ export function LoanWizard() {
           functions,
           'getLoanConfig'
         );
-        const [empDoc, configResult] = await Promise.all([
-          getDoc(doc(db, 'employees', user.uid)),
-          getLoanConfig(),
-        ]);
+        const configResult = await getLoanConfig();
+        if (cancelled) return;
         const config = configResult.data;
+        // A response that arrives without a usable rate is a failure, not a
+        // quote. Treating it as success is how a null reaches the price slots
+        // with `status === 'ready'` and renders as a blank nobody can retry.
+        if (!config || typeof config.feeRate !== 'number') {
+          setLoanConfig(null);
+          setConfigStatus('error');
+          return;
+        }
         setLoanConfig(config);
-        setTermDays(config.defaultTermDays);
+        if (typeof config.defaultTermDays === 'number') setTermDays(config.defaultTermDays);
+        setConfigStatus('ready');
+      } catch {
+        if (cancelled) return;
+        setLoanConfig(null);
+        setConfigStatus('error');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, configAttempt]);
+
+  // ── Fetch employee data & check eligibility ──
+  useEffect(() => {
+    if (!user) return;
+
+    (async () => {
+      try {
+        const empDoc = await getDoc(doc(db, 'employees', user.uid));
 
         if (!empDoc.exists()) {
           navigate('/employee', { replace: true });
@@ -169,7 +349,6 @@ export function LoanWizard() {
         }
 
         // Check for existing active/pending loans
-        const { getDocs } = await import('firebase/firestore');
         const existingLoans = await getDocs(
           query(collection(db, 'loans'), where('employeeId', '==', user.uid))
         );
@@ -212,6 +391,14 @@ export function LoanWizard() {
   useEffect(() => {
     if (amount > cappedMax) setAmount(Math.floor(cappedMax / STEP) * STEP || MIN_AMOUNT);
   }, [cappedMax, amount]);
+
+  const retryLoanConfig = () => setConfigAttempt((n) => n + 1);
+
+  // "Comisión (30%)" carries the rate inside the label, so without a rate the
+  // label has to change too — interpolating an empty string would ship
+  // "Comisión (%)", which reads as a formatting bug rather than a missing value.
+  const feeLabel =
+    feeRatePct === null ? t('wiz_flat_fee_unknown') : t('wiz_flat_fee', { rate: feeRatePct });
 
   const handleConfirm = async () => {
     setError('');
@@ -522,7 +709,7 @@ export function LoanWizard() {
                 {t('modal_total')}
               </div>
               <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
-                ${fmt(total)}
+                <PriceValue value={total} status={configStatus} />
               </div>
             </div>
           </div>
@@ -739,7 +926,20 @@ export function LoanWizard() {
 
             {/* Term options */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-              {(loanConfig?.allowedTermDays ?? []).map((days) => {
+              {configStatus !== 'ready' || feeRate === null ? (
+                // The term list itself comes from the config, so without it there
+                // is nothing to choose from — an empty list would read as "no
+                // terms available to you", which is a statement about the
+                // borrower rather than about our outage.
+                configStatus === 'loading' ? (
+                  <div data-testid="terms-loading" style={{ padding: '8px 0' }}>
+                    <PriceShimmer width={220} />
+                  </div>
+                ) : (
+                  <PricingErrorBanner onRetry={retryLoanConfig} />
+                )
+              ) : (
+                (loanConfig?.allowedTermDays ?? []).map((days) => {
                 const periods = Math.ceil(days / 15);
                 const deduction = Math.ceil((amount + Math.round(amount * feeRate)) / periods);
                 const isSelected = termDays === days;
@@ -811,7 +1011,8 @@ export function LoanWizard() {
                     </div>
                   </button>
                 );
-              })}
+                })
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 10 }}>
@@ -833,7 +1034,12 @@ export function LoanWizard() {
               >
                 {t('wiz_back')}
               </button>
-              <button onClick={() => setStep(3)} className="btn-primary" style={{ flex: 1 }}>
+              <button
+                onClick={() => setStep(3)}
+                className="btn-primary"
+                style={{ flex: 1 }}
+                disabled={!pricingReady}
+              >
                 {t('wiz_next')}
               </button>
             </div>
@@ -917,10 +1123,16 @@ export function LoanWizard() {
                     marginBottom: 6,
                   }}
                 >
-                  {t('wiz_flat_fee', { rate: feeRatePct })}
+                  {feeLabel}
                 </div>
                 <div style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>
-                  {t('wiz_flat_fee_rate', { rate: feeRatePct })}
+                  <PriceValue
+                    value={feeRatePct}
+                    status={configStatus}
+                    prefix=""
+                    suffix="%"
+                    shimmerWidth={48}
+                  />
                 </div>
               </div>
             </div>
@@ -956,10 +1168,10 @@ export function LoanWizard() {
                 }}
               >
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('wiz_flat_fee', { rate: feeRatePct })}
+                  {feeLabel}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  ${fmt(fee)}
+                  <PriceValue value={fee} status={configStatus} />
                 </span>
               </div>
               <div
@@ -992,7 +1204,7 @@ export function LoanWizard() {
                     color: 'var(--t1)',
                   }}
                 >
-                  ${fmt(total)}
+                  <PriceValue value={total} status={configStatus} />
                 </span>
               </div>
               <div
@@ -1006,7 +1218,11 @@ export function LoanWizard() {
                   {t('wiz_biweekly_deduction')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  ${fmt(biweeklyDeduction)} × {biweeklyPeriods}
+                  <PriceValue
+                    value={biweeklyDeduction}
+                    status={configStatus}
+                    suffix={` × ${biweeklyPeriods}`}
+                  />
                 </span>
               </div>
               <div
@@ -1047,8 +1263,13 @@ export function LoanWizard() {
                   {t('modal_cat_label')}
                 </span>
                 <span className="cat-highlight">
-                  {cat}
-                  {t('modal_cat_annual')}
+                  <PriceValue
+                    value={cat}
+                    status={configStatus}
+                    prefix=""
+                    suffix={t('modal_cat_annual')}
+                    shimmerWidth={56}
+                  />
                 </span>
               </div>
               <p
@@ -1071,6 +1292,7 @@ export function LoanWizard() {
               </p>
             </div>
 
+            {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => setStep(2)}
@@ -1090,7 +1312,12 @@ export function LoanWizard() {
               >
                 {t('wiz_back')}
               </button>
-              <button onClick={() => setStep(4)} className="btn-primary" style={{ flex: 1 }}>
+              <button
+                onClick={() => setStep(4)}
+                className="btn-primary"
+                style={{ flex: 1 }}
+                disabled={!pricingReady}
+              >
                 {t('wiz_next')}
               </button>
             </div>
@@ -1155,10 +1382,10 @@ export function LoanWizard() {
                 }}
               >
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('wiz_flat_fee', { rate: feeRatePct })}
+                  {feeLabel}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  ${fmt(fee)} MXN
+                  <PriceValue value={fee} status={configStatus} suffix=" MXN" />
                 </span>
               </div>
               <div
@@ -1191,7 +1418,7 @@ export function LoanWizard() {
                     color: 'var(--t1)',
                   }}
                 >
-                  ${fmt(total)} MXN
+                  <PriceValue value={total} status={configStatus} suffix=" MXN" />
                 </span>
               </div>
               <div
@@ -1226,7 +1453,11 @@ export function LoanWizard() {
                   {t('wiz_biweekly_deduction')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  ${fmt(biweeklyDeduction)} × {biweeklyPeriods}
+                  <PriceValue
+                    value={biweeklyDeduction}
+                    status={configStatus}
+                    suffix={` × ${biweeklyPeriods}`}
+                  />
                 </span>
               </div>
               <div
@@ -1254,8 +1485,13 @@ export function LoanWizard() {
                   {t('modal_cat_label')}
                 </span>
                 <span className="cat-highlight">
-                  {cat}
-                  {t('modal_cat_annual')}
+                  <PriceValue
+                    value={cat}
+                    status={configStatus}
+                    prefix=""
+                    suffix={t('modal_cat_annual')}
+                    shimmerWidth={56}
+                  />
                 </span>
               </div>
             </div>
@@ -1326,6 +1562,7 @@ export function LoanWizard() {
               </div>
             )}
 
+            {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => setStep(3)}
@@ -1347,7 +1584,7 @@ export function LoanWizard() {
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={!termsAccepted || submitting}
+                disabled={!termsAccepted || submitting || !pricingReady}
                 className="btn-primary"
                 style={{ flex: 1 }}
               >

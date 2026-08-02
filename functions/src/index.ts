@@ -248,12 +248,19 @@ export const validateCURP = onCall(
 // actually charges (see config/loanConfig.ts).
 
 // As of #389 the fee rate is read from the admin-editable config document, so
-// this can now FAIL. That is intentional and must stay that way: LoanWizard.tsx
-// treats a getLoanConfig rejection as an eligibility error and refuses to show
-// the wizard at all (verified — the Promise.all in its load effect is inside
-// the try whose catch sets eligibilityError, and the eligibilityError branch
-// returns before any pricing is rendered). A borrower seeing "try again later"
-// is the correct outcome; a borrower seeing a rate nobody approved is not.
+// this can now FAIL. That is intentional and must stay that way: a borrower
+// seeing a rate nobody approved is the outcome we refuse.
+//
+// What the CLIENT does with a rejection changed. It used to surface in the
+// eligibility-rejection card — the same screen as "you are not verified" and
+// "you already have an active loan" — so an outage on our side was reported to
+// an eligible borrower as a refusal, with no way to retry. LoanWizard.tsx now
+// tracks pricing separately from eligibility: no figure renders at all (never
+// 0 — a zero comisión quotes a free loan and a zero CAT is a false statement in
+// a disclosure the law requires), every fee-derived step is blocked, and the
+// borrower gets an in-place retry. The guarantee this callable depends on is
+// unchanged and is pinned by LoanWizard.test.tsx: a rate that failed to load
+// can never reach a quote or a submission.
 export const getLoanConfig = onCall(
   { cors: true, enforceAppCheck: true },
   withAuth<Record<string, never>, LoanConfig>(['employee'], async () => getLoanConfigValues())
