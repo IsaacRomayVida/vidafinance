@@ -112,6 +112,9 @@ function buildMockDb({
   // returns the compile-time seed (feeRate 0.3) — matching production
   // behavior for an unconfigured deployment.
   configData = null as Record<string, unknown> | null,
+  // Simulates the audit collection itself being unwritable, to prove a failed
+  // audit write never changes the error the borrower receives.
+  auditWriteFails = false,
 } = {}) {
   const loansQuery = makeQuery({
     empty: activeLoans.length === 0,
@@ -119,7 +122,19 @@ function buildMockDb({
   });
 
   const transactionCalls: Array<{ op: string; data?: unknown }> = [];
+  const auditWrites: Array<Record<string, unknown>> = [];
   let currentConfigData = configData;
+
+  // One stable object across every collection('audit_log') call, so a test can
+  // read what was written. `auditWriteFails` makes the write reject, which is
+  // how the fail-soft guarantee is exercised.
+  const auditCollection = {
+    add: jest.fn(async (doc: Record<string, unknown>) => {
+      if (auditWriteFails) throw new Error('audit_log unavailable');
+      auditWrites.push(doc);
+      return { id: `audit-${auditWrites.length}` };
+    }),
+  };
 
   return {
     collection: jest.fn().mockImplementation((name: string) => {
@@ -141,7 +156,7 @@ function buildMockDb({
         return { ...loansQuery, doc: jest.fn().mockReturnValue({ id: 'new-loan-id' }) };
       }
       if (name === 'audit_log') {
-        return { add: jest.fn().mockResolvedValue({ id: 'audit-1' }) };
+        return auditCollection;
       }
       if (name === 'config') {
         return {
@@ -166,6 +181,7 @@ function buildMockDb({
       return transactionCalls;
     }),
     _transactionCalls: transactionCalls,
+    _auditWrites: auditWrites,
     // Lets a test simulate an admin approving a config change (#389's propose
     // /approve flow) mid-test, i.e. between two requestLoan calls, without
     // reaching into module internals.
@@ -194,6 +210,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     mockCheckRateLimit.mockResolvedValue(true);
     delete process.env['UNDERWRITING_SERVICE_URL'];
     delete process.env['INTERNAL_SECRET'];
+    delete process.env['ML_SERVICE_URL'];
   });
 
   it('accepts the real client payload shape and does not reject with "Plazo inválido"', async () => {
@@ -563,6 +580,194 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       expect(persisted).toBeDefined();
       expect(persisted['allPass']).toBe(true);
       expect(persisted['conditions']).toHaveLength(2);
+    });
+  });
+
+  // Both inline-ML gates throw BEFORE db.runTransaction() writes the loan and
+  // before the `loan.requested` audit row. A denied applicant therefore used to
+  // leave nothing behind at all — no loan doc, no audit row, no review_queue
+  // entry — so nobody in the ops console could see that the denial happened,
+  // why, or to whom. These pin the record each denial path now writes.
+  describe('inline ML denial leaves an auditable record', () => {
+    const ML_URL = 'https://ml.internal';
+    const UW_URL = 'https://uw.internal';
+
+    /**
+     * Routes the shared node-fetch mock by URL: the 6-stage pipeline
+     * (`/underwrite`) and the inline single-number ML gate
+     * (`/underwrite/employee`) are two different services reached through the
+     * same mocked module. `uw: null` means the pipeline is unreachable, which
+     * is what leaves `uwDecision` null.
+     */
+    async function mockServices({
+      uw,
+      ml,
+    }: {
+      uw: Record<string, unknown> | null;
+      ml: Record<string, unknown>;
+    }) {
+      process.env['ML_SERVICE_URL'] = ML_URL;
+      process.env['INTERNAL_SECRET'] = 'test-secret';
+      if (uw !== null) process.env['UNDERWRITING_SERVICE_URL'] = UW_URL;
+
+      const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
+      fetchModule.mockImplementation(async (url: string) => {
+        if (url.startsWith(ML_URL)) return { ok: true, json: async () => ml };
+        if (uw === null) throw new Error('UW service unavailable');
+        return { ok: true, json: async () => uw };
+      });
+    }
+
+    const fraudulentMl = {
+      decisionId: 'ml-fraud-1',
+      credit_score: 610,
+      default_probability: 0.1,
+      fraud: { is_fraud: true, fraud_score: 0.93 },
+    };
+
+    const highRiskMl = {
+      decisionId: 'ml-risk-1',
+      credit_score: 480,
+      default_probability: 0.72,
+      fraud: { is_fraud: false, fraud_score: 0.02 },
+    };
+
+    async function callRequestLoan() {
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      return fn({ auth, data: realClientPayload });
+    }
+
+    function denialRecord() {
+      const record = mockDb._auditWrites.find((w) => w['action'] === 'loan.request_denied');
+      expect(record).toBeDefined();
+      return { doc: record!, meta: record!['meta'] as Record<string, unknown> };
+    }
+
+    it('records the fraud-flag denial, naming the gate and the applicant', async () => {
+      await mockServices({ uw: null, ml: fraudulentMl });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'permission-denied',
+        message: 'Solicitud marcada como sospechosa',
+      });
+
+      const { doc, meta } = denialRecord();
+      expect(doc['actorUid']).toBe('user-123');
+      expect(doc['targetCollection']).toBe('loan');
+      expect(meta['gate']).toBe('fraud_flag');
+      expect(meta['deniedBy']).toBe('inline_ml_gate');
+      expect(meta['amount']).toBe(1000);
+      expect(meta['value']).toBe(true);
+      expect(meta['bound']).toBe('is_fraud === true');
+      // The pipeline never answered, so there is no verdict to have overridden.
+      expect(meta['uwDecision']).toBeNull();
+      expect(meta['overrodePipelineDecision']).toBe(false);
+    });
+
+    it('records the default-probability denial with the tripping value and the bound it was compared against', async () => {
+      await mockServices({ uw: null, ml: highRiskMl });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'No es posible aprobar tu solicitud en este momento',
+      });
+
+      const { meta } = denialRecord();
+      expect(meta['gate']).toBe('default_probability');
+      // Without both halves the record cannot be reviewed: 0.72 means nothing
+      // unless the row also says what it was measured against.
+      expect(meta['value']).toBe(0.72);
+      expect(meta['bound']).toBe(0.4);
+      expect(meta['comparison']).toBe('> 0.4');
+      expect(meta['mlDecisionId']).toBe('ml-risk-1');
+    });
+
+    it('leaves no loan document behind — the audit row is the only trace, and it exists', async () => {
+      await mockServices({ uw: null, ml: highRiskMl });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({ code: 'failed-precondition' });
+
+      // The pre-fix state: no loan, no `loan.requested` row. Half of that is
+      // still true and correct — the denial must not create a loan — but the
+      // denial itself is now visible.
+      expect(mockDb._transactionCalls).toHaveLength(0);
+      expect(mockDb._auditWrites.some((w) => w['action'] === 'loan.requested')).toBe(false);
+      expect(mockDb._auditWrites.some((w) => w['action'] === 'loan.request_denied')).toBe(true);
+    });
+
+    it('records that the inline gate overrode a pipeline verdict of pending_review', async () => {
+      // The pipeline said "a human must look at this". The inline single-number
+      // gate throws first and turns that into a flat denial the borrower reads
+      // as a generic error, so the escalate-to-human outcome never applies.
+      // Current behaviour is deliberately unchanged here (that is a credit
+      // policy call) — but it stops being silent.
+      await mockServices({
+        uw: { decision: 'pending_review', reason: null, correlationId: 'uw-override-1', lastStage: 'stage5' },
+        ml: highRiskMl,
+      });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({ code: 'failed-precondition' });
+
+      const { meta } = denialRecord();
+      expect(meta['overrodePipelineDecision']).toBe(true);
+      expect(meta['uwDecision']).toBe('pending_review');
+      expect(meta['uwCorrelationId']).toBe('uw-override-1');
+    });
+
+    it('does not log CURP, RFC or CLABE into the audit record', async () => {
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: 'GARJ850101HDFRRN01', rfc: 'GARJ850101ABC', bankClabe: '032180000118359719' },
+      });
+      await mockServices({ uw: null, ml: highRiskMl });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({ code: 'failed-precondition' });
+
+      const serialised = JSON.stringify(denialRecord().doc);
+      expect(serialised).not.toContain('GARJ850101HDFRRN01');
+      expect(serialised).not.toContain('GARJ850101ABC');
+      expect(serialised).not.toContain('032180000118359719');
+    });
+
+    it('a failed audit write does not change the error the borrower receives', async () => {
+      // Bookkeeping failing is our problem, not the applicant's. The gate's
+      // own error must survive intact rather than becoming an internal error.
+      mockDb = buildMockDb({ auditWriteFails: true });
+      await mockServices({ uw: null, ml: highRiskMl });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'No es posible aprobar tu solicitud en este momento',
+      });
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to record inline ML denial in audit_log',
+        expect.objectContaining({ gate: 'default_probability' })
+      );
+    });
+
+    it('a failed audit write does not change the fraud-gate error either', async () => {
+      mockDb = buildMockDb({ auditWriteFails: true });
+      await mockServices({ uw: null, ml: fraudulentMl });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'permission-denied',
+        message: 'Solicitud marcada como sospechosa',
+      });
+    });
+
+    it('still creates the loan, with no denial record, when both gates pass', async () => {
+      await mockServices({
+        uw: null,
+        ml: { decisionId: 'ml-ok-1', credit_score: 720, default_probability: 0.12, fraud: { is_fraud: false } },
+      });
+
+      const result = (await callRequestLoan()) as { loanId: string; status: string };
+
+      expect(result.loanId).toBeTruthy();
+      expect(result.status).toBe('pending');
+      expect(mockDb._auditWrites.some((w) => w['action'] === 'loan.request_denied')).toBe(false);
+      expect(mockDb._auditWrites.some((w) => w['action'] === 'loan.requested')).toBe(true);
     });
   });
 });
