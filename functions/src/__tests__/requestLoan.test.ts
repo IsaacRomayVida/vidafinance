@@ -300,6 +300,39 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       { name: 'bureau_score', pass: true, value: 650, required: '> 600' },
     ];
 
+    // Builds the response shape the underwriting service ACTUALLY returns.
+    // decision-engine.js returns { decision, reason, correlationId, lastStage,
+    // stagesExecuted, stages }, and stage3-autoapprove.js nests its payload at
+    // stages.stage3.data.{conditions, allPass, failedConditions}.
+    //
+    // These tests previously mocked `conditions`/`allPass` as TOP-LEVEL fields.
+    // No such response is ever produced, so the tests passed against a payload
+    // that does not exist while the production read (uwResult.conditions) got
+    // undefined on every real loan and silently persisted nothing. Build mocks
+    // through this helper so the fixture cannot drift from the service again.
+    function uwResponse(
+      top: Record<string, unknown>,
+      stage3: { conditions: unknown[]; allPass: boolean } | null,
+    ): Record<string, unknown> {
+      return {
+        ...top,
+        stagesExecuted: stage3 ? ['stage1', 'stage2', 'stage3'] : ['stage1'],
+        stages: stage3
+          ? {
+              stage3: {
+                data: {
+                  conditions: stage3.conditions,
+                  allPass: stage3.allPass,
+                  failedConditions: stage3.conditions.filter(
+                    (c) => !(c as { pass: boolean }).pass,
+                  ),
+                },
+              },
+            }
+          : {},
+      };
+    }
+
     async function mockUnderwritingResponse(body: Record<string, unknown> | null) {
       process.env['UNDERWRITING_SERVICE_URL'] = 'https://uw.internal';
       process.env['INTERNAL_SECRET'] = 'test-secret';
@@ -320,14 +353,17 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     }
 
     it('persists the condition breakdown verbatim when underwriting approves', async () => {
-      await mockUnderwritingResponse({
-        decision: 'approved',
-        reason: null,
-        correlationId: 'uw-123',
-        lastStage: 'stage3',
-        allPass: true,
-        conditions: sampleConditions,
-      });
+      await mockUnderwritingResponse(
+        uwResponse(
+          {
+            decision: 'approved',
+            reason: null,
+            correlationId: 'uw-123',
+            lastStage: 'stage3',
+          },
+          { conditions: sampleConditions, allPass: true },
+        ),
+      );
 
       const { requestLoan } = await import('../index');
       const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
@@ -357,17 +393,23 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     });
 
     it('persists the breakdown alongside the denial reason when underwriting rejects', async () => {
-      await mockUnderwritingResponse({
-        decision: 'rejected',
-        reason: 'FULL_KYC_REQUIRED',
-        correlationId: 'uw-456',
-        lastStage: 'stage4',
-        allPass: false,
-        conditions: [
-          { name: 'bureau_score', pass: false, value: 550, required: '> 600' },
-          ...sampleConditions,
-        ],
-      });
+      await mockUnderwritingResponse(
+        uwResponse(
+          {
+            decision: 'rejected',
+            reason: 'FULL_KYC_REQUIRED',
+            correlationId: 'uw-456',
+            lastStage: 'stage4',
+          },
+          {
+            conditions: [
+              { name: 'bureau_score', pass: false, value: 550, required: '> 600' },
+              ...sampleConditions,
+            ],
+            allPass: false,
+          },
+        ),
+      );
 
       const { requestLoan } = await import('../index');
       const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
@@ -382,6 +424,57 @@ describe('requestLoan (deployed handler in index.ts)', () => {
         allPass: false,
       });
       expect((loanData['underwritingDecision'] as Record<string, unknown>)['conditions']).toHaveLength(3);
+    });
+
+    it('omits the breakdown when the pipeline stopped before stage 3', async () => {
+      // An early rejection (e.g. stage-1 blacklist hit) never evaluates the
+      // auto-approve conditions, so there is nothing to explain. This must be
+      // a clean omission, not a crash on the missing stages.stage3 path.
+      await mockUnderwritingResponse(
+        uwResponse(
+          {
+            decision: 'rejected',
+            reason: 'SAT_BLACKLIST',
+            correlationId: 'uw-789',
+            lastStage: 'stage1',
+          },
+          null,
+        ),
+      );
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+      const result = await fn({ auth, data: realClientPayload });
+
+      expect(result.loanId).toBeTruthy();
+      const loanData = getLoanWrite();
+      expect(loanData['status']).toBe('rejected');
+      expect(loanData['denialReason']).toBe('SAT_BLACKLIST');
+      expect(loanData['underwritingDecision']).toBeUndefined();
+    });
+
+    it('ignores a flat top-level conditions payload — that shape is not real', async () => {
+      // This is the exact regression. The production code read
+      // uwResult.conditions while the service only ever nests the breakdown
+      // under stages.stage3.data, so every loan silently persisted no
+      // explanation and the tests covering it passed against an invented
+      // fixture. Pinning it: a flat payload must NOT satisfy the read, because
+      // if it does, the mock has drifted away from the service again.
+      await mockUnderwritingResponse({
+        decision: 'approved',
+        reason: null,
+        correlationId: 'uw-flat',
+        lastStage: 'stage3',
+        allPass: true,
+        conditions: sampleConditions,
+        stages: {},
+      });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(getLoanWrite()['underwritingDecision']).toBeUndefined();
     });
   });
 });

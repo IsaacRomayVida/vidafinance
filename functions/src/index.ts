@@ -417,12 +417,23 @@ export const requestLoan = onCall(
         // underwriting is down or the pipeline never reached Stage 3 (e.g. an
         // earlier-stage rejection), omit the field entirely — never block loan
         // creation over missing explainability data.
-        const uwConditions = uwResult?.['conditions'];
+        //
+        // The breakdown is NESTED, not top-level. decision-engine.js returns
+        // { decision, reason, correlationId, lastStage, stagesExecuted, stages },
+        // and stage3-autoapprove.js puts its payload under
+        // stages.stage3.data.{conditions,allPass}. Reading uwResult.conditions
+        // here silently yielded undefined on every loan, so this entire block
+        // was dead and no loan ever carried an explanation. Keep this in sync
+        // with decision-engine.js if that response shape ever changes.
+        const uwStages = uwResult?.['stages'] as Record<string, unknown> | undefined;
+        const stage3 = uwStages?.['stage3'] as Record<string, unknown> | undefined;
+        const stage3Data = stage3?.['data'] as Record<string, unknown> | undefined;
+        const uwConditions = stage3Data?.['conditions'];
         if (Array.isArray(uwConditions) && uwConditions.length > 0) {
           decisionExtra['underwritingDecision'] = {
             decision: uwDecision,
             reason: (uwResult?.['reason'] as string) ?? null,
-            allPass: (uwResult?.['allPass'] as boolean) ?? null,
+            allPass: (stage3Data?.['allPass'] as boolean) ?? null,
             conditions: uwConditions,
             evaluatedAt: FieldValue.serverTimestamp(),
           };
