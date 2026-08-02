@@ -298,6 +298,71 @@ jobs:
             printf '%s\n' "$BODY" | head -n 20
           fi
 
+          # ── CANARY 2: may this service account ADMINISTER FIRESTORE INDEXES? ─
+          # The canary above proves the project accepts a Cloud FUNCTIONS write.
+          # It does NOT prove the deploy SA may create Firestore indexes: that is
+          # a different permission (datastore.indexes.create) on a different API,
+          # and the deploy touches it BEFORE it ever reaches the functions loop.
+          #
+          # Measured, not theorised. Run 30760060720 (main, 2026-08-02 18:04Z):
+          #   18:04:00  canary passed, CANARY_WRITE_OK=1, HTTP 200
+          #   18:04:04  "firestore: uploading rules firestore.rules..."  ← APPLIED
+          #   18:04:05  HTTP 403 "The caller does not have permission" on
+          #             POST .../collectionGroups/audit_log/indexes      ← DIED
+          # That is precisely the half-applied production this gate exists to
+          # prevent, reached THROUGH a green canary. The lesson is the same one
+          # the two dead probes above teach: one passing write does not
+          # generalise to every write the deploy makes. So probe this one too.
+          #
+          # testIamPermissions is used because it is the only way to ask "may I
+          # create an index?" without creating one. It requires no permission of
+          # its own (it reports the caller's own subset) and mutates nothing.
+          INDEX_PERM="datastore.indexes.create"
+          IRESP="$(curl -sS -m 30 -X POST \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"permissions\":[\"${INDEX_PERM}\"]}" \
+            -w $'\n%{http_code}' \
+            "https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions" 2>&1)"
+          ICODE="$(printf '%s' "$IRESP" | tail -n 1)"
+          IBODY="$(printf '%s' "$IRESP" | sed '$d')"
+
+          # ABORTS THE DEPLOY (fail closed) — and ONLY on HTTP 200 that omits the
+          # permission. A 200 is authoritative: the API answered the question and
+          # the answer was no. Anything else is not proof of absence.
+          if [ "$ICODE" = "200" ] && ! printf '%s' "$IBODY" | grep -q "$INDEX_PERM"; then
+            echo "::error::DEPLOY ABORTED BEFORE ANY CHANGE WAS APPLIED — the deploy service account cannot create Firestore indexes on ${PROJECT}."
+            echo ""
+            echo "=================================================================="
+            echo " MISSING IAM PERMISSION: ${INDEX_PERM}"
+            echo ""
+            echo " The project accepts Cloud Functions writes (billing is fine),"
+            echo " but the deploy service account may not administer Firestore"
+            echo " indexes. \`firebase deploy --only firestore:indexes\` will fail"
+            echo " with 403 'The caller does not have permission'."
+            echo ""
+            echo " FIX: grant the deploy service account ONE of:"
+            echo "   • roles/datastore.indexAdmin   (least privilege, preferred)"
+            echo "   • roles/datastore.owner"
+            echo " then re-run this job:"
+            echo "   https://console.cloud.google.com/iam-admin/iam?project=${PROJECT}"
+            echo "=================================================================="
+            echo ""
+            echo "testIamPermissions response (HTTP ${ICODE}):"
+            printf '%s\n' "$IBODY"
+            exit 1
+          elif [ "$ICODE" = "200" ]; then
+            echo "Preflight OK: deploy service account holds ${INDEX_PERM}."
+          else
+            # Fail open, consistent with every other probe here: a disabled
+            # cloudresourcemanager API, a 401 or a timeout is not evidence the
+            # permission is absent. The ordering fix in the deploy step below is
+            # the backstop — indexes are applied BEFORE rules, so a 403 there can
+            # no longer leave new rules enforcing against an old backend.
+            echo "::warning::Firestore index-permission probe inconclusive (HTTP ${ICODE:-none}); proceeding. Indexes deploy before rules, so a failure cannot half-apply."
+            printf '%s\n' "$IBODY" | head -n 20
+          fi
+
       - name: Deploy to Firebase
         if: github.event_name == 'push'
         run: |
@@ -355,18 +420,34 @@ jobs:
             fi
           fi
 
-          # 1) Rules, indexes and storage first — these are backward-compatible
-          #    and must be in place before the functions that rely on them.
-          #    They run ONLY after a canary returned 200 (or was inconclusive and
-          #    explicitly logged as such); a 403 exits above, untouched.
+          # 1) Rules, indexes and storage — all backward-compatible, and all
+          #    required before the functions that rely on them. They run ONLY
+          #    after a canary returned 200 (or was inconclusive and explicitly
+          #    logged as such); a 403 exits above, untouched.
           #    HOSTING IS DEPLOYED LAST, in a separate step, and ONLY if every
           #    function deployed. Releasing hosting before functions is what
           #    broke production on 2026-08-02: the new frontend went live
           #    calling `getLoanConfig`, the functions deploy then failed on a
           #    billing 403, and the loan wizard fail-closed for every borrower
           #    against a callable that had never been deployed.
+          #
+          # 1a) INDEXES AND STORAGE BEFORE RULES — this split is load-bearing,
+          #     do not recombine it into one `--only firestore:rules,firestore:
+          #     indexes,storage` call. `firebase deploy` applies rules BEFORE
+          #     indexes within a single invocation, so when index creation was
+          #     denied on run 30760060720 the new rules were ALREADY live in
+          #     production, enforcing against two-day-old functions. Indexes are
+          #     purely additive (an unused index changes no behaviour), so
+          #     applying them first is safe; rules are the enforcement change and
+          #     therefore go last, once everything they depend on has landed.
           firebase deploy \
-            --only firestore:rules,firestore:indexes,storage \
+            --only firestore:indexes,storage \
+            --project "$PROJECT" --non-interactive
+
+          # 1b) Rules last of this group — nothing above this line changes how
+          #     any read or write is authorised, so aborting here is clean.
+          firebase deploy \
+            --only firestore:rules \
             --project "$PROJECT" --non-interactive
 
           # 2) Functions ONE AT A TIME. Changing shared env (e.g. a secret)
