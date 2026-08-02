@@ -389,6 +389,7 @@ jobs:
             submitReviewDecision getReviewDetail getReviewQueue updateEmployerTier setEmployerClaims
             updateEmployerCurpConfig getContractDownloadUrl setAdminClaim revokeAdminClaim
             sendVerificationEmail sendEmployeeInvite lookupInvite acceptInvite
+            lookupEmployerByCode
             onContactCreated onEmployerDocCreated onLoanStatusChange onEmployeeDocCreated
             autoVerifyOnEmployerCreate autoVerifyOnEmployeeCreate dailyLoanCheck
             weeklyPortfolioSnapshot

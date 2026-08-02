@@ -8,10 +8,6 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'fire
 import {
   doc,
   setDoc,
-  collection,
-  query,
-  where,
-  getDocs,
   updateDoc,
   increment,
   serverTimestamp,
@@ -325,14 +321,21 @@ export function Onboarding() {
     }
     setCodeStatus('searching');
     try {
-      const q = query(collection(db, 'employers'), where('employerCode', '==', code.toUpperCase()));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const empDoc = snap.docs[0];
+      // Resolved server-side. Reading /employers directly would require the
+      // collection to be listable by unauthenticated callers, which exposes
+      // every employer document in full (apiKeyHash, rfc, bankClabe, ...).
+      // The callable returns only employerId and companyName.
+      const functions = getFunctions();
+      const lookup = httpsCallable<
+        { code: string },
+        { found: boolean; employerId?: string; companyName?: string }
+      >(functions, 'lookupEmployerByCode');
+      const { data } = await lookup({ code: code.toUpperCase() });
+      if (data.found && data.employerId) {
         setMemData((d) => ({
           ...d,
-          employerId: empDoc.id,
-          employerName: empDoc.data().companyName,
+          employerId: data.employerId as string,
+          employerName: data.companyName ?? '',
         }));
         setCodeStatus('found');
       } else {
@@ -530,7 +533,6 @@ export function Onboarding() {
     setError('');
     try {
       const salaryNum = parseFloat(memData.salary.replace(/,/g, ''));
-      const creditLimit = Math.min(salaryNum * 0.3, 5000);
       let cred;
       try {
         cred = await createUserWithEmailAndPassword(auth, memData.email, memData.password);
@@ -557,8 +559,9 @@ export function Onboarding() {
         payFrequency: memData.payFrequency,
         employmentTenure: memData.employmentTenure,
         bankClabe: memData.bankClabe,
-        creditLimit,
-        availableCredit: creditLimit,
+        // creditLimit / availableCredit are deliberately NOT written here.
+        // They are derived from monthlySalary by onEmployeeDocCreated and are
+        // rejected by firestore.rules if a client supplies them.
         kycStatus: kycStatus,
         ...(metamapVerificationId ? { metamapVerificationId } : {}),
         ...(metamapIdentityId ? { metamapIdentityId } : {}),

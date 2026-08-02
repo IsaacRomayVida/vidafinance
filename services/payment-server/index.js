@@ -8,6 +8,16 @@ const { alert5xx, alertDisbursementFailed, alertQueueDepth, alertRedisLost } = r
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 require('dotenv').config();
 
+// Fail closed: requireInternal compares the request header against
+// process.env.INTERNAL_SECRET. If the variable is unset both sides are
+// `undefined`, the strict-inequality check is false, and every /internal route
+// (including POST /internal/repayment) becomes publicly callable with no header
+// at all. Refuse to boot rather than serve the money path unauthenticated.
+// Same pattern as vida-registry-service.
+if (!process.env.INTERNAL_SECRET) {
+  throw new Error('INTERNAL_SECRET is required to start vida-payment-server');
+}
+
 const pkg = require('./package.json');
 const START_TIME = Date.now();
 

@@ -17,6 +17,7 @@ import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
 import { getLoanConfigValues, LOAN_FEE_RATE, ALLOWED_LOAN_TERM_DAYS, DEFAULT_LOAN_TERM_DAYS, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from './config/loanConfig';
+import { allowTestBypass } from './utils/environment';
 
 initSentry();
 
@@ -31,10 +32,17 @@ export { sendVerificationEmail } from './auth/sendVerificationEmail';
 export { sendEmployeeInvite, lookupInvite, acceptInvite } from './invites';
 export { metamapWebhook } from './webhooks';
 export { onContactCreated } from './contact/onContactCreated';
+export { lookupEmployerByCode } from './employers/lookupEmployerByCode';
 
 
 initializeApp();
 const db = getFirestore();
+
+// Credit-line policy. Single source of truth for the derived employee credit
+// limit (onEmployeeDocCreated) and the per-request salary cap (requestLoan), so
+// the two cannot drift apart.
+const EMPLOYEE_CREDIT_SALARY_RATIO = 0.3;
+const EMPLOYEE_CREDIT_CEILING = 5000;
 
 function getQueue(name: string): Queue {
   const redisUrl = process.env['REDIS_URL'] ?? '';
@@ -184,8 +192,10 @@ export const validateCURP = onCall(
       throw new HttpsError('invalid-argument', 'Invalid CURP format');
     }
 
-    // Test-mode bypass: if expectedName contains @vida-test.com email context, auto-approve
-    if (curp.toUpperCase().startsWith('VIDA') || (email && email.endsWith('@vida-test.com'))) {
+    // Test-mode bypass. Gated on the environment, not on the CURP prefix or the
+    // email suffix — the caller picks both of those, so on their own they are a
+    // self-service way to skip identity validation entirely.
+    if (allowTestBypass() && (curp.toUpperCase().startsWith('VIDA') || (email && email.endsWith('@vida-test.com')))) {
       logger.info('Test-mode CURP bypass', { curp });
       return {
         valid: true,
@@ -303,7 +313,7 @@ export const requestLoan = onCall(
 
         if (amount > emp['availableCredit'])
           throw new HttpsError('invalid-argument', 'El monto excede tu crédito disponible');
-        if (amount > Math.round(emp['monthlySalary'] * 0.3))
+        if (amount > Math.round(emp['monthlySalary'] * EMPLOYEE_CREDIT_SALARY_RATIO))
           throw new HttpsError('invalid-argument', 'El monto excede el 30% de tu salario mensual');
 
         const active = await db
@@ -1043,10 +1053,31 @@ export const updateEmployerTier = onCall(
 
 // ── onEmployerDocCreated — set employer_admin custom claim on employer create ─
 
+// Creating an employer document must NOT by itself confer employer_admin.
+// Self-signup writes employers/{ownUid}; granting the claim on creation meant
+// any authenticated user could mint themselves cross-employee reads, Storage
+// payroll access and processPayroll. The claim is granted only when the
+// employer is already in an approved state at creation time -- which only an
+// admin-created document can be, since firestore.rules pins self-created
+// employers to 'pending_verification'. The normal path for a self-signup
+// employer is approveEmployer, which grants the claim on approval.
+const CLAIM_ELIGIBLE_EMPLOYER_STATUSES = ['approved', 'active'];
+
 export const onEmployerDocCreated = onDocumentCreated('employers/{uid}', async (event) => {
   const uid = event.params['uid'];
+  const status = event.data?.data()?.['status'] as string | undefined;
+
+  if (!status || !CLAIM_ELIGIBLE_EMPLOYER_STATUSES.includes(status)) {
+    logger.info('Withholding employer_admin claim pending approval', {
+      uid,
+      status: status ?? null,
+      service: 'functions',
+    });
+    return null;
+  }
+
   await admin.auth().setCustomUserClaims(uid, { role: 'employer_admin' });
-  logger.info('Set employer_admin claim', { uid, service: 'functions' });
+  logger.info('Set employer_admin claim', { uid, status, service: 'functions' });
   return null;
 });
 
@@ -1378,10 +1409,42 @@ export const onEmployeeDocCreated = onDocumentCreated('employees/{uid}', async (
   const uid = event.params['uid'];
   await admin.auth().setCustomUserClaims(uid, { role: 'employee' });
   logger.info('Set employee claim', { uid, service: 'functions' });
+
+  // Derive the credit line server-side. The client used to compute and write
+  // creditLimit/availableCredit into its own document during onboarding, which
+  // let anyone pick their own borrowing ceiling; firestore.rules now rejects
+  // those fields on create, so they are established here from the declared
+  // salary using the server's formula.
+  const data = event.data?.data() ?? {};
+  const salary = typeof data['monthlySalary'] === 'number' ? (data['monthlySalary'] as number) : 0;
+  const creditLimit = Math.max(Math.min(salary * EMPLOYEE_CREDIT_SALARY_RATIO, EMPLOYEE_CREDIT_CEILING), 0);
+
+  try {
+    await db.collection('employees').doc(uid).update({
+      creditLimit,
+      availableCredit: creditLimit,
+      // monthlySalary is self-declared at registration and not yet corroborated
+      // against employer payroll. Record that so underwriting does not read it
+      // as a verified figure.
+      salarySource: 'self_declared',
+      creditLimitSetAt: FieldValue.serverTimestamp(),
+    });
+    logger.info('Derived employee credit limit', { uid, creditLimit, service: 'functions' });
+  } catch (err) {
+    logger.error('Failed to set derived credit limit', {
+      uid,
+      error: (err as Error).message,
+      service: 'functions',
+    });
+  }
   return null;
 });
 
 export const autoVerifyOnEmployerCreate = onDocumentCreated('employers/{uid}', async (event) => {
+  // Environment gate first: '@vida-test.com' is a suffix the signer-upper
+  // chooses, so on production it would let anyone skip email verification and
+  // auto-activate their own employer.
+  if (!allowTestBypass()) return;
   const data = event.data?.data();
   if (!data?.email) return;
   if (!data.email.endsWith('@vida-test.com')) return;
@@ -1402,6 +1465,8 @@ export const autoVerifyOnEmployerCreate = onDocumentCreated('employers/{uid}', a
 });
 
 export const autoVerifyOnEmployeeCreate = onDocumentCreated('employees/{uid}', async (event) => {
+  // Environment gate first — see autoVerifyOnEmployerCreate.
+  if (!allowTestBypass()) return;
   const data = event.data?.data();
   if (!data?.email) return;
   if (!data.email.endsWith('@vida-test.com')) return;

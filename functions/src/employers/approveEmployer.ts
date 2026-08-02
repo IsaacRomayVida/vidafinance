@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
@@ -286,6 +287,30 @@ export async function approveEmployerHandler(
     txn.update(employerRef, newFields as FirebaseFirestore.UpdateData<EmployerDocument>);
     txn.set(logRef, logEntry);
   });
+
+  // ── 5a. Grant the employer_admin claim (approval only) ─────────────────────
+  // This is the approval gate for the claim. onEmployerDocCreated deliberately
+  // does not grant it on self-signup, so an employer becomes an employer_admin
+  // here and nowhere else on the normal path.
+  if (decision === 'approved') {
+    try {
+      await getAuth().setCustomUserClaims(employerId, { role: 'employer_admin' });
+      logger.info('Granted employer_admin claim on approval', {
+        employerId,
+        approvedBy: adminUid,
+        service: 'functions',
+      });
+    } catch (e: unknown) {
+      // The employer is approved in Firestore either way; setEmployerClaims is
+      // the admin-only retry path. Surfaced loudly because the employer cannot
+      // use their dashboard until the claim lands.
+      logger.error('Failed to grant employer_admin claim after approval', {
+        employerId,
+        error: (e as Error).message,
+        service: 'functions',
+      });
+    }
+  }
 
   // ── 5b. Shadow-write to the identity registry (Phase A, non-blocking) ──────
   // Only on approval: the entity rule is "signs, pays, gets paid, or is

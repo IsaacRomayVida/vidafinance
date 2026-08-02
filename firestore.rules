@@ -44,23 +44,40 @@ service cloud.firestore {
 
     // =============================================
     // EMPLOYERS COLLECTION
-    // Get: the employer's own admin or ops. (Employee onboarding uses
-    //   list+where('employerCode') — single-doc get by id is not used cross-tenant.)
-    // List: left open for the unauthenticated employerCode lookup during
-    //   onboarding (Onboarding.tsx). The document reveals only public company
-    //   info (name, logo). Tightening requires moving lookup into a CF — follow-up.
-    // Create: user bootstrapping their own employer doc during onboarding, or admin.
+    // Get: the employer's own admin or ops.
+    // List: ops only (admin console). The unauthenticated employerCode lookup
+    //   during onboarding goes through the lookupEmployerByCode CF, which
+    //   returns only employerId + companyName. It used to be `list: if true`,
+    //   which handed every employer document — apiKeyHash, rfc, bankClabe,
+    //   email, mlScore, riskTier, llmAnalysis — to any anonymous caller.
+    // Create: admin (any shape), or a user bootstrapping their OWN employer doc
+    //   during onboarding. Self-created docs are pinned to
+    //   'pending_verification' and may not carry privileged fields: status is
+    //   what onEmployerDocCreated keys the employer_admin claim off, so letting
+    //   the client choose it would be self-service privilege escalation.
     // Update: admin (any field), or own admin (whitelisted contact fields only).
     // Delete: ops only.
     // =============================================
+    function isSelfServeEmployerCreate() {
+      return request.resource.data.status == 'pending_verification'
+             && !request.resource.data.keys().hasAny([
+                  'apiKeyHash', 'creditLimit', 'riskTier', 'mlScore', 'llmAnalysis',
+                  'approvedAt', 'approvedBy', 'currentOutstandingBalance', 'maxActiveSlots'
+                ]);
+    }
+
     match /employers/{employerId} {
       allow get: if isEmployerAdminOf(employerId) || isOps();
-      allow list: if true;
-      allow create: if isAdmin() || isOwner(employerId);
+      allow list: if isOps();
+      allow create: if isAdmin()
+                    || (isOwner(employerId) && isSelfServeEmployerCreate());
       allow update: if isAdmin()
                     || (isEmployerAdminOf(employerId)
                         && onlyAffects(['contactName', 'contactEmail', 'contactPhone', 'logoUrl', 'updatedAt']));
-      allow delete: if isOps();
+      // Same reasoning as /loans: an employer document anchors its employees'
+      // loans. Deleting it directly orphans them and leaves no audit record.
+      // Offboarding is a status change, not a delete. (#385)
+      allow delete: if false;
     }
 
     // =============================================
@@ -68,16 +85,26 @@ service cloud.firestore {
     // Read: the employee themselves, the employer_admin of their employer, or ops.
     //   This is the core isolation: employee A cannot read employee B even in
     //   the same employer, and employer A cannot read employer B's employees.
-    // Create: self-registration during onboarding (uid == employeeId).
+    // Create: self-registration during onboarding (uid == employeeId), but the
+    //   credit line may not be self-assigned. creditLimit/availableCredit are
+    //   derived from monthlySalary by onEmployeeDocCreated; before this
+    //   constraint the client wrote both directly (Onboarding.tsx), so a user
+    //   could pick their own borrowing ceiling at registration.
     // Update: ops (any field), or self (whitelisted personal fields only) —
     //   creditLimit, availableCredit, employerId, kycStatus must come from CFs.
     // Delete: ops only.
     // =============================================
+    function noSelfAssignedCredit() {
+      return !request.resource.data.keys().hasAny([
+        'creditLimit', 'availableCredit', 'creditLimitSetAt', 'salarySource', 'riskTier', 'mlScore'
+      ]);
+    }
+
     match /employees/{employeeId} {
       allow read: if isOwner(employeeId)
                   || (resource != null && isEmployerAdminOf(resource.data.employerId))
                   || isOps();
-      allow create: if isOwner(employeeId);
+      allow create: if isOwner(employeeId) && noSelfAssignedCredit();
       allow update: if isOps()
                     || (isOwner(employeeId)
                         && onlyAffects(['phone', 'bankClabe', 'bankName', 'address',
@@ -107,7 +134,13 @@ service cloud.firestore {
                     isOps()
                   );
       allow create, update: if false;
-      allow delete: if isOps();
+      // A loan is the record of a credit obligation. Deleting one destroys the
+      // audit trail irreversibly and bypasses every Cloud Function path, so no
+      // client — ops included — may do it directly. This block already claimed
+      // "all writes via Admin SDK" while permitting ops deletes; the rule had
+      // drifted from its own contract. Corrections go through an audited
+      // status transition, never a delete. (#385)
+      allow delete: if false;
     }
 
     // =============================================

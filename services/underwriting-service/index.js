@@ -6,6 +6,16 @@ const { alert5xx, alertRateLimit, alertFraudScore, alertFirestoreFailure, alertR
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 require('dotenv').config();
 
+// Fail closed: requireInternal compares the request header against
+// process.env.INTERNAL_SECRET. If the variable is unset both sides are
+// `undefined`, the strict-inequality check is false, and every internal route
+// (including POST /underwrite) becomes publicly callable with no header at all.
+// Refuse to boot rather than serve underwriting unauthenticated.
+// Same pattern as vida-registry-service.
+if (!process.env.INTERNAL_SECRET) {
+  throw new Error('INTERNAL_SECRET is required to start vida-underwriting-service');
+}
+
 const metamapClient = require('./src/metamap-client');
 const { riskSealSmokeHandler } = require('./src/riskseal-smoke');
 

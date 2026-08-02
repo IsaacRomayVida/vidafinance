@@ -15,18 +15,35 @@ import {
   assertSucceeds,
 } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'fs';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  addDoc,
+  query,
+  where,
+} from 'firebase/firestore';
 import * as path from 'path';
 
 let testEnv: RulesTestEnvironment;
+
+// `firebase emulators:exec` exports FIRESTORE_EMULATOR_HOST for the child process.
+// Honour it so the suite follows the emulator onto a non-default port; fall back to
+// the firebase.json default (localhost:8080) when running against a manually
+// started emulator.
+const [emulatorHost, emulatorPort] = (process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8080').split(':');
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: 'vida-finance-test',
     firestore: {
       rules: readFileSync(path.resolve(__dirname, 'firestore.rules'), 'utf8'),
-      host: 'localhost',
-      port: 8080,
+      host: emulatorHost,
+      port: Number(emulatorPort),
     },
   });
 });
@@ -262,6 +279,178 @@ describe('employers collection', () => {
     const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
     await assertFails(deleteDoc(doc(ctx.firestore(), 'employers/employer1')));
   });
+
+  // ── P1-2: the employers collection must not be listable ────────────────────
+  // `allow list: if true` returned every employer document in full — apiKeyHash,
+  // rfc, bankClabe, email, employerCode, mlScore, riskTier, llmAnalysis — to any
+  // caller. The onboarding employerCode lookup that motivated it now goes
+  // through the lookupEmployerByCode CF.
+
+  describe('employers list is not a public dump (P1-2)', () => {
+    async function seedSensitiveEmployer() {
+      await seedEmployer('employer1', {
+        companyName: 'Acme SA de CV',
+        employerCode: 'ACME01',
+        apiKeyHash: 'sha256-of-the-live-api-key',
+        rfc: 'AAA010101AAA',
+        bankClabe: '012345678901234567',
+        email: 'finance@acme.mx',
+        mlScore: 0.91,
+        riskTier: 'A',
+        llmAnalysis: 'internal underwriting narrative',
+      });
+    }
+
+    it('anonymous user cannot list the employers collection', async () => {
+      await seedSensitiveEmployer();
+
+      const ctx = testEnv.unauthenticatedContext();
+      await assertFails(getDocs(collection(ctx.firestore(), 'employers')));
+    });
+
+    it('anonymous user cannot query employers by employerCode', async () => {
+      await seedSensitiveEmployer();
+
+      // The exact query Onboarding.tsx used to run before the lookup moved
+      // server-side. It returned the whole matching document.
+      const ctx = testEnv.unauthenticatedContext();
+      await assertFails(
+        getDocs(query(collection(ctx.firestore(), 'employers'), where('employerCode', '==', 'ACME01')))
+      );
+    });
+
+    it('an authenticated employee cannot list the employers collection', async () => {
+      await seedSensitiveEmployer();
+
+      const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+      await assertFails(getDocs(collection(ctx.firestore(), 'employers')));
+    });
+
+    it('an employer_admin cannot list other employers', async () => {
+      await seedSensitiveEmployer();
+
+      const ctx = testEnv.authenticatedContext('employer2', { role: 'employer_admin' });
+      await assertFails(getDocs(collection(ctx.firestore(), 'employers')));
+    });
+
+    it('ops can still list employers (admin console)', async () => {
+      await seedSensitiveEmployer();
+
+      const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+      await assertSucceeds(getDocs(collection(ctx.firestore(), 'employers')));
+    });
+
+    it('admin can still list employers (admin console)', async () => {
+      await seedSensitiveEmployer();
+
+      const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+      await assertSucceeds(getDocs(collection(ctx.firestore(), 'employers')));
+    });
+  });
+
+  // ── P1-3: self-created employer docs cannot claim a privileged state ───────
+  // onEmployerDocCreated grants the employer_admin claim only for an employer
+  // that is already approved/active at creation. These rules are the other half
+  // of that gate: a self-signup may only create a 'pending_verification' doc, so
+  // it can never mint the claim for itself.
+
+  describe('employer self-signup cannot escalate (P1-3)', () => {
+    it(`user cannot self-create an employer with status 'active'`, async () => {
+      const ctx = testEnv.authenticatedContext('attacker1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employers/attacker1'), {
+          name: 'My Company',
+          status: 'active',
+        })
+      );
+    });
+
+    it(`user cannot self-create an employer with status 'approved'`, async () => {
+      const ctx = testEnv.authenticatedContext('attacker1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employers/attacker1'), {
+          name: 'My Company',
+          status: 'approved',
+        })
+      );
+    });
+
+    it('user cannot self-create an employer carrying an apiKeyHash', async () => {
+      const ctx = testEnv.authenticatedContext('attacker1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employers/attacker1'), {
+          name: 'My Company',
+          status: 'pending_verification',
+          apiKeyHash: 'attacker-chosen-hash',
+        })
+      );
+    });
+
+    it('user cannot self-create an employer carrying a creditLimit', async () => {
+      const ctx = testEnv.authenticatedContext('attacker1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employers/attacker1'), {
+          name: 'My Company',
+          status: 'pending_verification',
+          creditLimit: 5000000,
+        })
+      );
+    });
+
+    it('user cannot self-create an employer carrying a riskTier', async () => {
+      const ctx = testEnv.authenticatedContext('attacker1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employers/attacker1'), {
+          name: 'My Company',
+          status: 'pending_verification',
+          riskTier: 'A',
+        })
+      );
+    });
+
+    it('the real onboarding shape is still accepted', async () => {
+      // Mirrors the payload Onboarding.tsx writes at createEmployerAccount.
+      const ctx = testEnv.authenticatedContext('employer9');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employers/employer9'), {
+          name: 'Ana Lopez',
+          companyName: 'Nueva SA',
+          email: 'ana@nueva.mx',
+          phone: '+525512345678',
+          rfc: 'NUE010101AAA',
+          state: 'CDMX',
+          industry: 'retail',
+          employeeCount: '11-50',
+          payFrequency: 'quincenal',
+          payrollSystem: 'other',
+          usesDispersora: false,
+          bankClabe: '012345678901234567',
+          employerCode: 'NUE123',
+          employeeCurps: [],
+          dispersoraName: null,
+          status: 'pending_verification',
+          docUrls: {},
+          docRFC: null,
+          docId: null,
+          docAddress: null,
+          totalEmployees: 0,
+          activeLoans: 0,
+          totalDisbursed: 0,
+        })
+      );
+    });
+
+    it('admin can still create an employer in any state', async () => {
+      const ctx = testEnv.authenticatedContext('admin1', { admin: true, role: 'admin' });
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employers/new-employer'), {
+          name: 'New Company',
+          status: 'active',
+          apiKeyHash: 'issued-by-approveEmployer',
+        })
+      );
+    });
+  });
 });
 
 // ── employees collection ──────────────────────────────────────────────────────
@@ -314,6 +503,97 @@ describe('employees collection', () => {
     await assertFails(
       updateDoc(doc(ctx.firestore(), 'employees/employee1'), { creditLimit: 99999 })
     );
+  });
+
+  // ── P1-1: the credit line cannot be self-assigned at registration ──────────
+  // Onboarding.tsx used to compute creditLimit/availableCredit on the client and
+  // write them into employees/{uid} on create. `allow create: if isOwner(...)`
+  // did no field validation, so the user picked their own borrowing ceiling.
+  // Both fields are now derived by onEmployeeDocCreated from monthlySalary.
+
+  describe('employee cannot self-assign a credit line (P1-1)', () => {
+    // The legitimate onboarding payload, minus anything server-derived.
+    const registration = {
+      name: 'Test Employee',
+      email: 'employee@acme.mx',
+      phone: '+525512345678',
+      dateOfBirth: '1990-01-15',
+      curp: 'TEST900115HDFXXX01',
+      gender: 'M',
+      rfc: 'TES900115AAA',
+      employerId: 'employer1',
+      employerName: 'Acme SA de CV',
+      employerCode: 'ACME01',
+      monthlySalary: 12000,
+      payFrequency: 'quincenal',
+      employmentTenure: '2y',
+      bankClabe: '012345678901234567',
+      kycStatus: 'pending_review',
+    };
+
+    it('registration is rejected when it carries a creditLimit', async () => {
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+          ...registration,
+          creditLimit: 99999,
+        })
+      );
+    });
+
+    it('registration is rejected when it carries availableCredit', async () => {
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+          ...registration,
+          availableCredit: 99999,
+        })
+      );
+    });
+
+    it('registration is rejected when it carries both (the old client payload)', async () => {
+      // This is verbatim what Onboarding.tsx wrote before the fix:
+      // creditLimit = Math.min(salary * 0.3, 5000), availableCredit = creditLimit.
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+          ...registration,
+          creditLimit: 3600,
+          availableCredit: 3600,
+        })
+      );
+    });
+
+    it('registration is rejected when it carries a riskTier or mlScore', async () => {
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+          ...registration,
+          riskTier: 'A',
+          mlScore: 0.99,
+        })
+      );
+    });
+
+    it('registration is rejected when it forges salarySource', async () => {
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+          ...registration,
+          salarySource: 'employer_verified',
+        })
+      );
+    });
+
+    it('the real onboarding shape is still accepted', async () => {
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(setDoc(doc(ctx.firestore(), 'employees/employee1'), registration));
+    });
+
+    it('a user still cannot register as somebody else', async () => {
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(setDoc(doc(ctx.firestore(), 'employees/employee2'), registration));
+    });
   });
 });
 

@@ -131,7 +131,7 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/vida_registry_test
 
   firestore-rules:
-    name: "Firestore Rules Tests (emulator, SOFT gate — see TODO)"
+    name: "Firestore Rules Tests (emulator, HARD gate)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -145,19 +145,25 @@ jobs:
       - name: Install root deps (jest, ts-jest, @firebase/rules-unit-testing)
         run: npm ci
 
+      # The Firestore emulator is a Java process. firebase-tools dropped support
+      # for JDK versions before 21 and the ubuntu-latest default is older, so
+      # without this the emulator refuses to start and this gate fails for a
+      # reason that has nothing to do with the rules.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      # TODO: flip to a hard gate once the rules bug below is fixed. As of
-      # 2026-08-02, running `firebase emulators:exec --only firestore
-      # --project demo-vida-finance-test "npm run test:rules"` locally gives
-      # 66/68 passing — the 2 failures are a real firestore.rules bug, not a
-      # flaky/setup issue: "employers collection > employer delete is always
-      # denied" expects assertFails() but an admin-authenticated delete
-      # currently succeeds. Fix firestore.rules, confirm 68/68 locally, then
-      # remove continue-on-error here.
-      - name: Rules tests (Firestore emulator) — 66/68, non-blocking
-        continue-on-error: true
+      # HARD gate as of 2026-08-02. This was soft while two real firestore.rules
+      # bugs failed (loan and employer delete permitted for ops despite the
+      # tests — and the rules' own comments — requiring deny). Both are fixed
+      # (#385) and the suite is 88/88. These rules are the last line of defence
+      # on tenant isolation and on the loan audit trail, so a regression here
+      # must block the merge rather than show green with a red log.
+      - name: Rules tests (Firestore emulator)
         run: firebase emulators:exec --only firestore --project demo-vida-finance-test "npm run test:rules"
 
   # ─────────────────────────────────────────────────────────────────────

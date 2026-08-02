@@ -11,6 +11,16 @@ const { alert5xx, alertQueueDepth, alertRedisLost } = require("../shared/alertin
 const { register: metricsRegister, metricsMiddleware } = require("../shared/metrics");
 require("dotenv").config();
 
+// Fail closed: requireInternal compares the request header against
+// process.env.INTERNAL_SECRET. If the variable is unset both sides are
+// `undefined`, the strict-inequality check is false, and every internal route
+// (including POST /contracts/generate) becomes publicly callable with no header
+// at all. Refuse to boot rather than serve contract generation unauthenticated.
+// Same pattern as vida-registry-service.
+if (!process.env.INTERNAL_SECRET) {
+  throw new Error("INTERNAL_SECRET is required to start vida-pdf-generator");
+}
+
 const pkg = require("./package.json");
 const START_TIME = Date.now();
 
