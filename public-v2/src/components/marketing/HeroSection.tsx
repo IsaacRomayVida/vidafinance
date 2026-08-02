@@ -76,13 +76,16 @@ export function HeroSection() {
               filter: 'blur(20px)',
               pointerEvents: 'none',
             }} />
-            <img src="/images/worker.png" alt="Trabajador usando Funpay"
-              fetchPriority="high"
-              style={{
-                width: 340, position: 'relative',
-                filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.12))',
-              }}
-            />
+            <picture>
+              <source srcSet="/images/worker.webp" type="image/webp" />
+              <img src="/images/worker.png" alt="Trabajador usando Funpay"
+                fetchPriority="high"
+                style={{
+                  width: 340, position: 'relative',
+                  filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.12))',
+                }}
+              />
+            </picture>
           </div>
           <div className="phone-ring" />
           <div className="phone-ring-2" />
