@@ -93,6 +93,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, integration-test]
     if: github.event_name == 'push'
+    # Without this the job runs to the 6h runner limit and is reported as
+    # "cancelled" rather than "failed" — which raises no alert. See the
+    # 2026-08-02 incident: three consecutive main deploys burned 6h each on a
+    # non-retryable billing 403 and nobody was told.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
 
@@ -156,9 +161,16 @@ jobs:
           fi
           echo "Deploying to $PROJECT"
 
-          # 1) Non-function targets first (hosting, rules, indexes, storage).
+          # 1) Rules, indexes and storage first — these are backward-compatible
+          #    and must be in place before the functions that rely on them.
+          #    HOSTING IS DEPLOYED LAST, in a separate step, and ONLY if every
+          #    function deployed. Releasing hosting before functions is what
+          #    broke production on 2026-08-02: the new frontend went live
+          #    calling `getLoanConfig`, the functions deploy then failed on a
+          #    billing 403, and the loan wizard fail-closed for every borrower
+          #    against a callable that had never been deployed.
           firebase deploy \
-            --only hosting,firestore:rules,firestore:indexes,storage \
+            --only firestore:rules,firestore:indexes,storage \
             --project "$PROJECT" --non-interactive
 
           # 2) Functions ONE AT A TIME. Changing shared env (e.g. a secret)
@@ -186,15 +198,35 @@ jobs:
             weeklyPortfolioSnapshot
           "
 
+          # Account-level failures (billing disabled, write access denied, API
+          # turned off) are deterministic: they will fail identically on every
+          # function and every attempt. Retrying them 4x across ~40 functions
+          # costs ~6h and buries the real cause under 256 identical errors.
+          # Detect them and abort the whole deploy at the first occurrence.
+          FATAL=0
+          is_fatal() {
+            printf '%s' "$1" | grep -qiE \
+              "please check billing account|billing account .*(disabled|closed|not (found|active))|Write access to project .* was denied|billing (is )?(not enabled|disabled)|SERVICE_DISABLED|PERMISSION_DENIED.*(billing|serviceusage)"
+          }
+
           deploy_one() {
-            local fn="$1" attempt
+            local fn="$1" attempt out rc
             for attempt in 1 2 3 4; do
               echo "::group::Deploy ${fn} (attempt ${attempt}/4)"
-              if firebase deploy --only "functions:${fn}" --project "$PROJECT" --non-interactive --force; then
-                echo "::endgroup::"
+              set +e
+              out="$(firebase deploy --only "functions:${fn}" --project "$PROJECT" --non-interactive --force 2>&1)"
+              rc=$?
+              set -e
+              printf '%s\n' "$out"
+              echo "::endgroup::"
+              if [ "$rc" -eq 0 ]; then
                 return 0
               fi
-              echo "::endgroup::"
+              if is_fatal "$out"; then
+                echo "::error::${fn}: non-retryable account-level failure (billing or project permissions), not a transient CPU-quota backoff. Aborting the deploy now instead of retrying ~40 functions into the 6h job limit."
+                FATAL=1
+                return 1
+              fi
               echo "  ${fn} failed (attempt ${attempt}); backing off so CPU can free up…"
               sleep $((attempt * 60))
             done
@@ -209,14 +241,22 @@ jobs:
             if deploy_one "$fn"; then
               ok=$((ok+1))
             else
-              echo "::warning::${fn} did not deploy after retries"
               FAILED="${FAILED} ${fn}"
+              if [ "$FATAL" = "1" ]; then
+                echo "::error::Aborting after a non-retryable failure on ${fn}. Deployed ${ok}/${total} before the abort; hosting will NOT be released."
+                break
+              fi
+              echo "::warning::${fn} did not deploy after retries"
             fi
             # brief settle so the new revision can scale to zero before the next
-            [ "$idx" -lt "$total" ] && sleep 30
+            if [ "$idx" -lt "$total" ]; then sleep 30; fi
           done
 
           echo "Deployed ${ok}/${total} functions."
+          if [ "$FATAL" = "1" ]; then
+            echo "::error::Deploy aborted: the Google Cloud project rejected function writes (billing or project permissions). Hosting was deliberately left on the previous release so production is not left running a frontend against undeployed backend code. Fix the account issue, then re-run this job."
+            exit 1
+          fi
           if [ -n "$FAILED" ]; then
             echo "::error::Functions that failed after retries:${FAILED}"
             echo "Re-run this job to retry TRANSIENT failures (e.g. CPU-quota backoff) — already-deployed functions are skipped, so those converge."
@@ -227,4 +267,18 @@ jobs:
             exit 1
           fi
           echo "All ${total} functions deployed successfully."
+
+      # Hosting goes LAST and only on a fully successful functions deploy, so a
+      # backend failure can never leave production serving a frontend that calls
+      # callables which were never deployed.
+      - name: Deploy Hosting (only after all functions succeeded)
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            PROJECT="${{ secrets.FIREBASE_PROJECT_ID_PRODUCTION }}"
+          else
+            PROJECT="${{ secrets.FIREBASE_PROJECT_ID_STAGING }}"
+          fi
+          echo "Releasing hosting to $PROJECT"
+          firebase deploy --only hosting --project "$PROJECT" --non-interactive
 
