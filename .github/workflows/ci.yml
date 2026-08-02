@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Lint, Typecheck & Test
+    name: "Functions: Lint, Typecheck & Test (HARD gate)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -30,6 +30,9 @@ jobs:
 
       - name: Lint (functions)
         run: cd functions && npm run lint
+
+      - name: Unit tests (functions) — 235/235, this is a hard gate
+        run: cd functions && npm run test:ci
 
   frontend:
     name: Frontend Lint, Typecheck & Build
