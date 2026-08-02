@@ -14,6 +14,7 @@ process.env.BELVO_BASE_URL = "https://sandbox.belvo.com";
 
 const {
   runStage4,
+  runBelvoCashFlow,
   checkBiometricFailures,
   identifyPayrollDeposits,
   identifyLoanPayments,
@@ -364,5 +365,51 @@ describe("stage4-kyc: runStage4 with KYC_MODE", () => {
 
     assert.strictEqual(result.decision, "reject");
     assert.ok(result.reason.includes("Document verification failed"));
+  });
+});
+
+// ─── runBelvoCashFlow — Belvo base URL resolution ────────────────────────────
+
+describe("stage4-kyc: runBelvoCashFlow — Belvo base URL resolution", () => {
+  const BelvoClientMock = require("belvo").default;
+  const ORIGINAL_BASE_URL = process.env.BELVO_BASE_URL;
+  const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+
+  beforeEach(() => {
+    BelvoClientMock.mockClear();
+  });
+
+  afterEach(() => {
+    process.env.BELVO_BASE_URL = ORIGINAL_BASE_URL;
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+  });
+
+  it("uses the explicit BELVO_BASE_URL when set", async () => {
+    process.env.BELVO_BASE_URL = "https://api.belvo.com";
+    process.env.NODE_ENV = "production";
+
+    await runBelvoCashFlow(baseBankConnection, baseApplicant);
+
+    expect(BelvoClientMock).toHaveBeenCalledWith("test", "test", "https://api.belvo.com");
+  });
+
+  it("defaults to sandbox when BELVO_BASE_URL is unset and NODE_ENV is not production", async () => {
+    delete process.env.BELVO_BASE_URL;
+    process.env.NODE_ENV = "staging";
+
+    await runBelvoCashFlow(baseBankConnection, baseApplicant);
+
+    expect(BelvoClientMock).toHaveBeenCalledWith("test", "test", "https://sandbox.belvo.com");
+  });
+
+  it("fails loudly instead of defaulting to sandbox when BELVO_BASE_URL is unset in production", async () => {
+    delete process.env.BELVO_BASE_URL;
+    process.env.NODE_ENV = "production";
+
+    const result = await runBelvoCashFlow(baseBankConnection, baseApplicant);
+
+    expect(BelvoClientMock).not.toHaveBeenCalled();
+    expect(result.available).toBe(false);
+    expect(result.reason).toMatch(/BELVO_BASE_URL/);
   });
 });

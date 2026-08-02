@@ -59,7 +59,7 @@ jobs:
       # stage3-autoapprove rewrite) test features that were never built and
       # are excluded via testPathIgnorePatterns in jest.config.js, not here
       # — see that file for exactly what each is waiting on.
-      - name: Unit tests (underwriting-service) — 121/121, hard gate
+      - name: Unit tests (underwriting-service) — 129/129, hard gate
         run: cd services/underwriting-service && npm test
 
   frontend:

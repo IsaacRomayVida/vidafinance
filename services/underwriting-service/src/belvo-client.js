@@ -16,14 +16,35 @@
  */
 const BelvoClient = require("belvo").default;
 
+const BELVO_SANDBOX_URL = "https://sandbox.belvo.com";
+
 let _client = null;
+
+/**
+ * Resolve the Belvo API base URL.
+ * Explicit BELVO_BASE_URL always wins. Otherwise: non-production environments
+ * default to sandbox (so local/staging never needs the var set), but a
+ * production environment with no explicit URL fails loudly instead of
+ * silently falling back to sandbox and returning fake underwriting data.
+ */
+function resolveBelvoBaseUrl() {
+  if (process.env.BELVO_BASE_URL) return process.env.BELVO_BASE_URL;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "BELVO_BASE_URL is not set and NODE_ENV=production. Refusing to " +
+      "silently default to the Belvo sandbox, which would return fake " +
+      "underwriting data for real borrowers. Set BELVO_BASE_URL explicitly."
+    );
+  }
+  return BELVO_SANDBOX_URL;
+}
 
 async function getClient() {
   if (_client) return _client;
   _client = new BelvoClient(
     process.env.BELVO_SECRET_ID,
     process.env.BELVO_SECRET_PASSWORD,
-    process.env.BELVO_BASE_URL
+    resolveBelvoBaseUrl()
   );
   await _client.connect();
   return _client;
@@ -202,4 +223,6 @@ module.exports = {
   verifyEmployerIMSS,
   getISSSTE,
   extractBelvoError,
+  resolveBelvoBaseUrl,
+  BELVO_SANDBOX_URL,
 };
