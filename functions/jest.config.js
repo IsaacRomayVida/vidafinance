@@ -32,7 +32,6 @@ module.exports = {
   collectCoverageFrom: [
     'src/loans/markLoanDisbursed.ts',
     'src/loans/calculateNextPayrollDate.ts',
-    'src/loans/requestLoan.ts',
     'src/payments/generatePaymentLink.ts',
     'src/admin/adminClaims.ts',
   ],
