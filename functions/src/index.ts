@@ -26,6 +26,7 @@ export { getContractDownloadUrl } from './loans/getContractDownloadUrl';
 export { generatePaymentLink } from './payments/generatePaymentLink';
 export { setAdminClaim, revokeAdminClaim } from './admin/adminClaims';
 export { getSystemHealth } from './admin/getSystemHealth';
+export { getReviewQueue } from './admin/getReviewQueue';
 export { sendVerificationEmail } from './auth/sendVerificationEmail';
 export { sendEmployeeInvite, lookupInvite, acceptInvite } from './invites';
 export { metamapWebhook } from './webhooks';
