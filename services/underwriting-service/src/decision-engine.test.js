@@ -59,6 +59,13 @@ jest.mock("./sw-client", () => ({
   check69B: jest.fn(() => Promise.resolve({ pass: true, situacion: null, hardReject: false, flag: false })),
   checkArt69: jest.fn(() => Promise.resolve({ pass: true, hasDebt: false })),
 }));
+// EMPLOYER_SAT_PROVIDER defaults to "local" (sat-blacklist-client), not "sw" —
+// mock the default provider too so employer-a doesn't hit real GCS/firebase-admin.
+jest.mock("./sat-blacklist-client", () => ({
+  getSWToken: jest.fn(),
+  check69B: jest.fn(() => Promise.resolve({ pass: true, situacion: null, hardReject: false, flag: false })),
+  checkArt69: jest.fn(() => Promise.resolve({ pass: true, hasDebt: false })),
+}));
 jest.mock("./gov-apis", () => ({
   checkDENUE: jest.fn(() => Promise.resolve({ pass: true, found: true })),
   checkREPSE: jest.fn(() => Promise.resolve({ pass: true, registrado: true, vigente: true })),
@@ -73,6 +80,10 @@ jest.mock("node-fetch", () => jest.fn(() => Promise.resolve({
   ok: true,
   json: () => Promise.resolve({ is_fraud: false, anomaly_score: 10 }),
 })));
+jest.mock("./redis-client", () => ({
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue("OK"),
+}));
 
 const { runPipeline, sumCosts, STAGE_NAMES } = require("./decision-engine");
 const metamapClient = require("./metamap-client");
@@ -152,6 +163,7 @@ describe("Decision Engine — MetaMap integration", () => {
 
   it("sumCosts aggregates across stages", () => {
     const results = {
+      stage0: { cost: [{ api: "riskseal", mxn: 1.5 }] },
       stage2: { cost: [{ api: "belvo", mxn: 3.0 }, { api: "metamap", mxn: 5.0 }] },
     };
     const { totalMXN, items } = sumCosts(results);
