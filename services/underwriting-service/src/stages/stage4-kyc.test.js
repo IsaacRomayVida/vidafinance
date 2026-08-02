@@ -5,7 +5,6 @@
  * biometric rejection, escalation, approval, and timeout scenarios.
  */
 const assert = require("assert");
-const { describe, it, beforeEach, afterEach } = require("node:test");
 
 // Set mock mode before requiring modules
 process.env.METAMAP_MOCK = "true";

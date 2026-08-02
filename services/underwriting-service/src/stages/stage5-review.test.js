@@ -5,7 +5,6 @@
  * review queue writing, active learning routing, and timeout scenarios.
  */
 const assert = require("assert");
-const { describe, it, beforeEach } = require("node:test");
 
 // Set mock mode before requiring modules
 process.env.METAMAP_MOCK = "true";
