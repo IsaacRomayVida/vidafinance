@@ -4,6 +4,9 @@
 // bankAccountClabe, termsAccepted, termDays, loanPurpose? }. Before the P0
 // fix, the handler destructured `term` (which the client never sends) and
 // rejected every request with "Plazo inválido".
+import * as fs from 'fs';
+import * as path from 'path';
+
 jest.mock('firebase-admin/app', () => ({ initializeApp: jest.fn() }));
 
 jest.mock('firebase-functions/v2/https', () => ({
@@ -219,6 +222,59 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     expect(config.allowedTermDays).toEqual([30]);
   });
 
+  it('applies the server default term when the client omits termDays', async () => {
+    const { requestLoan } = await import('../index');
+    const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+    const { termDays: _omitted, ...payloadWithoutTermDays } = realClientPayload;
+
+    await fn({ auth, data: payloadWithoutTermDays });
+
+    const loanWrite = mockDb._transactionCalls.find((c) => c.op === 'set') as
+      | { data: Record<string, unknown> }
+      | undefined;
+    expect(loanWrite).toBeDefined();
+    expect(loanWrite!.data['term']).toBe(30); // DEFAULT_LOAN_TERM_DAYS
+  });
+
+  it('persists feeRate at creation time; a later config change never reprices an already-created loan', async () => {
+    let liveFeeRate = 0.3;
+    jest.doMock('../config/loanConfig', () => {
+      const actual = jest.requireActual('../config/loanConfig');
+      return {
+        ...actual,
+        get LOAN_FEE_RATE() {
+          return liveFeeRate;
+        },
+      };
+    });
+
+    const { requestLoan } = await import('../index');
+    const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+    // Loan #1 is created while the fee rate is 30%.
+    await fn({ auth, data: realClientPayload });
+
+    // The rate changes (e.g. an admin edits the config) before loan #2 is
+    // requested by the same borrower.
+    liveFeeRate = 0.5;
+    await fn({ auth, data: realClientPayload });
+
+    const loanWrites = mockDb._transactionCalls.filter((c) => c.op === 'set') as Array<{
+      data: Record<string, unknown>;
+    }>;
+    expect(loanWrites).toHaveLength(2);
+    const [firstLoanWrite, secondLoanWrite] = loanWrites;
+
+    // Loan #1's already-persisted fee/feeRate must be untouched by the rate
+    // change that happened after it was created.
+    expect(firstLoanWrite.data['feeRate']).toBe(0.3);
+    expect(firstLoanWrite.data['fee']).toBe(300);
+
+    // Loan #2 picks up the new rate in force at ITS creation time.
+    expect(secondLoanWrite.data['feeRate']).toBe(0.5);
+    expect(secondLoanWrite.data['fee']).toBe(500);
+  });
+
   describe('underwriting condition breakdown (E5c)', () => {
     const sampleConditions = [
       { name: 'age_range', pass: true, value: 34, required: '18-65' },
@@ -308,5 +364,34 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       });
       expect((loanData['underwritingDecision'] as Record<string, unknown>)['conditions']).toHaveLength(3);
     });
+  });
+});
+
+// Guards against the exact drift that caused P0-2: the fee rate re-declared as
+// a second, independently-editable literal instead of being read through the
+// single source of truth in config/loanConfig.ts. These read the real source
+// files on disk (not the compiled/mocked module) so a hardcoded literal can't
+// hide behind a mock.
+describe('fee-rate literal guardrail (P0-2 regression)', () => {
+  it('index.ts computes the loan fee only via LOAN_FEE_RATE — no hardcoded fee-rate literal', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../index.ts'), 'utf8');
+
+    expect(src).toMatch(/const fee = Math\.round\(amount \* LOAN_FEE_RATE\)/);
+    // Catches any hardcoded numeric fee rate multiplied against the loan amount
+    // (e.g. `amount * 0.08` or `amount * 0.3`) reappearing in the handler.
+    expect(src).not.toMatch(/amount\s*\*\s*0\.\d+/);
+  });
+
+  it('LoanWizard.tsx derives its quoted fee rate from getLoanConfig — no hardcoded fee-rate literal', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '../../../public-v2/src/pages/LoanWizard.tsx'),
+      'utf8'
+    );
+
+    expect(src).toMatch(/feeRate\s*=\s*loanConfig\?\.feeRate/);
+    // Catches a hardcoded fee-rate literal multiplied against the loan amount
+    // reappearing (e.g. the old `Math.round(amount * 0.08)`), without false
+    // -positiving on unrelated numeric literals like CSS opacity values.
+    expect(src).not.toMatch(/amount\s*\*\s*0\.08/);
   });
 });
