@@ -300,6 +300,42 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       { name: 'bureau_score', pass: true, value: 650, required: '> 600' },
     ];
 
+    // Mirrors the /underwrite HTTP response the callable actually receives.
+    //
+    // Note this is the RESPONSE shape, not decision-engine.js's return value —
+    // conflating the two is the trap here. The endpoint
+    // (services/underwriting-service/index.js) publishes BOTH: a lean
+    // top-level `conditions`/`allPass` slice, added alongside the persistence
+    // code in #393 as the contract for this caller, AND the verbose
+    // `stages.stage3.data` payload it is derived from. A fixture that omits
+    // either half does not represent a response the service can produce, so
+    // build every mock through this helper.
+    function uwResponse(
+      top: Record<string, unknown>,
+      stage3: { conditions: unknown[]; allPass: boolean } | null,
+    ): Record<string, unknown> {
+      return {
+        ...top,
+        stagesExecuted: stage3 ? ['stage1', 'stage2', 'stage3'] : ['stage1'],
+        // The endpoint emits `null`, not `undefined`, when Stage 3 never ran.
+        conditions: stage3 ? stage3.conditions : null,
+        allPass: stage3 ? stage3.allPass : null,
+        stages: stage3
+          ? {
+              stage3: {
+                data: {
+                  conditions: stage3.conditions,
+                  allPass: stage3.allPass,
+                  failedConditions: stage3.conditions.filter(
+                    (c) => !(c as { pass: boolean }).pass,
+                  ),
+                },
+              },
+            }
+          : {},
+      };
+    }
+
     async function mockUnderwritingResponse(body: Record<string, unknown> | null) {
       process.env['UNDERWRITING_SERVICE_URL'] = 'https://uw.internal';
       process.env['INTERNAL_SECRET'] = 'test-secret';
@@ -320,14 +356,17 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     }
 
     it('persists the condition breakdown verbatim when underwriting approves', async () => {
-      await mockUnderwritingResponse({
-        decision: 'approved',
-        reason: null,
-        correlationId: 'uw-123',
-        lastStage: 'stage3',
-        allPass: true,
-        conditions: sampleConditions,
-      });
+      await mockUnderwritingResponse(
+        uwResponse(
+          {
+            decision: 'approved',
+            reason: null,
+            correlationId: 'uw-123',
+            lastStage: 'stage3',
+          },
+          { conditions: sampleConditions, allPass: true },
+        ),
+      );
 
       const { requestLoan } = await import('../index');
       const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
@@ -357,17 +396,23 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     });
 
     it('persists the breakdown alongside the denial reason when underwriting rejects', async () => {
-      await mockUnderwritingResponse({
-        decision: 'rejected',
-        reason: 'FULL_KYC_REQUIRED',
-        correlationId: 'uw-456',
-        lastStage: 'stage4',
-        allPass: false,
-        conditions: [
-          { name: 'bureau_score', pass: false, value: 550, required: '> 600' },
-          ...sampleConditions,
-        ],
-      });
+      await mockUnderwritingResponse(
+        uwResponse(
+          {
+            decision: 'rejected',
+            reason: 'FULL_KYC_REQUIRED',
+            correlationId: 'uw-456',
+            lastStage: 'stage4',
+          },
+          {
+            conditions: [
+              { name: 'bureau_score', pass: false, value: 550, required: '> 600' },
+              ...sampleConditions,
+            ],
+            allPass: false,
+          },
+        ),
+      );
 
       const { requestLoan } = await import('../index');
       const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
@@ -382,6 +427,82 @@ describe('requestLoan (deployed handler in index.ts)', () => {
         allPass: false,
       });
       expect((loanData['underwritingDecision'] as Record<string, unknown>)['conditions']).toHaveLength(3);
+    });
+
+    it('omits the breakdown when the pipeline stopped before stage 3', async () => {
+      // An early rejection (e.g. stage-1 blacklist hit) never evaluates the
+      // auto-approve conditions, so there is nothing to explain. This must be
+      // a clean omission, not a crash on the missing stages.stage3 path.
+      await mockUnderwritingResponse(
+        uwResponse(
+          {
+            decision: 'rejected',
+            reason: 'SAT_BLACKLIST',
+            correlationId: 'uw-789',
+            lastStage: 'stage1',
+          },
+          null,
+        ),
+      );
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+      const result = await fn({ auth, data: realClientPayload });
+
+      expect(result.loanId).toBeTruthy();
+      const loanData = getLoanWrite();
+      expect(loanData['status']).toBe('rejected');
+      expect(loanData['denialReason']).toBe('SAT_BLACKLIST');
+      expect(loanData['underwritingDecision']).toBeUndefined();
+    });
+
+    it('reads the lean top-level slice — the documented contract — without needing stages', async () => {
+      // The lean `conditions`/`allPass` slice is the narrow contract between
+      // the service and this caller (#393). `stages` is the verbose payload it
+      // is derived from and is the half that could plausibly be trimmed off
+      // the wire for size. Persisting must therefore survive `stages` being
+      // absent entirely.
+      await mockUnderwritingResponse({
+        decision: 'approved',
+        reason: null,
+        correlationId: 'uw-lean',
+        lastStage: 'stage3',
+        stagesExecuted: ['stage1', 'stage2', 'stage3'],
+        allPass: true,
+        conditions: sampleConditions,
+      });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const persisted = getLoanWrite()['underwritingDecision'] as Record<string, unknown>;
+      expect(persisted).toBeDefined();
+      expect(persisted['allPass']).toBe(true);
+      expect(persisted['conditions']).toHaveLength(2);
+    });
+
+    it('falls back to stages.stage3.data when the lean slice is absent', async () => {
+      // Defensive path, for a service too old to publish the lean slice. Not
+      // reachable against today's deployment, but it is the reason the nested
+      // read is retained, so it is pinned rather than left as dead code.
+      await mockUnderwritingResponse({
+        decision: 'approved',
+        reason: null,
+        correlationId: 'uw-nested-only',
+        lastStage: 'stage3',
+        stagesExecuted: ['stage1', 'stage2', 'stage3'],
+        stages: { stage3: { data: { conditions: sampleConditions, allPass: true } } },
+      });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const persisted = getLoanWrite()['underwritingDecision'] as Record<string, unknown>;
+      expect(persisted).toBeDefined();
+      expect(persisted['allPass']).toBe(true);
+      expect(persisted['conditions']).toHaveLength(2);
     });
   });
 });

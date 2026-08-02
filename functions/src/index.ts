@@ -417,12 +417,28 @@ export const requestLoan = onCall(
         // underwriting is down or the pipeline never reached Stage 3 (e.g. an
         // earlier-stage rejection), omit the field entirely — never block loan
         // creation over missing explainability data.
-        const uwConditions = uwResult?.['conditions'];
+        //
+        // `uwResult` is the /underwrite HTTP response, NOT the raw
+        // decision-engine return value — the two are different shapes and must
+        // not be conflated. The endpoint deliberately publishes a lean
+        // top-level `conditions`/`allPass` slice (services/underwriting-service
+        // /index.js) precisely so this caller does not have to reach into the
+        // verbose `stages` payload. Read the lean slice first: it is the
+        // narrow, stable contract, and `stages` is the part that may later be
+        // trimmed off the wire for payload size.
+        //
+        // The nested read is a defensive fallback only, for a service old
+        // enough to predate the lean slice. Both are populated today.
+        const uwStages = uwResult?.['stages'] as Record<string, unknown> | undefined;
+        const stage3 = uwStages?.['stage3'] as Record<string, unknown> | undefined;
+        const stage3Data = stage3?.['data'] as Record<string, unknown> | undefined;
+        const uwConditions = uwResult?.['conditions'] ?? stage3Data?.['conditions'];
+        const uwAllPass = uwResult?.['allPass'] ?? stage3Data?.['allPass'];
         if (Array.isArray(uwConditions) && uwConditions.length > 0) {
           decisionExtra['underwritingDecision'] = {
             decision: uwDecision,
             reason: (uwResult?.['reason'] as string) ?? null,
-            allPass: (uwResult?.['allPass'] as boolean) ?? null,
+            allPass: (uwAllPass as boolean) ?? null,
             conditions: uwConditions,
             evaluatedAt: FieldValue.serverTimestamp(),
           };
