@@ -44,6 +44,11 @@ interface QueryState {
 // Flipped by the fail-soft test to make the count() aggregation throw.
 let countShouldFail = false;
 
+// Set by the sort-fallback tests to make the ascending (oldest-first) query throw,
+// standing in for production's missing `(status ASC, queuedAt ASC)` index. Firestore
+// signals that as FAILED_PRECONDITION; anything else must stay fatal.
+let ascQueryError: (Error & { code?: unknown }) | null = null;
+
 function matchesWheres(d: FakeDoc, state: QueryState): boolean {
   return state.wheres.every(({ field, op, value }) => {
     const v = d.data[field];
@@ -69,6 +74,9 @@ function createQueryable(state: QueryState): Record<string, unknown> {
       },
     }),
     get: async () => {
+      if (ascQueryError && state.orderField === 'queuedAt' && state.orderDir === 'asc') {
+        throw ascQueryError;
+      }
       let items = reviewQueueDocs.filter((d) => matchesWheres(d, state));
       if (state.orderField) {
         const field = state.orderField;
@@ -163,6 +171,7 @@ beforeEach(() => {
   reviewQueueDocs = [];
   loanDocs = {};
   countShouldFail = false;
+  ascQueryError = null;
 });
 
 describe('getReviewQueue', () => {
@@ -430,6 +439,100 @@ describe('getReviewQueue', () => {
       expect(result.counts).toBeNull();
       expect((result.reviews as unknown[]).length).toBe(1);
       expect(mockLogger.warn).toHaveBeenCalled();
+    });
+  });
+
+  describe('sort order fallback (missing oldest-first index)', () => {
+    function failedPrecondition(code: unknown) {
+      const e = new Error(
+        'FAILED_PRECONDITION: The query requires an index.'
+      ) as Error & { code?: unknown };
+      e.code = code;
+      return e;
+    }
+
+    it('reports oldest_first when the index is present', async () => {
+      seedReview('old', { queuedAt: '2026-01-01T00:00:00Z' });
+      seedReview('new', { queuedAt: '2026-08-01T00:00:00Z' });
+      seedLoan('loan-old');
+      seedLoan('loan-new');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+
+      expect(result.sortOrder).toBe('oldest_first');
+      expect((result.reviews as Array<{ id: string }>)[0].id).toBe('old');
+    });
+
+    it('serves newest-first instead of dying when the index is missing (gRPC code 9)', async () => {
+      ascQueryError = failedPrecondition(9);
+      seedReview('old', { queuedAt: '2026-01-01T00:00:00Z' });
+      seedReview('new', { queuedAt: '2026-08-01T00:00:00Z' });
+      seedLoan('loan-old');
+      seedLoan('loan-new');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+
+      // The screen still renders — this is the whole point.
+      expect((result.reviews as unknown[]).length).toBe(2);
+      expect(result.sortOrder).toBe('newest_first');
+      expect((result.reviews as Array<{ id: string }>)[0].id).toBe('new');
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it('also falls back on the string form of the code', async () => {
+      ascQueryError = failedPrecondition('failed-precondition');
+      seedReview('r1');
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+
+      expect(result.sortOrder).toBe('newest_first');
+    });
+
+    it('still returns counts and a cursor while degraded', async () => {
+      ascQueryError = failedPrecondition(9);
+      for (let i = 0; i < 3; i++) {
+        seedReview(`r${i}`, { queuedAt: `2026-0${i + 1}-01T00:00:00Z` });
+        seedLoan(`loan-r${i}`);
+      }
+
+      const result = (await fn({ auth: opsAuth, data: { limit: 2 } })) as Record<string, unknown>;
+
+      expect(result.sortOrder).toBe('newest_first');
+      expect(result.nextCursor).not.toBeNull();
+      expect(result.counts).not.toBeNull();
+    });
+
+    it('honours the cursor in the fallback order rather than restarting the page', async () => {
+      ascQueryError = failedPrecondition(9);
+      seedReview('a', { queuedAt: '2026-01-01T00:00:00Z' });
+      seedReview('b', { queuedAt: '2026-02-01T00:00:00Z' });
+      seedReview('c', { queuedAt: '2026-03-01T00:00:00Z' });
+      seedLoan('loan-a');
+      seedLoan('loan-b');
+      seedLoan('loan-c');
+
+      // Descending order is c, b, a — starting after c must yield b, not c again.
+      const result = (await fn({
+        auth: opsAuth,
+        data: { startAfter: 'c' },
+      })) as Record<string, unknown>;
+
+      expect((result.reviews as Array<{ id: string }>).map((r) => r.id)).toEqual(['b', 'a']);
+    });
+
+    it('does not swallow a non-index query failure', async () => {
+      const boom = new Error('backend unavailable') as Error & { code?: unknown };
+      boom.code = 14;
+      ascQueryError = boom;
+      seedReview('r1');
+      seedLoan('loan-r1');
+
+      // Rethrown, so the shared error handler turns it into an `internal` HttpsError.
+      // The point is that it surfaces at all rather than silently degrading the sort:
+      // an unavailable backend is not a missing index, and its blast radius is
+      // uncharacterised.
+      await expect(fn({ auth: opsAuth, data: {} })).rejects.toMatchObject({ code: 'internal' });
     });
   });
 
