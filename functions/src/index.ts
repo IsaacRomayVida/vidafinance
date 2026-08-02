@@ -414,6 +414,12 @@ export const requestLoan = onCall(
             employerCode: employer['employerCode'],
             amount,
             fee,
+            // The rate IN FORCE at creation, persisted on the loan itself. Once
+            // the fee rate becomes admin-editable (#389), a later change must
+            // never reprice a loan the borrower has already signed — every
+            // downstream consumer (contract PDF, CAT disclosure, statements)
+            // reads this field, not the live config.
+            feeRate: LOAN_FEE_RATE,
             total: amount + fee,
             term,
             status: initialStatus,

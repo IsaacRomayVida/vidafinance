@@ -5,12 +5,19 @@
 // or re-declare them anywhere else — that is exactly how the fee-rate and
 // term-list drifted between the UI, the backend, and the contract template.
 
-// TODO(isaac): this rate is UNRATIFIED. It preserves the existing deployed
-// backend behavior (30%) so wiring this single source of truth does not
-// silently reprice loans out from under you. Before this ships, confirm the
-// real commercial fee rate — the UI previously (incorrectly) quoted
-// borrowers 8% while the backend charged 30%; that gap was a CONDUSEF
-// consumer-protection exposure, not just a bug.
+// RATIFIED 2026-08-02 (Isaac): the flat fee is 30%. This matches the deployed
+// backend and the executed contract PDFs. The UI previously (incorrectly)
+// quoted borrowers 8% while the backend charged 30% — a CONDUSEF
+// consumer-protection exposure, not just a bug. That 8% is now deleted, not
+// kept as a fallback: a second constant is how the drift started.
+//
+// This constant is the SEED value. Issue #389 replaces the body of
+// getLoanConfigValues() with a read from an admin-editable config document
+// (two-person approval, effective-from semantics, server-enforced bounds,
+// append-only audit). Callers must keep reading through getLoanConfigValues()
+// so that swap stays a one-line change. The rate in force at loan creation is
+// persisted ON the loan document — a later change must never reprice a loan a
+// borrower has already signed.
 export const LOAN_FEE_RATE = 0.3;
 
 // Only a 30-day term is supported end-to-end today: underwriting risk

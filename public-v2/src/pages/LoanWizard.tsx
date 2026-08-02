@@ -27,9 +27,13 @@ const LOAN_PURPOSES = [
 const MIN_AMOUNT = 500;
 const MAX_AMOUNT = 5000;
 const STEP = 100;
-const FEE_RATE = 0.08;
-const TERM_OPTIONS = [15, 30, 45, 60] as const;
 const ACTIVE_STATUSES = ['pending', 'under_review', 'approved', 'disbursed', 'disbursement_queued'];
+
+interface LoanConfig {
+  feeRate: number;
+  allowedTermDays: number[];
+  defaultTermDays: number;
+}
 
 interface EmployeeData {
   name?: string;
@@ -67,6 +71,7 @@ export function LoanWizard() {
   const [loading, setLoading] = useState(true);
   const [eligibilityError, setEligibilityError] = useState('');
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
+  const [loanConfig, setLoanConfig] = useState<LoanConfig | null>(null);
 
   // Wizard state
   const [step, setStep] = useState(1);
@@ -89,7 +94,9 @@ export function LoanWizard() {
   const cappedMax = Math.max(effectiveMax, MIN_AMOUNT);
 
   // Calculations
-  const fee = Math.round(amount * FEE_RATE);
+  const feeRate = loanConfig?.feeRate ?? 0;
+  const feeRatePct = Math.round(feeRate * 100);
+  const fee = Math.round(amount * feeRate);
   const total = amount + fee;
   const biweeklyPeriods = Math.ceil(termDays / 15);
   const biweeklyDeduction = Math.ceil(total / biweeklyPeriods);
@@ -106,7 +113,19 @@ export function LoanWizard() {
 
     (async () => {
       try {
-        const empDoc = await getDoc(doc(db, 'employees', user.uid));
+        const functions = getFunctions();
+        const getLoanConfig = httpsCallable<Record<string, never>, LoanConfig>(
+          functions,
+          'getLoanConfig'
+        );
+        const [empDoc, configResult] = await Promise.all([
+          getDoc(doc(db, 'employees', user.uid)),
+          getLoanConfig(),
+        ]);
+        const config = configResult.data;
+        setLoanConfig(config);
+        setTermDays(config.defaultTermDays);
+
         if (!empDoc.exists()) {
           navigate('/employee', { replace: true });
           return;
@@ -720,9 +739,9 @@ export function LoanWizard() {
 
             {/* Term options */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-              {TERM_OPTIONS.map((days) => {
+              {(loanConfig?.allowedTermDays ?? []).map((days) => {
                 const periods = Math.ceil(days / 15);
-                const deduction = Math.ceil((amount + Math.round(amount * FEE_RATE)) / periods);
+                const deduction = Math.ceil((amount + Math.round(amount * feeRate)) / periods);
                 const isSelected = termDays === days;
 
                 return (
@@ -898,10 +917,10 @@ export function LoanWizard() {
                     marginBottom: 6,
                   }}
                 >
-                  {t('wiz_flat_fee')}
+                  {t('wiz_flat_fee', { rate: feeRatePct })}
                 </div>
                 <div style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>
-                  {t('wiz_flat_fee_rate')}
+                  {t('wiz_flat_fee_rate', { rate: feeRatePct })}
                 </div>
               </div>
             </div>
@@ -937,7 +956,7 @@ export function LoanWizard() {
                 }}
               >
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('wiz_flat_fee')}
+                  {t('wiz_flat_fee', { rate: feeRatePct })}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
                   ${fmt(fee)}
@@ -1136,7 +1155,7 @@ export function LoanWizard() {
                 }}
               >
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('wiz_flat_fee')}
+                  {t('wiz_flat_fee', { rate: feeRatePct })}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
                   ${fmt(fee)} MXN
