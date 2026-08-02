@@ -77,6 +77,18 @@ interface GetReviewQueueResult {
   // missing count must render as "unknown", never as 0. 0 is a claim about work.
   counts: Record<string, number> | null;
   nextCursor: string | null;
+  // Which order was actually served, not which one was asked for. Oldest-first
+  // needs the `(status ASC, queuedAt ASC)` composite index, and index deploys have
+  // been 403'ing since 2026-07-31 (the deploy service account is missing
+  // `roles/datastore.indexAdmin` — see #414). Rather than ship a query that dies
+  // with FAILED_PRECONDITION until a human fixes IAM, the handler falls back to
+  // newest-first and says so here.
+  //
+  // The console header reads this instead of hardcoding a caveat string: a
+  // hardcoded one has to be deleted by hand the day the index lands, and nobody
+  // remembers. Same rule as `counts` — never assert something about the data that
+  // the response does not support.
+  sortOrder: 'oldest_first' | 'newest_first';
 }
 
 // A money field is either a real number or unknown. NaN/Infinity are neither, and
@@ -131,19 +143,57 @@ export const getReviewQueue = onCall(
 
         const status = typeof data?.status === 'string' && data.status.trim().length > 0 ? data.status.trim() : null;
 
-        let query = status
-          ? db.collection('review_queue').where('status', '==', status)
-          : db.collection('review_queue').where('status', 'in', OPEN_STATUSES);
-        query = query.orderBy('queuedAt', 'desc').limit(limit);
-
+        // Resolve the cursor once — it is independent of sort direction, and the
+        // fallback below must not re-read it.
+        let cursorSnap: FirebaseFirestore.DocumentSnapshot | null = null;
         if (data?.startAfter) {
-          const cursorSnap = await db.collection('review_queue').doc(data.startAfter).get();
-          if (cursorSnap.exists) {
-            query = query.startAfter(cursorSnap);
-          }
+          const snap = await db.collection('review_queue').doc(data.startAfter).get();
+          if (snap.exists) cursorSnap = snap;
         }
 
-        const querySnap = await query.get();
+        // Oldest first. This is a work queue, not an activity feed: the review that
+        // has waited longest is the most urgent one, and with cursor pagination a
+        // newest-first order buries it on the last page nobody scrolls to.
+        //
+        // Flat by age, deliberately not tiered by status — Firestore would order
+        // `status` lexically (approved < escalated < info_requested < pending <
+        // pending_review), which is not a priority order, and faking one needs a
+        // stored sort key. The status column and the filter pills already answer
+        // "what kind of work is this"; the sort answers "what has waited longest".
+        const buildQuery = (direction: 'asc' | 'desc') => {
+          const base = status
+            ? db.collection('review_queue').where('status', '==', status)
+            : db.collection('review_queue').where('status', 'in', OPEN_STATUSES);
+          const ordered = base.orderBy('queuedAt', direction).limit(limit);
+          return cursorSnap ? ordered.startAfter(cursorSnap) : ordered;
+        };
+
+        // Oldest-first needs `(status ASC, queuedAt ASC)`, which is in
+        // firestore.indexes.json but cannot reach production while index deploys
+        // 403 on the missing `roles/datastore.indexAdmin` (#414). Without the
+        // fallback this throws FAILED_PRECONDITION on every call — not a degraded
+        // sort, a dead screen: the default view and all four filter pills, including
+        // the statuses that render fine today.
+        //
+        // So degrade the ordering instead of the endpoint, and report which order
+        // was served. Self-healing: the day the index goes live this starts
+        // returning oldest-first with no second deploy.
+        let sortOrder: 'oldest_first' | 'newest_first' = 'oldest_first';
+        let querySnap;
+        try {
+          querySnap = await buildQuery('asc').get();
+        } catch (e: unknown) {
+          const code = (e as { code?: unknown })?.code;
+          // gRPC 9 / 'failed-precondition' is Firestore's "this query needs an index
+          // you do not have". Anything else is uncharacterised and must still throw.
+          if (code !== 9 && code !== 'failed-precondition') throw e;
+          logger.warn('Review queue oldest-first index missing, serving newest-first', {
+            error: (e as Error).message,
+            service: 'functions',
+          });
+          sortOrder = 'newest_first';
+          querySnap = await buildQuery('desc').get();
+        }
         const reviewDocs = querySnap.docs;
 
         // Batch-fetch the loans backing this page of reviews (bounded by `limit`)
@@ -204,7 +254,7 @@ export const getReviewQueue = onCall(
           });
         }
 
-        return { reviews, counts, nextCursor };
+        return { reviews, counts, nextCursor, sortOrder };
       })
   )
 );
