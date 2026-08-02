@@ -1,0 +1,318 @@
+// Mock all external dependencies before any imports. review_queue listing needs
+// where/orderBy/limit/startAfter chaining plus a batched getAll() for loans —
+// the shared __mocks__/firebase-admin/firestore.ts store only supports simple
+// doc get/update/add, so (like requestLoan.test.ts) this file builds its own
+// lightweight in-memory Firestore fake rather than extending the shared one.
+jest.mock('firebase-functions/v2/https', () => ({
+  onCall: jest.fn((_opts: unknown, handler: unknown) => handler),
+  HttpsError: class HttpsError extends Error {
+    code: string;
+    details: unknown;
+    constructor(code: string, message: string, details?: unknown) {
+      super(message);
+      this.code = code;
+      this.details = details;
+      this.name = 'HttpsError';
+    }
+  },
+}));
+
+const mockLogger = { warn: jest.fn(), info: jest.fn(), error: jest.fn() };
+jest.mock('firebase-functions', () => ({ logger: mockLogger }));
+
+const mockCheckRateLimit = jest.fn().mockResolvedValue(true);
+jest.mock('../../utils/rateLimiter', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
+interface FakeDoc {
+  id: string;
+  data: Record<string, unknown>;
+}
+
+let reviewQueueDocs: FakeDoc[] = [];
+let loanDocs: Record<string, Record<string, unknown>> = {};
+
+interface QueryState {
+  wheres: Array<{ field: string; op: string; value: unknown }>;
+  orderField: string | null;
+  orderDir: 'asc' | 'desc';
+  limitN: number | null;
+  startAfterId: string | null;
+}
+
+function createQueryable(state: QueryState): Record<string, unknown> {
+  return {
+    where: (field: string, op: string, value: unknown) =>
+      createQueryable({ ...state, wheres: [...state.wheres, { field, op, value }] }),
+    orderBy: (field: string, dir: 'asc' | 'desc' = 'asc') =>
+      createQueryable({ ...state, orderField: field, orderDir: dir }),
+    limit: (n: number) => createQueryable({ ...state, limitN: n }),
+    startAfter: (docSnap: { id: string }) => createQueryable({ ...state, startAfterId: docSnap.id }),
+    get: async () => {
+      let items = reviewQueueDocs.filter((d) =>
+        state.wheres.every(({ field, op, value }) => {
+          const v = d.data[field];
+          if (op === '==') return v === value;
+          if (op === 'in') return Array.isArray(value) && (value as unknown[]).includes(v);
+          return true;
+        })
+      );
+      if (state.orderField) {
+        const field = state.orderField;
+        items = [...items].sort((a, b) => {
+          const av = a.data[field] as string;
+          const bv = b.data[field] as string;
+          if (av === bv) return 0;
+          const cmp = av < bv ? -1 : 1;
+          return state.orderDir === 'desc' ? -cmp : cmp;
+        });
+      }
+      if (state.startAfterId) {
+        const idx = items.findIndex((d) => d.id === state.startAfterId);
+        items = idx >= 0 ? items.slice(idx + 1) : items;
+      }
+      if (state.limitN != null) items = items.slice(0, state.limitN);
+      return { docs: items.map((d) => ({ id: d.id, data: () => d.data })) };
+    },
+  };
+}
+
+const mockDb = {
+  collection: jest.fn((name: string) => {
+    if (name === 'review_queue') {
+      return {
+        ...createQueryable({ wheres: [], orderField: null, orderDir: 'asc', limitN: null, startAfterId: null }),
+        doc: jest.fn((id: string) => ({
+          id,
+          get: jest.fn(async () => {
+            const found = reviewQueueDocs.find((d) => d.id === id);
+            return found
+              ? { exists: true, id, data: () => found.data }
+              : { exists: false, id, data: () => undefined };
+          }),
+        })),
+      };
+    }
+    if (name === 'loans') {
+      return { doc: jest.fn((id: string) => ({ id })) };
+    }
+    throw new Error(`Unexpected collection: ${name}`);
+  }),
+  getAll: jest.fn(async (...refs: Array<{ id: string }>) =>
+    refs.map((ref) => {
+      const data = loanDocs[ref.id];
+      return data
+        ? { id: ref.id, exists: true, data: () => data }
+        : { id: ref.id, exists: false, data: () => undefined };
+    })
+  ),
+};
+
+jest.mock('firebase-admin/firestore', () => ({
+  getFirestore: () => mockDb,
+}));
+
+import { getReviewQueue } from '../getReviewQueue';
+
+type Handler = (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+const fn = getReviewQueue as unknown as Handler;
+
+const opsAuth = { uid: 'ops-uid', token: { role: 'ops', email: 'ops@test.com' } };
+const employeeAuth = { uid: 'emp-uid', token: { role: 'employee', email: 'emp@test.com' } };
+
+function seedReview(id: string, overrides: Record<string, unknown> = {}) {
+  reviewQueueDocs.push({
+    id,
+    data: {
+      loanId: `loan-${id}`,
+      status: 'pending',
+      queuedAt: '2026-08-01T00:00:00.000Z',
+      applicantName: 'Fallback Name',
+      ...overrides,
+    },
+  });
+}
+
+function seedLoan(id: string, overrides: Record<string, unknown> = {}) {
+  loanDocs[id] = {
+    employeeId: `employee-${id}`,
+    employeeName: 'Juan Perez',
+    employerId: `employer-${id}`,
+    employerName: 'Acme Corp',
+    amount: 5000,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockCheckRateLimit.mockResolvedValue(true);
+  reviewQueueDocs = [];
+  loanDocs = {};
+});
+
+describe('getReviewQueue', () => {
+  describe('authentication & authorization', () => {
+    it('throws unauthenticated when no auth', async () => {
+      await expect(fn({ data: {} })).rejects.toMatchObject({ code: 'unauthenticated' });
+    });
+
+    it('throws permission-denied for employee role', async () => {
+      await expect(fn({ auth: employeeAuth, data: {} })).rejects.toMatchObject({ code: 'permission-denied' });
+    });
+
+    it('allows ops role', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1');
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      expect(Array.isArray(result.reviews)).toBe(true);
+    });
+  });
+
+  describe('pagination', () => {
+    it('defaults to 25 when no limit given', async () => {
+      for (let i = 0; i < 30; i++) {
+        seedReview(`r${i}`, { queuedAt: `2026-08-01T00:${String(i).padStart(2, '0')}:00.000Z` });
+        seedLoan(`loan-r${i}`);
+      }
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      expect((result.reviews as unknown[]).length).toBe(25);
+      expect(result.nextCursor).toBeTruthy();
+    });
+
+    it('clamps an oversized limit to 100', async () => {
+      for (let i = 0; i < 150; i++) {
+        seedReview(`r${i}`, { queuedAt: `2026-08-01T${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00.000Z` });
+        seedLoan(`loan-r${i}`);
+      }
+      const result = (await fn({ auth: opsAuth, data: { limit: 500 } })) as Record<string, unknown>;
+      expect((result.reviews as unknown[]).length).toBe(100);
+    });
+
+    it('returns null nextCursor when fewer results than limit', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1');
+      const result = (await fn({ auth: opsAuth, data: { limit: 25 } })) as Record<string, unknown>;
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it('filters by status when provided', async () => {
+      seedReview('r1', { status: 'pending' });
+      seedReview('r2', { status: 'approved' });
+      seedLoan('loan-r1');
+      seedLoan('loan-r2');
+      const result = (await fn({ auth: opsAuth, data: { status: 'approved' } })) as Record<string, unknown>;
+      const rows = result.reviews as Array<Record<string, unknown>>;
+      expect(rows.length).toBe(1);
+      expect(rows[0].id).toBe('r2');
+    });
+
+    it('defaults to open statuses (pending, pending_review) only', async () => {
+      seedReview('r1', { status: 'pending' });
+      seedReview('r2', { status: 'pending_review' });
+      seedReview('r3', { status: 'approved' });
+      seedLoan('loan-r1');
+      seedLoan('loan-r2');
+      seedLoan('loan-r3');
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const rows = result.reviews as Array<Record<string, unknown>>;
+      expect(rows.map((r) => r.id).sort()).toEqual(['r1', 'r2']);
+    });
+  });
+
+  describe('underwriting breakdown summary', () => {
+    it('returns counted passed/total plus failed condition names when breakdown exists', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1', {
+        underwritingDecision: {
+          decision: 'pending_review',
+          allPass: false,
+          conditions: [
+            { name: 'min_tenure', pass: true, value: 12, required: 6 },
+            { name: 'max_dti', pass: false, value: 0.55, required: 0.4 },
+            { name: 'bureau_score', pass: false, value: 380, required: 500 },
+          ],
+        },
+      });
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+      expect(row.underwritingDecision).toMatchObject({
+        decision: 'pending_review',
+        allPass: false,
+        conditions: { passed: 1, total: 3 },
+        failedConditions: ['max_dti', 'bureau_score'],
+      });
+    });
+
+    it('returns null and does not throw when loan has no underwritingDecision', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1'); // no underwritingDecision field — pre-#393 loan
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+      expect(row.underwritingDecision).toBeNull();
+    });
+
+    it('does not throw when the loan doc is missing entirely', async () => {
+      seedReview('r1'); // loanDocs has no entry for loan-r1
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+      expect(row.underwritingDecision).toBeNull();
+      expect(row.amount).toBeNull();
+    });
+  });
+
+  describe('field projection (no sensitive data leakage)', () => {
+    it('never includes apiKeyHash, rfc, or bankClabe from the loan doc', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1', {
+        apiKeyHash: 'super-secret-hash',
+        rfc: 'PEPJ800101ABC',
+        bankClabe: '012345678901234567',
+      });
+      const result = await fn({ auth: opsAuth, data: {} });
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('super-secret-hash');
+      expect(serialized).not.toContain('PEPJ800101ABC');
+      expect(serialized).not.toContain('012345678901234567');
+    });
+
+    it('returns only the documented summary fields per row', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1');
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+      expect(Object.keys(row).sort()).toEqual(
+        [
+          'id',
+          'loanId',
+          'employeeId',
+          'employeeName',
+          'employerId',
+          'employerName',
+          'amount',
+          'requestedAt',
+          'status',
+          'underwritingDecision',
+        ].sort()
+      );
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('throws resource-exhausted when rate limited', async () => {
+      mockCheckRateLimit.mockResolvedValue(false);
+      seedReview('r1');
+      seedLoan('loan-r1');
+      await expect(fn({ auth: opsAuth, data: {} })).rejects.toMatchObject({ code: 'resource-exhausted' });
+    });
+
+    it('fails soft (does not throw) when the rate limiter itself errors', async () => {
+      mockCheckRateLimit.mockRejectedValue(new Error('redis down'));
+      seedReview('r1');
+      seedLoan('loan-r1');
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      expect(Array.isArray(result.reviews)).toBe(true);
+    });
+  });
+});
