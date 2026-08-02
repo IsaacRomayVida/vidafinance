@@ -14,6 +14,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 load_dotenv()
+from internal_auth import load_internal_secret, secret_matches
 from scoring import employer_score, employee_score, fraud_score
 from services.firestore_client import FirestoreClient
 from monitoring.alerts import alert_5xx, alert_redis_lost, alert_model_fallback, alert_rate_limit
@@ -24,7 +25,10 @@ logger = logging.getLogger("ml-service")
 rdb = Redis.from_url(
     os.environ.get("REDIS_URL", "redis://localhost:6379"), decode_responses=True
 )
-SEC = os.environ.get("INTERNAL_SECRET", "")
+# Fail closed: raises at import scope, so uvicorn never gets an app object when
+# INTERNAL_SECRET is unset. See internal_auth.py for why an empty secret is an
+# open door rather than a locked one.
+SEC = load_internal_secret()
 AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
 
@@ -155,7 +159,7 @@ async def _check_redis_connection():
 
 
 def auth(s):
-    if s != SEC:
+    if not secret_matches(SEC, s):
         raise HTTPException(401, "Unauthorized")
 
 
