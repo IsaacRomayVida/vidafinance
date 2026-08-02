@@ -41,6 +41,7 @@ jest.mock("ioredis", () => {
   return jest.fn().mockImplementation(() => ({
     ping: jest.fn().mockResolvedValue("PONG"),
     disconnect: jest.fn(),
+    on: jest.fn(),
   }));
 });
 
