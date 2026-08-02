@@ -343,8 +343,8 @@
           "order": "ASCENDING"
         }
       ]
-    }
-    ,{
+    },
+    {
       "collectionGroup": "metamap_shadow_log",
       "queryScope": "COLLECTION",
       "fields": [
@@ -357,8 +357,7 @@
           "order": "DESCENDING"
         }
       ]
-    }
-    ,
+    },
     {
       "collectionGroup": "review_queue",
       "queryScope": "COLLECTION",
@@ -370,6 +369,20 @@
         {
           "fieldPath": "queuedAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "review_queue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "queuedAt",
+          "order": "ASCENDING"
         }
       ]
     }
