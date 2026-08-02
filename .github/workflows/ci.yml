@@ -62,6 +62,72 @@ jobs:
       - name: Unit tests (underwriting-service) — 139/139, hard gate
         run: cd services/underwriting-service && npm test
 
+  # Addresses the incident behind #425: softcredito-adapter and ml-service had
+  # real test suites but no CI job ever ran them, which is how
+  # /internal/disburse shipped to production publicly callable with no auth
+  # header — the regression test for that exact bug (internalAuth.test.js)
+  # existed and would have caught it, but nothing executed it before merge.
+  softcredito-adapter:
+    name: "Softcredito Adapter Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: services/softcredito-adapter/package-lock.json
+
+      - name: Install softcredito-adapter dependencies
+        run: cd services/softcredito-adapter && npm ci
+
+      - name: Unit tests (softcredito-adapter) — 44/44 (internalAuth, bureauFallback, scToken), hard gate
+        run: cd services/softcredito-adapter && npm test
+
+  # See the softcredito-adapter job above for why this exists (#425).
+  ml-service:
+    name: "ML Service Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: services/ml-service/requirements.txt
+
+      - name: Install ml-service dependencies
+        run: cd services/ml-service && pip install -r requirements.txt pytest pytest-asyncio
+
+      # NOT a green gate: measured 154/168 passing, 14 failing, 1 skipped
+      # (skip is test_underwriting_worker.py's live-Redis/Firebase
+      # integration test, intentionally gated behind INTEGRATION_TEST=1).
+      # The 14 failures in test_underwriting_worker.py are pre-existing bugs,
+      # not CI flakiness or environment issues:
+      #   - test_model_loads / test_model_predict_good_borrower /
+      #     test_model_predict_risky_borrower: models/underwriting_v1.joblib
+      #     was pickled under numpy>=2.0 (module path "numpy._core"), but
+      #     requirements.txt pins numpy==1.26.0, which only has
+      #     "numpy.core" — loading it raises ModuleNotFoundError.
+      #   - the other 11 (test_decision_engine_*, test_good_loan_approved,
+      #     test_low_tenure_hard_reject, test_bureau_enrichment_failure_*,
+      #     test_notification_*, test_stage_data_persisted_in_firestore):
+      #     they patch workers.underwriting_worker.call_decision_engine,
+      #     which does not exist anywhere in workers/underwriting_worker.py
+      #     — the decision-engine integration these tests cover was never
+      #     built.
+      # This is intentionally left red rather than excluded: unlike
+      # underwriting-service's testPathIgnorePatterns exclusions (features
+      # never built, scoped and documented in jest.config.js), these were
+      # not judged safe to quietly exclude. A red gate that tells the truth
+      # is the point — do not add continue-on-error or exclude these tests
+      # to force green; fix the numpy pin and implement call_decision_engine
+      # instead.
+      - name: Unit tests (ml-service) — 154/168 passing, 14 known pre-existing failures, hard gate
+        run: cd services/ml-service && python -m pytest
+
   frontend:
     name: Frontend Lint, Typecheck & Build
     runs-on: ubuntu-latest
