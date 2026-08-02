@@ -821,6 +821,20 @@ export const getEmployerDashboard = onCall(
 
 // ── submitReviewDecision — ops/admin Stage 5 review action ───────────────────
 
+// Statuses a review can still be decided from.
+//   pending / pending_review — never decided yet
+//   info_requested           — ops asked the employee for a document; the answer has to be
+//                              able to land, so this must stay decidable. Treating it as
+//                              terminal stranded the loan in `under_review`, which
+//                              requestLoan counts as an occupied slot — one click locked
+//                              the employee out of the product permanently (#407).
+const DECIDABLE_REVIEW_STATUSES = ['pending', 'pending_review', 'info_requested'];
+
+// `escalated` is decidable too, but only from a role above the ops user who escalated it.
+// That is what makes escalation mean something without building a separate supervisor
+// queue — and it keeps the review resolvable instead of a dead end (#407).
+const ESCALATED_DECIDER_ROLES = ['admin', 'super_admin'];
+
 interface SubmitReviewDecisionData {
   reviewId: string;
   decision: 'approved' | 'rejected' | 'request_info' | 'escalate';
@@ -853,8 +867,18 @@ export const submitReviewDecision = onCall(
         if (!reviewSnap.exists) throw new HttpsError('not-found', 'Review not found');
         const review = reviewSnap.data()!;
 
-        if (!['pending', 'pending_review'].includes(review['status'] as string))
-          throw new HttpsError('failed-precondition', 'Review is not in pending status');
+        const reviewStatus = review['status'] as string;
+        if (reviewStatus === 'escalated') {
+          if (!ESCALATED_DECIDER_ROLES.includes(auth.role))
+            throw new HttpsError(
+              'permission-denied',
+              'Esta revisión fue escalada y solo un administrador puede resolverla'
+            );
+          if (decision === 'escalate')
+            throw new HttpsError('failed-precondition', 'Review is already escalated');
+        } else if (!DECIDABLE_REVIEW_STATUSES.includes(reviewStatus)) {
+          throw new HttpsError('failed-precondition', 'Review has already been resolved');
+        }
 
         const now = FieldValue.serverTimestamp();
 
@@ -871,6 +895,7 @@ export const submitReviewDecision = onCall(
           reviewedAt: now,
           reviewNotes: notes || null,
           ...(decision === 'escalate' ? { escalatedAt: now, escalatedBy: auth.uid } : {}),
+          ...(decision === 'request_info' ? { infoRequestedAt: now, infoRequestedBy: auth.uid } : {}),
         });
 
         // If the review is tied to a loan, update the loan status (only for approve/reject)
