@@ -217,6 +217,51 @@ jobs:
       - name: Rules tests (Firestore emulator)
         run: firebase emulators:exec --only firestore --project demo-vida-finance-test "npm run test:rules"
 
+  loan-flow-e2e:
+    name: "Loan Flow E2E (emulator, HARD gate)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install root deps (jest, ts-jest)
+        run: npm ci
+
+      # tests/e2e/jest.emulator.config.js resolves firebase-admin,
+      # firebase-functions and friends out of functions/node_modules, because
+      # the suite imports functions/src/index.ts directly. Without this install
+      # the suite cannot resolve its own jest.mock() targets.
+      - name: Install functions deps (resolved by the e2e jest config)
+        run: cd functions && npm ci
+
+      # Same JDK-21 constraint as the rules job above — the Firestore emulator
+      # is a Java process and firebase-tools dropped pre-21 support.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      # Added with #427. This is the only suite that proves a borrower can
+      # actually get a loan: it runs the deployed requestLoan/getLoanConfig
+      # handlers against a REAL Firestore emulator, stubbing only the Cloud
+      # Functions decorator layer. Two P0s shipped through this flow with
+      # nothing to catch them — every request throwing "Plazo inválido"
+      # (P0-1), and a borrower quoted 8% while charged 30% (P0-2, ADR-002).
+      # Hard gate from the start: it was 6/6 green before merge, so unlike
+      # the ml-service exclusions there is no known-failing set to carve out.
+      # firebase.e2e.json pins the emulator to 8098 to avoid colliding with
+      # firebase.json's 8080.
+      - name: Loan flow E2E (Firestore emulator)
+        run: firebase emulators:exec --only firestore --config firebase.e2e.json --project demo-vida-finance-test "npm run test:e2e:loan-flow"
+
   # ─────────────────────────────────────────────────────────────────────
   # Addresses #376: deploy.yml's deploy-firebase job carries
   # `if: github.event_name == 'push'`, so it never runs on PR CI — a PR
