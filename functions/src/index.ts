@@ -402,6 +402,22 @@ export const requestLoan = onCall(
         }
         const holdCredit = initialStatus !== 'rejected';
 
+        // Persist the Stage 3 auto-approve condition breakdown so ops can see WHY
+        // a loan was approved/denied, not just the coarse decision. Fail-soft: if
+        // underwriting is down or the pipeline never reached Stage 3 (e.g. an
+        // earlier-stage rejection), omit the field entirely — never block loan
+        // creation over missing explainability data.
+        const uwConditions = uwResult?.['conditions'];
+        if (Array.isArray(uwConditions) && uwConditions.length > 0) {
+          decisionExtra['underwritingDecision'] = {
+            decision: uwDecision,
+            reason: (uwResult?.['reason'] as string) ?? null,
+            allPass: (uwResult?.['allPass'] as boolean) ?? null,
+            conditions: uwConditions,
+            evaluatedAt: FieldValue.serverTimestamp(),
+          };
+        }
+
         await db.runTransaction(async (tx) => {
           if (holdCredit) tx.update(empRef, { availableCredit: FieldValue.increment(-amount) });
           tx.set(db.collection('loans').doc(loanId), {

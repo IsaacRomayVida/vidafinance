@@ -165,6 +165,8 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     jest.clearAllMocks();
     mockDb = buildMockDb();
     mockCheckRateLimit.mockResolvedValue(true);
+    delete process.env['UNDERWRITING_SERVICE_URL'];
+    delete process.env['INTERNAL_SECRET'];
   });
 
   it('accepts the real client payload shape and does not reject with "Plazo inválido"', async () => {
@@ -215,5 +217,96 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 
     expect(config.feeRate).toBe(0.3);
     expect(config.allowedTermDays).toEqual([30]);
+  });
+
+  describe('underwriting condition breakdown (E5c)', () => {
+    const sampleConditions = [
+      { name: 'age_range', pass: true, value: 34, required: '18-65' },
+      { name: 'bureau_score', pass: true, value: 650, required: '> 600' },
+    ];
+
+    async function mockUnderwritingResponse(body: Record<string, unknown> | null) {
+      process.env['UNDERWRITING_SERVICE_URL'] = 'https://uw.internal';
+      process.env['INTERNAL_SECRET'] = 'test-secret';
+      const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
+      if (body === null) {
+        fetchModule.mockRejectedValue(new Error('UW service unavailable'));
+      } else {
+        fetchModule.mockResolvedValue({ ok: true, json: async () => body });
+      }
+    }
+
+    function getLoanWrite() {
+      const loanWrite = mockDb._transactionCalls.find((c) => c.op === 'set') as
+        | { data: Record<string, unknown> }
+        | undefined;
+      expect(loanWrite).toBeDefined();
+      return loanWrite!.data;
+    }
+
+    it('persists the condition breakdown verbatim when underwriting approves', async () => {
+      await mockUnderwritingResponse({
+        decision: 'approved',
+        reason: null,
+        correlationId: 'uw-123',
+        lastStage: 'stage3',
+        allPass: true,
+        conditions: sampleConditions,
+      });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const loanData = getLoanWrite();
+      expect(loanData['status']).toBe('approved');
+      expect(loanData['underwritingDecision']).toMatchObject({
+        decision: 'approved',
+        reason: null,
+        allPass: true,
+        conditions: sampleConditions,
+      });
+    });
+
+    it('creates the loan with no breakdown, and does not throw, when underwriting is unreachable', async () => {
+      await mockUnderwritingResponse(null);
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+      const result = await fn({ auth, data: realClientPayload });
+
+      expect(result.loanId).toBeTruthy();
+      const loanData = getLoanWrite();
+      expect(loanData['status']).toBe('pending');
+      expect(loanData['underwritingDecision']).toBeUndefined();
+    });
+
+    it('persists the breakdown alongside the denial reason when underwriting rejects', async () => {
+      await mockUnderwritingResponse({
+        decision: 'rejected',
+        reason: 'FULL_KYC_REQUIRED',
+        correlationId: 'uw-456',
+        lastStage: 'stage4',
+        allPass: false,
+        conditions: [
+          { name: 'bureau_score', pass: false, value: 550, required: '> 600' },
+          ...sampleConditions,
+        ],
+      });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const loanData = getLoanWrite();
+      expect(loanData['status']).toBe('rejected');
+      expect(loanData['denialReason']).toBe('FULL_KYC_REQUIRED');
+      expect(loanData['underwritingDecision']).toMatchObject({
+        decision: 'rejected',
+        reason: 'FULL_KYC_REQUIRED',
+        allPass: false,
+      });
+      expect((loanData['underwritingDecision'] as Record<string, unknown>)['conditions']).toHaveLength(3);
+    });
   });
 });
