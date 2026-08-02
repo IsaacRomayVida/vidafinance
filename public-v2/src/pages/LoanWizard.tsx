@@ -134,10 +134,24 @@ function PriceValue({
 }
 
 /**
- * The single red element on the screen when pricing cannot be read. It carries
- * the whole explanation so that the value slots can stay neutral, and it says
- * plainly that nothing was charged and nothing about the borrower's application
- * changed — this is our fault, not a decision about them.
+ * The single emphasised element on the screen when pricing cannot be read. It
+ * carries the whole explanation so that the value slots can stay neutral, and
+ * it says plainly that nothing was charged and nothing about the borrower's
+ * application changed — this is our fault, not a decision about them.
+ *
+ * It deliberately uses NO semantic status pair (#422). `--danger-bg`/
+ * `--danger-text` is what LoanStatusCard renders `denied` in, and
+ * `--warning-bg`/`--warning-text` is what it renders `pending_review` and
+ * `escalated` in — both borrower-facing, both reachable in the same session as
+ * this wizard. A banner whose entire purpose is to stop our outage from reading
+ * as a verdict cannot be painted in a verdict's colours: the red pair reads as
+ * "I was rejected", and the amber pair reads as "my application is under
+ * review", which is worse here because it is plausible at this exact moment.
+ *
+ * So the emphasis comes from WEIGHT — a solid border and more air on a neutral
+ * surface — with `--warning` used only as a border accent. It is not used for
+ * text: #b08420 on white is 3.4:1, which clears the 3:1 bar for a non-text UI
+ * boundary but fails AA for body copy. Text stays on --t1/--t2.
  */
 function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
@@ -146,10 +160,10 @@ function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
       role="alert"
       data-testid="pricing-error-banner"
       style={{
-        background: 'var(--danger-bg)',
-        border: '1px solid var(--danger)',
+        background: 'var(--bg)',
+        border: '1.5px solid var(--warning)',
         borderRadius: 12,
-        padding: '14px 16px',
+        padding: '18px 20px',
         marginBottom: 16,
       }}
     >
@@ -157,8 +171,8 @@ function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
         style={{
           fontSize: 13.5,
           fontWeight: 700,
-          color: 'var(--danger-text)',
-          marginBottom: 4,
+          color: 'var(--t1)',
+          marginBottom: 6,
         }}
       >
         {t('wiz_price_error_title')}
@@ -166,8 +180,8 @@ function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
       <p
         style={{
           fontSize: 12.5,
-          color: 'var(--danger-text)',
-          margin: '0 0 12px',
+          color: 'var(--t2)',
+          margin: '0 0 14px',
           lineHeight: 1.5,
         }}
       >
@@ -179,9 +193,9 @@ function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
         style={{
           padding: '8px 16px',
           borderRadius: 10,
-          border: '1.5px solid var(--danger)',
+          border: '1.5px solid var(--warning)',
           background: 'transparent',
-          color: 'var(--danger-text)',
+          color: 'var(--t1)',
           fontSize: 13,
           fontWeight: 600,
           fontFamily: 'var(--db)',

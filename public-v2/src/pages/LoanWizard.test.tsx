@@ -155,6 +155,39 @@ describe('LoanWizard — pricing unavailable', () => {
     expect(screen.queryAllByText(/paso 3|step 3/i)).toHaveLength(0);
   });
 
+  it('is not painted in any verdict-about-the-borrower colours', async () => {
+    // #422. LoanStatusCard renders `denied` in the --danger-bg/--danger-text
+    // pair and `pending_review`/`escalated` in the --warning-bg/--warning-text
+    // pair, both on surfaces this borrower can see in the same session. A
+    // banner that exists to stop our outage from reading as a verdict must not
+    // borrow either pair: red reads as "I was rejected", amber reads as "my
+    // application is under review" — plausible at exactly this moment, and so
+    // the more dangerous of the two.
+    //
+    // The assertion is on the pairs, not on a specific chosen colour, so a
+    // future restyle stays free as long as it does not reach for a status pair
+    // again. This has now regressed twice through two different tokens.
+    getLoanConfigMock.mockRejectedValue(new Error('unavailable'));
+
+    render(<LoanWizard />);
+    await goToTermStep();
+    const banner = await screen.findByTestId('pricing-error-banner');
+
+    const markup = banner.outerHTML;
+    for (const statusPairToken of [
+      '--danger-bg',
+      '--danger-text',
+      '--warning-bg',
+      '--warning-text',
+      '--success-bg',
+      '--success-text',
+      '--info-bg',
+      '--info-text',
+    ]) {
+      expect(markup).not.toContain(statusPairToken);
+    }
+  });
+
   it('says plainly that nothing was charged, and avoids rejection language', async () => {
     getLoanConfigMock.mockRejectedValue(new Error('unavailable'));
 
