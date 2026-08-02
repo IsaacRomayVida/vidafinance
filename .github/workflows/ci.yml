@@ -126,6 +126,100 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/vida_registry_test
 
+  # ─────────────────────────────────────────────────────────────────────
+  # Addresses #376: deploy.yml's deploy-firebase job carries
+  # `if: github.event_name == 'push'`, so it never runs on PR CI — a PR
+  # can go fully green and still be undeployable. This job runs on every
+  # push AND pull_request and is credential-free (no Firebase auth), so
+  # it is safe to run pre-merge without the staging-IAM decision that
+  # Albert's comment on #376 explicitly parked pending Isaac's ruling.
+  #
+  # What it catches: functions that fail to compile, and drift between
+  # what functions/src/index.ts exports and the FUNCTIONS list deploy.yml
+  # deploys one-by-one (a function silently missing from one or the other
+  # currently breaks or no-ops the deploy, undetected until after merge).
+  #
+  # RESIDUAL RISK: this does NOT catch trigger-type changes (HTTPS ->
+  # event-trigger etc.) — the actual root cause of the onContactCreated
+  # failure that motivated #376. Detecting that requires diffing against
+  # the live deployed function via the Firebase API, which needs
+  # staging-scoped CI credentials. That is the "fuller option" in #376
+  # and is explicitly parked ("no CI changes until ratified" — Albert,
+  # 2026-08-02) pending an IAM decision from Isaac.
+  # ─────────────────────────────────────────────────────────────────────
+  deploy-readiness:
+    name: "Deploy Readiness Check (build + export drift, no credentials) — #376"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install functions dependencies
+        run: cd functions && npm ci
+
+      - name: Build Cloud Functions (the exact artifact deploy.yml ships)
+        run: cd functions && npm run build
+
+      - name: Check functions/src/index.ts exports match deploy.yml's FUNCTIONS list
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const indexSrc = fs.readFileSync('functions/src/index.ts', 'utf8');
+          const deployYml = fs.readFileSync('.github/workflows/deploy.yml', 'utf8');
+
+          const exported = new Set();
+          for (const m of indexSrc.matchAll(/export\s+(?:const|function|async function)\s+([A-Za-z0-9_]+)/g)) {
+            exported.add(m[1]);
+          }
+          for (const m of indexSrc.matchAll(/export\s*\{([^}]+)\}\s*from/g)) {
+            for (let part of m[1].split(',')) {
+              part = part.trim();
+              if (!part) continue;
+              if (part.includes(' as ')) part = part.split(' as ')[1].trim();
+              exported.add(part);
+            }
+          }
+
+          const listMatch = deployYml.match(/FUNCTIONS="\n([\s\S]*?)\n\s*"/);
+          if (!listMatch) {
+            console.error('Could not locate the FUNCTIONS list in deploy.yml — update this check if that format changed.');
+            process.exit(1);
+          }
+          const deployed = new Set(listMatch[1].split(/\s+/).filter(Boolean));
+
+          // Dev/test-only exports that are intentionally never deployed.
+          const KNOWN_UNDEPLOYED = new Set(['autoVerifyTestAccounts']);
+
+          const missingFromDeploy = [...exported].filter((f) => !deployed.has(f) && !KNOWN_UNDEPLOYED.has(f));
+          const missingFromExports = [...deployed].filter((f) => !exported.has(f));
+
+          if (missingFromDeploy.length || missingFromExports.length) {
+            if (missingFromDeploy.length) {
+              console.error(
+                'Exported from functions/src/index.ts but NOT in deploy.yml FUNCTIONS list ' +
+                '(will silently never deploy):', missingFromDeploy.join(', ')
+              );
+            }
+            if (missingFromExports.length) {
+              console.error(
+                'Listed in deploy.yml FUNCTIONS but NOT exported from functions/src/index.ts ' +
+                '(will fail deploy-firebase on main):', missingFromExports.join(', ')
+              );
+            }
+            process.exit(1);
+          }
+          console.log(
+            `OK: ${deployed.size} deployed functions match index.ts exports ` +
+            `(${KNOWN_UNDEPLOYED.size} dev-only export(s) excluded).`
+          );
+          NODE
+
   health-check:
     name: Verify production endpoints
     runs-on: ubuntu-latest
