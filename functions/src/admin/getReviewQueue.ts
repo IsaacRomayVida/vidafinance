@@ -6,17 +6,26 @@ import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { checkRateLimit } from '../utils/rateLimiter';
 
-// review_queue docs use these two statuses while awaiting a decision (see
-// submitReviewDecision's precondition check, index.ts) — everything else
-// (approved/rejected/info_requested/escalated) is a terminal state.
-const OPEN_STATUSES = ['pending', 'pending_review'];
+// Every status a review can sit in while it still needs a human — i.e. every status
+// submitReviewDecision will still accept a decision for (DECIDABLE_REVIEW_STATUSES
+// plus `escalated`, which admin/super_admin resolve; see index.ts).
+//
+// `info_requested` and `escalated` are NOT terminal. The comment that used to say so
+// here predates #407: back then request_info/escalate really did make a review
+// undecidable forever. #408 gave both a return path, so leaving them out of the
+// default list rebuilt the same dead end one layer up — ops asks for a payslip, the
+// employee sends it, and the review never comes back to the list ops actually works.
+//
+// Keep this in lockstep with COUNTED_STATUSES: the header count and the default list
+// are two statements about the same set, and they must not disagree.
+const OPEN_STATUSES = ['pending', 'pending_review', 'info_requested', 'escalated'];
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 
 // Statuses the console shows as filter pills. Counted with server-side aggregation
 // (billed at ~1/1000 of reading the documents), so the header can answer "how many
 // are waiting on a human" without any client paging over the collection.
-const COUNTED_STATUSES = ['pending', 'pending_review', 'info_requested', 'escalated'];
+const COUNTED_STATUSES = [...OPEN_STATUSES];
 
 interface GetReviewQueueData {
   status?: string;
