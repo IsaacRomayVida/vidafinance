@@ -8,7 +8,12 @@ on:
 
 jobs:
   test:
-    name: "Functions: Lint, Typecheck & Test (HARD gate)"
+    # NOTE: keep this name exactly "Lint, Typecheck & Test" — it's a
+    # required status check context on main's branch protection
+    # (contexts must match a job's `name:` verbatim). Renaming it here
+    # without also updating branch protection would leave that required
+    # check permanently unsatisfied and block all future merges.
+    name: Lint, Typecheck & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
