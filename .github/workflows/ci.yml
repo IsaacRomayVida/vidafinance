@@ -40,7 +40,7 @@ jobs:
         run: cd functions && npm run test:ci
 
   underwriting-service:
-    name: "Underwriting Service Tests (SOFT gate — see TODO)"
+    name: "Underwriting Service Tests"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -54,13 +54,12 @@ jobs:
       - name: Install underwriting-service dependencies
         run: cd services/underwriting-service && npm ci
 
-      # TODO(fix/uw-test-suite): flip this to a hard gate (remove
-      # continue-on-error) once branch fix/uw-test-suite merges. As of
-      # 2026-08-02 this suite is heavily red, so failing the build on it
-      # would block every unrelated PR — but it must still run on every
-      # PR so the red count is visible and doesn't silently regress further.
-      - name: Unit tests (underwriting-service) — currently red, non-blocking
-        continue-on-error: true
+      # #386 repaired this suite (50 -> 122 passing) and this is now a hard
+      # gate. Two suites (employer-b weighted-scoring rewrite and the
+      # stage3-autoapprove rewrite) test features that were never built and
+      # are excluded via testPathIgnorePatterns in jest.config.js, not here
+      # — see that file for exactly what each is waiting on.
+      - name: Unit tests (underwriting-service) — 121/121, hard gate
         run: cd services/underwriting-service && npm test
 
   frontend:
