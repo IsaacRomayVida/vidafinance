@@ -421,17 +421,37 @@ jobs:
           # and the loan wizard fail-closed for every borrower against a callable
           # that had never been deployed.
 
-          # 1) Functions ONE AT A TIME. Changing shared env (e.g. a secret)
-          #    forces a new Cloud Run revision for EVERY gen2 function; each new
-          #    revision holds ~1 CPU during its health-check. The project's
-          #    "total allowable CPU per project per region" quota is low and
-          #    cannot be raised, so we deploy a single function at a time and let
-          #    its instance scale back to zero before the next one. Retries with
-          #    backoff absorb any leftover warm instances still occupying CPU.
-          #    Functions are ordered service-callers FIRST so the INTERNAL_SECRET
-          #    auth path (requestLoan / onLoanApproved / generatePaymentLink …) is
-          #    fixed early even if later, non-critical functions need a re-run.
-          #    KEEP IN SYNC with the exported functions in functions/src/index.ts.
+          # 1) Functions deployed in BATCHES via a single
+          #    `firebase deploy --only functions:a,b,c` call per batch, instead
+          #    of one `firebase deploy` invocation per function.
+          #
+          #    Deploying one function at a time (the previous design) was a
+          #    mitigation for a real constraint that still applies: changing
+          #    shared env (e.g. a secret) forces a new Cloud Run revision for
+          #    EVERY gen2 function, and each new revision holds ~1 CPU during
+          #    its health-check, against a low, non-raisable per-project
+          #    per-region CPU quota. But one-at-a-time also re-packages and
+          #    re-uploads the ENTIRE functions source bundle once per function —
+          #    ~40x redundant work — which is most of why a deploy took
+          #    40-70 minutes against the 90-minute job timeout.
+          #
+          #    BATCH_SIZE is deliberately conservative and lives in ONE place so
+          #    it's trivially tunable: 6 concurrent functions per `firebase
+          #    deploy` call cuts ~40 invocations (and ~40 redundant
+          #    package/upload cycles) down to ~7, while still keeping the number
+          #    of simultaneous new revisions health-checking at once — and
+          #    therefore the CPU held concurrently — to a small fraction of the
+          #    full function set, not all ~40 at once. If CPU-quota errors
+          #    reappear, lower this number; do NOT jump to deploying all ~40 in
+          #    one call.
+          BATCH_SIZE=6
+
+          # Functions are ordered service-callers FIRST so the INTERNAL_SECRET
+          # auth path (requestLoan / onLoanApproved / generatePaymentLink …) is
+          # fixed early even if later, non-critical functions need a re-run.
+          # This ordering is preserved batch-by-batch and inside the
+          # per-function fallback below. KEEP IN SYNC with the exported
+          # functions in functions/src/index.ts.
           FUNCTIONS="
             requestLoan getLoanConfig onLoanApproved generatePaymentLink markLoanDisbursed
             metamapWebhook getSystemHealth systemHealthCheck queueHealthCheck
@@ -450,15 +470,20 @@ jobs:
 
           # Account-level failures (billing disabled, write access denied, API
           # turned off) are deterministic: they will fail identically on every
-          # function and every attempt. Retrying them 4x across ~40 functions
-          # costs ~6h and buries the real cause under 256 identical errors.
-          # Detect them and abort the whole deploy at the first occurrence.
+          # function and every attempt. Retrying them 4x across every batch
+          # costs hours and buries the real cause under repeated identical
+          # errors. Detect them and abort the whole deploy at the first
+          # occurrence.
           FATAL=0
           is_fatal() {
             printf '%s' "$1" | grep -qiE \
               "please check billing account|billing account .*(disabled|closed|not (found|active))|Write access to project .* was denied|billing (is )?(not enabled|disabled)|SERVICE_DISABLED|PERMISSION_DENIED.*(billing|serviceusage)"
           }
 
+          # Deploys a single function with a 4-attempt retry + backoff. This is
+          # the fallback path used below when a whole batch fails: falling back
+          # to one-at-a-time for just that batch means one poisoned function
+          # cannot take down the other, healthy functions batched alongside it.
           deploy_one() {
             local fn="$1" attempt out rc
             for attempt in 1 2 3 4; do
@@ -473,7 +498,7 @@ jobs:
                 return 0
               fi
               if is_fatal "$out"; then
-                echo "::error::${fn}: non-retryable account-level failure (billing or project permissions), not a transient CPU-quota backoff. Aborting the deploy now instead of retrying ~40 functions into the 6h job limit."
+                echo "::error::${fn}: non-retryable account-level failure (billing or project permissions), not a transient CPU-quota backoff. Aborting the deploy now."
                 FATAL=1
                 return 1
               fi
@@ -483,23 +508,100 @@ jobs:
             return 1
           }
 
-          total=0; for fn in $FUNCTIONS; do total=$((total+1)); done
-          idx=0; ok=0; FAILED=""
-          for fn in $FUNCTIONS; do
-            idx=$((idx+1))
-            echo "=== [${idx}/${total}] ${fn} ==="
-            if deploy_one "$fn"; then
-              ok=$((ok+1))
+          # Deploys a batch with the same 4-attempt retry + backoff the old
+          # single-function loop used. Takes an ALREADY-BUILT --only selector
+          # (see the construction below — every function carries its own
+          # `functions:` prefix; this is load-bearing, not stylistic).
+          # Returns 0 if the WHOLE batch deployed in one shot; 1 otherwise —
+          # either FATAL=1 was set (non-retryable), or all 4 attempts were
+          # exhausted and the caller should fall back to deploy_one per
+          # function.
+          deploy_batch() {
+            local only_arg="$1" label="$2" attempt out rc
+            for attempt in 1 2 3 4; do
+              echo "::group::Deploy batch [${label}] (attempt ${attempt}/4): ${only_arg}"
+              set +e
+              out="$(firebase deploy --only "${only_arg}" --project "$PROJECT" --non-interactive --force 2>&1)"
+              rc=$?
+              set -e
+              printf '%s\n' "$out"
+              echo "::endgroup::"
+              if [ "$rc" -eq 0 ]; then
+                return 0
+              fi
+              if is_fatal "$out"; then
+                echo "::error::Batch [${label}]: non-retryable account-level failure (billing or project permissions), not a transient CPU-quota backoff. Aborting the deploy now instead of retrying every batch into the 6h job limit."
+                FATAL=1
+                return 1
+              fi
+              echo "  batch [${label}] failed (attempt ${attempt}); backing off so CPU can free up…"
+              sleep $((attempt * 60))
+            done
+            echo "  batch [${label}] failed after 4 attempts; falling back to deploying its functions individually so one poisoned function does not take down the rest of the batch."
+            return 1
+          }
+
+          FUNCTIONS_ARR=($FUNCTIONS)
+          total=${#FUNCTIONS_ARR[@]}
+          ok=0; FAILED=""
+          i=0; batch_num=0; num_batches=$(( (total + BATCH_SIZE - 1) / BATCH_SIZE ))
+          while [ "$i" -lt "$total" ]; do
+            batch_num=$((batch_num+1))
+            batch=("${FUNCTIONS_ARR[@]:$i:$BATCH_SIZE}")
+
+            # EVERY function needs its own `functions:` prefix:
+            #   --only functions:a,functions:b,functions:c
+            #
+            # NOT `--only functions:a,b,c`. That form looks correct and is
+            # silently, dangerously wrong. firebase-tools splits --only on
+            # commas and keeps only the selectors that literally start with
+            # "functions:" (deploy/functions/functionsDeployHelper.js,
+            # getEndpointFilters). So `functions:a,b,c` yields a filter for `a`
+            # ALONE; `b` and `c` are dropped with no warning. filterTargets
+            # still resolves the "functions" target from the first selector, so
+            # the CLI exits 0 and the batch is counted as fully deployed.
+            #
+            # The failure mode that produces is the worst one this workflow has:
+            # 1 of every 6 functions actually deploys, the run reports
+            # "Deployed 40/40 functions", and hosting — which is gated on that
+            # count — releases the new frontend against 33 stale functions. A
+            # green check on an incoherent production state, which is precisely
+            # what the ordering in this file exists to prevent.
+            only_arg=""
+            for fn in "${batch[@]}"; do
+              only_arg="${only_arg:+${only_arg},}functions:${fn}"
+            done
+
+            echo "=== batch ${batch_num}/${num_batches} (functions $((i+1))-$((i+${#batch[@]}))/${total}): ${batch[*]} ==="
+            if deploy_batch "$only_arg" "${batch_num}/${num_batches}"; then
+              ok=$((ok+${#batch[@]}))
+            elif [ "$FATAL" = "1" ]; then
+              echo "::error::Aborting after a non-retryable failure in batch ${batch_num}. Deployed ${ok}/${total} before the abort; hosting will NOT be released."
+              break
             else
-              FAILED="${FAILED} ${fn}"
+              fb_idx=0; fb_total=${#batch[@]}
+              for fn in "${batch[@]}"; do
+                fb_idx=$((fb_idx+1))
+                if deploy_one "$fn"; then
+                  ok=$((ok+1))
+                else
+                  FAILED="${FAILED} ${fn}"
+                  if [ "$FATAL" = "1" ]; then
+                    break
+                  fi
+                  echo "::warning::${fn} did not deploy after retries"
+                fi
+                # brief settle so the new revision can scale to zero before the next
+                if [ "$fb_idx" -lt "$fb_total" ]; then sleep 30; fi
+              done
               if [ "$FATAL" = "1" ]; then
-                echo "::error::Aborting after a non-retryable failure on ${fn}. Deployed ${ok}/${total} before the abort; hosting will NOT be released."
+                echo "::error::Aborting after a non-retryable failure during individual fallback in batch ${batch_num}. Deployed ${ok}/${total} before the abort; hosting will NOT be released."
                 break
               fi
-              echo "::warning::${fn} did not deploy after retries"
             fi
-            # brief settle so the new revision can scale to zero before the next
-            if [ "$idx" -lt "$total" ]; then sleep 30; fi
+            i=$((i+BATCH_SIZE))
+            # brief settle so new revisions can scale to zero before the next batch
+            if [ "$i" -lt "$total" ]; then sleep 30; fi
           done
 
           echo "Deployed ${ok}/${total} functions."
