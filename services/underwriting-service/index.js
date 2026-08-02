@@ -171,7 +171,7 @@ app.post('/underwrite', requireInternal, async (req, res) => {
 
   try {
     const result = await runPipeline(
-      { applicant, employer },
+      { applicant, employer, loanAmount },
       { logger: console, db, correlationId: req.body.correlationId }
     );
 
@@ -198,6 +198,17 @@ app.post('/underwrite', requireInternal, async (req, res) => {
       allPass: result.stages?.stage3?.data?.allPass ?? null,
     });
   } catch (err) {
+    // A missing principal is a malformed request, not a service fault. Answer 4xx
+    // so the caller treats underwriting as unavailable and leaves the loan
+    // `pending` for manual review, rather than retrying against a pipeline that
+    // structurally cannot evaluate affordability.
+    if (err.code === 'MISSING_LOAN_AMOUNT') {
+      console.error('Underwrite rejected: loanAmount missing or not a positive number');
+      return res.status(400).json({
+        error: 'Missing or invalid loanAmount',
+        message: 'loanAmount (or applicant.principalAmount) must be a positive number',
+      });
+    }
     console.error('Underwriting pipeline error:', err.message);
     // Detect rate limit errors from external APIs
     if (err.message?.includes('429') || err.message?.toLowerCase().includes('rate limit')) {
