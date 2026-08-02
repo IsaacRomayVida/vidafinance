@@ -49,7 +49,7 @@ export function EmployerPage() {
             <div className="rv d2">
               {/* HR Director photo */}
               <div style={{ marginBottom: 32, borderRadius: 20, overflow: 'hidden', boxShadow: '0 16px 48px rgba(25,68,69,0.1)' }}>
-                <picture>
+                <picture style={{ display: 'block' }}>
                   <source srcSet="/images/hr-director.webp" type="image/webp" />
                   <img loading="lazy" src="/images/hr-director.jpg" alt="Director de RRHH" style={{ width: '100%', display: 'block' }} />
                 </picture>

@@ -76,7 +76,7 @@ export function HeroSection() {
               filter: 'blur(20px)',
               pointerEvents: 'none',
             }} />
-            <picture>
+            <picture style={{ display: 'block' }}>
               <source srcSet="/images/worker.webp" type="image/webp" />
               <img src="/images/worker.png" alt="Trabajador usando Funpay"
                 fetchPriority="high"

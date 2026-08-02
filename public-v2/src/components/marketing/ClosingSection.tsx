@@ -84,7 +84,7 @@ export function ClosingSection() {
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {curr.img ? (
-              <picture>
+              <picture style={{ display: 'block' }}>
                 <source srcSet={curr.img} type="image/webp" />
                 <img loading="lazy" src={curr.imgFallback} alt={curr.name} style={{
                   width: 72, height: 72, borderRadius: '50%', objectFit: 'cover',
