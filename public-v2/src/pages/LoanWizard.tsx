@@ -30,10 +30,61 @@ const MAX_AMOUNT = 5000;
 const STEP = 100;
 const ACTIVE_STATUSES = ['pending', 'under_review', 'approved', 'disbursed', 'disbursement_queued'];
 
+/** One installment as the server publishes it: when, and what share — no pesos. */
+interface RepaymentInstallmentTerms {
+  number: number;
+  dueInDays: number;
+  shareOfTotal: number;
+}
+
+/** The repayment terms for one allowed term, published by getLoanConfig. */
+interface RepaymentTerms {
+  termDays: number;
+  installments: RepaymentInstallmentTerms[];
+  catPercent: number;
+}
+
 interface LoanConfig {
   feeRate: number;
   allowedTermDays: number[];
   defaultTermDays: number;
+  repayment: RepaymentTerms[];
+}
+
+/**
+ * The peso split of a published schedule.
+ *
+ * This screen does NOT decide how many payments there are, when they fall, or
+ * what the CAT is — all three come from the server
+ * (functions/src/config/loanConfig.ts, REPAYMENT_STRUCTURE). It used to decide
+ * all of them: `Math.ceil(termDays / 15)` quoted the borrower two biweekly
+ * payments and a locally-derived CAT, while the backend registered a single
+ * payroll deduction for the full total on the due date (#424). Shares are the
+ * contract; turning them into pesos is presentation, and the last installment
+ * absorbs the rounding remainder so the parts always sum to exactly the total
+ * the borrower agreed to — the same rule the server applies.
+ *
+ * There is deliberately no local fallback schedule. A schedule we could not read
+ * renders as "no disponible", never as a confident-looking number, for the same
+ * reason FEE_RATE was deleted rather than kept as a default.
+ */
+function allocateInstallments(
+  total: number,
+  terms: RepaymentTerms | null
+): { number: number; amount: number; dueInDays: number }[] | null {
+  if (!terms || terms.installments.length === 0) return null;
+  let allocated = 0;
+  return terms.installments.map((inst, i) => {
+    const isLast = i === terms.installments.length - 1;
+    const amount = isLast ? total - allocated : Math.round(total * inst.shareOfTotal);
+    allocated += amount;
+    return { number: inst.number, amount, dueInDays: inst.dueInDays };
+  });
+}
+
+/** The published terms for one term length, or null if the server sent none. */
+function repaymentTermsFor(config: LoanConfig | null, termDays: number): RepaymentTerms | null {
+  return (config?.repayment ?? []).find((r) => r.termDays === termDays) ?? null;
 }
 
 interface EmployeeData {
@@ -249,14 +300,15 @@ export function LoanWizard() {
   const feeRatePct = feeRate === null ? null : Math.round(feeRate * 100);
   const fee = feeRate === null ? null : Math.round(amount * feeRate);
   const total = fee === null ? null : amount + fee;
-  const biweeklyPeriods = Math.ceil(termDays / 15);
-  const biweeklyDeduction = total === null ? null : Math.ceil(total / biweeklyPeriods);
   const dueDate = new Date(Date.now() + termDays * 24 * 60 * 60 * 1000);
-  const cat =
-    fee === null || amount <= 0
-      ? null
-      : ((Math.pow(1 + fee / amount, 365 / termDays) - 1) * 100).toFixed(0);
-  const pricingReady = configStatus === 'ready' && feeRate !== null;
+  // Schedule and CAT: read, never derived. `null` propagates exactly like the
+  // fee rate does — a schedule we could not read must not render as "$0 × 0".
+  const repaymentTerms = repaymentTermsFor(loanConfig, termDays);
+  const installments = total === null ? null : allocateInstallments(total, repaymentTerms);
+  const installmentCount = installments?.length ?? null;
+  const deductionAmount = installments?.[0]?.amount ?? null;
+  const cat = repaymentTerms === null ? null : String(repaymentTerms.catPercent);
+  const pricingReady = configStatus === 'ready' && feeRate !== null && repaymentTerms !== null;
   const sliderPct = ((amount - MIN_AMOUNT) / (cappedMax - MIN_AMOUNT)) * 100;
 
   // ── Fetch pricing config ──────────────────────────────────────────────────
@@ -289,10 +341,16 @@ export function LoanWizard() {
         const configResult = await getLoanConfig();
         if (cancelled) return;
         const config = configResult.data;
-        // A response that arrives without a usable rate is a failure, not a
-        // quote. Treating it as success is how a null reaches the price slots
+        // A response that arrives without a usable rate — or without the
+        // repayment schedule and CAT that go with it (#424) — is a failure, not
+        // a quote. Treating it as success is how a null reaches the price slots
         // with `status === 'ready'` and renders as a blank nobody can retry.
-        if (!config || typeof config.feeRate !== 'number') {
+        if (
+          !config ||
+          typeof config.feeRate !== 'number' ||
+          !Array.isArray(config.repayment) ||
+          config.repayment.length === 0
+        ) {
           setLoanConfig(null);
           setConfigStatus('error');
           return;
@@ -953,9 +1011,20 @@ export function LoanWizard() {
                   <PricingErrorBanner onRetry={retryLoanConfig} />
                 )
               ) : (
-                (loanConfig?.allowedTermDays ?? []).map((days) => {
-                const periods = Math.ceil(days / 15);
-                const deduction = Math.ceil((amount + Math.round(amount * feeRate)) / periods);
+                // Driven by the server's published repayment terms rather than
+                // by `allowedTermDays`, so a term can never be offered without
+                // the schedule that says how it is actually collected (#424).
+                (loanConfig?.repayment ?? []).map((terms) => {
+                const days = terms.termDays;
+                const optionInstallments = allocateInstallments(
+                  amount + Math.round(amount * feeRate),
+                  terms
+                );
+                const deduction = optionInstallments?.[0]?.amount;
+                // A term whose schedule we cannot read is not offered at all.
+                // Rendering it with a 0 would quote a payment nobody will take.
+                if (!optionInstallments || deduction === undefined) return null;
+                const periods = optionInstallments.length;
                 const isSelected = termDays === days;
 
                 return (
@@ -1004,8 +1073,8 @@ export function LoanWizard() {
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>
                           {periods === 1
-                            ? t('wiz_term_biweekly', { count: periods })
-                            : t('wiz_term_biweekly_plural', { count: periods })}
+                            ? t('wiz_term_installments', { count: periods })
+                            : t('wiz_term_installments_plural', { count: periods })}
                         </div>
                       </div>
                     </div>
@@ -1020,7 +1089,7 @@ export function LoanWizard() {
                         ${fmt(deduction)}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--t3)' }}>
-                        /{t('wiz_biweekly_deduction').toLowerCase().split(' ')[0]}
+                        {t('wiz_payroll_deduction')}
                       </div>
                     </div>
                   </button>
@@ -1229,13 +1298,13 @@ export function LoanWizard() {
                 }}
               >
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('wiz_biweekly_deduction')}
+                  {t('wiz_payroll_deduction')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
                   <PriceValue
-                    value={biweeklyDeduction}
+                    value={deductionAmount}
                     status={configStatus}
-                    suffix={` × ${biweeklyPeriods}`}
+                    suffix={installmentCount && installmentCount > 1 ? ` × ${installmentCount}` : ''}
                   />
                 </span>
               </div>
@@ -1464,13 +1533,13 @@ export function LoanWizard() {
                 }}
               >
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('wiz_biweekly_deduction')}
+                  {t('wiz_payroll_deduction')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
                   <PriceValue
-                    value={biweeklyDeduction}
+                    value={deductionAmount}
                     status={configStatus}
-                    suffix={` × ${biweeklyPeriods}`}
+                    suffix={installmentCount && installmentCount > 1 ? ` × ${installmentCount}` : ''}
                   />
                 </span>
               </div>

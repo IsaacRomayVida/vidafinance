@@ -61,10 +61,31 @@ vi.mock('firebase/firestore', () => ({
 import '../i18n';
 import { LoanWizard } from './LoanWizard';
 
-/** 1,000 principal at the real 30% rate ⇒ 300 fee, 1,300 total. */
+/**
+ * 1,000 principal at the real 30% rate ⇒ 300 fee, 1,300 total.
+ *
+ * `repayment` mirrors what getLoanConfig actually publishes (#424): the schedule
+ * the backend really executes — ONE payroll deduction of the full total on the
+ * due date — plus the CAT derived from it. It is part of the fixture because the
+ * screen no longer derives any of it.
+ */
 const READY_CONFIG = {
-  data: { feeRate: 0.3, allowedTermDays: [30], defaultTermDays: 30 },
+  data: {
+    feeRate: 0.3,
+    allowedTermDays: [30],
+    defaultTermDays: 30,
+    repayment: [
+      {
+        termDays: 30,
+        installments: [{ number: 1, dueInDays: 30, shareOfTotal: 1 }],
+        catPercent: 2334,
+      },
+    ],
+  },
 };
+
+/** Everything the screen renders, with whitespace normalised for matching. */
+const screenText = () => (document.body.textContent ?? '').replace(/\s+/g, ' ');
 
 const forwardButtons = () =>
   screen.getAllByRole('button', { name: /^(continuar|siguiente|next)$/i }) as HTMLButtonElement[];
@@ -241,6 +262,109 @@ describe('LoanWizard — pricing available', () => {
 
     expect(screen.queryByTestId('pricing-error-banner')).toBeNull();
     expect(screen.getByText(/\$300/)).toBeInTheDocument();
-    expect(screen.getByText(/\$1,300/)).toBeInTheDocument();
+    // Twice, not once: the total AND the single payroll deduction, which are the
+    // same figure because the loan is collected in one payment (#424). Before
+    // that fix the deduction row showed $650 and this matched a single element.
+    expect(screen.getAllByText(/\$1,300/)).toHaveLength(2);
+  });
+});
+
+/**
+ * #424 — the quote must describe the repayment the backend actually performs.
+ *
+ * The wizard used to compute `Math.ceil(termDays / 15)` and quote the borrower
+ * TWO biweekly payments of $650, plus a CAT it derived itself, while
+ * functions/src/index.ts registered ONE payroll deduction of $1,300 on the due
+ * date. Nothing in the backend has ever implemented installments. These tests
+ * pin the direction of the dependency: the screen renders the server's schedule
+ * and the server's CAT, and has no opinion of its own about either.
+ */
+describe('LoanWizard — repayment schedule comes from the server', () => {
+  it('quotes the single payroll deduction the backend registers, not two biweekly payments', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+
+    // Step 2 — the term option describes how the loan is collected.
+    await goToTermStep();
+    const termText = screenText();
+    expect(termText).toMatch(/1 descuento vía nómina|1 payroll deduction/i);
+    // The old lie: 30 / 15 = 2 periods of ceil(1300 / 2) = $650 each.
+    expect(termText).not.toMatch(/\$650/);
+    expect(termText).not.toMatch(/2 quincenas|2 pay periods|quincenal|biweekly/i);
+
+    // Step 3 — the quote breakdown states the same single deduction.
+    advance();
+    await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
+    const quoteText = screenText();
+    expect(quoteText).toMatch(/(Deducción de nómina|Payroll deduction) ?\$1,300/i);
+    expect(quoteText).not.toMatch(/\$650/);
+    expect(quoteText).not.toMatch(/quincenal|biweekly/i);
+  });
+
+  it('renders the CAT the server published, and derives none of its own', async () => {
+    // A value the old client-side formula could not produce for these figures
+    // (it would have computed 2334). If this shows up on screen, the disclosure
+    // is being read rather than recomputed.
+    getLoanConfigMock.mockResolvedValue({
+      data: {
+        ...READY_CONFIG.data,
+        repayment: [{ ...READY_CONFIG.data.repayment[0], catPercent: 777 }],
+      },
+    });
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    const text = screenText();
+    expect(text).toMatch(/777\s*%/);
+    expect(text).not.toMatch(/2334/);
+  });
+
+  it('renders a multi-installment schedule as published, without inventing the split', async () => {
+    // Today the server never sends this — REPAYMENT_STRUCTURE has one entry and
+    // toPayrollDeduction() refuses anything else. The test is here to prove the
+    // screen follows the server rather than its own arithmetic: if the repayment
+    // product ever really changes, the quote changes because the server said so.
+    getLoanConfigMock.mockResolvedValue({
+      data: {
+        ...READY_CONFIG.data,
+        repayment: [
+          {
+            termDays: 30,
+            installments: [
+              { number: 1, dueInDays: 15, shareOfTotal: 0.5 },
+              { number: 2, dueInDays: 30, shareOfTotal: 0.5 },
+            ],
+            catPercent: 2334,
+          },
+        ],
+      },
+    });
+
+    render(<LoanWizard />);
+
+    await goToTermStep();
+    expect(screenText()).toMatch(/2 descuentos vía nómina|2 payroll deductions/i);
+
+    advance();
+    await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
+    expect(screenText()).toMatch(/\$650 × 2/);
+  });
+
+  it('treats a payload with no repayment schedule as a failure, not as a quote', async () => {
+    // The pre-#424 payload shape. A client that accepted it would be back to
+    // filling in the schedule itself.
+    getLoanConfigMock.mockResolvedValue({
+      data: { feeRate: 0.3, allowedTermDays: [30], defaultTermDays: 30 },
+    });
+
+    render(<LoanWizard />);
+    await goToTermStep();
+
+    expect(await screen.findByTestId('pricing-error-banner')).toBeInTheDocument();
+    expect(screen.queryByText(/^\$0$/)).toBeNull();
+    expect(screen.queryByText(/^0\s*%/)).toBeNull();
+    expect(advance()).toBe(false);
   });
 });

@@ -16,7 +16,17 @@ import { checkRateLimit } from './utils/rateLimiter';
 import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
-import { getLoanConfigValues, type LoanConfig, ALLOWED_LOAN_TERM_DAYS, DEFAULT_LOAN_TERM_DAYS, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from './config/loanConfig';
+import {
+  getLoanConfigValues,
+  type LoanConfig,
+  ALLOWED_LOAN_TERM_DAYS,
+  DEFAULT_LOAN_TERM_DAYS,
+  MIN_LOAN_AMOUNT,
+  MAX_LOAN_AMOUNT,
+  buildLoanInstallments,
+  toPayrollDeduction,
+  computeCatPercent,
+} from './config/loanConfig';
 import { calculateNextPayrollDate, type PayFrequency } from './loans/calculateNextPayrollDate';
 import { resolvePayFrequency, type PayFrequencySource } from './loans/resolvePayFrequency';
 import { allowTestBypass } from './utils/environment';
@@ -366,6 +376,15 @@ export const requestLoan = onCall(
         const fee = Math.round(amount * loanConfig.feeRate);
         const dueDate = Timestamp.fromDate(new Date(Date.now() + term * 24 * 60 * 60 * 1000));
 
+        // The repayment schedule and the CAT in force at creation, persisted on
+        // the loan for the same reason `feeRate` is (#389): the contract PDF and
+        // the disclosure must render what this borrower agreed to, not whatever
+        // the code says later. Built from the SAME helper the payroll deduction
+        // registration uses, so the quote, the contract and the deduction are
+        // one schedule and not three (#424).
+        const installments = buildLoanInstallments(amount + fee, dueDate.toDate(), term);
+        const catPercent = computeCatPercent(loanConfig.feeRate, term);
+
         // Try full underwriting pipeline first
         const uwUrl = process.env['UNDERWRITING_SERVICE_URL'];
         const intSecret = process.env['INTERNAL_SECRET'] ?? '';
@@ -498,6 +517,12 @@ export const requestLoan = onCall(
             term,
             status: initialStatus,
             dueDate,
+            repaymentSchedule: installments.map((i) => ({
+              number: i.number,
+              amount: i.amount,
+              dueDate: Timestamp.fromDate(i.dueDate),
+            })),
+            catPercent,
             disbursedAt: null,
             disbursementRef: null,
             disbursementError: null,
@@ -1451,11 +1476,24 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
     }
   }
 
-  // Register payroll deduction with SoftCrédito
+  // Register payroll deduction with SoftCrédito.
+  //
+  // The amount and date come from buildLoanInstallments() — the same function
+  // that produced the schedule quoted in the wizard and printed on the contract
+  // (#424). Before, this hand-assembled `{ amount: total, dueDate }` while the
+  // wizard advertised two biweekly payments, so what the borrower was promised
+  // and what was collected were written in two different places and disagreed.
   try {
     const scUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
     const secret = process.env['INTERNAL_SECRET'] ?? '';
     if (scUrl && secret) {
+      const deduction = toPayrollDeduction(
+        buildLoanInstallments(
+          after['total'] as number,
+          (after['dueDate'] as FirebaseFirestore.Timestamp).toDate(),
+          (after['term'] as number) ?? DEFAULT_LOAN_TERM_DAYS
+        )
+      );
       await fetch(scUrl + '/internal/register-deduction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
@@ -1463,10 +1501,10 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           loanId,
           employeeId: after['employeeId'],
           employerId: after['employerId'],
-          amount: after['total'],
-          dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
+          amount: deduction.amount,
+          dueDate: deduction.dueDate,
         }),
-         
+
         signal: AbortSignal.timeout(10000),
       }).then(async (r) => {
         if (r.ok) {

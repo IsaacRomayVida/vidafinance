@@ -10,6 +10,7 @@ import fetch from 'node-fetch';
 
 import { getQueue } from '../utils/queue';
 import { notifyLoanEvent } from '../utils/notify';
+import { buildLoanInstallments, toPayrollDeduction, DEFAULT_LOAN_TERM_DAYS } from '../config/loanConfig';
 
 export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) => {
   const before = event.data!.before.data();
@@ -136,6 +137,15 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
     const scUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
     const secret = process.env['INTERNAL_SECRET'] ?? '';
     if (scUrl && secret) {
+      // Same schedule the borrower was quoted and the contract prints — see
+      // config/loanConfig.ts REPAYMENT_STRUCTURE (#424).
+      const deduction = toPayrollDeduction(
+        buildLoanInstallments(
+          after['total'] as number,
+          (after['dueDate'] as FirebaseFirestore.Timestamp).toDate(),
+          (after['term'] as number) ?? DEFAULT_LOAN_TERM_DAYS
+        )
+      );
       await fetch(scUrl + '/internal/register-deduction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
@@ -143,8 +153,8 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           loanId,
           employeeId: after['employeeId'],
           employerId: after['employerId'],
-          amount: after['total'],
-          dueDate: (after['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
+          amount: deduction.amount,
+          dueDate: deduction.dueDate,
         }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         signal: (AbortSignal as any).timeout(10000),
