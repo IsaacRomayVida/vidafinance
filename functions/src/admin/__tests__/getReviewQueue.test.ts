@@ -161,6 +161,12 @@ function seedLoan(id: string, overrides: Record<string, unknown> = {}) {
     employerId: `employer-${id}`,
     employerName: 'Acme Corp',
     amount: 5000,
+    // Derived from the rate actually in force (LOAN_FEE_RATE = 0.3), not a round
+    // placeholder. A fixture carrying a fee rate the product does not charge gets
+    // copied into specs and mockups and read as the price.
+    fee: 1500,
+    feeRate: 0.3,
+    total: 6500,
     ...overrides,
   };
 }
@@ -379,11 +385,74 @@ describe('getReviewQueue', () => {
           'employerId',
           'employerName',
           'amount',
+          'feeAmount',
+          'feeRate',
+          'totalDue',
           'requestedAt',
           'status',
           'underwritingDecision',
         ].sort()
       );
+    });
+  });
+
+  describe('money fields', () => {
+    it('serves the fee, rate and total persisted on the loan', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row).toMatchObject({ amount: 5000, feeAmount: 1500, feeRate: 0.3, totalDue: 6500 });
+    });
+
+    it('reports the rate contracted on each loan, not one shared live rate', async () => {
+      // #389 made the fee rate admin-editable. A loan signed before a rate change
+      // keeps its rate, so two rows in one page can legitimately disagree — the
+      // reviewer must see what each borrower actually owes.
+      seedReview('old', { queuedAt: '2026-07-01T00:00:00.000Z' });
+      seedLoan('loan-old', { amount: 1000, fee: 80, feeRate: 0.08, total: 1080 });
+      seedReview('new', { queuedAt: '2026-08-01T00:00:00.000Z' });
+      seedLoan('loan-new', { amount: 1000, fee: 300, feeRate: 0.3, total: 1300 });
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const byId = Object.fromEntries(
+        (result.reviews as Array<Record<string, unknown>>).map((r) => [r.id, r])
+      );
+
+      expect(byId['old']).toMatchObject({ feeAmount: 80, feeRate: 0.08, totalDue: 1080 });
+      expect(byId['new']).toMatchObject({ feeAmount: 300, feeRate: 0.3, totalDue: 1300 });
+    });
+
+    it('returns null (never 0) when a legacy loan carries no money fields', async () => {
+      seedReview('r1');
+      loanDocs['loan-r1'] = { employeeId: 'e1', employerId: 'er1', amount: 5000 };
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row).toMatchObject({ amount: 5000, feeAmount: null, feeRate: null, totalDue: null });
+    });
+
+    it('returns null for every money field on an orphan review (no loan doc)', async () => {
+      seedReview('r1'); // no seedLoan — the loan the review points at does not exist
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row).toMatchObject({ amount: null, feeAmount: null, feeRate: null, totalDue: null });
+    });
+
+    it('degrades a corrupt numeric field to null rather than emitting NaN', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1', { fee: Number.NaN, total: '6500' });
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row['feeAmount']).toBeNull();
+      expect(row['totalDue']).toBeNull();
     });
   });
 
