@@ -221,16 +221,46 @@ describe('getReviewQueue', () => {
       expect(rows[0].id).toBe('r2');
     });
 
-    it('defaults to open statuses (pending, pending_review) only', async () => {
+    it('defaults to every status that still needs a human, and excludes resolved ones', async () => {
       seedReview('r1', { status: 'pending' });
       seedReview('r2', { status: 'pending_review' });
-      seedReview('r3', { status: 'approved' });
-      seedLoan('loan-r1');
-      seedLoan('loan-r2');
-      seedLoan('loan-r3');
+      seedReview('r3', { status: 'info_requested' });
+      seedReview('r4', { status: 'escalated' });
+      seedReview('r5', { status: 'approved' });
+      seedReview('r6', { status: 'rejected' });
+      ['r1', 'r2', 'r3', 'r4', 'r5', 'r6'].forEach((id) => seedLoan(`loan-${id}`));
       const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
       const rows = result.reviews as Array<Record<string, unknown>>;
-      expect(rows.map((r) => r.id).sort()).toEqual(['r1', 'r2']);
+      expect(rows.map((r) => r.id).sort()).toEqual(['r1', 'r2', 'r3', 'r4']);
+    });
+
+    // #407/#408 regression: request_info used to make a review undecidable forever.
+    // The precondition was fixed; the default list still hid the result, which put the
+    // dead end back where it is harder to see. Ops asks for a document, the employee
+    // sends it, and the review has to reappear in the list ops actually works.
+    it('keeps an info_requested review in the default list so its answer can land', async () => {
+      seedReview('r1', { status: 'info_requested' });
+      seedLoan('loan-r1');
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const rows = result.reviews as Array<Record<string, unknown>>;
+      expect(rows.map((r) => r.id)).toEqual(['r1']);
+    });
+
+    // The header counts and the default list are two statements about the same set.
+    // If they ever disagree, one of them is lying to the operator.
+    it('counts exactly the statuses the default list returns', async () => {
+      seedReview('r1', { status: 'pending' });
+      seedReview('r2', { status: 'pending_review' });
+      seedReview('r3', { status: 'info_requested' });
+      seedReview('r4', { status: 'escalated' });
+      seedReview('r5', { status: 'approved' });
+      ['r1', 'r2', 'r3', 'r4', 'r5'].forEach((id) => seedLoan(`loan-${id}`));
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const rows = result.reviews as Array<Record<string, unknown>>;
+      const counts = result.counts as Record<string, number>;
+      expect(Object.keys(counts).sort()).toEqual(
+        [...new Set(rows.map((r) => r.status as string))].sort()
+      );
     });
   });
 
