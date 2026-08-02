@@ -101,16 +101,17 @@ jobs:
       - name: Install ml-service dependencies
         run: cd services/ml-service && pip install -r requirements.txt pytest pytest-asyncio
 
-      # 154 passing, hard gate. 14 tests in tests/test_underwriting_worker.py
-      # are deselected BY NAME in services/ml-service/pytest.ini, where the two
-      # underlying product defects are documented in full and tracked in #428:
-      # the decision-engine integration was never built (11 tests patch a
-      # call_decision_engine that does not exist), and the shipped model
-      # artifact was pickled under a numpy the pin cannot load (3 tests).
-      # Excluded by name, not by file — that file has 6 tests that do pass.
-      # Do not force this green by widening the exclusion or adding
-      # continue-on-error; fix the defects and delete the deselect lines.
-      - name: Unit tests (ml-service) — 154 passing, hard gate (14 deselected, see pytest.ini + #428)
+      # Full hard gate — nothing is deselected. Both #428 defects are closed:
+      # Defect 2 (model artifact pickled under a numpy the pin cannot load) was
+      # fixed in PR #430 and its 3 tests run again; Defect 1 (11 tests patching
+      # a call_decision_engine that does not exist, on a worker that is not on
+      # the live decision path — no producer feeds its queue and it is never
+      # started) was RETIRED, not fixed. See
+      # outputs/ADR-004-underwriting-worker-not-the-decision-path.md.
+      #
+      # Do not force this green by adding continue-on-error or re-introducing
+      # --deselect. Red here means something actually regressed.
+      - name: Unit tests (ml-service) — full suite, hard gate, nothing deselected
         run: cd services/ml-service && python -m pytest
 
   frontend:
