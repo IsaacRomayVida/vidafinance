@@ -8,6 +8,7 @@
     "load-test:full": "k6 run --out json=tests/load/results/results.json tests/load/pipeline-load-test.js",
     "load-test:report": "node tests/load/generate-report.js",
     "test:e2e": "jest --config tests/e2e/jest.config.js",
+    "test:e2e:loan-flow": "jest --config tests/e2e/jest.emulator.config.js",
     "prepare": "husky"
   },
   "jest": {
