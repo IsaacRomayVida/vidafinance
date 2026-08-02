@@ -300,16 +300,16 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       { name: 'bureau_score', pass: true, value: 650, required: '> 600' },
     ];
 
-    // Builds the response shape the underwriting service ACTUALLY returns.
-    // decision-engine.js returns { decision, reason, correlationId, lastStage,
-    // stagesExecuted, stages }, and stage3-autoapprove.js nests its payload at
-    // stages.stage3.data.{conditions, allPass, failedConditions}.
+    // Mirrors the /underwrite HTTP response the callable actually receives.
     //
-    // These tests previously mocked `conditions`/`allPass` as TOP-LEVEL fields.
-    // No such response is ever produced, so the tests passed against a payload
-    // that does not exist while the production read (uwResult.conditions) got
-    // undefined on every real loan and silently persisted nothing. Build mocks
-    // through this helper so the fixture cannot drift from the service again.
+    // Note this is the RESPONSE shape, not decision-engine.js's return value —
+    // conflating the two is the trap here. The endpoint
+    // (services/underwriting-service/index.js) publishes BOTH: a lean
+    // top-level `conditions`/`allPass` slice, added alongside the persistence
+    // code in #393 as the contract for this caller, AND the verbose
+    // `stages.stage3.data` payload it is derived from. A fixture that omits
+    // either half does not represent a response the service can produce, so
+    // build every mock through this helper.
     function uwResponse(
       top: Record<string, unknown>,
       stage3: { conditions: unknown[]; allPass: boolean } | null,
@@ -317,6 +317,9 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       return {
         ...top,
         stagesExecuted: stage3 ? ['stage1', 'stage2', 'stage3'] : ['stage1'],
+        // The endpoint emits `null`, not `undefined`, when Stage 3 never ran.
+        conditions: stage3 ? stage3.conditions : null,
+        allPass: stage3 ? stage3.allPass : null,
         stages: stage3
           ? {
               stage3: {
@@ -453,28 +456,53 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       expect(loanData['underwritingDecision']).toBeUndefined();
     });
 
-    it('ignores a flat top-level conditions payload — that shape is not real', async () => {
-      // This is the exact regression. The production code read
-      // uwResult.conditions while the service only ever nests the breakdown
-      // under stages.stage3.data, so every loan silently persisted no
-      // explanation and the tests covering it passed against an invented
-      // fixture. Pinning it: a flat payload must NOT satisfy the read, because
-      // if it does, the mock has drifted away from the service again.
+    it('reads the lean top-level slice — the documented contract — without needing stages', async () => {
+      // The lean `conditions`/`allPass` slice is the narrow contract between
+      // the service and this caller (#393). `stages` is the verbose payload it
+      // is derived from and is the half that could plausibly be trimmed off
+      // the wire for size. Persisting must therefore survive `stages` being
+      // absent entirely.
       await mockUnderwritingResponse({
         decision: 'approved',
         reason: null,
-        correlationId: 'uw-flat',
+        correlationId: 'uw-lean',
         lastStage: 'stage3',
+        stagesExecuted: ['stage1', 'stage2', 'stage3'],
         allPass: true,
         conditions: sampleConditions,
-        stages: {},
       });
 
       const { requestLoan } = await import('../index');
       const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
       await fn({ auth, data: realClientPayload });
 
-      expect(getLoanWrite()['underwritingDecision']).toBeUndefined();
+      const persisted = getLoanWrite()['underwritingDecision'] as Record<string, unknown>;
+      expect(persisted).toBeDefined();
+      expect(persisted['allPass']).toBe(true);
+      expect(persisted['conditions']).toHaveLength(2);
+    });
+
+    it('falls back to stages.stage3.data when the lean slice is absent', async () => {
+      // Defensive path, for a service too old to publish the lean slice. Not
+      // reachable against today's deployment, but it is the reason the nested
+      // read is retained, so it is pinned rather than left as dead code.
+      await mockUnderwritingResponse({
+        decision: 'approved',
+        reason: null,
+        correlationId: 'uw-nested-only',
+        lastStage: 'stage3',
+        stagesExecuted: ['stage1', 'stage2', 'stage3'],
+        stages: { stage3: { data: { conditions: sampleConditions, allPass: true } } },
+      });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const persisted = getLoanWrite()['underwritingDecision'] as Record<string, unknown>;
+      expect(persisted).toBeDefined();
+      expect(persisted['allPass']).toBe(true);
+      expect(persisted['conditions']).toHaveLength(2);
     });
   });
 });

@@ -418,22 +418,27 @@ export const requestLoan = onCall(
         // earlier-stage rejection), omit the field entirely — never block loan
         // creation over missing explainability data.
         //
-        // The breakdown is NESTED, not top-level. decision-engine.js returns
-        // { decision, reason, correlationId, lastStage, stagesExecuted, stages },
-        // and stage3-autoapprove.js puts its payload under
-        // stages.stage3.data.{conditions,allPass}. Reading uwResult.conditions
-        // here silently yielded undefined on every loan, so this entire block
-        // was dead and no loan ever carried an explanation. Keep this in sync
-        // with decision-engine.js if that response shape ever changes.
+        // `uwResult` is the /underwrite HTTP response, NOT the raw
+        // decision-engine return value — the two are different shapes and must
+        // not be conflated. The endpoint deliberately publishes a lean
+        // top-level `conditions`/`allPass` slice (services/underwriting-service
+        // /index.js) precisely so this caller does not have to reach into the
+        // verbose `stages` payload. Read the lean slice first: it is the
+        // narrow, stable contract, and `stages` is the part that may later be
+        // trimmed off the wire for payload size.
+        //
+        // The nested read is a defensive fallback only, for a service old
+        // enough to predate the lean slice. Both are populated today.
         const uwStages = uwResult?.['stages'] as Record<string, unknown> | undefined;
         const stage3 = uwStages?.['stage3'] as Record<string, unknown> | undefined;
         const stage3Data = stage3?.['data'] as Record<string, unknown> | undefined;
-        const uwConditions = stage3Data?.['conditions'];
+        const uwConditions = uwResult?.['conditions'] ?? stage3Data?.['conditions'];
+        const uwAllPass = uwResult?.['allPass'] ?? stage3Data?.['allPass'];
         if (Array.isArray(uwConditions) && uwConditions.length > 0) {
           decisionExtra['underwritingDecision'] = {
             decision: uwDecision,
             reason: (uwResult?.['reason'] as string) ?? null,
-            allPass: (stage3Data?.['allPass'] as boolean) ?? null,
+            allPass: (uwAllPass as boolean) ?? null,
             conditions: uwConditions,
             evaluatedAt: FieldValue.serverTimestamp(),
           };
