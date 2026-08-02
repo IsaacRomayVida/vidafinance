@@ -58,6 +58,13 @@ const db = getFirestore();
 const EMPLOYEE_CREDIT_SALARY_RATIO = 0.3;
 const EMPLOYEE_CREDIT_CEILING = 5000;
 
+// The inline ML default-probability cut-off applied in requestLoan. Named, not
+// because the policy changed — it is the same 0.4 that has always been in force
+// — but because a denial record has to state the bound the applicant was
+// compared against, and the bound and the comparison must not be able to drift
+// apart into two separately-editable literals.
+const INLINE_ML_MAX_DEFAULT_PROBABILITY = 0.4;
+
 function getQueue(name: string): Queue {
   const redisUrl = process.env['REDIS_URL'] ?? '';
   if (!redisUrl) throw new Error('REDIS_URL not configured — queue unavailable');
@@ -413,6 +420,69 @@ export const requestLoan = onCall(
           }
         }
 
+        // Both inline-ML gates below deny the applicant BEFORE the loan
+        // transaction runs, so no loan document and no `loan.requested` audit
+        // row is ever written for them. Without this record a denial is
+        // invisible: ops cannot see that it happened, to whom, or on what
+        // number. For a regulated consumer lender that is an adverse-action
+        // decision with no auditable trace, so every denial path writes to
+        // `audit_log` — the one collection firestore.rules grants ops read on
+        // (firestore.rules:213) — before it throws.
+        //
+        // `targetId` is the loanId that WOULD have been used. No document
+        // exists at loans/{loanId}; the id is here as the correlation key
+        // between this row and the request's logs, not as a live reference.
+        //
+        // Fail-soft by construction: a failing audit write is swallowed and
+        // logged. The borrower must receive the denial error the gate decided
+        // on, never a different error caused by our own bookkeeping.
+        //
+        // Deliberately NOT recorded: CURP, RFC, CLABE. The uid, the amount and
+        // the tripping number are what ops needs to review a denial; the
+        // identity documents are not, and `audit_log` is a long-lived
+        // ops-readable collection.
+        const recordInlineMlDenial = async (
+          gate: 'fraud_flag' | 'default_probability',
+          gateDetail: Record<string, unknown>
+        ): Promise<void> => {
+          try {
+            await auditLog(db, {
+              action: 'loan.request_denied',
+              actorUid: uid,
+              actorRole: 'employee',
+              targetId: loanId,
+              meta: {
+                deniedBy: 'inline_ml_gate',
+                gate,
+                amount,
+                term,
+                ...gateDetail,
+                // The 6-stage pipeline's verdict at the moment the inline gate
+                // fired. `null` means the pipeline was unreachable and this
+                // gate is the only assessment that ran.
+                uwDecision,
+                uwCorrelationId: (uwResult?.['correlationId'] as string) ?? null,
+                // ADR-001/ADR-004: the pipeline is the decision path. When it
+                // HAS returned a verdict, this single-number gate is
+                // second-guessing it — a `pending_review` ("a human must look
+                // at this") becomes a flat denial the borrower sees as a
+                // generic error. That override is current behaviour and is not
+                // changed here; it is recorded explicitly so it is reviewable
+                // rather than silent.
+                overrodePipelineDecision: uwDecision !== null,
+              },
+            });
+          } catch (auditErr: unknown) {
+            logger.warn('Failed to record inline ML denial in audit_log', {
+              gate,
+              uid,
+              loanId,
+              error: (auditErr as Error).message,
+              service: 'functions',
+            });
+          }
+        };
+
         const loanExtra: Record<string, unknown> = {};
         try {
           const ml = await callML('/underwrite/employee', {
@@ -424,10 +494,26 @@ export const requestLoan = onCall(
             amount,
             requestsLastHour: 0,
           });
-          if (ml['fraud'] && (ml['fraud'] as Record<string, unknown>)['is_fraud'])
+          if (ml['fraud'] && (ml['fraud'] as Record<string, unknown>)['is_fraud']) {
+            const fraud = ml['fraud'] as Record<string, unknown>;
+            await recordInlineMlDenial('fraud_flag', {
+              mlDecisionId: ml['decisionId'] ?? null,
+              value: fraud['is_fraud'],
+              bound: 'is_fraud === true',
+              fraudScore: fraud['fraud_score'] ?? null,
+            });
             throw new HttpsError('permission-denied', 'Solicitud marcada como sospechosa');
-          if ((ml['default_probability'] as number) > 0.4)
+          }
+          if ((ml['default_probability'] as number) > INLINE_ML_MAX_DEFAULT_PROBABILITY) {
+            await recordInlineMlDenial('default_probability', {
+              mlDecisionId: ml['decisionId'] ?? null,
+              value: ml['default_probability'],
+              bound: INLINE_ML_MAX_DEFAULT_PROBABILITY,
+              comparison: `> ${INLINE_ML_MAX_DEFAULT_PROBABILITY}`,
+              mlCreditScore: ml['credit_score'] ?? null,
+            });
             throw new HttpsError('failed-precondition', 'No es posible aprobar tu solicitud en este momento');
+          }
           Object.assign(loanExtra, {
             mlDecisionId: ml['decisionId'],
             mlCreditScore: ml['credit_score'],
