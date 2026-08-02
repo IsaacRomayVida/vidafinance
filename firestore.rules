@@ -109,7 +109,14 @@ service cloud.firestore {
                     || (isOwner(employeeId)
                         && onlyAffects(['phone', 'bankClabe', 'bankName', 'address',
                                         'dateOfBirth', 'gender', 'updatedAt']));
-      allow delete: if isOps();
+      // Same reasoning as /loans and /employers (#385): an employee document is
+      // what a loan's employeeId points at. Deleting it from a client SDK
+      // orphans every loan that references it, destroys the creditLimit/riskTier
+      // those loans were underwritten against, and leaves no audit entry — only
+      // the Admin SDK path writes audit_log. Offboarding is a status change, not
+      // a delete. Verified before tightening: `deleteDoc` appears nowhere in
+      // public-v2/src, so no client flow regresses.
+      allow delete: if false;
     }
 
     // =============================================
