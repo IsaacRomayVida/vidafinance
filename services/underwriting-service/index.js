@@ -181,6 +181,11 @@ app.post('/underwrite', requireInternal, async (req, res) => {
       cost: result.cost,
       stages: result.stages,
       slaHours: result.slaHours || null,
+      // Lean, stable slice of the Stage 3 auto-approve breakdown — callers that
+      // only need "why" (e.g. requestLoan persisting to the loan doc) should
+      // read these instead of reaching into `stages.stage3.data`.
+      conditions: result.stages?.stage3?.data?.conditions || null,
+      allPass: result.stages?.stage3?.data?.allPass ?? null,
     });
   } catch (err) {
     console.error('Underwriting pipeline error:', err.message);
