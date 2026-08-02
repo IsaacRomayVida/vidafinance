@@ -1,3 +1,15 @@
+const { assertInternalSecret, requireInternal } = require('./lib/internalAuth');
+require('dotenv').config();
+
+// Fail closed, before anything else loads: requireInternal compares the request
+// header against process.env.INTERNAL_SECRET. If the variable is unset both
+// sides are `undefined`, the comparison passes, and every internal route
+// (disburse, register-employer, register-deduction, sync-repayments,
+// bureau/query, curp/validate) becomes publicly callable with no header at all.
+// Refuse to boot rather than serve disbursements unauthenticated.
+// Same pattern as vida-underwriting-service.
+assertInternalSecret();
+
 const express = require('express');
 const helmet  = require('helmet');
 const admin   = require('firebase-admin');
@@ -8,7 +20,6 @@ const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting
 const { scTokenRaw, scTokenProbe } = require('./lib/scToken');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 const { parseBureauMode, withBureauFallback } = require('./lib/bureauFallback');
-require('dotenv').config();
 
 const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
@@ -55,12 +66,6 @@ app.use((req, res, next) => {
   };
   next();
 });
-
-const requireInternal = (req, res, next) => {
-  if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
-    return res.status(401).json({ error: 'Unauthorized' });
-  next();
-};
 
 // ── SoftCrédito token cache ─────────────────────────────────────────
 let _token = null, _tokenExp = 0;

@@ -32,3 +32,8 @@ Instructions for Cursor/
 
 # Claude Code local state (settings, worktrees — never commit)
 .claude/
+
+# Python virtualenvs created by local test runs (never commit — multi-GB)
+.venv/
+.venv_*/
+venv/
