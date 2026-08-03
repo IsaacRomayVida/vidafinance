@@ -13,7 +13,23 @@
  * opposite: a condition whose value was never read cannot clear its bound.
  * The single exception is `no_competitor_loans` — see its own case below.
  */
+
+// stage3-autoapprove.js requires config/maxPDefaultCutoff.js, which requires
+// firebase-admin (ADR-005 Finding 5's server-side config seam). Mocked here
+// the same way stage2-bureau.test.js and competitorLenders.test.js mock it
+// for the SAME seam, so `runAutoApproveGate` tests below can control what the
+// config document read returns.
+const mockMaxPDefaultConfigGet = jest.fn();
+jest.mock("firebase-admin", () => ({
+  firestore: () => ({
+    collection: () => ({
+      doc: () => ({ get: mockMaxPDefaultConfigGet }),
+    }),
+  }),
+}));
+
 const { evaluateAutoApprove, runAutoApproveGate } = require("../stage3-autoapprove");
+const { SEED_MAX_PDEFAULT } = require("../../config/maxPDefaultCutoff");
 
 const APPLICANT = {
   rfc: "GARA900101ABC",
@@ -403,21 +419,13 @@ describe("evaluateAutoApprove — condition ids (ADR-005 Finding 6)", () => {
 });
 
 // ADR-005 Finding 5: the P(default) cutoff is a single declared MAX_PDEFAULT,
-// not a derived complement of APPROVAL_THRESHOLD. The effective cutoff must
-// stay exactly 0.35 — this is naming only, zero behaviour change.
+// not a derived complement of APPROVAL_THRESHOLD, and it is server-side
+// configurable through the SAME seam ADR-002 established for the fee rate
+// (config/maxPDefaultCutoff.js). `evaluateAutoApprove` stays synchronous and
+// takes the resolved cutoff as its third argument — these tests cover that
+// parameter directly. `runAutoApproveGate` (below) covers the Firestore read
+// that resolves it in production.
 describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () => {
-  const ORIGINAL_ENV = process.env;
-
-  beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    delete process.env.MAX_PDEFAULT;
-    delete process.env.APPROVAL_THRESHOLD;
-  });
-
-  afterAll(() => {
-    process.env = ORIGINAL_ENV;
-  });
-
   function dataWithPDefault(pDefault) {
     return {
       ...ALL_DATA_PRESENT,
@@ -427,7 +435,9 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
     };
   }
 
-  it("defaults to an effective cutoff of 0.35, unchanged from the old derived APPROVAL_THRESHOLD behaviour", () => {
+  it("defaults to the seed cutoff of 0.35 when no cutoff is supplied — unchanged from the old derived APPROVAL_THRESHOLD behaviour", () => {
+    expect(SEED_MAX_PDEFAULT).toBe(0.35);
+
     const passing = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.34))
       .find((c) => c.name === "ml_default_prob");
     const failing = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.35))
@@ -438,29 +448,109 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
     expect(failing.pass).toBe(false);
   });
 
-  it("honours MAX_PDEFAULT directly when set", () => {
-    process.env.MAX_PDEFAULT = "0.15";
-    const cond = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.20))
+  it("honours an explicit cutoff over the seed", () => {
+    const cond = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.20), 0.15)
       .find((c) => c.name === "ml_default_prob");
     expect(cond.pass).toBe(false);
     expect(cond.required).toBe("< 0.15");
   });
 
-  it("still honours a deployed-but-unmigrated APPROVAL_THRESHOLD as its old complement", () => {
-    process.env.APPROVAL_THRESHOLD = "0.5"; // effective cutoff: 1 - 0.5 = 0.5
-    const cond = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.4))
+  it("an explicit cutoff can also loosen the gate relative to the seed", () => {
+    const cond = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.4), 0.5)
       .find((c) => c.name === "ml_default_prob");
     expect(cond.pass).toBe(true);
     expect(cond.required).toBe("< 0.5");
   });
 
-  it("prefers MAX_PDEFAULT over a legacy APPROVAL_THRESHOLD when both are set", () => {
-    process.env.APPROVAL_THRESHOLD = "0.5"; // would give 0.5 if honoured
-    process.env.MAX_PDEFAULT = "0.15";
-    const cond = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.2))
+  // ADR-005 Finding 5: "the condition reads the CHAMPION model. The
+  // challenger is scored and logged in parallel, per ADR-001; promoting it
+  // is a separate ratified event, not a fixture choice." `stage2Data.mlScore`
+  // carries no champion/challenger split — it IS the champion score — so
+  // this pins that a `shadow: true` challenger value sitting alongside it in
+  // the same object is structurally inert: condition 8 does not look at any
+  // nested `.challenger` / `.champion` key, so a shadow score can never reach
+  // `pDefault` no matter what else the ML service response carries.
+  it("never reads a shadow-marked challenger value, even when one is present on the same object", () => {
+    const withShadowChallenger = {
+      ...ALL_DATA_PRESENT,
+      stage2: {
+        data: {
+          ...ALL_DATA_PRESENT.stage2.data,
+          mlScore: {
+            default_probability: 0.18, // champion — what condition 8 must use
+            challenger: { pDefault: 0.01, model: "xgboost", shadow: true },
+          },
+        },
+      },
+    };
+
+    const cond = evaluateAutoApprove(APPLICANT, withShadowChallenger)
       .find((c) => c.name === "ml_default_prob");
-    expect(cond.pass).toBe(false);
+
+    // 0.01 (the shadow challenger) would also pass at the seed cutoff, so
+    // this only proves the right thing if the VALUE is pinned to the
+    // champion's 0.18, not merely that `pass` came out true either way.
+    expect(cond.value).toBe(0.18);
+    expect(cond.pass).toBe(true);
+  });
+});
+
+// ADR-005 Finding 5's server-side config seam, exercised end to end through
+// runAutoApproveGate (the function decision-engine.js actually awaits),
+// mirroring how competitorLenders.test.js exercises getCompetitorLenderNames.
+describe("runAutoApproveGate — MAX_PDEFAULT config seam (ADR-005 Finding 5)", () => {
+  beforeEach(() => {
+    mockMaxPDefaultConfigGet.mockReset();
+  });
+
+  const silentLogger = { info: () => {}, error: () => {}, warn: () => {} };
+
+  it("uses the seed (0.35) when the config document does not exist", async () => {
+    mockMaxPDefaultConfigGet.mockResolvedValue({ exists: false });
+
+    const dataAtSeedBoundary = {
+      ...ALL_DATA_PRESENT,
+      stage2: {
+        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { default_probability: 0.34 } },
+      },
+    };
+
+    const result = await runAutoApproveGate(APPLICANT, dataAtSeedBoundary, { logger: silentLogger });
+    const cond = result.data.conditions.find((c) => c.name === "ml_default_prob");
+    expect(cond.required).toBe("< 0.35");
+    expect(result.pass).toBe(true);
+  });
+
+  it("uses the configured value when the document is valid", async () => {
+    mockMaxPDefaultConfigGet.mockResolvedValue({ exists: true, data: () => ({ value: 0.15 }) });
+
+    const dataAt020 = {
+      ...ALL_DATA_PRESENT,
+      stage2: {
+        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { default_probability: 0.20 } },
+      },
+    };
+
+    const result = await runAutoApproveGate(APPLICANT, dataAt020, { logger: silentLogger });
+    const cond = result.data.conditions.find((c) => c.name === "ml_default_prob");
     expect(cond.required).toBe("< 0.15");
+    expect(cond.pass).toBe(false);
+  });
+
+  it("fails closed (rejects, does not fall back to the seed) when the config document exists but cannot be trusted", async () => {
+    mockMaxPDefaultConfigGet.mockResolvedValue({ exists: true, data: () => ({ value: "not-a-number" }) });
+
+    await expect(
+      runAutoApproveGate(APPLICANT, ALL_DATA_PRESENT, { logger: silentLogger })
+    ).rejects.toThrow("MAX_PDEFAULT config");
+  });
+
+  it("fails closed when the config read itself fails", async () => {
+    mockMaxPDefaultConfigGet.mockRejectedValue(new Error("network down"));
+
+    await expect(
+      runAutoApproveGate(APPLICANT, ALL_DATA_PRESENT, { logger: silentLogger })
+    ).rejects.toThrow("MAX_PDEFAULT config");
   });
 });
 
@@ -476,6 +566,18 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
 // untouched here.
 describe("runAutoApproveGate — competitor loan routing (ADR-005 C5, ratified 2026-08-03)", () => {
   const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+  // These cases are about ROUTING, not about the cutoff, so they run against
+  // an unconfigured deployment: no config document, therefore the
+  // compile-time seed. That is the cutoff the fixtures below were written
+  // against — ALL_DATA_PRESENT's P(default) of 0.18 clears it, leaving
+  // `no_competitor_loans` as the single failing condition the first case
+  // asserts on. Without this, `getMaxPDefault()` reads an unstubbed mock and
+  // the gate throws before it can route anything.
+  beforeEach(() => {
+    mockMaxPDefaultConfigGet.mockReset();
+    mockMaxPDefaultConfigGet.mockResolvedValue({ exists: false });
+  });
 
   it("does not decline on a competitor-loan-only failure; it escalates to further review instead", async () => {
     const competitorLoanOnly = {

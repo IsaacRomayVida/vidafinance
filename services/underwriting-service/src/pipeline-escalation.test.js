@@ -76,6 +76,20 @@ jest.mock("./metamap-client", () => ({
   STAGE_5_MODULES: ["aml-screening", "criminal-records", "pep-check"],
 }));
 jest.mock("node-fetch", () => jest.fn());
+// stage3-autoapprove.js's MAX_PDEFAULT cutoff (ADR-005 Finding 5) and
+// stage2-bureau.js's competitor-lender-by-name lookup (Finding 7) both read a
+// Firestore config document through the same seam. Neither doc exists in
+// this suite's world, so both resolve to their compile-time seed — the
+// existing behaviour, unchanged. Without this mock, `admin.firestore()`
+// throws synchronously ("no Firebase App '[DEFAULT]'") the first time either
+// seam is touched, since index.js's `admin.initializeApp()` never runs here.
+jest.mock("firebase-admin", () => ({
+  firestore: () => ({
+    collection: () => ({
+      doc: () => ({ get: jest.fn().mockResolvedValue({ exists: false }) }),
+    }),
+  }),
+}));
 
 const { runPipeline } = require("./decision-engine");
 const { parseAgeFromCurp, RFC_REGEX, CURP_REGEX } = require("./stages/stage1-identity");
