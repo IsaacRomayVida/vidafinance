@@ -18,7 +18,7 @@ import logging
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from models.thin_file_knn import ThinFileKNN, build_profile_text, EMBEDDING_DIM
+from models.thin_file_knn import ThinFileKNN, EMBEDDING_DIM
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("train_thin_file_index")

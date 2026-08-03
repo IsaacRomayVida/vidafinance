@@ -7,7 +7,6 @@ with separate system and user prompt sections.
 """
 
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Any

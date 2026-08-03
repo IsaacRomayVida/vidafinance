@@ -179,7 +179,7 @@ def train_and_save(output_path: str):
     # Raw AUC
     raw_train_auc = roc_auc_score(y_train, raw_xgb.predict_proba(X_train)[:, 1])
     raw_test_auc = roc_auc_score(y_test, raw_xgb.predict_proba(X_test)[:, 1])
-    print(f"\nRaw XGBoost:")
+    print("\nRaw XGBoost:")
     print(f"  Train AUC: {raw_train_auc:.4f}")
     print(f"  Test AUC:  {raw_test_auc:.4f}")
 
@@ -193,16 +193,16 @@ def train_and_save(output_path: str):
     calibrated = PlattCalibratedXGB(raw_xgb, platt_lr)
 
     cal_test_auc = roc_auc_score(y_test, calibrated.predict_proba(X_test)[:, 1])
-    print(f"\nCalibrated XGBoost:")
+    print("\nCalibrated XGBoost:")
     print(f"  Test AUC:  {cal_test_auc:.4f}")
 
     if cal_test_auc < 0.85:
         print(f"\nWARNING: Test AUC {cal_test_auc:.4f} < 0.85 target")
     else:
-        print(f"\n  AUC target met (>= 0.85)")
+        print("\n  AUC target met (>= 0.85)")
 
     # Feature importance
-    print(f"\nFeature importance (gain):")
+    print("\nFeature importance (gain):")
     importances = raw_xgb.feature_importances_
     for name, imp in sorted(zip(feature_names, importances), key=lambda x: -x[1]):
         print(f"  {name:25s}  {imp:.4f}")

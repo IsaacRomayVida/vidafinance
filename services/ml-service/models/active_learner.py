@@ -13,7 +13,6 @@ Flow:
 """
 
 import logging
-from typing import Optional
 
 import joblib
 import numpy as np

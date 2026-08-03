@@ -1,7 +1,6 @@
 """ML_MODE env var handling — VID3-712."""
 
 import os
-from typing import Literal
 
 try:
     from prometheus_client import Counter

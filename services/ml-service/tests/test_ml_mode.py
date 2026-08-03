@@ -1,11 +1,9 @@
 import os
-import pytest
 from unittest.mock import patch
 from ml_mode import (
     apply_ml_mode_override,
     get_ml_mode,
     ML_MODE_AUTO,
-    ML_MODE_MANUAL_REVIEW_ALL,
 )
 
 

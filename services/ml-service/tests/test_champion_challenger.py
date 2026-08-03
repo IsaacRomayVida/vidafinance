@@ -8,7 +8,6 @@ Tests cover:
   - Updated underwriting worker integration (mocked Firestore/Redis)
 """
 
-import json
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch

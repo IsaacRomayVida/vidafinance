@@ -3,10 +3,12 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Header, Request, Response
+from fastapi import FastAPI, HTTPException, Header, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import Counter, Histogram, make_asgi_app
-import os, json, time
+import os
+import json
+import time
 import redis as Redis
 from dotenv import load_dotenv
 
@@ -20,8 +22,6 @@ from services.firestore_client import FirestoreClient
 from monitoring.alerts import (
     alert_5xx,
     alert_redis_lost,
-    alert_model_fallback,
-    alert_rate_limit,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -262,9 +262,9 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
                         {
                             "role": "user",
                             "content": (
-                                f'Analyze employer risk. Company:{payload.get("companyName","?")} '
-                                f'Size:{payload.get("companySize","?")} Industry:{payload.get("industry","?")} '
-                                f'Payroll:{payload.get("payrollSystem","?")} Years:{payload.get("yearsActive","?")}\n'
+                                f'Analyze employer risk. Company:{payload.get("companyName", "?")} '
+                                f'Size:{payload.get("companySize", "?")} Industry:{payload.get("industry", "?")} '
+                                f'Payroll:{payload.get("payrollSystem", "?")} Years:{payload.get("yearsActive", "?")}\n'
                                 'Respond: {"risk_tier":1|2|3,"red_flags":[],"green_flags":[],'
                                 '"escalate_to_human":true|false,"summary":"1 sentence"}'
                             ),

@@ -4,8 +4,6 @@ Tests for the thin-file k-NN model (embedding + FAISS).
 These tests use synthetic embeddings to avoid requiring an OpenAI API key.
 """
 
-import json
-
 import numpy as np
 import pytest
 
