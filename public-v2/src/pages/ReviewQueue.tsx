@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
+import { friendlyError } from '../lib/errors';
+import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { OPEN_REVIEW_STATUSES } from '../lib/reviewStatus';
 import { useAuth } from '../hooks/useAuth';
 
@@ -128,6 +130,7 @@ export function ReviewQueue() {
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
   // Filters & sorting
@@ -159,9 +162,28 @@ export function ReviewQueue() {
       q,
       (snap) => {
         setReviews(snap.docs.map(d => ({ id: d.id, ...d.data() } as ReviewItem)));
+        setLoadError(null);
         setLoading(false);
       },
-      () => setLoading(false),
+      (err) => {
+        // A swallowed error here rendered "No pending reviews. All caught up."
+        // — a failed read told the ops team that every waiting borrower had
+        // been dealt with. This is the #503 rule (a failed read must not show a
+        // spinner or a lie) applied to the console, which never got it.
+        //
+        // FAILED_PRECONDITION is called out by name because it is the live
+        // risk, not a hypothetical: this query needs the
+        // (status ASC, queuedAt ASC) composite index, and index deploys have
+        // been 403'ing since 2026-07-31 on a missing IAM role (#414). Without
+        // it the page fails exactly this way, and "all caught up" is what ops
+        // would see.
+        setLoadError(
+          err.code === 'failed-precondition'
+            ? 'No se pudo cargar la cola: falta un índice de Firestore (#414). Esto NO significa que no haya revisiones pendientes.'
+            : `No se pudo cargar la cola de revisión: ${friendlyError(err)}. Esto NO significa que no haya revisiones pendientes.`
+        );
+        setLoading(false);
+      },
     );
     return unsub;
   }, []);
@@ -369,8 +391,15 @@ export function ReviewQueue() {
         </div>
       )}
 
-      {/* Empty */}
-      {!loading && reviews.length === 0 && (
+      {/* Read failure — never rendered as an empty queue. */}
+      {!loading && loadError && (
+        <ErrorBanner message={loadError} style={{ textAlign: 'left', marginBottom: 16 }} />
+      )}
+
+      {/* Empty. Gated on loadError: "All caught up" is a claim that every
+          waiting borrower has been dealt with, and it must only be made when
+          the queue was actually read. */}
+      {!loading && !loadError && reviews.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
           <p style={{ fontSize: 14 }}>No pending reviews. All caught up.</p>
         </div>
