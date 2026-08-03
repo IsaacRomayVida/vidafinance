@@ -44,7 +44,6 @@ const DELIBERATE: Record<string, { count: number; why: string }> = {
     count: 1,
     why: 'Payment-method metadata, secondary to the amount and date beside it.',
   },
-  'components/employee/LoanModal.tsx': { count: 0, why: 'None left.' },
   'pages/MyLoans.tsx': {
     count: 3,
     why:

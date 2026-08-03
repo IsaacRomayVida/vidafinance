@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
@@ -10,7 +10,6 @@ import { LoanStatusCard } from '../components/LoanStatusCard';
 import { KYCBanner } from '../components/employee/KYCBanner';
 import { CreditWidget } from '../components/employee/CreditWidget';
 import { LoanTable } from '../components/employee/LoanTable';
-import { LoanModal } from '../components/employee/LoanModal';
 import { PaymentModal } from '../components/employee/PaymentModal';
 import type { EmployeeData, Loan, Repayment } from '../components/employee/types';
 import { fmt } from '../components/employee/types';
@@ -29,7 +28,6 @@ export function EmployeeDashboard() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [paymentLoan, setPaymentLoan] = useState<Loan | null>(null);
   const [pageState, setPageState] = useState<'loading' | 'dashboard'>('loading');
 
@@ -84,14 +82,12 @@ export function EmployeeDashboard() {
     return acc;
   }, {});
 
-  const handleLoanSubmitted = useCallback(() => {
-    setShowModal(false);
-    if (user) {
-      getDoc(doc(db, 'employees', user.uid)).then((snap) => {
-        if (snap.exists()) setEmployee(snap.data() as EmployeeData);
-      });
-    }
-  }, [user]);
+  // Requesting a loan navigates to the wizard rather than opening a modal
+  // (#446). There is one priced surface, so there is one place a borrower can
+  // be quoted a fee, a due date and a CAT. The dashboard reloads the employee
+  // document on mount, so returning from the wizard refreshes the balance
+  // without a callback threaded through the request UI.
+  const goToApply = () => navigate('/employee/apply');
 
   if (pageState === 'loading') {
     return (
@@ -149,7 +145,7 @@ export function EmployeeDashboard() {
           employee={employee}
           loans={loans}
           hasActiveLoan={hasActiveLoan}
-          onOpenModal={() => setShowModal(true)}
+          onOpenModal={goToApply}
         />
 
         {/* Loan Status Card */}
@@ -163,7 +159,7 @@ export function EmployeeDashboard() {
             }
             onRequestAnother={
               ['paid', 'repaid', 'completed'].includes(statusCardLoan.status)
-                ? () => setShowModal(true)
+                ? goToApply
                 : undefined
             }
           />
@@ -202,26 +198,12 @@ export function EmployeeDashboard() {
           loans={loans}
           repaymentsByLoan={repaymentsByLoan}
           loading={loading}
-          onOpenModal={() => setShowModal(true)}
+          onOpenModal={goToApply}
           onPayLoan={setPaymentLoan}
         />
       </div>
 
       {/* Modals */}
-      <AnimatePresence>
-        {showModal && employee && (
-          <LoanModal
-            key="loan-modal"
-            availableCredit={employee.availableCredit}
-            employerId={employee.employerId}
-            employerCode={employee.employerCode}
-            savedClabe={employee.bankClabe}
-            onClose={() => setShowModal(false)}
-            onSubmitted={handleLoanSubmitted}
-          />
-        )}
-      </AnimatePresence>
-
       <AnimatePresence>
         {paymentLoan && (
           <PaymentModal
