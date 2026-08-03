@@ -35,13 +35,31 @@ describe('vida-pdfs worker — loan_contract job', () => {
     expect(docs[0].data).toMatchObject({ type: 'loan_contract', loanId: 'loan_1' });
   });
 
-  // DEFECT: a malformed job (loan not found in Firestore) throws a raw
-  // TypeError reading `.dueDate` off `undefined` instead of a clear
-  // "loan not found" error -- the worker has no existence check before use,
-  // unlike the HTTP route which does check.
-  test('DEFECT: malformed job — unknown loanId throws a raw TypeError instead of a clear error', async () => {
+  // FIXED: a malformed job (loan not found in Firestore) now throws a clear
+  // "Loan not found" error instead of a raw TypeError reading `.dueDate` off
+  // `undefined` -- the worker now shares the same existence/shape guard the
+  // HTTP route uses.
+  test('malformed job: unknown loanId throws a clear "Loan not found" error', async () => {
     const job = { data: { type: 'loan_contract', loanId: 'does_not_exist', employeeId: 'emp_1' } };
-    await expect(worker.processor(job)).rejects.toThrow();
+    await expect(worker.processor(job)).rejects.toThrow('Loan not found: does_not_exist');
+  });
+
+  // FIXED: a loan missing dueDate (e.g. corrupted or partially written) now
+  // throws a clear validation error instead of a raw TypeError, matching the
+  // HTTP route's guard.
+  test('loan missing dueDate throws a clear validation error', async () => {
+    admin.__seed('loans', 'loan_bad', {
+      employeeName: 'Ana Torres',
+      employerName: 'Acme SA de CV',
+      amount: 1000,
+      fee: 300,
+      total: 1300,
+      feeRate: 0.3,
+      term: 30,
+      // dueDate intentionally omitted
+    });
+    const job = { data: { type: 'loan_contract', loanId: 'loan_bad', employeeId: 'emp_1' } };
+    await expect(worker.processor(job)).rejects.toThrow('Loan loan_bad is missing required field: dueDate');
   });
 });
 

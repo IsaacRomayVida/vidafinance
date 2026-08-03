@@ -56,10 +56,11 @@ describe('POST /contracts/generate — malformed payloads', () => {
     expect(res.body).toEqual({ error: 'Loan not found' });
   });
 
-  // DEFECT: a loan document missing dueDate (e.g. corrupted or partially
-  // written) crashes the request with a generic 500 instead of a clear
-  // validation error -- loan.dueDate.toDate() throws on undefined.
-  test('DEFECT: 500s with a generic error when the loan is missing dueDate', async () => {
+  // FIXED: a loan document missing dueDate (e.g. corrupted or partially
+  // written) now returns a clear 422 validation error identifying the bad
+  // field, instead of a generic 500 from loan.dueDate.toDate() throwing on
+  // undefined -- ops can now tell a bad loan record from a service outage.
+  test('422s with a clear validation error when the loan is missing dueDate', async () => {
     admin.__seed('loans', 'loan_bad', {
       employeeName: 'Ana Torres',
       employerName: 'Acme SA de CV',
@@ -74,8 +75,8 @@ describe('POST /contracts/generate — malformed payloads', () => {
       .post('/contracts/generate')
       .set('x-internal-secret', SECRET)
       .send({ loanId: 'loan_bad', employeeId: 'emp_1' });
-    expect(res.status).toBe(500);
-    expect(res.body).toEqual({ error: 'Contract generation failed' });
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({ error: 'Loan loan_bad is missing required field: dueDate' });
   });
 });
 
@@ -99,6 +100,9 @@ describe('POST /contracts/generate — happy path (MetaMap signing disabled)', (
     expect(loan.metamapDocumentId).toBeNull();
     expect(loan.metamapVerificationId).toBeNull();
     expect(loan.contractGeneratedAt).toBe('__mock_timestamp__');
+    // Never-attempted signing must stay distinguishable from a failed
+    // signing attempt (see 'signature_request_failed' below).
+    expect(loan.signatureError).toBeUndefined();
 
     const docs = admin.__all('employees/emp_1/documents');
     expect(docs).toHaveLength(1);
@@ -149,10 +153,13 @@ describe('POST /contracts/generate — MetaMap signing enabled', () => {
     expect(loan.metamapVerificationId).toBe('verif_1');
   });
 
-  // DEFECT: when MetaMap signing throws (e.g. provider outage), the error is
-  // caught and swallowed -- the contract is still returned as `generated`
-  // with no signal to the caller that the signing step failed.
-  test('DEFECT: signing failure is swallowed and the contract still reports success as "generated"', async () => {
+  // FIXED: when MetaMap signing throws (e.g. provider outage), the failure is
+  // now observable -- a distinct terminal contractStatus that a
+  // never-attempted signing can never reach, plus the error persisted on the
+  // loan so ops can see what happened. The contract PDF itself still
+  // generated fine, so the HTTP response stays 200; the fix lives entirely
+  // in the loan document's shape, not the route's status semantics.
+  test('signing failure is observable: contractStatus is signature_request_failed and the error is persisted', async () => {
     jest.spyOn(signing, 'isEnabled').mockReturnValue(true);
     jest.spyOn(signing, 'createSignedDocument').mockRejectedValue(new Error('MetaMap outage'));
     seedLoan('loan_5');
@@ -164,7 +171,9 @@ describe('POST /contracts/generate — MetaMap signing enabled', () => {
 
     expect(res.status).toBe(200);
     const loan = admin.__get('loans', 'loan_5');
-    expect(loan.contractStatus).toBe('generated');
+    expect(loan.contractStatus).toBe('signature_request_failed');
     expect(loan.metamapDocumentId).toBeNull();
+    expect(loan.signatureError).toBe('MetaMap outage');
+    expect(loan.signatureFailedAt).toBe('__mock_timestamp__');
   });
 });
