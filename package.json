@@ -54,8 +54,8 @@
       "eslint --fix --max-warnings 0"
     ],
     "services/ml-service/**/*.py": [
-      "python3 -m black --check",
-      "python3 -m flake8"
+      "bash services/ml-service/scripts/precommit_lint.sh black",
+      "bash services/ml-service/scripts/precommit_lint.sh flake8"
     ]
   }
 }
