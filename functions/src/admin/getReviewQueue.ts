@@ -109,10 +109,18 @@ function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-// Fail-soft: loans created before PR #393 shipped have no `underwritingDecision`
-// field at all — never throw over its absence, just surface null to the client.
-function summarizeUnderwriting(loan: Record<string, unknown> | null): UnderwritingSummary | null {
-  const uw = loan?.['underwritingDecision'] as Record<string, unknown> | undefined;
+// Fail-soft: loans created before PR #393 shipped (or whose pipeline never
+// reached Stage 3) have no `underwritingDetail` doc at all — never throw over
+// its absence, just surface null to the client.
+//
+// `detail` is `loans/{loanId}/underwritingDetail/detail` (E5c), NOT a field on
+// the loan doc — that subcollection is what firestore.rules gates `isOps()`-
+// only, since each condition carries the applicant's actual bureau/fraud/model
+// scores. This function only ever sees it via this Admin-SDK read, which
+// bypasses client rules, so the ops-only gate on the source data holds
+// regardless of what this summary reshapes it into.
+function summarizeUnderwriting(detail: Record<string, unknown> | null): UnderwritingSummary | null {
+  const uw = detail;
   if (!uw) return null;
 
   const conditions = Array.isArray(uw['conditions'])
@@ -241,10 +249,24 @@ export const getReviewQueue = onCall(
           if (snap.exists) loanById.set(snap.id, snap.data() as Record<string, unknown>);
         });
 
+        // Batch-fetched alongside the loans themselves, same `loanIds` order —
+        // see `summarizeUnderwriting` for why this lives in a subcollection
+        // rather than a field on the loan doc.
+        const underwritingDetailRefs = loanIds.map((id) =>
+          db.collection('loans').doc(id).collection('underwritingDetail').doc('detail')
+        );
+        const underwritingDetailSnaps =
+          underwritingDetailRefs.length > 0 ? await db.getAll(...underwritingDetailRefs) : [];
+        const underwritingDetailByLoanId = new Map<string, Record<string, unknown>>();
+        underwritingDetailSnaps.forEach((snap, i) => {
+          if (snap.exists) underwritingDetailByLoanId.set(loanIds[i], snap.data() as Record<string, unknown>);
+        });
+
         const reviews: ReviewQueueRow[] = reviewDocs.map((doc) => {
           const review = doc.data() as Record<string, unknown>;
           const loanId = typeof review['loanId'] === 'string' ? (review['loanId'] as string) : null;
           const loan = loanId ? loanById.get(loanId) ?? null : null;
+          const underwritingDetail = loanId ? underwritingDetailByLoanId.get(loanId) ?? null : null;
 
           return {
             id: doc.id,
@@ -259,7 +281,7 @@ export const getReviewQueue = onCall(
             totalDue: num(loan?.['total']),
             requestedAt: review['queuedAt'] ?? null,
             status: review['status'] as string,
-            underwritingDecision: summarizeUnderwriting(loan),
+            underwritingDecision: summarizeUnderwriting(underwritingDetail),
           };
         });
 

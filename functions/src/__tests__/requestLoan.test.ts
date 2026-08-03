@@ -138,7 +138,7 @@ function buildMockDb({
   const employerActiveLoansCountQuery = { _kind: 'employerActiveLoansCountQuery' as const };
   loansQuery.count.mockReturnValue(employerActiveLoansCountQuery);
 
-  const transactionCalls: Array<{ op: string; data?: unknown }> = [];
+  const transactionCalls: Array<{ op: string; ref?: string; data?: unknown }> = [];
   const auditWrites: Array<Record<string, unknown>> = [];
   let currentConfigData = configData;
   let currentEmployer = employer;
@@ -178,7 +178,20 @@ function buildMockDb({
         return { doc: jest.fn().mockReturnValue(employerDocRef) };
       }
       if (name === 'loans') {
-        return { ...loansQuery, doc: jest.fn().mockReturnValue({ id: 'new-loan-id' }) };
+        // Tagged so the transaction mock's `set()` below can tell the loan
+        // document apart from its `underwritingDetail/detail` subcollection
+        // doc — both are written inside the same transaction (E5c).
+        const loanDocRef = {
+          id: 'new-loan-id',
+          _kind: 'loanDocRef' as const,
+          collection: jest.fn().mockImplementation((subName: string) => {
+            if (subName !== 'underwritingDetail') throw new Error(`Unexpected subcollection: ${subName}`);
+            return {
+              doc: jest.fn().mockReturnValue({ _kind: 'underwritingDetailDocRef' as const }),
+            };
+          }),
+        };
+        return { ...loansQuery, doc: jest.fn().mockReturnValue(loanDocRef) };
       }
       if (name === 'audit_log') {
         return auditCollection;
@@ -215,7 +228,9 @@ function buildMockDb({
             if (ref?._kind === 'employerDocRef') currentEmployer = { ...(currentEmployer ?? {}), ...data };
             transactionCalls.push({ op: 'update', data });
           }),
-          set: jest.fn((_ref: unknown, data: unknown) => transactionCalls.push({ op: 'set', data })),
+          set: jest.fn((ref: { _kind?: string }, data: unknown) =>
+            transactionCalls.push({ op: 'set', ref: ref?._kind, data })
+          ),
         };
         await fn(txn);
         return transactionCalls;
@@ -466,11 +481,26 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     }
 
     function getLoanWrite() {
-      const loanWrite = mockDb._transactionCalls.find((c) => c.op === 'set') as
+      const loanWrite = mockDb._transactionCalls.find((c) => c.ref === 'loanDocRef') as
         | { data: Record<string, unknown> }
         | undefined;
       expect(loanWrite).toBeDefined();
       return loanWrite!.data;
+    }
+
+    // The breakdown (E5c) does NOT go on the loan document — that document is
+    // readable by the loan's own borrower and by the employer admin
+    // (firestore.rules `isOwner`/`isEmployerAdminOf`), and every condition
+    // carries the applicant's actual bureau score, LTI, RiskSeal fraud score
+    // and ML default probability alongside the bound it was tested against.
+    // It is written to `loans/{loanId}/underwritingDetail/detail` instead,
+    // which firestore.rules gates `isOps()`-only. `getLoanWrite` above must
+    // never see it; this reads the OTHER `tx.set()` call.
+    function getUnderwritingDetailWrite() {
+      const write = mockDb._transactionCalls.find((c) => c.ref === 'underwritingDetailDocRef') as
+        | { data: Record<string, unknown> }
+        | undefined;
+      return write?.data;
     }
 
     it('persists the condition breakdown verbatim when underwriting approves', async () => {
@@ -492,7 +522,11 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 
       const loanData = getLoanWrite();
       expect(loanData['status']).toBe('approved');
-      expect(loanData['underwritingDecision']).toMatchObject({
+      // The raw breakdown must NOT be reachable from the loan doc a borrower
+      // can read directly.
+      expect(loanData['underwritingDecision']).toBeUndefined();
+
+      expect(getUnderwritingDetailWrite()).toMatchObject({
         decision: 'approved',
         reason: null,
         allPass: true,
@@ -521,12 +555,57 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
       await fn({ auth, data: realClientPayload });
 
-      const loanData = getLoanWrite();
-      const persisted = loanData['underwritingDecision'] as Record<string, unknown>;
+      const persisted = getUnderwritingDetailWrite()!;
       expect(persisted['conditions']).toEqual(conditionsWithProvenance);
       const persistedConditions = persisted['conditions'] as Array<Record<string, unknown>>;
       expect(persistedConditions[0]['source']).toBe('read');
       expect(persistedConditions[1]['source']).toBe('assumed');
+    });
+
+    // The exact shape stage3-autoapprove.js's `evaluateAutoApprove` produces
+    // for all 12 gating conditions (ADR-006 added ids 11/12 on top of the
+    // original 10) — id, name, pass, value, required (the bound), source.
+    // Every field must survive the write untouched: this is the "why was
+    // this decided this way" data the whole feature exists to make readable.
+    const allTwelveConditions = [
+      { id: 1, name: 'employer_tier', pass: true, value: 1, required: '1-2', source: 'read' },
+      { id: 2, name: 'imss_tenure', pass: true, value: 24, required: '> 6 months', source: 'read' },
+      { id: 3, name: 'bureau_score', pass: true, value: 650, required: '> 600', source: 'read' },
+      { id: 4, name: 'lti', pass: true, value: 12, required: '<= 25%', source: 'read' },
+      { id: 5, name: 'no_competitor_loans', pass: true, value: 0, required: '0', source: 'read' },
+      { id: 6, name: 'riskseal_score', pass: true, value: 85, required: '> 60', source: 'read' },
+      { id: 7, name: 'sector_safe', pass: true, value: 'bajo', required: 'not alto', source: 'read' },
+      { id: 8, name: 'ml_default_prob', pass: true, value: 0.05, required: '< 0.15', source: 'read' },
+      { id: 9, name: 'no_active_defaults', pass: true, value: 0, required: '0', source: 'read' },
+      { id: 10, name: 'age_range', pass: true, value: 34, required: '18-65', source: 'read' },
+      { id: 11, name: 'dias_atraso_zero', pass: true, value: 0, required: '0', source: 'read' },
+      { id: 12, name: 'cartera_vencida_false', pass: true, value: false, required: 'false', source: 'read' },
+    ];
+
+    it('round-trips all 12 auto-approve conditions with id, value, bound and source intact', async () => {
+      await mockUnderwritingResponse(
+        uwResponse(
+          { decision: 'approved', reason: null, correlationId: 'uw-full', lastStage: 'stage3' },
+          { conditions: allTwelveConditions, allPass: true },
+        ),
+      );
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const persisted = getUnderwritingDetailWrite()!;
+      expect(persisted['conditions']).toEqual(allTwelveConditions);
+      expect((persisted['conditions'] as unknown[])).toHaveLength(12);
+      // Not just "the array survived" — every id/value/required/source pair
+      // must be individually intact, since ops reads this per-condition.
+      allTwelveConditions.forEach((expected, i) => {
+        const actual = (persisted['conditions'] as Array<Record<string, unknown>>)[i];
+        expect(actual['id']).toBe(expected.id);
+        expect(actual['value']).toBe(expected.value);
+        expect(actual['required']).toBe(expected.required);
+        expect(actual['source']).toBe(expected.source);
+      });
     });
 
     it('creates the loan with no breakdown, and does not throw, when underwriting is unreachable', async () => {
@@ -540,6 +619,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       const loanData = getLoanWrite();
       expect(loanData['status']).toBe('pending');
       expect(loanData['underwritingDecision']).toBeUndefined();
+      expect(getUnderwritingDetailWrite()).toBeUndefined();
     });
 
     it('persists the breakdown alongside the denial reason when underwriting rejects', async () => {
@@ -568,12 +648,14 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       const loanData = getLoanWrite();
       expect(loanData['status']).toBe('rejected');
       expect(loanData['denialReason']).toBe('FULL_KYC_REQUIRED');
-      expect(loanData['underwritingDecision']).toMatchObject({
+
+      const persisted = getUnderwritingDetailWrite()!;
+      expect(persisted).toMatchObject({
         decision: 'rejected',
         reason: 'FULL_KYC_REQUIRED',
         allPass: false,
       });
-      expect((loanData['underwritingDecision'] as Record<string, unknown>)['conditions']).toHaveLength(3);
+      expect((persisted['conditions'] as unknown[])).toHaveLength(3);
     });
 
     it('omits the breakdown when the pipeline stopped before stage 3', async () => {
@@ -600,7 +682,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       const loanData = getLoanWrite();
       expect(loanData['status']).toBe('rejected');
       expect(loanData['denialReason']).toBe('SAT_BLACKLIST');
-      expect(loanData['underwritingDecision']).toBeUndefined();
+      expect(getUnderwritingDetailWrite()).toBeUndefined();
     });
 
     it('reads the lean top-level slice — the documented contract — without needing stages', async () => {
@@ -623,7 +705,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
       await fn({ auth, data: realClientPayload });
 
-      const persisted = getLoanWrite()['underwritingDecision'] as Record<string, unknown>;
+      const persisted = getUnderwritingDetailWrite()!;
       expect(persisted).toBeDefined();
       expect(persisted['allPass']).toBe(true);
       expect(persisted['conditions']).toHaveLength(2);
@@ -646,7 +728,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
       await fn({ auth, data: realClientPayload });
 
-      const persisted = getLoanWrite()['underwritingDecision'] as Record<string, unknown>;
+      const persisted = getUnderwritingDetailWrite()!;
       expect(persisted).toBeDefined();
       expect(persisted['allPass']).toBe(true);
       expect(persisted['conditions']).toHaveLength(2);
