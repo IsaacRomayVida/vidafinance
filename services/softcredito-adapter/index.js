@@ -20,7 +20,7 @@ const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting
 const { scTokenRaw, scTokenProbe } = require('./lib/scToken');
 const { getFetch } = require('./lib/fetchClient');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
-const { parseBureauMode, withBureauFallback } = require('./lib/bureauFallback');
+const { parseBureauMode, withBureauFallback, classifyError } = require('./lib/bureauFallback');
 
 const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
 
@@ -80,7 +80,23 @@ async function scToken() {
   return _token;
 }
 
-async function scCall(method, path, body) {
+// Outbound timeout for the READ-ONLY SoftCrédito calls. node-fetch v3 has no
+// default timeout of its own, so without an abort signal an upstream that
+// accepts the connection and then never answers holds the request -- and the
+// underwriting request queued behind it -- open forever. 15s matches the
+// timeout lib/scToken.js already applies to this service's other outbound
+// call.
+//
+// Opt-in per call site, and deliberately NOT applied to /spei/transfer,
+// /employers/register or /deductions/register: aborting a request that may
+// already have moved money turns one hung call into an ambiguous one, and
+// /internal/disburse has no idempotency guard to make the retry safe (see the
+// pinned test in test/disburse.test.js). Whether the money-moving calls should
+// time out is a question for whoever owns the SoftCrédito integration
+// contract, not something to decide here.
+const SC_READ_TIMEOUT_MS = () => Number(process.env.SC_HTTP_TIMEOUT_MS) || 15000;
+
+async function scCall(method, path, body, callOpts = {}) {
   const fetch = await getFetch();
   const token = await scToken();
   const opts = {
@@ -88,12 +104,20 @@ async function scCall(method, path, body) {
     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
   };
   if (body) opts.body = JSON.stringify(body);
+  if (callOpts.timeoutMs) opts.signal = AbortSignal.timeout(callOpts.timeoutMs);
   const r = await fetch(process.env.SOFTCREDITO_API_URL + path, opts);
   if (r.status === 429) {
     alertRateLimit(SERVICE_NAME, 'SoftCredito');
   }
   const d = await r.json();
-  if (!r.ok) throw new Error('SC API ' + path + ': ' + JSON.stringify(d));
+  if (!r.ok) {
+    // The status is carried on the error object so failure paths can log which
+    // upstream status we got without logging the response body, which for the
+    // bureau and CURP endpoints echoes the queried subject's CURP and name.
+    const err = new Error('SC API ' + path + ': ' + JSON.stringify(d));
+    err.status = r.status;
+    throw err;
+  }
   return d;
 }
 
@@ -108,8 +132,18 @@ app.get('/debug-routes', (req, res) => {
 
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
-  res.set('Content-Type', metricsRegister.contentType);
-  res.end(await metricsRegister.metrics());
+  // Express 4 does not catch a rejected promise from an async route handler:
+  // an unguarded `await` here left the scrape with no response at all, hanging
+  // the caller until it timed out. Same shape as registry-service (#524) and
+  // payment-server (#526).
+  try {
+    const body = await metricsRegister.metrics();
+    res.set('Content-Type', metricsRegister.contentType);
+    res.end(body);
+  } catch (err) {
+    log.warn({ error: err.message }, 'metrics collection failed');
+    res.status(500).json({ error: 'metrics_unavailable' });
+  }
 });
 
 app.get('/health', async (req, res) => {
@@ -341,13 +375,31 @@ app.post('/bureau/query', requireInternal, async (req, res) => {
     const data = await withBureauFallback({
       mode: BUREAU_MODE,
       log,
-      liveFn: () => scCall('POST', '/bureau/query', { curp, fullName, dateOfBirth, rfc }),
+      liveFn: () => scCall('POST', '/bureau/query', { curp, fullName, dateOfBirth, rfc }, { timeoutMs: SC_READ_TIMEOUT_MS() }),
     });
     res.json(data);
   } catch (err) {
     // Only reached in 'live' mode, where errors propagate through.
-    log.warn({ error: err.message }, 'Bureau query error — returning defaults');
-    res.json({ hasBureauRecord: false, score: 500, activeDefaults: 0, competitorLoans: 0, error: err.message });
+    //
+    // Fail closed. This used to answer 200 with
+    // { hasBureauRecord: false, score: 500, activeDefaults: 0, competitorLoans: 0 },
+    // which is a claim about the applicant we have no basis for: we never
+    // reached the bureau. The caller
+    // (underwriting-service/src/stages/stage2-bureau.js) decides a read
+    // failed on `!res.ok` and nothing else -- it does not read this `error`
+    // field, and the record flag it reads from a 2xx body is
+    // `has_bureau_record`, which this route has never emitted, so it falls
+    // through to `?? true`. A 200 here was therefore taken downstream as a
+    // real bureau record, with a mid-range score, an explicit "no active
+    // defaults" and an explicit "no competitor loans" -- an outage rendered
+    // as a clean file. A non-2xx routes it into that caller's existing
+    // failure branch, which marks the bureau block `skipped`.
+    //
+    // No score is returned, and the upstream body is not echoed: bureau
+    // validation errors quote the CURP and full name they were queried with.
+    const reason = classifyError(err);
+    log.warn({ reason, upstreamStatus: err.status }, 'Bureau query failed — no bureau data returned');
+    res.status(502).json({ error: 'bureau_unavailable', reason });
   }
 });
 
@@ -356,11 +408,23 @@ app.post('/curp/validate', requireInternal, async (req, res) => {
   const { curp, expectedName } = req.body;
   if (!curp) return res.status(400).json({ error: 'CURP required' });
   try {
-    const data = await scCall('POST', '/curp/validate', { curp, expectedName });
+    const data = await scCall('POST', '/curp/validate', { curp, expectedName }, { timeoutMs: SC_READ_TIMEOUT_MS() });
     res.json(data);
   } catch (err) {
-    log.warn({ error: err.message }, 'CURP validation error — accepting by format');
-    res.json({ valid: true, fullName: expectedName || null });
+    // Fail closed. This used to answer 200 with { valid: true, fullName:
+    // expectedName } on any failure -- reporting an identity check that never
+    // ran as a successful one, and echoing the applicant's own claimed name
+    // back in `fullName`, a field whose meaning is "the name RENAPO holds for
+    // this CURP".
+    //
+    // The accept-by-format fallback the old comment described lives in the
+    // caller, functions/src/index.ts's validateCURP, which already applies it
+    // on a non-2xx response ("CURP adapter error, accepting by format"). So
+    // this does not change the loan outcome; it stops this service asserting a
+    // validation it did not perform.
+    const reason = classifyError(err);
+    log.warn({ reason, upstreamStatus: err.status }, 'CURP validation failed — no RENAPO answer returned');
+    res.status(502).json({ error: 'curp_validation_unavailable', reason });
   }
 });
 
