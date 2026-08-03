@@ -1188,6 +1188,175 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       expect(result.loanId).toBeTruthy();
     });
   });
+
+  // ADR-009: the slot ACCRUAL ledger, the half ADR-007 left unbuilt.
+  //
+  // Measured before writing these: the employer object requestLoan sent to
+  // the underwriting service was `{rfc, companyName}` and nothing else, so
+  // employer-b's `employer.maxActiveSlots` was always undefined in
+  // production, its `isReturning` branch was never taken, and
+  // `autoScaleTier1` — ADR-007's entire ratified growth rule — was
+  // unreachable outside its own unit tests. Every Tier-1 employer was
+  // re-granted a flat 10 on every loan request, forever.
+  describe('ADR-009: slot accrual ledger wiring', () => {
+    const UW_URL = 'https://uw.internal';
+
+    async function mockUwWithEmployerB(employerB: Record<string, unknown>) {
+      process.env['UNDERWRITING_SERVICE_URL'] = UW_URL;
+      process.env['INTERNAL_SECRET'] = 'test-secret';
+      const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
+      fetchModule.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          decision: 'approved',
+          reason: null,
+          correlationId: 'uw-adr009',
+          lastStage: 'stage3',
+          stages: { employerB },
+        }),
+      });
+      return fetchModule;
+    }
+
+    async function uwEmployerPayload(fetchModule: jest.Mock): Promise<Record<string, unknown>> {
+      const call = fetchModule.mock.calls.find((c) => String(c[0]).includes('/underwrite'));
+      expect(call).toBeDefined();
+      return JSON.parse((call![1] as { body: string }).body)['employer'];
+    }
+
+    function ledgerWrites() {
+      return mockDb._transactionCalls.filter(
+        (c) => c.op === 'update' && (c.data as Record<string, unknown>)?.['tier'] !== undefined
+      );
+    }
+
+    it('sends the stored slot ledger to the underwriting service', async () => {
+      mockDb = buildMockDb({
+        employer: {
+          ...mockEmployer,
+          tier: 1,
+          maxActiveSlots: 30,
+          cleanPayrollCycles: 7,
+          cleanPayrollCyclesSinceReview: 2,
+        },
+      });
+      const fetchModule = await mockUwWithEmployerB({ pass: true, tier: 1, score: 85, maxActiveSlots: 50 });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(await uwEmployerPayload(fetchModule)).toMatchObject({
+        tier: 1,
+        maxActiveSlots: 30,
+        cleanPayrollCycles: 7,
+        cleanPayrollCyclesSinceReview: 2,
+      });
+    });
+
+    it('defaults a never-scored employer\'s ledger to zeros, never undefined', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer } });
+      const fetchModule = await mockUwWithEmployerB({ pass: true, tier: 1, score: 85, maxActiveSlots: 10 });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const payload = await uwEmployerPayload(fetchModule);
+      expect(payload).toMatchObject({
+        tier: null,
+        maxActiveSlots: 0,
+        cleanPayrollCycles: 0,
+        cleanPayrollCyclesSinceReview: 0,
+      });
+    });
+
+    // Sending employerId would activate employer-b's OWN Firestore write,
+    // making the underwriting service a second concurrent writer of
+    // maxActiveSlots racing the block in requestLoan. #487 is the writer.
+    it('does not send employerId, keeping requestLoan the single cap writer', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer, maxActiveSlots: 10 } });
+      const fetchModule = await mockUwWithEmployerB({ pass: true, tier: 1, score: 85, maxActiveSlots: 10 });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(await uwEmployerPayload(fetchModule)).not.toHaveProperty('employerId');
+    });
+
+    it('persists the due-diligence tier alongside the cap', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer, maxActiveSlots: 10 } });
+      await mockUwWithEmployerB({ pass: true, tier: 1, score: 85, maxActiveSlots: 20 });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(ledgerWrites()).toHaveLength(1);
+      expect(ledgerWrites()[0]).toMatchObject({
+        data: { tier: 1, maxActiveSlots: 20, maxActiveSlotsSource: 'due_diligence' },
+      });
+    });
+
+    // ops_override means ops owns the NUMBER, not the score behind it —
+    // the same split employer-b's own transaction makes.
+    it('refreshes the tier under an ops override while leaving the cap frozen', async () => {
+      mockDb = buildMockDb({
+        employer: { ...mockEmployer, maxActiveSlots: 50, maxActiveSlotsSource: 'ops_override', tier: 1 },
+      });
+      await mockUwWithEmployerB({ pass: true, tier: 2, score: 55, maxActiveSlots: 3 });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const writes = ledgerWrites();
+      expect(writes).toHaveLength(1);
+      expect(writes[0]!.data).toEqual({ tier: 2 });
+      expect((writes[0]!.data as Record<string, unknown>)['maxActiveSlots']).toBeUndefined();
+    });
+
+    // ADR-007 forfeits earned cycles beyond the 2-increment cap. A forfeit
+    // that leaves no trace is indistinguishable from a cycle never earned.
+    it('audit-logs the credited increments and the forfeited cycles', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer, maxActiveSlots: 30 } });
+      await mockUwWithEmployerB({
+        pass: true,
+        tier: 1,
+        score: 85,
+        maxActiveSlots: 50,
+        slotGrowth: {
+          cyclesConsidered: 5,
+          incrementsCredited: 2,
+          cyclesForfeited: 3,
+          slotsBefore: 30,
+          slotsAfter: 50,
+        },
+      });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const entry = mockDb._auditWrites.find((w) => w['action'] === 'employer.due_diligence_cap');
+      expect(entry).toMatchObject({
+        meta: { slotGrowth: { incrementsCredited: 2, cyclesForfeited: 3 } },
+      });
+    });
+
+    it('records a null slotGrowth when the review granted a fresh cap rather than an increment', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer } });
+      await mockUwWithEmployerB({ pass: true, tier: 1, score: 85, maxActiveSlots: 10 });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const entry = mockDb._auditWrites.find((w) => w['action'] === 'employer.due_diligence_cap');
+      expect(entry).toMatchObject({ meta: { slotGrowth: null } });
+    });
+  });
 });
 
 // Guards against the exact drift that caused P0-2: the fee rate re-declared as

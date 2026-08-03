@@ -42,7 +42,31 @@ Employer organizations. The document ID is the employer's Firebase Auth UID.
 | `totalDisbursed` | number | Total disbursed amount (denormalized) |
 | `currentOutstandingBalance` | number | Outstanding balance (denormalized) |
 
-**Access:** Owner (employer), ops, admin.
+#### Lending-slot ledger (ADR-007)
+
+A **slot** is one employee at one employer allowed to hold a loan at the same
+time. These fields cap how much of Funpay's money can sit at a single employer.
+
+| Field | Type | Description |
+|---|---|---|
+| `maxActiveSlots` | number | **CAPACITY** — how many concurrent loans this employer's employees may hold. Never slots-IN-USE: `requestLoan` derives that separately with an aggregate `count()` over `ACTIVE_LOAN_STATUSES` and compares the two inside its transaction. |
+| `maxActiveSlotsSource` | string | `due_diligence` \| `ops_override`. An ops-approved expansion (`updateEmployerTier`'s `approve_expansion`) outranks the next automated re-score. A **missing** source is not an override. |
+| `tier` | number | Due-diligence tier from `employer-b.js` (1 auto-scale, 2 manual gate, 0 rejected). Anchors which slot ladder the next review re-enters. **Distinct from `riskTier`**, which is ML-assigned and drives pricing/fraud paths — ADR-005 Finding 2 flagged the two vocabularies; the relationship is that `tier` alone governs slots and `riskTier` alone governs the ML gates, and neither is derived from the other. |
+| `cleanPayrollCycles` | number | **LIFETIME** clean payroll cycles. Feeds the `payrollHistory` score weight (full at 6+) and Tier 2's upgrade clock (eligible at 10). Monotonic; never reset. |
+| `cleanPayrollCyclesSinceReview` | number | Clean cycles **accrued since the last due-diligence review** — the quantity ADR-007's hybrid growth rule consumes (+10 slots per cycle, max 2 increments credited per review, surplus forfeited). |
+| `lastDueDiligenceAt` | timestamp | When due diligence last ran. |
+| `employerScore` | number | 0–100 weighted due-diligence score. |
+| `dueDiligenceResult` | map | `{pass, tier, score}` snapshot of the last review. |
+
+> **Not yet live:** no code in this repository increments either cycle counter,
+> and there is no periodic due-diligence review job — the only invocation of
+> `runEmployerDueDiligence` is the per-loan-request underwriting pipeline. Both
+> counters therefore read 0 in production, so hybrid growth credits nothing and
+> preserves the stored cap. See ADR-009 (open questions Q1 and Q2).
+
+**Access:** Owner (employer), ops, admin. The slot-ledger fields are
+Admin-SDK-only; `firestore.rules` blocks an employer from self-assigning
+`maxActiveSlots` at creation.
 
 ---
 

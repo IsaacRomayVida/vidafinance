@@ -535,6 +535,34 @@ describe('employers collection', () => {
       );
     });
 
+    // ADR-009: `maxActiveSlots` was already blocked here, but the fields that
+    // FEED it were not. An employer that self-created with `tier: 1` and a
+    // pre-loaded `cleanPayrollCyclesSinceReview` would walk its first
+    // due-diligence review straight into a credited slot increment. Blocking
+    // the cap while leaving its inputs writable is not a cap.
+    const SLOT_LEDGER_FIELDS: Array<[string, unknown]> = [
+      ['maxActiveSlots', 500],
+      ['maxActiveSlotsSource', 'ops_override'],
+      ['tier', 1],
+      ['cleanPayrollCycles', 99],
+      ['cleanPayrollCyclesSinceReview', 99],
+      ['employerScore', 100],
+      ['dueDiligenceResult', { pass: true, tier: 1, score: 100 }],
+    ];
+
+    for (const [field, value] of SLOT_LEDGER_FIELDS) {
+      it(`user cannot self-create an employer carrying a ${field}`, async () => {
+        const ctx = testEnv.authenticatedContext('attacker1');
+        await assertFails(
+          setDoc(doc(ctx.firestore(), 'employers/attacker1'), {
+            name: 'My Company',
+            status: 'pending_verification',
+            [field]: value,
+          })
+        );
+      });
+    }
+
     it('the real onboarding shape is still accepted', async () => {
       // Mirrors the payload Onboarding.tsx writes at createEmployerAccount.
       const ctx = testEnv.authenticatedContext('employer9');

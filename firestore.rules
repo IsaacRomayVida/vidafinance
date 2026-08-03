@@ -59,10 +59,19 @@ service cloud.firestore {
     // Delete: ops only.
     // =============================================
     function isSelfServeEmployerCreate() {
+      // ADR-007: the lending-slot ledger is Admin-SDK-only. `maxActiveSlots`
+      // was already blocked, but the fields that FEED it were not — a
+      // self-serve employer that created itself with `tier: 1` and
+      // `cleanPayrollCyclesSinceReview: 2` would hand its first
+      // due-diligence review a pre-loaded accrual and walk straight into a
+      // credited increment. Blocking the cap while leaving its inputs
+      // writable is not a cap.
       return request.resource.data.status == 'pending_verification'
              && !request.resource.data.keys().hasAny([
                   'apiKeyHash', 'creditLimit', 'riskTier', 'mlScore', 'llmAnalysis',
-                  'approvedAt', 'approvedBy', 'currentOutstandingBalance', 'maxActiveSlots'
+                  'approvedAt', 'approvedBy', 'currentOutstandingBalance', 'maxActiveSlots',
+                  'maxActiveSlotsSource', 'tier', 'cleanPayrollCycles',
+                  'cleanPayrollCyclesSinceReview', 'employerScore', 'dueDiligenceResult'
                 ]);
     }
 

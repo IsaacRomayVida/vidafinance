@@ -412,11 +412,16 @@ describe("runEmployerDueDiligence", () => {
     // asserted before ADR-007 superseded ADR-003. The other 2 earned
     // cycles are forfeited under the conservative reading (see ADR-007's
     // open question), not banked for the next review.
+    // ADR-009: the accrual now reads `cleanPayrollCyclesSinceReview`, not the
+    // LIFETIME `cleanPayrollCycles`. Both are 4 here so the score (which uses
+    // the lifetime count) and the credited increments are unchanged from the
+    // fixture ADR-007 set — only the field the growth rule reads moved.
     it("auto-scales returning Tier 1 employer, capped at 2 credited increments per review", async () => {
       const employer = makeEmployer({
         satRegistrationDate: "2010-01-01",
         maxActiveSlots: 30,
         cleanPayrollCycles: 4,
+        cleanPayrollCyclesSinceReview: 4,
       });
       const partA = makePartAResults();
 
@@ -498,6 +503,174 @@ describe("runEmployerDueDiligence", () => {
       expect(result.score).toBeLessThan(TIER_2_THRESHOLD);
       expect(result.maxActiveSlots).toBe(0);
       expect(result.reason).toContain("rejected");
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════
+  // ADR-009: the slot accrual ledger.
+  //
+  // Two separate counters, and which one each ratified rule reads:
+  //   `cleanPayrollCycles`            (LIFETIME)      -> payrollHistory
+  //                                                      score, Tier-2
+  //                                                      upgrade clock
+  //                                                      (ADR-005 F1 item 2)
+  //   `cleanPayrollCyclesSinceReview` (SINCE REVIEW)  -> ADR-007 hybrid
+  //                                                      growth
+  // Before this split both rules aliased onto one field, which makes them
+  // mutually unsatisfiable: forfeiting the Tier-1 accrual to zero also
+  // zeroes the lifetime clock a Tier-2 employer needs to reach 10 cycles.
+  // ═════════════════════════════════════════════════════════════════
+  describe("ADR-009 slot accrual ledger", () => {
+    it("credits growth from cycles-since-review, NOT from the lifetime count", async () => {
+      // 12 lifetime cycles but none accrued since the last review: a long
+      // clean history is not repeatedly re-spendable growth.
+      const employer = makeEmployer({
+        satRegistrationDate: "2010-01-01",
+        maxActiveSlots: 30,
+        cleanPayrollCycles: 12,
+        cleanPayrollCyclesSinceReview: 0,
+      });
+
+      const result = await runEmployerDueDiligence(employer, makePartAResults());
+
+      expect(result.tier).toBe(1);
+      expect(result.maxActiveSlots).toBe(30); // preserved, not grown
+      expect(result.slotGrowth).toMatchObject({
+        cyclesConsidered: 0,
+        incrementsCredited: 0,
+        cyclesForfeited: 0,
+        slotsBefore: 30,
+        slotsAfter: 30,
+      });
+    });
+
+    it("caps credit at 2 increments and reports the forfeited surplus", async () => {
+      const employer = makeEmployer({
+        satRegistrationDate: "2010-01-01",
+        maxActiveSlots: 20,
+        cleanPayrollCycles: 5,
+        cleanPayrollCyclesSinceReview: 5,
+      });
+
+      const result = await runEmployerDueDiligence(employer, makePartAResults());
+
+      expect(result.maxActiveSlots).toBe(40); // 20 + min(5, 2) * 10
+      expect(result.slotGrowth).toMatchObject({
+        cyclesConsidered: 5,
+        incrementsCredited: 2,
+        cyclesForfeited: 3, // ADR-007: forfeited, NOT carried forward
+      });
+    });
+
+    it("clamps at the Tier 1 ceiling and flags manual review", async () => {
+      const employer = makeEmployer({
+        satRegistrationDate: "2010-01-01",
+        maxActiveSlots: 90,
+        cleanPayrollCycles: 4,
+        cleanPayrollCyclesSinceReview: 2,
+      });
+
+      const result = await runEmployerDueDiligence(employer, makePartAResults());
+
+      expect(result.maxActiveSlots).toBe(TIER_1_MAX_AUTO_SLOTS); // 90 + 20 -> 100
+      expect(result.requiresApproval).toBe(true);
+    });
+
+    it("reports no slotGrowth for a first-time Tier 1 grant", async () => {
+      const employer = makeEmployer({ satRegistrationDate: "2010-01-01" });
+
+      const result = await runEmployerDueDiligence(employer, makePartAResults());
+
+      expect(result.maxActiveSlots).toBe(TIER_1_INITIAL_SLOTS);
+      expect(result.slotGrowth).toBeNull();
+    });
+
+    // A stored slot count is a position on ONE tier's ladder. Carrying it
+    // across a tier change puts the employer on the wrong rung in whichever
+    // direction it moved.
+    it("grants an upgraded Tier-2 employer the Tier-1 initial slots, not an increment off its Tier-2 cap", async () => {
+      const employer = makeEmployer({
+        satRegistrationDate: "2010-01-01",
+        tier: 2,
+        maxActiveSlots: 3,
+        cleanPayrollCycles: 4,
+        cleanPayrollCyclesSinceReview: 4,
+      });
+
+      const result = await runEmployerDueDiligence(employer, makePartAResults());
+
+      expect(result.tier).toBe(1);
+      // Not autoScaleTier1(3, 4) === 23, and never below a fresh Tier 1.
+      expect(result.maxActiveSlots).toBe(TIER_1_INITIAL_SLOTS);
+      expect(result.slotGrowth).toBeNull();
+    });
+
+    it("drops a downgraded Tier-1 employer to the Tier-2 initial band, not expandTier2's top band", async () => {
+      const employer = makeEmployer({
+        satRegistrationDate: "2022-01-01",
+        tier: 1,
+        maxActiveSlots: 50,
+        cleanPayrollCycles: 2,
+      });
+      const partA = makePartAResults({
+        imssVerification: [
+          { curp: "CURP1", rfcMatch: true, imssActive: true },
+          { curp: "CURP2", rfcMatch: false, imssActive: true },
+          { curp: "CURP3", rfcMatch: false, imssActive: false },
+        ],
+        sectorRisk: { riskLevel: "medio" },
+      });
+
+      const result = await runEmployerDueDiligence(employer, partA);
+
+      expect(result.tier).toBe(2);
+      // expandTier2(50, 2) would clamp to the top band (10). A Tier-1 cap is
+      // not a rung on the Tier-2 ladder.
+      expect(result.maxActiveSlots).toBe(TIER_2_INITIAL_SLOTS);
+    });
+
+    // Every employer written before `tier` existed has it absent. Treating
+    // that as "fresh" would move caps nobody chose, on the whole book at once.
+    it("treats an ABSENT prior tier as returning, preserving the stored cap", async () => {
+      const employer = makeEmployer({
+        satRegistrationDate: "2010-01-01",
+        maxActiveSlots: 40,
+        cleanPayrollCycles: 3,
+      });
+
+      const result = await runEmployerDueDiligence(employer, makePartAResults());
+
+      expect(result.tier).toBe(1);
+      expect(result.maxActiveSlots).toBe(40);
+      expect(result.slotGrowth).not.toBeNull();
+    });
+
+    it("keeps the LIFETIME count driving the Tier-2 upgrade clock", async () => {
+      const employer = makeEmployer({
+        satRegistrationDate: "2022-01-01",
+        tier: 2,
+        maxActiveSlots: 3,
+        cleanPayrollCycles: TIER_2_UPGRADE_CYCLES,
+        cleanPayrollCyclesSinceReview: 0, // accrual spent; upgrade clock is not
+      });
+      // A full 10-cycle lifetime history scores the full payrollHistory
+      // weight, so the other signals have to be weak enough to keep this
+      // employer inside the 40-69 Tier 2 band.
+      const partA = makePartAResults({
+        imssVerification: [
+          { curp: "CURP1", rfcMatch: true, imssActive: true },
+          { curp: "CURP2", rfcMatch: false, imssActive: true },
+          { curp: "CURP3", rfcMatch: false, imssActive: false },
+        ],
+        denue: { found: false },
+        sectorRisk: { riskLevel: "alto" },
+      });
+
+      const result = await runEmployerDueDiligence(employer, partA);
+
+      expect(result.tier).toBe(2);
+      expect(result.maxActiveSlots).toBe(6); // band 3 -> 6
+      expect(expandTier2(3, employer.cleanPayrollCycles).eligibleForUpgrade).toBe(true);
     });
   });
 
