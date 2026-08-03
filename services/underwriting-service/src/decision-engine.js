@@ -109,7 +109,12 @@ async function runPipeline({ applicant, employer, loanAmount }, options = {}) {
   }
 
   if (!results.employerB.pass) {
-    return buildResult("rejected", results.employerB.reason, results, correlationId, startTime);
+    // employerB's own `reason` is now a human-readable sentence (#387/#388's
+    // weighted-scoring rewrite requires it to contain "rejected"); the
+    // pipeline's decision reason stays the stable code every other consumer
+    // of this field already keys off, the same way employerA's snake_case
+    // reason codes above are stable regardless of the sentence a stage logs.
+    return buildResult("rejected", "EMPLOYER_SCORE_LOW", results, correlationId, startTime);
   }
 
   // ── Stage 0: Fraud Gates ─────────────────────────────────────────────

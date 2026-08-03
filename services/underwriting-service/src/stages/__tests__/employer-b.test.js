@@ -1,26 +1,26 @@
 "use strict";
 
 // ════════════════════════════════════════════════════════════════════
-// PARTIALLY BUILT. See #387, #388, ADR-003 (superseded), ADR-007.
+// See #387, #388, ADR-003 (superseded), ADR-007.
 //
 // ADR-007 (2026-08-03) ratified the slot-growth commercial rule ADR-003
 // left open: Tier 1 earns +10 slots per clean payroll cycle, credited only
 // at a due-diligence review, capped at 2 increments (20 slots) per review,
 // never past the 100-slot ceiling. `assignTier`, `computeInitialSlots`,
-// `autoScaleTier1`, and `expandTier2` are now implemented in
-// `../employer-b` against that ruling and are un-skipped below.
+// `autoScaleTier1`, and `expandTier2` implement that ruling.
 //
-// Everything else in this file is STILL `describe.skip` and still does not
-// exist: the weighted scoring engine (scoreSATAge through
-// scorePayrollHistory, WEIGHTS) and the Firestore-integrated
-// `runEmployerDueDiligence` rewrite this file also specifies. That is a
-// separate, larger feature build (#387/#388's scoring-model half) that
-// ADR-007 does not cover and that was NOT part of what was ratified today.
-// `runEmployerDueDiligence` in `../employer-b` still returns its original,
-// simpler shape (tier 3 for reject, not 0; data.tier, not top-level tier)
-// because stage3-autoapprove.js depends on that exact contract.
+// The weighted scoring engine (scoreSATAge through scorePayrollHistory,
+// WEIGHTS) and the Firestore-integrated `runEmployerDueDiligence` rewrite
+// this file specifies (#387/#388's scoring-model half) are now built in
+// `../employer-b`. `runEmployerDueDiligence` returns the NEW shape —
+// top-level `tier`, `score`, `activeSlots`, `signals`, `requiresApproval`,
+// `reason`; tier 0 (not 3) for a rejected employer — and
+// stage3-autoapprove.js reads that shape (`allResults.employerB.tier`,
+// with an upper AND lower bound so a spec-conformant 0 fails rather than
+// clearing the gate — see stage3-autoapprove.js and
+// __tests__/stage3-provenance.test.js).
 //
-// DO NOT make the still-skipped blocks green by weakening the assertions to
+// DO NOT make a still-skipped block green by weakening the assertions to
 // match the current source. The assertions are the specification; the
 // source is the thing that has not caught up.
 //
@@ -376,7 +376,7 @@ describe("expandTier2", () => {
 // Integration: runEmployerDueDiligence
 // ═══════════════════════════════════════════════════════════════════
 
-describe.skip("runEmployerDueDiligence", () => {
+describe("runEmployerDueDiligence", () => {
   describe("Tier 1 outcome", () => {
     it("assigns Tier 1 with 10 initial slots for a strong employer", async () => {
       const employer = makeEmployer({ satRegistrationDate: "2010-01-01" });

@@ -2,25 +2,23 @@
 /**
  * Employer Part B: Due Diligence
  *
- * Computes employer score 0-100 from Part A signals + IMSS employee proxy.
- *   >= 70 = Tier 1 (auto-scale slots 10→20→...→100)
- *   40-69 = Tier 2 (manual gate, max 3 starting slots)
- *   < 40  = reject
+ * Computes employer score 0-100 via the weighted signal engine below
+ * (WEIGHTS through scorePayrollHistory) from Part A signals, SAT
+ * registration age, and IMSS employee verification.
+ *   >= 70 = Tier 1 (auto-scale slots 10→20→...→100, ADR-007 hybrid growth)
+ *   40-69 = Tier 2 (manual gate, max 3 starting slots, expands 3→6→10)
+ *   < 40  = reject (tier 0)
  *
- * The tier-assignment and slot-growth helpers below (assignTier through
- * expandTier2) implement ADR-007's ratified hybrid growth rule and are used
- * by services that call them directly. `runEmployerDueDiligence` itself is
- * unchanged by ADR-007 — it does not yet call these helpers — because its
- * tier numbering (reject = 3, not 0) is a load-bearing contract for
- * stage3-autoapprove.js. Wiring due-diligence review time into
- * runEmployerDueDiligence is a separate, larger piece of work (the weighted
- * scoring engine and Firestore integration specified in
- * __tests__/employer-b.test.js's still-skipped `runEmployerDueDiligence`
- * describe block) that ADR-007 does not cover.
+ * `runEmployerDueDiligence` wires the weighted engine and the ADR-007
+ * tier/slot helpers (assignTier through expandTier2) together and persists
+ * the outcome to `employers/{employerId}` in Firestore. Its top-level return
+ * shape (`{pass, tier, score, activeSlots, signals, requiresApproval,
+ * reason}`) is specified by __tests__/employer-b.test.js's
+ * `runEmployerDueDiligence` describe block.
  */
 const { verifyEmployerIMSS } = require("../belvo-client");
-const { getPayrollTier } = require("../payroll-software");
 const { getSeedSlotGrowthConfig } = require("../config/lendingSlotGrowth");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 const TIER_1_THRESHOLD = 70;
 const TIER_2_THRESHOLD = 40;
@@ -37,12 +35,8 @@ const TIER_1_MAX_AUTO_SLOTS = getSeedSlotGrowthConfig().tier1MaxAutoSlots;
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
 
 /**
- * Per-signal weights for the weighted scoring engine (#387/#388's
- * scoring-model half). Sums to 100, matching this file's documented
- * 0-100 score range. Not yet wired into `runEmployerDueDiligence` — see
- * the file header — so this does not change today's shipped scoring,
- * only makes the individual signal functions below independently callable
- * and testable ahead of that rewrite.
+ * Per-signal weights for the weighted scoring engine. Sums to 100, matching
+ * this file's documented 0-100 score range.
  */
 const WEIGHTS = Object.freeze({
   satAge: 15,
@@ -205,6 +199,25 @@ function scorePayrollHistory(cleanPayrollCycles) {
   return Math.round((cycles / 6) * WEIGHTS.payrollHistory);
 }
 
+/**
+ * Runs the weighted scoring engine against Part A + employer signals,
+ * assigns a tier and slot count via the ADR-007 helpers, persists the
+ * outcome to Firestore, and returns the flat result the pipeline and its
+ * callers consume.
+ *
+ * `partAResults` accepts either the raw signal object directly
+ * (`{check69B, art69, denue, sectorRisk, imssVerification}`, as isolated
+ * callers and tests pass it) or a full Part A stage result with those
+ * signals nested under `.signals` (as decision-engine.js passes
+ * `results.employerA`). Part A's own signal is exposed under the key
+ * `lista69B`, the same check69B() result under a different name, so both
+ * spellings are accepted for that one field.
+ *
+ * IMSS employee verification prefers a live check against
+ * `employer.sampleCurps` (the same call and cost line the previous ad-hoc
+ * heuristic made) and falls back to `partAResults.imssVerification` when the
+ * caller already supplies it and no CURPs are available to check directly.
+ */
 async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) {
   const log = logger || console;
   const rfc = employer.rfc;
@@ -212,80 +225,83 @@ async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) 
 
   log.info({ stage: "employer-b", rfc }, "Starting employer due diligence");
 
-  // Verify employee CURPs against employer RFC via IMSS
-  let imssVerification = null;
+  const partA = partAResults.signals || partAResults || {};
+  const check69B = partA.check69B || partA.lista69B || null;
+
+  let imssResults = partA.imssVerification || null;
   if (employer.sampleCurps && employer.sampleCurps.length > 0) {
     try {
-      imssVerification = await verifyEmployerIMSS(employer.sampleCurps, rfc);
+      imssResults = await verifyEmployerIMSS(employer.sampleCurps, rfc);
       costItems.push({ api: "belvo-imss", mxn: 3.0 });
     } catch (err) {
       log.warn({ stage: "employer-b", rfc, err: err.message }, "IMSS verification failed");
-      imssVerification = { error: err.message, skipped: true };
+      imssResults = partA.imssVerification || null;
     }
   }
 
-  // Compute employer score
-  let score = 50; // base
+  const signals = {
+    satAge: scoreSATAge(employer.satRegistrationDate),
+    denue: scoreDENUE(partA.denue),
+    imssEmployees: scoreIMSSEmployees(imssResults),
+    fiscalDebt: scoreFiscalDebt(partA.art69),
+    presunto: scorePresunto(check69B),
+    sectorRisk: scoreSectorRisk(partA.sectorRisk),
+    payrollHistory: scorePayrollHistory(employer.cleanPayrollCycles),
+  };
+  const score = Object.values(signals).reduce((sum, value) => sum + value, 0);
+  const tier = assignTier(score);
+  const pass = tier > 0;
 
-  // Part A signals (new format uses "signals", fallback to "data" for compat)
-  const partA = partAResults.signals || partAResults.data || {};
-  if (partA.sat?.pass) score += 10;
-  if (partA.denue?.pass) score += 5;
-  if (partA.repse?.pass) score += 5;
-  if (partA.lista69B?.flag || partA.efos?.flag) score -= 15; // PRESUNTO flag
+  const currentSlots = employer.activeSlots || 0;
+  const cleanCycles = employer.cleanPayrollCycles || 0;
+  const isReturning = currentSlots > 0;
 
-  // IMSS employee verification
-  if (imssVerification && !imssVerification.skipped) {
-    const matches = imssVerification.filter(r => r.rfcMatch);
-    if (matches.length >= 2) score += 15;
-    else if (matches.length === 1) score += 5;
-    else score -= 10;
-
-    // Tenure signal from verified employees
-    const avgTenure = matches.reduce((sum, r) => sum + (r.tenure || 0), 0) / Math.max(matches.length, 1);
-    if (avgTenure > 24) score += 5;
+  let activeSlots = 0;
+  let requiresApproval = false;
+  if (tier === 1) {
+    if (isReturning) {
+      const autoScale = autoScaleTier1(currentSlots, cleanCycles);
+      activeSlots = autoScale.newSlots;
+      requiresApproval = autoScale.requiresManualReview;
+    } else {
+      activeSlots = computeInitialSlots(1);
+    }
+  } else if (tier === 2) {
+    requiresApproval = true;
+    activeSlots = isReturning
+      ? expandTier2(currentSlots, cleanCycles).newSlots
+      : computeInitialSlots(2);
   }
 
-  // Payroll system tier
-  const payroll = getPayrollTier(employer.payrollSystem || "other");
-  score += payroll.tier * 5; // Tier 2 = +10, Tier 1 = +5, Tier 0 = +0
-
-  // Company size proxy
-  const empCount = employer.employeeCount || 0;
-  if (empCount >= 50) score += 5;
-  if (empCount < 5) score -= 10;
-
-  // Clamp to 0-100
-  score = Math.max(0, Math.min(100, score));
-
-  // Tier assignment
-  let tier, maxSlots;
-  if (score >= 70) {
-    tier = 1;
-    maxSlots = 100; // auto-scale 10→20→...→100
-  } else if (score >= 40) {
-    tier = 2;
-    maxSlots = 3; // manual gate
-  } else {
-    tier = 3;
-    maxSlots = 0;
-  }
-
-  const pass = tier <= 2;
+  const reason = pass
+    ? null
+    : `Employer rejected: score ${score} below the Tier 2 threshold of ${TIER_2_THRESHOLD}`;
 
   log.info({ stage: "employer-b", rfc, score, tier, pass }, "Employer scoring complete");
 
+  if (employer.employerId) {
+    const db = getFirestore();
+    await db
+      .collection("employers")
+      .doc(employer.employerId)
+      .update({
+        employerScore: score,
+        activeSlots,
+        tier: pass ? tier : null,
+        tierAssignedAt: FieldValue.serverTimestamp(),
+        lastDueDiligenceAt: FieldValue.serverTimestamp(),
+        dueDiligenceResult: { pass, tier, score },
+      });
+  }
+
   return {
     pass,
-    escalateToStage: null,
-    reason: pass ? null : "EMPLOYER_SCORE_LOW",
-    data: {
-      score,
-      tier,
-      maxSlots,
-      imssVerification,
-      payroll,
-    },
+    tier,
+    score,
+    activeSlots,
+    signals,
+    requiresApproval,
+    reason,
     cost: costItems,
   };
 }
@@ -304,8 +320,7 @@ module.exports = {
   computeInitialSlots,
   autoScaleTier1,
   expandTier2,
-  // Weighted scoring engine (#387/#388's scoring-model half). Not yet wired
-  // into runEmployerDueDiligence — see the file header.
+  // Weighted scoring engine — see WEIGHTS' own comment.
   WEIGHTS,
   scoreSATAge,
   scoreDENUE,
