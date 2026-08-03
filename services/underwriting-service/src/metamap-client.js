@@ -16,6 +16,7 @@
  *
  * Docs: https://docs.metamap.com
  */
+const crypto = require("crypto");
 const fetch = require("node-fetch");
 
 const MOCK = () => process.env.METAMAP_MOCK === "true";
@@ -268,6 +269,48 @@ async function createVerification(applicant, modules) {
   });
 }
 
+/** Single GET of a verification resource. Returns the raw MetaMap payload. */
+async function fetchVerification(verificationId) {
+  await acquireToken();
+  const token = await getAccessToken();
+
+  const res = await fetch(`${BASE()}/v2/verifications/${verificationId}`, {
+    headers: { "Authorization": `Bearer ${token}` },
+    timeout: 10000,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`MetaMap ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+/**
+ * Fetch a verification once and parse it. No polling.
+ *
+ * This is the fetch-once primitive the module was missing. index.js:134 has
+ * always called `metamapClient.getVerificationResult(verificationId)` from the
+ * `verification_completed` webhook branch — where the verification is by
+ * definition already finished and polling would be wrong — but the function
+ * did not exist on the module after #346. Every such webhook therefore threw
+ * `TypeError: metamapClient.getVerificationResult is not a function`, was
+ * swallowed by that handler's catch, and landed in incident_log instead of
+ * metamap_shadow_log.
+ *
+ * @param {string} verificationId
+ * @param {string} [rfc] — mock seeding only
+ * @param {object} [opts] — { isAML }
+ */
+async function getVerificationResult(verificationId, rfc = "", opts = {}) {
+  const { isAML = false } = opts;
+  if (MOCK()) {
+    return isAML ? mockAMLResult(rfc) : mockKYCResult(rfc);
+  }
+  const data = await fetchVerification(verificationId);
+  return isAML ? parseAMLResult(data) : parseKYCResult(data);
+}
+
 /**
  * Poll verification status until completed or timeout.
  * @param {string} verificationId
@@ -283,20 +326,7 @@ async function pollVerification(verificationId, rfc, opts = {}) {
 
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
-    await acquireToken();
-    const token = await getAccessToken();
-
-    const res = await fetch(`${BASE()}/v2/verifications/${verificationId}`, {
-      headers: { "Authorization": `Bearer ${token}` },
-      timeout: 10000,
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`MetaMap poll ${res.status}: ${text.slice(0, 200)}`);
-    }
-
-    const data = await res.json();
+    const data = await fetchVerification(verificationId);
     if (data.status === "completed" || data.status === "reviewNeeded" || data.status === "rejected") {
       return isAML ? parseAMLResult(data) : parseKYCResult(data);
     }
@@ -309,26 +339,73 @@ async function pollVerification(verificationId, rfc, opts = {}) {
 
 /**
  * Parse a webhook payload from MetaMap.
- * Validates HMAC-SHA256 signature if METAMAP_WEBHOOK_SECRET is set.
+ *
+ * Returns an envelope, not a bare result:
+ *   { valid, eventName, verificationId, step, metadata, result }
+ *
+ * This shape is what the only production caller — the `POST /webhooks/metamap`
+ * handler in index.js:114 — destructures. It used to return the parsed
+ * verification result directly (no `valid` key) and to THROW on a signature
+ * mismatch, which broke that handler in two ways at once:
+ *
+ *   1. `valid` was always `undefined`, so every correctly-signed webhook took
+ *      the `if (!valid)` branch: 401 to MetaMap and an `invalid_signature`
+ *      row in incident_log. No webhook has ever reached the shadow log.
+ *   2. A genuinely bad signature threw out of an async Express handler with no
+ *      try/catch, producing an unhandled rejection and no response at all —
+ *      the one case the 401 branch was written for was the one it never saw.
+ *
+ * The mismatch dates to #346 (Verifik removal), which rewrote this module's
+ * API without migrating index.js. It stayed invisible because
+ * src/webhook-metamap.test.js mocks this module with the *old* shape, so the
+ * webhook tests asserted against a contract the real module had stopped
+ * honouring. See the contract test at the bottom of that file.
+ *
+ * `valid` is false — never thrown — for a bad or malformed signature, so the
+ * caller can answer 401 and log an incident. `eventName`, `step` and
+ * `metadata` come off the raw payload; `result` is the parsed KYC/AML view of
+ * it for callers that do not want to re-fetch.
+ *
+ * Signature posture is unchanged: if METAMAP_WEBHOOK_SECRET is unset, payloads
+ * are accepted unverified. This endpoint only writes to metamap_shadow_log and
+ * makes no credit decision. Hardening that default is a deploy-coupled change
+ * (it 401s every environment missing the variable) and is deliberately not
+ * bundled into this fix.
  */
 function parseWebhook(body, signature) {
   const secret = process.env.METAMAP_WEBHOOK_SECRET;
-  if (secret && signature) {
-    const crypto = require("crypto");
-    const expected = crypto
-      .createHmac("sha256", secret)
-      .update(typeof body === "string" ? body : JSON.stringify(body))
-      .digest("hex");
-    if (expected !== signature) {
-      throw new Error("MetaMap webhook signature mismatch");
-    }
+  const raw = typeof body === "string" ? body : JSON.stringify(body);
+
+  let valid = true;
+  if (secret) {
+    const expected = crypto.createHmac("sha256", secret).update(raw).digest("hex");
+    // timingSafeEqual throws on a length mismatch, which an attacker controls,
+    // so compare lengths first and only then in constant time.
+    const given = typeof signature === "string" ? signature : "";
+    valid =
+      given.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
   }
 
-  const payload = typeof body === "string" ? JSON.parse(body) : body;
-  const flowId = payload.flowId || "";
-  const isAML = flowId === process.env.METAMAP_FLOW_ID_AML;
+  let payload;
+  try {
+    payload = typeof body === "string" ? JSON.parse(body) : body || {};
+  } catch {
+    return { valid: false, eventName: "", verificationId: "", step: undefined, metadata: undefined, result: null };
+  }
 
-  return isAML ? parseAMLResult(payload) : parseKYCResult(payload);
+  const isAML = (payload.flowId || "") === process.env.METAMAP_FLOW_ID_AML;
+
+  return {
+    valid,
+    eventName: payload.eventName || "",
+    // MetaMap names the verification id `resource` on webhooks and `id`/`_id`
+    // on the REST resource itself.
+    verificationId: payload.resource || payload.id || payload._id || "",
+    step: payload.step,
+    metadata: payload.metadata,
+    result: valid ? (isAML ? parseAMLResult(payload) : parseKYCResult(payload)) : null,
+  };
 }
 
 // ─── Result Parsers ──────────────────────────────────────────────────────────
@@ -474,8 +551,24 @@ async function checkBehavioralRisk(sessionKey, userId) {
   });
 }
 
+// Exposed for tests only. `_tokenCache` and `_bucket` are module-level and
+// survive `jest.resetModules()`-free suites, so without this nothing about the
+// OAuth cache or the rate limiter can be exercised twice in one file: the
+// second case reuses the first case's token and a drained bucket, and asserting
+// on fetch call counts becomes order-dependent. The tests/ suite reached for a
+// `_resetTokenCache` export that no longer existed; this is the same idea under
+// the name sat-blacklist-client.js already uses (`__resetForTests`), and it
+// resets the rate limiter too, which the old name did not.
+function __resetForTests() {
+  _tokenCache = null;
+  _bucket.tokens = _bucket.rate;
+  _bucket.lastRefill = Date.now();
+}
+
 module.exports = {
+  getAccessToken,
   createVerification,
+  getVerificationResult,
   pollVerification,
   parseWebhook,
   parseKYCResult,
@@ -484,4 +577,5 @@ module.exports = {
   checkBehavioralRisk,
   STAGE_4_MODULES,
   STAGE_5_MODULES,
+  __resetForTests,
 };
