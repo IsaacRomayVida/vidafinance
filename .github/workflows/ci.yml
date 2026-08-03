@@ -85,6 +85,15 @@ jobs:
   # /internal/disburse shipped to production publicly callable with no auth
   # header — the regression test for that exact bug (internalAuth.test.js)
   # existed and would have caught it, but nothing executed it before merge.
+  #
+  # test/*.test.js (P1-6) closed the second half of that gap: internalAuth,
+  # bureauFallback and scToken covered helper libs only, but the Dockerfile
+  # runs root index.js, and its actual route handlers -- /internal/disburse
+  # (the real SPEI transfer), /internal/register-employer,
+  # /internal/register-deduction, /internal/sync-repayments -- had zero
+  # coverage. No count is named here on purpose (see the functions job above
+  # for why) -- `npm test` fails the job on a single failing test, which is
+  # what makes this a hard gate.
   softcredito-adapter:
     name: "Softcredito Adapter Tests"
     runs-on: ubuntu-latest
@@ -100,7 +109,7 @@ jobs:
       - name: Install softcredito-adapter dependencies
         run: cd services/softcredito-adapter && npm ci
 
-      - name: Unit tests (softcredito-adapter) — 44/44 (internalAuth, bureauFallback, scToken), hard gate
+      - name: Unit tests (softcredito-adapter) — internalAuth, bureauFallback, scToken, disburse/register-employer/register-deduction/sync-repayments handlers, hard gate
         run: cd services/softcredito-adapter && npm test
 
   # payment-server is the MONEY-IN surface: it receives CONEKTA card webhooks
