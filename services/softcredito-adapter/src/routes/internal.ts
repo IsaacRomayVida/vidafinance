@@ -210,6 +210,7 @@ router.post('/internal/sync-repayments', requireInternalSecret, async (req, res)
     );
 
     let synced = 0;
+    const failed: Array<{ deductionId: string; error: string }> = [];
     for (const item of data.deductions ?? []) {
       const snap = await db
         .collection('loans')
@@ -222,27 +223,35 @@ router.post('/internal/sync-repayments', requireInternalSecret, async (req, res)
       const loanId = snap.docs[0].id;
       const loan = snap.docs[0].data();
 
-      await axios.post(
-        `${process.env.PAYMENT_SERVER_URL}/internal/repayment`,
-        {
-          loanId,
-          employeeId: loan.employeeId,
-          amount: item.amount,
-          ref: item.reference,
-          method: 'payroll_deduction',
-        },
-        {
-          headers: {
-            'x-internal-secret': process.env.INTERNAL_SECRET || process.env.INTERNAL_API_SECRET,
+      // One unreconcilable deduction must not abort the rest of the day's
+      // batch. axios rejects on non-2xx, and /internal/repayment now answers
+      // 404 for a loanId it does not hold, so this has to be isolated per item.
+      try {
+        await axios.post(
+          `${process.env.PAYMENT_SERVER_URL}/internal/repayment`,
+          {
+            loanId,
+            employeeId: loan.employeeId,
+            amount: item.amount,
+            ref: item.reference,
+            method: 'payroll_deduction',
           },
-          timeout: 10_000,
-        },
-      );
+          {
+            headers: {
+              'x-internal-secret': process.env.INTERNAL_SECRET || process.env.INTERNAL_API_SECRET,
+            },
+            timeout: 10_000,
+          },
+        );
+      } catch (err) {
+        failed.push({ deductionId: item.deductionId, error: err instanceof Error ? err.message : 'unknown' });
+        continue;
+      }
 
       synced++;
     }
 
-    res.json({ success: true, synced });
+    res.json({ success: true, synced, failed });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal error';
     res.status(500).json({ error: message });

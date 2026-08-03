@@ -167,10 +167,18 @@ app.post('/webhooks/conekta', async (req, res) => {
       if (!loanId || !employeeId) throw new Error('Missing metadata on charge.paid');
       const amount = data.object.amount / 100; // Conekta uses centavos
       const chargeId = data.object.id;
+      if (!chargeId) throw new Error('Missing charge id on charge.paid');
 
       await db.runTransaction(async tx => {
         const ref = db.collection('loans').doc(loanId);
-        const doc = await tx.get(ref);
+        // The repayment row is keyed by the Conekta charge id, so a replayed
+        // webhook is a no-op. `status === 'paid'` is not enough on its own:
+        // a partial repayment leaves the loan active, and Conekta retries
+        // webhooks in normal operation, so the balance would be decremented
+        // once per delivery.
+        const repaymentRef = db.collection('repayments').doc(`conekta_${chargeId}`);
+        const [doc, alreadyApplied] = await Promise.all([tx.get(ref), tx.get(repaymentRef)]);
+        if (alreadyApplied.exists) return;
         if (!doc.exists || doc.data().status === 'paid') return;
         const loanData = doc.data();
         const newBalance = (loanData.remainingBalance ?? loanData.amount) - amount;
@@ -180,7 +188,7 @@ app.post('/webhooks/conekta', async (req, res) => {
           updates.paidAt = admin.firestore.FieldValue.serverTimestamp();
         }
         tx.update(ref, updates);
-        tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: 'card', conektaChargeId: chargeId, status: 'completed', createdAt: admin.firestore.FieldValue.serverTimestamp() });
+        tx.set(repaymentRef, { loanId, employeeId, amount, method: 'card', conektaChargeId: chargeId, status: 'completed', createdAt: admin.firestore.FieldValue.serverTimestamp() });
       });
     }
 
@@ -278,17 +286,29 @@ app.post('/internal/repayment', requireInternal, async (req, res) => {
   const { loanId, employeeId, amount, ref, method } = req.body;
   if (!loanId || !employeeId || !amount) return res.status(400).json({ error: 'Missing fields' });
   try {
-    await db.runTransaction(async tx => {
+    const outcome = await db.runTransaction(async tx => {
       const loanRef = db.collection('loans').doc(loanId);
       const doc = await tx.get(loanRef);
-      if (!doc.exists || doc.data().status === 'paid') return;
+      if (!doc.exists) return 'not_found';
+      if (doc.data().status === 'paid') return 'already_paid';
       tx.update(loanRef, { status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), paidAmount: amount, repaymentRef: ref });
       tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: method || 'payroll_deduction', externalRef: ref, status: 'completed', paidAt: admin.firestore.FieldValue.serverTimestamp() });
       const emp = await tx.get(db.collection('employees').doc(employeeId));
       if (emp.exists) tx.update(db.collection('employees').doc(employeeId), { availableCredit: admin.firestore.FieldValue.increment(doc.data().amount) });
+      return 'applied';
     });
-    await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId, amount, method: method || 'payroll_deduction' });
-    res.json({ success: true });
+
+    // A repayment against a loan we do not have is a reconciliation failure on
+    // the payroll side. Reporting success hides it and, worse, used to tell the
+    // borrower their loan was paid.
+    if (outcome === 'not_found') return res.status(404).json({ error: 'Loan not found', loanId });
+
+    // Only a repayment we actually applied may raise the notification; a replay
+    // against an already-paid loan must not re-notify.
+    if (outcome === 'applied') {
+      await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId, amount, method: method || 'payroll_deduction' });
+    }
+    res.json({ success: true, status: outcome });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
