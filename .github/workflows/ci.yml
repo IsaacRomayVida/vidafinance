@@ -136,6 +136,69 @@ jobs:
       - name: Unit tests (payment-server) — internal auth, Conekta webhook signature, disbursement worker, hard gate
         run: cd services/payment-server && npm test
 
+  # notification-service is the delivery path for every borrower notification
+  # (loan approved, disbursed, repaid, overdue) via Twilio SMS/WhatsApp and
+  # SendGrid email. Like softcredito-adapter before #425, it had zero tests,
+  # no test script, and no CI job. See the softcredito-adapter job above for
+  # the shape of the incident this pattern addresses.
+  notification-service:
+    name: "Notification Service Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: services/notification-service/package-lock.json
+
+      - name: Install notification-service dependencies
+        run: cd services/notification-service && npm ci
+
+      # Nothing ran these before this job existed either — added alongside
+      # the test suite since both were free-standing scripts nobody executed.
+      - name: TypeScript typecheck (notification-service)
+        run: cd services/notification-service && npm run typecheck
+
+      # lint is intentionally NOT run here: services/notification-service/package.json
+      # has always had a `lint` script but never a local `eslint` devDependency
+      # (same gap as payment-server and pdf-generator's lint scripts), so
+      # `npm run lint` fails with `eslint: not found` on main today, before any
+      # change in this PR. Wiring it up is separate work; gating on a script
+      # that was already broken would make this job red for a pre-existing
+      # reason unrelated to what it's here to catch.
+      - name: Unit tests (notification-service) — worker job handling, Twilio/SendGrid wrappers, hard gate
+        run: cd services/notification-service && npm test
+
+  # pdf-generator generates the loan contract PDF -- a document carrying
+  # borrower PII and the loan's financial terms. Like softcredito-adapter
+  # before #425, it had no test script and no CI job. See the
+  # softcredito-adapter job above for the shape of the incident this pattern
+  # addresses.
+  pdf-generator:
+    name: "PDF Generator Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: services/pdf-generator/package-lock.json
+
+      - name: Install pdf-generator dependencies
+        # The test suite mocks puppeteer entirely (no real browser is ever
+        # launched), so skip downloading the bundled Chromium binary.
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+        run: cd services/pdf-generator && npm ci
+
+      - name: Unit tests (pdf-generator) — internal auth, boot guard, contract generation, worker, hard gate
+        run: cd services/pdf-generator && npm test
+
   # See the softcredito-adapter job above for why this exists (#425).
   ml-service:
     name: "ML Service Tests"
