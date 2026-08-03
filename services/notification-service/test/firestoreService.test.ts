@@ -1,7 +1,7 @@
 import { setBaseEnv } from './testEnv';
 setBaseEnv();
 
-import { FirestoreService } from '../src/services/firestoreService';
+import { FirestoreService, IncompleteUserProfileError } from '../src/services/firestoreService';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const admin = require('firebase-admin');
 
@@ -32,16 +32,45 @@ describe('FirestoreService.getUser', () => {
     await expect(svc.getUser('ghost')).rejects.toThrow(/User ghost not found/);
   });
 
-  // DEFECT: a real employee/user doc missing the phone/email fields resolves
-  // successfully with empty strings instead of surfacing the incomplete
-  // record -- callers (e.g. resolvePhone) then proceed with an empty phone.
-  test('DEFECT: a doc with no phone/email field resolves to empty strings, not an error', async () => {
+  // FIXED: a real employee/user doc missing the phone/email fields now
+  // surfaces the incomplete record via IncompleteUserProfileError instead of
+  // resolving to empty strings -- callers (e.g. resolvePhone) can no longer
+  // proceed silently with an empty phone.
+  test('FIXED: a doc with no phone/email field throws IncompleteUserProfileError, not empty strings', async () => {
     admin.__seed('employees', 'emp_2', { name: 'No Contact Info' });
 
     const svc = new FirestoreService();
-    const user = await svc.getUser('emp_2');
-    expect(user.phone).toBe('');
-    expect(user.email).toBe('');
+    await expect(svc.getUser('emp_2')).rejects.toThrow(IncompleteUserProfileError);
+    await expect(svc.getUser('emp_2')).rejects.toThrow(/emp_2 is missing required contact field\(s\): phone, email/);
+  });
+
+  test('FIXED: a doc with a phone but no email reports only the missing field', async () => {
+    admin.__seed('employees', 'emp_3', { phone: '5512345678' });
+
+    const svc = new FirestoreService();
+    await expect(svc.getUser('emp_3')).rejects.toThrow(/missing required contact field\(s\): email/);
+  });
+
+  test('FIXED: a doc with an email but no phone reports only the missing field', async () => {
+    admin.__seed('employees', 'emp_4', { email: 'a@b.com' });
+
+    const svc = new FirestoreService();
+    await expect(svc.getUser('emp_4')).rejects.toThrow(/missing required contact field\(s\): phone/);
+  });
+
+  test('an incomplete profile is distinguishable from a "user not found" error', async () => {
+    admin.__seed('employees', 'emp_5', {});
+    const svc = new FirestoreService();
+
+    let incompleteErr: unknown;
+    try {
+      await svc.getUser('emp_5');
+    } catch (err) {
+      incompleteErr = err;
+    }
+    expect(incompleteErr).toBeInstanceOf(IncompleteUserProfileError);
+
+    await expect(svc.getUser('ghost')).rejects.not.toBeInstanceOf(IncompleteUserProfileError);
   });
 });
 
