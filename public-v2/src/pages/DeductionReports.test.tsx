@@ -52,6 +52,7 @@ import '../i18n';
 import {
   buildCsvRows,
   getDeductionAmount,
+  getPayFrequency,
   groupByPeriod,
   type Loan,
 } from '../lib/deductionReport';
@@ -106,6 +107,75 @@ describe('getDeductionAmount', () => {
   });
 });
 
+const WEEKLY_LOAN: Loan = {
+  id: 'loan-weekly',
+  employeeName: 'Sofía Torres',
+  amount: 800,
+  fee: 240,
+  total: 1040,
+  status: 'active',
+  borrowerSnapshot: { payFrequency: 'weekly' },
+  payFrequencySource: 'loan_snapshot',
+  createdAt: { seconds: 1704067200 },
+};
+
+const ASSUMED_MONTHLY_LOAN: Loan = {
+  id: 'loan-assumed',
+  employeeName: 'Diego Ríos',
+  amount: 700,
+  fee: 210,
+  total: 910,
+  status: 'active',
+  borrowerSnapshot: { payFrequency: 'monthly' },
+  payFrequencySource: 'default_monthly',
+  createdAt: { seconds: 1704067200 },
+};
+
+const LEGACY_NO_FREQUENCY_LOAN: Loan = {
+  id: 'loan-legacy-freq',
+  employeeName: 'Elena Vidal',
+  amount: 600,
+  fee: 180,
+  total: 780,
+  status: 'active',
+  createdAt: { seconds: 1704067200 },
+};
+
+describe('getPayFrequency', () => {
+  it('reads borrowerSnapshot.payFrequency, not the never-written loan.frequency field', () => {
+    expect(getPayFrequency(WEEKLY_LOAN)).toBe('weekly');
+    expect(getPayFrequency({ ...WEEKLY_LOAN, frequency: 'monthly' } as Loan)).toBe('weekly');
+  });
+
+  it('returns null, not "monthly", when the cadence is only an assumption (default_monthly)', () => {
+    expect(getPayFrequency(ASSUMED_MONTHLY_LOAN)).toBeNull();
+  });
+
+  it('returns null, not "monthly", when no frequency was ever recorded', () => {
+    expect(getPayFrequency(LEGACY_NO_FREQUENCY_LOAN)).toBeNull();
+  });
+});
+
+describe('DeductionReports frequency column', () => {
+  it('renders the real cadence from borrowerSnapshot.payFrequency', async () => {
+    snapshotLoans = [{ id: WEEKLY_LOAN.id, data: WEEKLY_LOAN }];
+    render(<DeductionReports />);
+
+    expect(await screen.findByText('Sofía Torres')).toBeInTheDocument();
+    expect(screen.getByText('weekly')).toBeInTheDocument();
+    expect(screen.queryByText('monthly')).not.toBeInTheDocument();
+  });
+
+  it('shows an honest "—" instead of "monthly" when the cadence was only assumed', async () => {
+    snapshotLoans = [{ id: ASSUMED_MONTHLY_LOAN.id, data: ASSUMED_MONTHLY_LOAN }];
+    render(<DeductionReports />);
+
+    expect(await screen.findByText('Diego Ríos')).toBeInTheDocument();
+    expect(screen.queryByText('monthly')).not.toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+});
+
 describe('DeductionReports status query', () => {
   it('queries the canonical "repaid" plus the live disbursed/overdue statuses, not just active/paid', async () => {
     snapshotLoans = [{ id: DISBURSED_LOAN.id, data: DISBURSED_LOAN }];
@@ -141,5 +211,18 @@ describe('CSV export', () => {
     expect(feeRow?.[2]).toBe('1,300.00');
     expect(partialRow?.[2]).toBe('1,600.00');
     expect(disbursedRow?.[2]).toBe('650.00');
+  });
+
+  it('carries the real cadence, not "monthly", and leaves an assumed cadence blank rather than inventing one', () => {
+    const groups = groupByPeriod([WEEKLY_LOAN, ASSUMED_MONTHLY_LOAN, LEGACY_NO_FREQUENCY_LOAN]);
+    const rows = buildCsvRows(groups);
+
+    const weeklyRow = rows.find((r) => r[1] === 'Sofía Torres');
+    const assumedRow = rows.find((r) => r[1] === 'Diego Ríos');
+    const legacyRow = rows.find((r) => r[1] === 'Elena Vidal');
+
+    expect(weeklyRow?.[3]).toBe('weekly');
+    expect(assumedRow?.[3]).toBe('');
+    expect(legacyRow?.[3]).toBe('');
   });
 });

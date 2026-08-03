@@ -15,7 +15,10 @@ interface Loan {
   id: string;
   employeeName?: string;
   amount: number;
-  termDays?: number;
+  // The persisted field is `term` (functions/src/index.ts:839); `termDays` is
+  // only the requestLoan request-payload name and is never written to the
+  // document — see MyLoans.tsx / LoanTable.tsx, which read the same field.
+  term?: number;
   repaymentAmount?: number;
   status: string;
   createdAt?: { seconds: number };
@@ -985,7 +988,7 @@ export function EmployerDashboard() {
                     <tr key={loan.id}>
                       <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
                       <td>${fmt(loan.amount)}</td>
-                      <td>{loan.termDays ?? 30} {t('dash_days')}</td>
+                      <td>{loan.term ?? 30} {t('dash_days')}</td>
                       <td>
                         <span className={`badge badge-${loan.status}`}>
                           {t(`status_${loan.status}`, loan.status)}

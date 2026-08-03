@@ -10,7 +10,11 @@ export interface Loan {
   fee?: number;
   total?: number;
   remainingBalance?: number;
-  frequency?: string;
+  // The persisted fields are `borrowerSnapshot.payFrequency` and
+  // `payFrequencySource` (functions/src/index.ts:850-851); `frequency` is
+  // never written to the document — see getPayFrequency below.
+  borrowerSnapshot?: { payFrequency?: string };
+  payFrequencySource?: string;
   termDays?: number;
   status: string;
   softcreditoDeductionId?: string;
@@ -57,6 +61,30 @@ export function getDeductionAmount(loan: Loan): number | null {
 export function formatDeductionAmount(loan: Loan): string {
   const amount = getDeductionAmount(loan);
   return amount === null ? '—' : fmtCurrency(amount);
+}
+
+/**
+ * The pay frequency this report should show the employer for a loan, or
+ * null if it isn't known with confidence.
+ *
+ * `loan.frequency` is never written to the document — requestLoan persists
+ * `borrowerSnapshot.payFrequency` (functions/src/index.ts:850), so reading
+ * `loan.frequency ?? 'monthly'` always fell through to the default and every
+ * row silently showed "monthly" regardless of the truth. That default is
+ * exactly the failure mode to avoid here: this report is what the employer
+ * runs payroll against, so a wrong-but-plausible cadence is worse than an
+ * honest gap.
+ *
+ * `payFrequencySource === 'default_monthly'` (see resolvePayFrequency.ts)
+ * means the backend itself could not read the borrower's real cadence and
+ * priced the loan against an assumption — it logs a warning for exactly
+ * this reason. An assumption should not be handed to the employer with the
+ * same confidence as a known fact, so it is treated as unknown here too.
+ */
+export function getPayFrequency(loan: Loan): string | null {
+  if (loan.payFrequencySource === 'default_monthly') return null;
+  const value = loan.borrowerSnapshot?.payFrequency;
+  return typeof value === 'string' && value ? value : null;
 }
 
 function getPeriodKey(loan: Loan): string {
@@ -107,7 +135,7 @@ export function buildCsvRows(groups: PeriodGroup[]): string[][] {
         group.label,
         loan.employeeName ?? '',
         formatDeductionAmount(loan),
-        loan.frequency ?? 'monthly',
+        getPayFrequency(loan) ?? '',
         loan.status,
         loan.softcreditoDeductionId ?? '',
       ]);
