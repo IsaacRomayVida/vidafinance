@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { DEDUCTION_REPORT_STATUSES, isActiveDeductionStatus, isRepaidStatus } from './loanStatus';
+import {
+  DEDUCTIBLE_STATUSES,
+  DEDUCTION_REPORT_STATUSES,
+  isActiveDeductionStatus,
+  isRepaidStatus,
+} from './loanStatus';
 
 // Mirrors DISBURSED_STATUSES / REPAID_STATUSES / LOAN_STATUS.OVERDUE in
 // functions/src/loans/loanStatus.ts. public-v2 and functions are separate
@@ -15,10 +20,24 @@ const STATUSES_FUNCTIONS_TREATS_AS_HAVING_A_DEDUCTION = [
   'active',
   'disbursed',
   'overdue',
+  'in_collections',
   'repaid',
   'paid',
   'complete',
   'completed',
+];
+
+// Mirrors DEDUCTIBLE_STATUSES in functions/src/loans/loanStatus.ts — the set
+// processPayroll's loan lookup queries on. THIS is the list that has to agree
+// with the server, and the one that didn't: this report billed the employer
+// for `overdue` loans while the server's lookup was a hardcoded
+// ['active', 'disbursed'], so the employer withheld the deduction from the
+// paycheck and the server credited nothing against the debt.
+const STATUSES_FUNCTIONS_WILL_DEDUCT_AGAINST = [
+  'active',
+  'disbursed',
+  'overdue',
+  'in_collections',
 ];
 
 describe('deduction report status vocabulary', () => {
@@ -41,11 +60,45 @@ describe('deduction report status vocabulary', () => {
   });
 });
 
+describe('deductible status vocabulary', () => {
+  it('matches, in both directions, the set processPayroll queries loans on', () => {
+    expect([...DEDUCTIBLE_STATUSES].sort()).toEqual(
+      [...STATUSES_FUNCTIONS_WILL_DEDUCT_AGAINST].sort(),
+    );
+  });
+
+  // The defect, stated directly: anything this report bills the employer for
+  // and still expects a payment on MUST be a status the server will accept a
+  // deduction against. Otherwise the money leaves the paycheck and lands
+  // nowhere.
+  it('accepts every status this report shows as still owing', () => {
+    const stillOwing = DEDUCTION_REPORT_STATUSES.filter((s) => !isRepaidStatus(s));
+    expect([...stillOwing].sort()).toEqual([...DEDUCTIBLE_STATUSES].sort());
+  });
+
+  it('excludes every repaid spelling — there is nothing left to deduct', () => {
+    for (const s of ['repaid', 'paid', 'complete', 'completed']) {
+      expect(DEDUCTIBLE_STATUSES).not.toContain(s);
+    }
+  });
+
+  it('excludes statuses where no funds ever went out', () => {
+    for (const s of ['pending', 'under_review', 'approved', 'disbursement_queued']) {
+      expect(DEDUCTIBLE_STATUSES).not.toContain(s);
+    }
+  });
+
+  it('stays under the Firestore "in" query cap of 30 values', () => {
+    expect(DEDUCTIBLE_STATUSES.length).toBeLessThanOrEqual(30);
+  });
+});
+
 describe('isActiveDeductionStatus', () => {
-  it('is true for active, disbursed and overdue', () => {
+  it('is true for active, disbursed, overdue and in_collections', () => {
     expect(isActiveDeductionStatus('active')).toBe(true);
     expect(isActiveDeductionStatus('disbursed')).toBe(true);
     expect(isActiveDeductionStatus('overdue')).toBe(true);
+    expect(isActiveDeductionStatus('in_collections')).toBe(true);
   });
 
   it('is false for repaid or unknown statuses', () => {

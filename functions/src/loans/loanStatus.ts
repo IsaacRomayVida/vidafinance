@@ -77,6 +77,43 @@ export const REPAID_STATUSES: readonly string[] = [
 /** Both live "funds were actually sent" spellings. */
 export const DISBURSED_STATUSES: readonly string[] = [LOAN_STATUS.ACTIVE, LOAN_STATUS.DISBURSED];
 
+/**
+ * The statuses a payroll deduction may legitimately land against: funds have
+ * gone out and the debt is still owed, however badly it is going.
+ *
+ * This is the SINGLE definition the two sides of the payroll channel derive
+ * from. They used to be written out by hand and drifted: the employer's
+ * deduction report listed `overdue` loans with an amount owed, while
+ * `processPayroll`'s loan lookup hardcoded `['active', 'disbursed']`. The
+ * employer withheld the money from the paycheck and the server recorded
+ * nothing — the money is gone from the employee's wages and never credited
+ * against their debt. `in_collections` was excluded on both sides, so those
+ * loans were merely uncollectable rather than dangerous; it belongs here for
+ * the same reason `overdue` does.
+ *
+ * The public-v2 mirror is `public-v2/src/lib/loanStatus.ts`
+ * (DEDUCTIBLE_STATUSES) — separate TypeScript projects with no shared
+ * package, kept in agreement by `loanStatus.test.ts` on both sides.
+ */
+export const DEDUCTIBLE_STATUSES: readonly string[] = [
+  ...DISBURSED_STATUSES,
+  LOAN_STATUS.OVERDUE,
+  LOAN_STATUS.IN_COLLECTIONS,
+];
+
+/**
+ * Everything the employer's deduction report shows: every loan a deduction can
+ * still land against, plus the ones already paid off so the period history
+ * doesn't lose them (legacy repaid aliases included — a hand-written document
+ * must not silently vanish from the report).
+ *
+ * Firestore's `in` operator caps at 30 values; this is well under.
+ */
+export const DEDUCTION_REPORT_STATUSES: readonly string[] = [
+  ...DEDUCTIBLE_STATUSES,
+  ...REPAID_STATUSES,
+];
+
 /** Everything from "funds sent" onward, regardless of what happened since. */
 export const POST_DISBURSEMENT_STATUSES: readonly string[] = [
   ...DISBURSED_STATUSES,

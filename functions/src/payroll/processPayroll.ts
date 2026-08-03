@@ -4,6 +4,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { notifyLoanEvent } from '../utils/notify';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { DEDUCTIBLE_STATUSES, LOAN_STATUS } from '../loans/loanStatus';
 
 // ─── Input Schema ─────────────────────────────────────────────────────────────
 
@@ -23,6 +24,42 @@ const ProcessPayrollSchema = z.object({
   rows: z.array(DeductionRowSchema).min(1).max(10000),
 });
 
+// ─── Row outcomes ─────────────────────────────────────────────────────────────
+
+/**
+ * The outcome of a single payroll row, as the employer's results table reads
+ * it (`public-v2/src/pages/PayrollUpload.tsx`). The server used to return no
+ * row status at all, so every counter on that page was structurally 0 and each
+ * badge rendered the literal string `payroll_status_undefined`.
+ *
+ *  - `deducted`          — money was applied to a loan.
+ *  - `skipped`           — nothing to do: no deductible loan, or nothing owed.
+ *  - `already_processed` — this row already landed in a previous attempt at
+ *                          this same batch (see the per-row idempotency key).
+ *  - `error`             — the row was rejected or blew up; nothing was written.
+ */
+type RowStatus = 'deducted' | 'skipped' | 'error' | 'already_processed';
+
+type RowResult = {
+  employeeId: string;
+  status: RowStatus;
+  loanId?: string;
+  deductionAmount: number;
+  newBalance?: number;
+  newStatus?: string;
+  error?: string;
+};
+
+// ─── Money helpers ───────────────────────────────────────────────────────────
+
+/** Balances are pesos-and-centavos; keep float dust out of the ledger. */
+function roundToCents(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+/** Half a centavo — below this, a difference is float noise, not money. */
+const CENT_EPSILON = 0.005;
+
 // ─── Helper: resolve expected deduction for a loan in this pay period ──────
 
 function calcExpectedDeduction(
@@ -32,6 +69,25 @@ function calcExpectedDeduction(
 ): number {
   const perPeriod = Math.ceil(monthlyPayment / payPeriodsPerMonth);
   return Math.min(perPeriod, remainingBalance);
+}
+
+/**
+ * Deterministic id for the deduction a given batch applies to a given loan.
+ *
+ * Idempotency has to be per row, not per batch: the batch document is only
+ * flipped to `completed` after the last row, so a batch that times out
+ * half-way is left `in_progress` and the natural retry re-ran EVERY row from
+ * the first, debiting the already-processed employees a second time. With a
+ * deterministic id the replayed rows fail their `create` instead.
+ *
+ * `loanId` alone identifies the employee's loan (and is a Firestore auto-id,
+ * so it is safe in a document path — unlike `employeeId`, which comes from the
+ * uploaded CSV and may contain anything). Two CSV rows naming the same
+ * employee in one batch therefore collapse onto one deduction, which is the
+ * behaviour we want.
+ */
+function deductionDocId(batchId: string, loanId: string): string {
+  return `${batchId}__${loanId}`;
 }
 
 // ─── Main function ───────────────────────────────────────────────────────────
@@ -61,8 +117,19 @@ export const processPayroll = onCall(
 
     const input = ProcessPayrollSchema.parse(request.data);
 
-    // Verify the caller actually belongs to the employer
-    if (claims['role'] === 'employer_admin' && claims['employerId'] !== input.employerId) {
+    // Verify the caller actually belongs to the employer. An employer_admin is
+    // scoped to their own employer record, and for this product an employer's
+    // uid *is* the employer doc id (firestore.rules, and EmployerDashboard
+    // reads employers/{uid} on exactly that basis); `employerId` on the claim
+    // is the fallback for if the two ever diverge. This check used to test the
+    // claim alone — and no code path in the repository has ever WRITTEN that
+    // claim (every setCustomUserClaims call site writes `{ role }` only), so it
+    // was `undefined` for every real caller and every employer upload was
+    // rejected with 'Employer mismatch'. Same rule as
+    // invites/sendEmployeeInvite.ts.
+    const ownsEmployer =
+      request.auth.uid === input.employerId || claims['employerId'] === input.employerId;
+    if (claims['role'] === 'employer_admin' && !ownsEmployer) {
       throw new HttpsError('permission-denied', 'Employer mismatch');
     }
 
@@ -91,64 +158,128 @@ export const processPayroll = onCall(
       startedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 
-    const results: Array<{
-      employeeId: string;
-      loanId?: string;
-      deductionAmount: number;
-      newBalance?: number;
-      newStatus?: string;
-      error?: string;
-    }> = [];
+    const results: RowResult[] = [];
 
     for (const row of input.rows) {
       try {
-        // Find the active loan for this employee
+        // Find the loan a deduction can land against. DEDUCTIBLE_STATUSES is
+        // the shared definition the employer's deduction report also derives
+        // from; this used to be a hardcoded ['active', 'disbursed'], which
+        // excluded the `overdue` loans that report bills the employer for.
         const loanSnap = await db.collection('loans')
           .where('employeeId', '==', row.employeeId)
           .where('employerId', '==', input.employerId)
-          .where('status', 'in', ['active', 'disbursed'])
+          .where('status', 'in', DEDUCTIBLE_STATUSES as string[])
           .limit(1)
           .get();
 
         if (loanSnap.empty) {
           results.push({
             employeeId: row.employeeId,
+            status: 'skipped',
             deductionAmount: 0,
-            error: 'no_active_loan',
+            error: 'no_deductible_loan',
           });
           continue;
         }
 
-        const loanDoc = loanSnap.docs[0];
-        const loan = loanDoc.data();
-        const loanId = loanDoc.id;
-        const remainingBalance = Number(loan['remainingBalance'] ?? loan['total'] ?? 0);
-        const monthlyPayment = Number(loan['monthlyPayment'] ?? loan['total'] ?? 0);
-        const payPeriodsPerMonth = Number(loan['payPeriodsPerMonth'] ?? 2); // default bi-weekly
+        const loanRef = loanSnap.docs[0].ref;
+        const loanId = loanSnap.docs[0].id;
+        const deductionRef = db.collection('payrollDeductions').doc(deductionDocId(batchId, loanId));
 
-        const deductionAmount = row.deductionAmount ?? calcExpectedDeduction(
-          remainingBalance,
-          monthlyPayment,
-          payPeriodsPerMonth,
-        );
+        // Everything that decides how much money moves happens INSIDE the
+        // transaction, against the balance the transaction itself read. The
+        // query above only locates the loan; its snapshot is deliberately not
+        // used for arithmetic, because Firestore's optimistic concurrency
+        // cannot protect a value the transaction never read — two concurrent
+        // batches would both write a balance derived from the same starting
+        // figure and one deduction would be silently lost.
+        const outcome = await db.runTransaction(async (tx): Promise<RowResult> => {
+          const deductionSnap = await tx.get(deductionRef);
+          if (deductionSnap.exists) {
+            const prior = deductionSnap.data() ?? {};
+            return {
+              employeeId: row.employeeId,
+              status: 'already_processed',
+              loanId,
+              deductionAmount: Number(prior['deductionAmount'] ?? 0),
+              newBalance: Number(prior['remainingBalanceAfter'] ?? 0),
+            };
+          }
 
-        if (deductionAmount <= 0) {
-          results.push({
-            employeeId: row.employeeId,
-            loanId,
-            deductionAmount: 0,
-            error: 'nothing_to_deduct',
-          });
-          continue;
-        }
+          const loanFresh = await tx.get(loanRef);
+          if (!loanFresh.exists) {
+            return {
+              employeeId: row.employeeId,
+              status: 'error',
+              loanId,
+              deductionAmount: 0,
+              error: 'loan_not_found',
+            };
+          }
+          const loan = loanFresh.data() ?? {};
 
-        const newBalance = Math.max(0, remainingBalance - deductionAmount);
-        const loanFullyRepaid = newBalance === 0;
-        const newStatus = loanFullyRepaid ? 'repaid' : loan['status'];
+          // Re-check under the transaction: the loan may have been repaid or
+          // written off between the query and here.
+          if (!DEDUCTIBLE_STATUSES.includes(String(loan['status']))) {
+            return {
+              employeeId: row.employeeId,
+              status: 'skipped',
+              loanId,
+              deductionAmount: 0,
+              error: 'loan_not_deductible',
+            };
+          }
 
-        // Transactional write: deduction record + loan update
-        await db.runTransaction(async (tx) => {
-          tx.set(db.collection('payrollDeductions').doc(), {
+          const remainingBalance = roundToCents(
+            Number(loan['remainingBalance'] ?? loan['total'] ?? 0),
+          );
+          const monthlyPayment = Number(loan['monthlyPayment'] ?? loan['total'] ?? 0);
+          const payPeriodsPerMonth = Number(loan['payPeriodsPerMonth'] ?? 2); // default bi-weekly
+
+          const requestedAmount = row.deductionAmount ?? calcExpectedDeduction(
+            remainingBalance,
+            monthlyPayment,
+            payPeriodsPerMonth,
+          );
+
+          // The obligation is the ceiling, and the obligation is server-side.
+          // `row.deductionAmount` comes straight off the uploaded CSV: an
+          // over-stated figure used to clamp to a zero balance and mark the
+          // loan `repaid` (restoring the employee's credit), so any employer
+          // could extinguish their employees' debts with a spreadsheet typo.
+          // Surface the discrepancy instead of silently truncating it — the
+          // employer withheld a number we cannot reconcile, and they have to
+          // see that. Re-uploading the corrected row is safe: the per-row
+          // idempotency key means the rows that did land are not re-applied.
+          if (requestedAmount - remainingBalance > CENT_EPSILON) {
+            return {
+              employeeId: row.employeeId,
+              status: 'error',
+              loanId,
+              deductionAmount: 0,
+              error: `deduction_exceeds_balance:requested=${roundToCents(requestedAmount)},owed=${remainingBalance}`,
+            };
+          }
+
+          const deductionAmount = roundToCents(Math.min(requestedAmount, remainingBalance));
+          if (deductionAmount <= 0) {
+            return {
+              employeeId: row.employeeId,
+              status: 'skipped',
+              loanId,
+              deductionAmount: 0,
+              error: 'nothing_to_deduct',
+            };
+          }
+
+          const newBalance = Math.max(0, roundToCents(remainingBalance - deductionAmount));
+          const loanFullyRepaid = newBalance === 0;
+          const newStatus = loanFullyRepaid ? LOAN_STATUS.REPAID : String(loan['status']);
+
+          // `create`, not `set`: a replay of this row must fail the write
+          // rather than record a second deduction.
+          tx.create(deductionRef, {
             loanId,
             employeeId: row.employeeId,
             employerId: input.employerId,
@@ -163,47 +294,59 @@ export const processPayroll = onCall(
             createdAt: FieldValue.serverTimestamp(),
           });
 
-          tx.update(loanDoc.ref, {
+          tx.update(loanRef, {
             remainingBalance: newBalance,
             lastDeductionAt: FieldValue.serverTimestamp(),
             lastDeductionAmount: deductionAmount,
             ...(loanFullyRepaid ? {
-              status: 'repaid',
+              status: LOAN_STATUS.REPAID,
               repaidAt: FieldValue.serverTimestamp(),
             } : {}),
             updatedAt: FieldValue.serverTimestamp(),
           });
+
+          return {
+            employeeId: row.employeeId,
+            status: 'deducted',
+            loanId,
+            deductionAmount,
+            newBalance,
+            newStatus,
+          };
         });
 
-        // Side-effect: notification (non-blocking)
-        if (loanFullyRepaid) {
-          notifyLoanEvent('loan_repaid', { employeeId: row.employeeId, loanId, totalDeducted: remainingBalance }).catch((err) => logger.warn('notify loan_repaid failed', err));
-        } else {
-          notifyLoanEvent('payroll_deduction', { employeeId: row.employeeId, loanId, amount: deductionAmount, remaining: newBalance }).catch((err) => logger.warn('notify payroll_deduction failed', err));
+        // Side-effect: notification (non-blocking). Only for a deduction this
+        // attempt actually applied — a replayed row must not re-notify.
+        if (outcome.status === 'deducted') {
+          if (outcome.newStatus === LOAN_STATUS.REPAID) {
+            notifyLoanEvent('loan_repaid', { employeeId: row.employeeId, loanId, totalDeducted: outcome.deductionAmount }).catch((err) => logger.warn('notify loan_repaid failed', err));
+          } else {
+            notifyLoanEvent('payroll_deduction', { employeeId: row.employeeId, loanId, amount: outcome.deductionAmount, remaining: outcome.newBalance }).catch((err) => logger.warn('notify payroll_deduction failed', err));
+          }
         }
 
-        results.push({
-          employeeId: row.employeeId,
-          loanId,
-          deductionAmount,
-          newBalance,
-          newStatus,
-        });
+        results.push(outcome);
       } catch (err) {
         logger.error({ err, employeeId: row.employeeId }, 'Payroll row processing failed');
         results.push({
           employeeId: row.employeeId,
+          status: 'error',
           deductionAmount: 0,
           error: (err as Error).message,
         });
       }
     }
 
-    const processedCount = results.filter((r) => !r.error).length;
+    const processedCount = results.filter((r) => r.status === 'deducted').length;
+    const skippedCount = results.filter((r) => r.status === 'skipped').length;
+    const alreadyProcessedCount = results.filter((r) => r.status === 'already_processed').length;
+    const errorCount = results.filter((r) => r.status === 'error').length;
     await batchRef.set({
       status: 'completed',
       processedCount,
-      errorCount: results.length - processedCount,
+      skippedCount,
+      alreadyProcessedCount,
+      errorCount,
       completedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 

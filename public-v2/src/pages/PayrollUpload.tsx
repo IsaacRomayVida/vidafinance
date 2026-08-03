@@ -12,13 +12,26 @@ type PayrollRow = {
   deductionAmount?: number;
 };
 
+/** The row outcomes processPayroll returns (functions/src/payroll/processPayroll.ts). */
+const ROW_STATUSES = ['deducted', 'skipped', 'error', 'already_processed'] as const;
+type RowStatus = (typeof ROW_STATUSES)[number];
+
 type RowResult = {
   employeeId: string;
-  status: 'deducted' | 'skipped' | 'error' | 'already_processed';
+  // Widened to `string`, deliberately: this is a value off the wire. The server
+  // returned no `status` at all for a while, and i18next is configured with no
+  // parseMissingKeyHandler (see i18n/index.ts), so `t('payroll_status_' + s)`
+  // rendered the literal `payroll_status_undefined` in every badge. Anything
+  // the client doesn't recognise now falls back to a generic label.
+  status?: string;
   deductionAmount?: number;
   newBalance?: number;
   error?: string;
 };
+
+function isKnownRowStatus(status: string | undefined): status is RowStatus {
+  return status != null && (ROW_STATUSES as readonly string[]).includes(status);
+}
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const REQUIRED_HEADERS = ['employeeId', 'grossSalary', 'netSalary', 'payPeriod'];
@@ -379,7 +392,9 @@ export function PayrollUpload() {
                         background: statusColor(r.status).bg,
                         color: statusColor(r.status).text,
                       }}>
-                        {t(`payroll_status_${r.status}`)}
+                        {isKnownRowStatus(r.status)
+                          ? t(`payroll_status_${r.status}`)
+                          : t('payroll_status_unknown')}
                       </span>
                     </td>
                     <td style={tdStyle}>{r.deductionAmount != null ? `$${r.deductionAmount.toLocaleString('es-MX')}` : '\u2014'}</td>
@@ -413,7 +428,7 @@ export function PayrollUpload() {
   );
 }
 
-function statusColor(status: string): { bg: string; text: string } {
+function statusColor(status: string | undefined): { bg: string; text: string } {
   switch (status) {
     case 'deducted': return { bg: 'rgba(36,122,110,0.1)', text: 'var(--success)' };
     case 'skipped': return { bg: 'rgba(162,134,87,0.1)', text: 'var(--gold)' };
