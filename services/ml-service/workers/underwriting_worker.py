@@ -164,6 +164,12 @@ def build_model_features(borrower: dict, principal: float, monthly_salary: float
         # Legacy features (kept for backward compatibility with hard rules)
         "employment_tenure_months": tenure,
         "loan_to_salary_ratio": lti,
+        # Declared in models/underwriting_model.py FEATURE_ORDER and monitored
+        # by models/drift_monitor.py FEATURE_NAMES. Neither champion nor
+        # challenger read it today, but it must still be emitted here — a
+        # feature the monitor can't see gets silently treated as a constant
+        # 0.0 ("stable") instead of flagged as unmonitorable. See #463.
+        "employer_industry_encoded": float(industry_code),
     }
 
 

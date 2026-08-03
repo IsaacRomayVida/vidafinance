@@ -198,6 +198,7 @@ def run_drift_check(
     current_features: np.ndarray,
     current_scores: np.ndarray,
     baseline: dict | None = None,
+    feature_names: list[str] | None = None,
 ) -> dict:
     """
     Run full PSI + per-feature CSI drift check against baseline.
@@ -206,12 +207,19 @@ def run_drift_check(
         current_features: Feature matrix (n_samples, n_features).
         current_scores: Model output scores (n_samples,).
         baseline: Baseline dict. Loaded from disk if not provided.
+        feature_names: Names of the columns in current_features, in order.
+            Defaults to the full FEATURE_NAMES — pass a subset when a caller
+            could not source every declared feature (e.g. it was never
+            written by the upstream job) so CSI is only computed for columns
+            that actually carry real data.
 
     Returns:
         Drift report dict with PSI, per-feature CSI, and alert level.
     """
     if baseline is None:
         baseline = load_baseline()
+    if feature_names is None:
+        feature_names = FEATURE_NAMES
 
     # Overall score PSI
     baseline_scores = baseline["score_distribution"]
@@ -227,7 +235,7 @@ def run_drift_check(
 
     # Per-feature CSI
     feature_csi = {}
-    for i, name in enumerate(FEATURE_NAMES):
+    for i, name in enumerate(feature_names):
         feature_csi[name] = compute_csi(
             baseline["features"][name],
             current_features[:, i],

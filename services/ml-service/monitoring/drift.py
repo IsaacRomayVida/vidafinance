@@ -10,16 +10,12 @@ Alert thresholds:
 """
 
 import logging
-import json
-import os
-import time
 from datetime import datetime, timezone
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset
 from evidently.metrics import (
     ColumnDriftMetric,
     DatasetDriftMetric,
@@ -68,7 +64,8 @@ def run_drift_check(
 ) -> dict:
     """
     Run PSI on prediction scores and CSI on each input feature.
-    Also runs evidently DataDriftPreset for detailed reporting.
+    Also runs evidently's DatasetDriftMetric plus a per-column
+    ColumnDriftMetric for each feature, for detailed reporting.
 
     Both DataFrames must contain FEATURE_COLUMNS + SCORE_COLUMN.
     """
@@ -129,21 +126,38 @@ def run_drift_check(
                     "message": f"CSI({col})={csi_value:.4f} — significant feature drift",
                 })
 
-    # Evidently report for detailed drift statistics
+    # Evidently report: dataset-level verdict plus per-column drift detail
     try:
-        all_cols = [c for c in FEATURE_COLUMNS + [SCORE_COLUMN]
-                    if c in reference_df.columns and c in current_df.columns]
+        feature_cols = [c for c in FEATURE_COLUMNS
+                         if c in reference_df.columns and c in current_df.columns]
+        all_cols = feature_cols + (
+            [SCORE_COLUMN] if SCORE_COLUMN in reference_df.columns
+            and SCORE_COLUMN in current_df.columns else []
+        )
         ref_subset = reference_df[all_cols].copy()
         cur_subset = current_df[all_cols].copy()
 
-        report = Report(metrics=[DatasetDriftMetric()])
+        report = Report(metrics=[
+            DatasetDriftMetric(),
+            *[ColumnDriftMetric(column_name=col) for col in all_cols],
+        ])
         report.run(reference_data=ref_subset, current_data=cur_subset)
         report_dict = report.as_dict()
-        drift_result = report_dict.get("metrics", [{}])[0].get("result", {})
+        metrics = report_dict.get("metrics", [])
+        dataset_result = metrics[0].get("result", {}) if metrics else {}
+        columns_drift = {
+            m["result"]["column_name"]: {
+                "drift_score": m["result"].get("drift_score"),
+                "drift_detected": m["result"].get("drift_detected", False),
+                "stattest_name": m["result"].get("stattest_name"),
+            }
+            for m in metrics[1:]
+        }
         results["evidently_drift"] = {
-            "dataset_drift": drift_result.get("dataset_drift", False),
-            "share_of_drifted_columns": drift_result.get("share_of_drifted_columns", 0),
-            "number_of_drifted_columns": drift_result.get("number_of_drifted_columns", 0),
+            "dataset_drift": dataset_result.get("dataset_drift", False),
+            "share_of_drifted_columns": dataset_result.get("share_of_drifted_columns", 0),
+            "number_of_drifted_columns": dataset_result.get("number_of_drifted_columns", 0),
+            "columns": columns_drift,
         }
     except Exception as e:
         logger.warning("Evidently report failed: %s", e)
