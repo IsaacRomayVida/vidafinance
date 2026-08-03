@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
@@ -50,18 +52,18 @@ function ageLabel(queuedAt: string): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-function slaLabel(queuedAt: string): string {
+function slaLabel(queuedAt: string, t: TFunction): string {
   const elapsed = hoursElapsed(queuedAt);
   const remaining = 24 - elapsed;
   if (remaining <= 0) {
     const over = Math.abs(remaining);
     const h = Math.floor(over);
     const m = Math.floor((over - h) * 60);
-    return `Overdue ${h}h ${m}m`;
+    return t('rq_sla_overdue', 'Vencido {{h}}h {{m}}m', { h, m });
   }
   const h = Math.floor(remaining);
   const m = Math.floor((remaining - h) * 60);
-  return `${h}h ${m}m left`;
+  return t('rq_sla_left', 'Faltan {{h}}h {{m}}m', { h, m });
 }
 
 function riskColor(level: string): { bg: string; text: string } {
@@ -86,19 +88,19 @@ function urgencyLevel(item: ReviewItem): 'breach' | 'warning' | 'normal' {
   return 'normal';
 }
 
-function getEscalationReason(item: ReviewItem): string {
+function getEscalationReason(item: ReviewItem, t: TFunction): string {
   const reasons: string[] = [];
-  if (item.aml_result?.criminalRecordFound) reasons.push('Criminal record');
-  if (item.aml_result?.amlHit) reasons.push('AML hit');
-  if (item.aml_result?.isPEP) reasons.push('PEP');
+  if (item.aml_result?.criminalRecordFound) reasons.push(t('rq_reason_criminal', 'Antecedentes penales'));
+  if (item.aml_result?.amlHit) reasons.push(t('rq_reason_aml', 'Coincidencia PLD'));
+  if (item.aml_result?.isPEP) reasons.push(t('rq_reason_pep', 'PEP'));
   if (item.llm_narrative?.risk_level === 'high' || item.llm_narrative?.risk_level === 'critical') {
-    reasons.push(`LLM: ${item.llm_narrative.risk_level}`);
+    reasons.push(t('rq_reason_llm', 'IA: {{level}}', { level: item.llm_narrative.risk_level }));
   }
   const signals = item.signals as Record<string, Record<string, unknown>> | undefined;
-  if (signals?.bureau && (signals.bureau['activeDefaults'] as number) > 0) reasons.push('Active defaults');
-  if (signals?.riskseal && (signals.riskseal['score'] as number) < 30) reasons.push('Low RiskSeal');
-  if (signals?.bureau && (signals.bureau['score'] as number) < 400) reasons.push('Low bureau score');
-  return reasons.length > 0 ? reasons.join(', ') : 'Stage 4 escalation';
+  if (signals?.bureau && (signals.bureau['activeDefaults'] as number) > 0) reasons.push(t('rq_reason_defaults', 'Incumplimientos activos'));
+  if (signals?.riskseal && (signals.riskseal['score'] as number) < 30) reasons.push(t('rq_reason_riskseal', 'RiskSeal bajo'));
+  if (signals?.bureau && (signals.bureau['score'] as number) < 400) reasons.push(t('rq_reason_bureau', 'Score de buró bajo'));
+  return reasons.length > 0 ? reasons.join(', ') : t('rq_reason_stage4', 'Escalado en Etapa 4');
 }
 
 function getEmployerName(item: ReviewItem): string {
@@ -126,11 +128,16 @@ type UrgencyFilter = 'all' | 'breach' | 'warning';
 /* ── component ───────────────────────────────────────────────────────────── */
 
 export function ReviewQueue() {
+  const { t } = useTranslation();
   useAuth();
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The error is held as a code + raw reason, not a translated sentence: a
+  // formatted string here would drag `t` into the snapshot effect, whose
+  // identity changes on language switch and would tear down and re-establish
+  // the realtime listener every toggle. Translated at render instead.
+  const [loadError, setLoadError] = useState<{ code: 'index' | 'generic'; reason?: string } | null>(null);
   const [, setTick] = useState(0);
 
   // Filters & sorting
@@ -179,8 +186,8 @@ export function ReviewQueue() {
         // would see.
         setLoadError(
           err.code === 'failed-precondition'
-            ? 'No se pudo cargar la cola: falta un índice de Firestore (#414). Esto NO significa que no haya revisiones pendientes.'
-            : `No se pudo cargar la cola de revisión: ${friendlyError(err)}. Esto NO significa que no haya revisiones pendientes.`
+            ? { code: 'index' }
+            : { code: 'generic', reason: friendlyError(err) }
         );
         setLoading(false);
       },
@@ -202,10 +209,10 @@ export function ReviewQueue() {
   const reasons = useMemo(() => {
     const set = new Set<string>();
     reviews.forEach(r => {
-      getEscalationReason(r).split(', ').forEach(reason => set.add(reason));
+      getEscalationReason(r, t).split(', ').forEach(reason => set.add(reason));
     });
     return Array.from(set).sort();
-  }, [reviews]);
+  }, [reviews, t]);
 
   // Filtered and sorted reviews
   const filteredReviews = useMemo(() => {
@@ -218,7 +225,7 @@ export function ReviewQueue() {
       result = result.filter(r => getEmployerName(r) === employerFilter);
     }
     if (reasonFilter) {
-      result = result.filter(r => getEscalationReason(r).includes(reasonFilter));
+      result = result.filter(r => getEscalationReason(r, t).includes(reasonFilter));
     }
 
     result.sort((a, b) => {
@@ -235,7 +242,7 @@ export function ReviewQueue() {
     });
 
     return result;
-  }, [reviews, sortKey, urgencyFilter, employerFilter, reasonFilter]);
+  }, [reviews, sortKey, urgencyFilter, employerFilter, reasonFilter, t]);
 
   /* ── styles ──────────────────────────────────────────────────────────────── */
 
@@ -306,27 +313,27 @@ export function ReviewQueue() {
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
         <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-          Review Queue
+          {t('rq_title', 'Cola de revisión')}
         </h1>
         <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
-          Loans flagged for Stage 5 manual review. 24-hour SLA per item.
+          {t('rq_subtitle', 'Préstamos marcados para revisión manual (Etapa 5). SLA de 24 horas por caso.')}
         </p>
       </div>
 
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 32 }}>
         <div style={cardStyle}>
-          <div style={labelStyle}>Pending</div>
+          <div style={labelStyle}>{t('rq_stat_pending', 'Pendientes')}</div>
           <div style={valueStyle}>{reviews.length}</div>
         </div>
         <div style={cardStyle}>
-          <div style={labelStyle}>High Risk</div>
+          <div style={labelStyle}>{t('rq_stat_high_risk', 'Riesgo alto')}</div>
           <div style={{ ...valueStyle, color: reviews.some(r => r.risk_level === 'high' || r.risk_level === 'critical') ? 'var(--danger)' : 'var(--t1)' }}>
             {reviews.filter(r => r.risk_level === 'high' || r.risk_level === 'critical').length}
           </div>
         </div>
         <div style={cardStyle}>
-          <div style={labelStyle}>SLA Breach</div>
+          <div style={labelStyle}>{t('rq_stat_sla_breach', 'SLA incumplido')}</div>
           <div style={{ ...valueStyle, color: reviews.some(r => hoursElapsed(r.queuedAt) > 24) ? 'var(--danger)' : 'var(--t1)' }}>
             {reviews.filter(r => hoursElapsed(r.queuedAt) > 24).length}
           </div>
@@ -336,50 +343,50 @@ export function ReviewQueue() {
       {/* Filters & Sort */}
       <div style={{ ...cardStyle, padding: '16px 20px', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 24 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)', marginRight: 4 }}>
-          Filters
+          {t('rq_filters', 'Filtros')}
         </div>
         <select
-          aria-label="Filter by urgency"
+          aria-label={t('rq_aria_filter_urgency', 'Filtrar por urgencia')}
           value={urgencyFilter}
           onChange={e => setUrgencyFilter(e.target.value as UrgencyFilter)}
           style={selectStyle}
         >
-          <option value="all">All urgency</option>
-          <option value="breach">SLA breach</option>
-          <option value="warning">SLA warning</option>
+          <option value="all">{t('rq_urgency_all', 'Toda urgencia')}</option>
+          <option value="breach">{t('rq_urgency_breach', 'SLA incumplido')}</option>
+          <option value="warning">{t('rq_urgency_warning', 'SLA por vencer')}</option>
         </select>
         <select
-          aria-label="Filter by employer"
+          aria-label={t('rq_aria_filter_employer', 'Filtrar por empleador')}
           value={employerFilter}
           onChange={e => setEmployerFilter(e.target.value)}
           style={selectStyle}
         >
-          <option value="">All employers</option>
+          <option value="">{t('rq_employer_all', 'Todos los empleadores')}</option>
           {employers.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
         <select
-          aria-label="Filter by reason"
+          aria-label={t('rq_aria_filter_reason', 'Filtrar por motivo')}
           value={reasonFilter}
           onChange={e => setReasonFilter(e.target.value)}
           style={selectStyle}
         >
-          <option value="">All reasons</option>
+          <option value="">{t('rq_reason_all', 'Todos los motivos')}</option>
           {reasons.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)' }}>
-            Sort
+            {t('rq_sort', 'Ordenar')}
           </span>
           <select
-            aria-label="Sort reviews"
+            aria-label={t('rq_aria_sort', 'Ordenar revisiones')}
             value={sortKey}
             onChange={e => setSortKey(e.target.value as SortKey)}
             style={selectStyle}
           >
-            <option value="age">Age (oldest first)</option>
-            <option value="amount">Amount (highest)</option>
-            <option value="lti">LTI ratio (highest)</option>
+            <option value="age">{t('rq_sort_age', 'Antigüedad (más antiguas primero)')}</option>
+            <option value="amount">{t('rq_sort_amount', 'Monto (mayor primero)')}</option>
+            <option value="lti">{t('rq_sort_lti', 'Razón préstamo/salario (mayor primero)')}</option>
           </select>
         </div>
       </div>
@@ -387,13 +394,20 @@ export function ReviewQueue() {
       {/* Loading */}
       {loading && (
         <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
-          <p style={{ fontSize: 14 }}>Loading reviews...</p>
+          <p style={{ fontSize: 14 }}>{t('rq_loading', 'Cargando revisiones...')}</p>
         </div>
       )}
 
       {/* Read failure — never rendered as an empty queue. */}
       {!loading && loadError && (
-        <ErrorBanner message={loadError} style={{ textAlign: 'left', marginBottom: 16 }} />
+        <ErrorBanner
+          message={
+            loadError.code === 'index'
+              ? t('rq_err_index', 'No se pudo cargar la cola: falta un índice de Firestore (#414). Esto NO significa que no haya revisiones pendientes.')
+              : t('rq_err_generic', 'No se pudo cargar la cola de revisión: {{reason}}. Esto NO significa que no haya revisiones pendientes.', { reason: loadError.reason })
+          }
+          style={{ textAlign: 'left', marginBottom: 16 }}
+        />
       )}
 
       {/* Empty. Gated on loadError: "All caught up" is a claim that every
@@ -401,7 +415,7 @@ export function ReviewQueue() {
           the queue was actually read. */}
       {!loading && !loadError && reviews.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
-          <p style={{ fontSize: 14 }}>No pending reviews. All caught up.</p>
+          <p style={{ fontSize: 14 }}>{t('rq_empty', 'No hay revisiones pendientes. Todo al día.')}</p>
         </div>
       )}
 
@@ -412,14 +426,14 @@ export function ReviewQueue() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={thStyle}>Loan ID</th>
-                  <th style={thStyle}>Applicant</th>
-                  <th style={thStyle}>Employer</th>
-                  <th style={thStyle}>Amount</th>
-                  <th style={thStyle}>Risk</th>
-                  <th style={thStyle}>Reason</th>
-                  <th style={thStyle}>Age</th>
-                  <th style={thStyle}>SLA</th>
+                  <th style={thStyle}>{t('rq_th_loan_id', 'ID de préstamo')}</th>
+                  <th style={thStyle}>{t('rq_th_applicant', 'Solicitante')}</th>
+                  <th style={thStyle}>{t('rq_th_employer', 'Empleador')}</th>
+                  <th style={thStyle}>{t('rq_th_amount', 'Monto')}</th>
+                  <th style={thStyle}>{t('rq_th_risk', 'Riesgo')}</th>
+                  <th style={thStyle}>{t('rq_th_reason', 'Motivo')}</th>
+                  <th style={thStyle}>{t('rq_th_age', 'Antigüedad')}</th>
+                  <th style={thStyle}>{t('rq_th_sla', 'SLA')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -470,7 +484,7 @@ export function ReviewQueue() {
                       </td>
                       <td style={{ ...tdStyle, fontSize: 12, color: 'var(--t2)', maxWidth: 180 }}>
                         <span style={{ display: 'inline-block', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {getEscalationReason(item)}
+                          {getEscalationReason(item, t)}
                         </span>
                       </td>
                       <td style={{ ...tdStyle, fontSize: 12, fontWeight: 600, color: 'var(--t2)', whiteSpace: 'nowrap' }}>
@@ -486,7 +500,7 @@ export function ReviewQueue() {
                           color: urg === 'breach' ? 'var(--danger)' : urg === 'warning' ? 'var(--warning)' : 'var(--brand-light)',
                           whiteSpace: 'nowrap',
                         }}>
-                          {slaLabel(item.queuedAt)}
+                          {slaLabel(item.queuedAt, t)}
                         </span>
                       </td>
                     </tr>
