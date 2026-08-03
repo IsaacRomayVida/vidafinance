@@ -79,6 +79,24 @@ function contractTerms(loan) {
   return { feePct: Math.round(feeRate * 100), termDays, cat };
 }
 
+/**
+ * Both the HTTP route and the BullMQ worker generate a contract from the same
+ * loan shape. Neither should crash with a raw property-access error on a
+ * missing/malformed loan -- validate once, share the result.
+ */
+function assertLoanReadyForContract(loan, loanId) {
+  if (!loan) {
+    const err = new Error(`Loan not found: ${loanId}`);
+    err.code = "LOAN_NOT_FOUND";
+    throw err;
+  }
+  if (!loan.dueDate || typeof loan.dueDate.toDate !== "function") {
+    const err = new Error(`Loan ${loanId} is missing required field: dueDate`);
+    err.code = "LOAN_INVALID";
+    throw err;
+  }
+}
+
 /* ─── Puppeteer helpers ─── */
 
 let browser;
@@ -121,6 +139,7 @@ const worker = new Worker(
 
     if (type === "loan_contract") {
       const loan = (await db.collection("loans").doc(loanId).get()).data();
+      assertLoanReadyForContract(loan, loanId);
       const { feePct, termDays, cat } = contractTerms(loan);
       const html = CONTRACT_TPL({
         loanId: loanId.slice(0, 8).toUpperCase(),
@@ -247,7 +266,7 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
 
   try {
     const loan = (await db.collection("loans").doc(loanId).get()).data();
-    if (!loan) return res.status(404).json({ error: "Loan not found" });
+    assertLoanReadyForContract(loan, loanId);
 
     const { feePct, termDays, cat } = contractTerms(loan);
     const html = CONTRACT_TPL({
@@ -272,6 +291,7 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
 
     let metamapDocumentId = null;
     let contractStatus = 'generated';
+    let signatureError = null;
     try {
       const signing = require('./src/metamap-signing-client');
       if (signing.isEnabled() && metamapVerificationId) {
@@ -288,7 +308,12 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
         log.info({ loanId, metamapDocumentId }, "Loan submitted for signing");
       }
     } catch (err) {
+      // Distinct terminal status so a failed signature request is never
+      // mistaken for "signing not attempted" -- both previously collapsed to
+      // contractStatus: 'generated' / metamapDocumentId: null.
       console.error(`[metamap] Signing failed for loan ${loanId}:`, err.message);
+      contractStatus = 'signature_request_failed';
+      signatureError = err.message;
     }
 
     await db.collection("loans").doc(loanId).update({
@@ -297,6 +322,9 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
       metamapVerificationId: metamapVerificationId || null,
       metamapDocumentId,
       contractStatus,
+      ...(signatureError
+        ? { signatureError, signatureFailedAt: admin.firestore.FieldValue.serverTimestamp() }
+        : {}),
     });
     await db
       .collection("employees")
@@ -311,6 +339,12 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
 
     res.json({ contractUrl: url });
   } catch (err) {
+    if (err.code === "LOAN_NOT_FOUND") {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+    if (err.code === "LOAN_INVALID") {
+      return res.status(422).json({ error: err.message });
+    }
     console.error("Contract generation failed:", err);
     res.status(500).json({ error: "Contract generation failed" });
   }
