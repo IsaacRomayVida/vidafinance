@@ -11,6 +11,11 @@ export enum VidaErrorCode {
   DUPLICATE_LOAN_APPLICATION = 'DUPLICATE_LOAN_APPLICATION',
   EMPLOYER_NOT_APPROVED = 'EMPLOYER_NOT_APPROVED',
   EMPLOYEE_NOT_FOUND = 'EMPLOYEE_NOT_FOUND',
+  // A capacity block, not a credit decline: the employer's concurrent-active-loan
+  // cap (maxActiveSlots) is already occupied. Deliberately distinct from any
+  // underwriting/credit-decision code so the borrower is never told they were
+  // declined for credit when the real reason is "try again once a slot frees up".
+  EMPLOYER_SLOT_LIMIT_REACHED = 'EMPLOYER_SLOT_LIMIT_REACHED',
 }
 
 interface ErrorContext {
