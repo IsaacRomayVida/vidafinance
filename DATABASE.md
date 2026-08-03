@@ -190,7 +190,16 @@ Audit writes on lower-risk paths are still best-effort, so this log is
 ### `auditLogs/{docId}` — legacy, read-only
 
 Retired camelCase collection. It has no writers; records created before the
-consolidation still live here and remain ops-readable. No data migration was run.
+consolidation still live here and remain ops-readable.
+
+**No data migration has been run yet.** `scripts/migrations/002_consolidate_audit_logs.ts`
+copies these records into `audit_log` (copy-only, idempotent, preserves the
+original `timestamp`); it is committed but deliberately unrun. Procedure,
+verification steps and rollback: `docs/runbooks/audit-log-consolidation.md`.
+
+Until it runs, note that the ops audit console queries `audit_log` only, so
+records here are readable by rule but not surfaced in the UI. This collection
+has no composite indexes.
 
 ---
 
