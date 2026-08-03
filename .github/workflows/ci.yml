@@ -36,7 +36,12 @@ jobs:
       - name: Lint (functions)
         run: cd functions && npm run lint
 
-      - name: Unit tests (functions) — 275/275, this is a hard gate
+      # No count in this label on purpose. The previous one read 275/275 while the
+      # suite had grown to 437, so the number aged into a false statement about a
+      # gate — the one place a stale figure does the most damage, because it invites
+      # "only 275 ran, the rest are optional". `npm run test:ci` fails the job on a
+      # single failing test; that is what makes this a hard gate, not the count.
+      - name: Unit tests (functions) — hard gate
         run: cd functions && npm run test:ci
 
   underwriting-service:
