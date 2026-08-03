@@ -19,6 +19,7 @@ governs the code belongs beside it.
 | [005](ADR-005-underwriting-spec-vs-implementation-reconciliation.md) | Reconciling the underwriting spec with the underwriting implementation | ACCEPTED (engineering); C1/C2 answered by ADR-007, C3 by ADR-006, C4 open | Stage 3 auto-approve gate, employer slots |
 | [006](ADR-006-auto-approve-gate-policy-ratified.md) | The Stage 3 auto-approve gate policy, ratified | ACCEPTED — ratified by Isaac 2026-08-03; implemented, C4 still open | Stage 3 auto-approve gate |
 | [007](ADR-007-lending-slot-hybrid-growth.md) | Lending-slot hybrid growth: +10 per clean cycle, credited at review, capped at 2 per review | ACCEPTED — ratified by Isaac 2026-08-03 | `services/underwriting-service/src/stages/employer-b.js`, `src/config/lendingSlotGrowth.js` |
+| [008](ADR-008-due-diligence-capacity-wired-to-enforced-cap.md) | Due-diligence capacity is wired to the field the loan-cap transaction enforces | ACCEPTED and IMPLEMENTED — shipped #487, 2026-08-03 | `functions/src/index.ts` (`requestLoan`, `updateEmployerTier`), `services/underwriting-service/src/stages/employer-b.js` |
 
 ## Open commercial questions
 

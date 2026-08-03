@@ -76,18 +76,23 @@ jobs:
       # count is named here. The step was called "139/139" while the suite
       # actually ran 150, the same drift eb224f7 took out of the functions job.
       #
-      # Two suites specify features that were never built (#387, #388). #395
-      # held them out via testPathIgnorePatterns in jest.config.js, which kept
-      # the gate honest but made the hole invisible — jest never collected the
-      # files, so the output read as a clean sweep. They are now `describe.skip`
-      # inside the files themselves, so a run reports "2 skipped, 11 passed,
-      # 11 of 13 total / 78 skipped, 150 passed, 228 total" and the unbuilt
-      # work is counted in the open where it can be watched shrinking. The
-      # exclusion is by name and nothing else: a failure in any of the other 11
-      # suites fails this job.
+      # Two suites once specified features that were never built (#387, #388)
+      # and were held out — first via testPathIgnorePatterns (#395), then via
+      # named describe.skip so the hole stayed counted instead of invisible.
+      # Both issues are now CLOSED: #483/#486 built and wired the weighted
+      # scoring engine (ADR-007), and #487 wired its output to the field the
+      # loan-cap transaction enforces (ADR-008). jest.config.js excludes
+      # nothing by name any more. One `it.skip` remains in
+      # stage3-autoapprove.test.js, deliberately: it asserts a shadow/
+      # challenger model gating a live decision, which ADR-001 §Decision.2
+      # forbids until promoting that model is its own ratified event. That is
+      # the only exclusion this gate carries, and it is by name, not by count.
       #
-      # Do not add continue-on-error, and do not quiet the skips down. Red here
-      # means something actually regressed.
+      # Do not add continue-on-error, and do not quiet the skip down. Red here
+      # means something actually regressed. This gate covers every suite
+      # `jest.config.js`'s `roots` collects; no count is named here on
+      # purpose — see the functions job above for why a hardcoded number is
+      # exactly the drift this comment exists to avoid repeating.
       - name: Unit tests (underwriting-service) — hard gate
         run: cd services/underwriting-service && npm test
 
