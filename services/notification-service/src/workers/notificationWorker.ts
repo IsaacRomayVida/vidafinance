@@ -53,8 +53,10 @@ async function resolvePhone(data: NotificationJobData): Promise<string> {
   if (data.phone) return data.phone;
   const uid = data.userId ?? data.employeeId;
   if (!uid) throw new Error(`No userId/employeeId in job data: ${JSON.stringify(data)}`);
-  const user = await firestore.getUser(uid);
-  return user.phone;
+  // ['phone'] is all an SMS/WhatsApp job needs -- a missing email on an
+  // otherwise-reachable borrower must not suppress their notification.
+  const user = await firestore.getUser(uid, ['phone']);
+  return user.phone!;
 }
 
 /**

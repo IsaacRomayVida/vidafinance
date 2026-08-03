@@ -41,14 +41,31 @@ describe('FirestoreService.getUser', () => {
 
     const svc = new FirestoreService();
     await expect(svc.getUser('emp_2')).rejects.toThrow(IncompleteUserProfileError);
-    await expect(svc.getUser('emp_2')).rejects.toThrow(/emp_2 is missing required contact field\(s\): phone, email/);
+    await expect(svc.getUser('emp_2')).rejects.toThrow(/emp_2 is missing required contact field\(s\): phone/);
+    await expect(svc.getUser('emp_2', ['phone', 'email'])).rejects.toThrow(
+      /emp_2 is missing required contact field\(s\): phone, email/,
+    );
   });
 
-  test('FIXED: a doc with a phone but no email reports only the missing field', async () => {
+  // A borrower with a working phone and no email on file is still reachable by
+  // SMS/WhatsApp -- the only channels this service sends on. Demanding `email`
+  // by default would suppress every notification for that borrower.
+  test('a doc with a phone but no email is returned, not rejected', async () => {
     admin.__seed('employees', 'emp_3', { phone: '5512345678' });
 
     const svc = new FirestoreService();
-    await expect(svc.getUser('emp_3')).rejects.toThrow(/missing required contact field\(s\): email/);
+    const user = await svc.getUser('emp_3');
+    expect(user.phone).toBe('5512345678');
+    expect(user.email).toBeUndefined();
+  });
+
+  test('a caller that explicitly needs an email still gets it enforced', async () => {
+    admin.__seed('employees', 'emp_3b', { phone: '5512345678' });
+
+    const svc = new FirestoreService();
+    await expect(svc.getUser('emp_3b', ['email'])).rejects.toThrow(
+      /missing required contact field\(s\): email/,
+    );
   });
 
   test('FIXED: a doc with an email but no phone reports only the missing field', async () => {
