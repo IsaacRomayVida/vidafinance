@@ -40,6 +40,7 @@ import {
   isDisbursedStatus,
   isRepaidStatus,
 } from './loans/loanStatus';
+import { computeEmployerDashboardStats } from './employers/computeEmployerDashboardStats';
 import { allowTestBypass } from './utils/environment';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
 
@@ -1284,10 +1285,13 @@ export const getEmployerDashboard = onCall(
 
       if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
 
+      const loanDocs = loans.docs.map((d) => ({ id: d.id, ...d.data() }));
+
       return {
         employer: projectDoc(empDoc, EMPLOYER_DASHBOARD_FIELDS),
-        loans: loans.docs.map((d) => ({ id: d.id, ...d.data() })),
+        loans: loanDocs,
         employeeCount: employees.size,
+        stats: computeEmployerDashboardStats(loanDocs, employees.size),
       };
     });
   }
