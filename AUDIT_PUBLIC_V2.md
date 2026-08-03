@@ -302,3 +302,53 @@ the due date — was audited closely and is in good shape; the hardening documen
 `LoanWizard.tsx` is real and holds up against the server. The defects are concentrated in the
 surfaces *after* origination, which appear never to have been reconciled against the loan
 document's actual field names or the canonical status vocabulary.
+
+---
+
+# Addendum — `services/payment-server` accounting, found while verifying F2
+
+Added by the orchestrator, 2026-08-03, while independently re-verifying F2 against source.
+Out of the audit's `public-v2/` scope, but it is the other half of the same channel, and it
+changes the **merge order** for F2. Line numbers read on `8275294`.
+
+## G1 — `order.paid` marks a loan fully repaid regardless of how much was collected
+
+`services/payment-server/index.js:145-153`. The handler's only guard is
+`if (!doc.exists || doc.data().status === 'paid') return;`. It then writes
+`status: 'paid'` and `paidAmount: amount` **unconditionally** — no comparison against
+`total` or `remainingBalance` — and increments the employee's `availableCredit` by the
+full `doc.data().amount`.
+
+Compare `charge.paid` immediately below (`:183-190`), which *is* balance-aware: it computes
+`newBalance` and only sets `paid` when `newBalance <= 0`. Two handlers, same collection,
+divergent logic. **The checkout-link flow is the unguarded one** — `generatePaymentLink`
+mints a Conekta *order*, which settles as `order.paid`.
+
+Failure scenario: borrower owes 6,500, pays 1,000 through the link. Loan → `paid`,
+`availableCredit` restored by the full principal, 5,500 of debt erased, and the borrower can
+immediately re-borrow against money they never repaid.
+
+## G2 — `charge.paid`'s balance fallback is principal, not the obligation
+
+`services/payment-server/index.js:184` — `(loanData.remainingBalance ?? loanData.amount)`.
+`remainingBalance` is only written once a payroll deduction has landed
+(`functions/src/payroll/processPayroll.ts:167`), so on a card-first repayment the fallback is
+`amount`, the bare principal (`functions/src/index.ts:830`). The obligation is `total`
+(`:838`). Paying exactly the principal drives `newBalance` to 0 and settles the loan with the
+entire fee uncollected — the same defect class as LAUNCH_GAPS P0-2, one layer down.
+
+## G3 — known residual, not a new find
+
+The `'paid'` vs canonical `'repaid'` split is deliberate and already documented at
+`functions/src/loans/loanStatus.ts:145-162`: the trigger owns only `'repaid'` so that card
+repayments, which restore `availableCredit` in their own transaction, are not credited twice.
+The residual that file names — the employer's `activeLoans` slot is **not** released on the
+card or payroll-sync paths — is still open, and the fix it proposes (make
+`onLoanStatusChange` the single owner of both counters and strip the increments out of
+`payment-server`) would subsume G1 and G2 cleanly.
+
+## Consequence for merge order
+
+These three are **latent today only because the card channel is unreachable** (F2). Landing
+the F2 gate fix alone would make them live in the same deploy. F2 must not merge ahead of the
+`payment-server` accounting fix.
