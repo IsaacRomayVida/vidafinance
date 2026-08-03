@@ -38,15 +38,21 @@ export const OPEN_REVIEW_STATUSES = [
  *
  * `info_requested` is here deliberately: ops asked the employee for a
  * document, and the answer has to be able to land.
+ *
+ * Exported (not just used internally) so reviewStatus.parity.test.ts can
+ * compare it against the backend literal by value instead of duplicating it
+ * as a third hardcoded array in the test.
  */
-const DECIDABLE_REVIEW_STATUSES = ['pending', 'pending_review', 'info_requested'];
+export const DECIDABLE_REVIEW_STATUSES = ['pending', 'pending_review', 'info_requested'];
 
 /**
  * `escalated` is decidable too, but only from a role above the ops user who
  * escalated it — that is what makes escalation mean something without building
  * a separate supervisor queue. Mirrors `ESCALATED_DECIDER_ROLES`.
+ *
+ * Exported for the same reason as `DECIDABLE_REVIEW_STATUSES` above.
  */
-const ESCALATED_DECIDER_ROLES = ['admin', 'super_admin'];
+export const ESCALATED_DECIDER_ROLES = ['admin', 'super_admin'];
 
 export type ReviewDecision = 'approved' | 'rejected' | 'request_info' | 'escalate';
 
