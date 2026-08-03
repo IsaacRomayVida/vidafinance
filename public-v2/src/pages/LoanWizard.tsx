@@ -1012,7 +1012,7 @@ export function LoanWizard() {
               >
                 ${fmt(amount)}
               </div>
-              <div style={{ fontSize: 13, color: 'var(--t3)' }}>MXN</div>
+              <div style={{ fontSize: 13, color: 'var(--t2)' }}>MXN</div>
             </div>
 
             {/* Slider */}
@@ -1044,7 +1044,7 @@ export function LoanWizard() {
               <div
                 style={{
                   fontSize: 12,
-                  color: 'var(--t3)',
+                  color: 'var(--t2)',
                   textAlign: 'center',
                   marginTop: 8,
                 }}
@@ -1120,7 +1120,7 @@ export function LoanWizard() {
             >
               {t('wiz_step_2_title')}
             </h3>
-            <p style={{ fontSize: 13, color: 'var(--t3)', margin: '0 0 24px' }}>
+            <p style={{ fontSize: 13, color: 'var(--t2)', margin: '0 0 24px' }}>
               {t('wiz_step_2_desc')}
             </p>
 
@@ -1199,7 +1199,7 @@ export function LoanWizard() {
                         >
                           {t('wiz_term_days', { days })}
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>
+                        <div style={{ fontSize: 12, color: 'var(--t2)', marginTop: 2 }}>
                           {periods === 1
                             ? t('wiz_term_installments', { count: periods })
                             : t('wiz_term_installments_plural', { count: periods })}
@@ -1216,7 +1216,7 @@ export function LoanWizard() {
                       >
                         ${fmt(deduction)}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--t3)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--t2)' }}>
                         {t('wiz_payroll_deduction')}
                       </div>
                     </div>
@@ -1364,7 +1364,7 @@ export function LoanWizard() {
                   padding: '8px 0',
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                   {t('modal_loan_amount')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1378,7 +1378,7 @@ export function LoanWizard() {
                   padding: '8px 0',
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                   {feeLabel}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1426,7 +1426,7 @@ export function LoanWizard() {
                     padding: '8px 0',
                   }}
                 >
-                  <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                     {t('wiz_payroll_deduction')}
                   </span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1445,7 +1445,7 @@ export function LoanWizard() {
                   padding: '8px 0',
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                   {t('wiz_deduction_date_label')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1559,7 +1559,7 @@ export function LoanWizard() {
                   padding: '6px 0',
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                   {t('modal_loan_amount')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1573,7 +1573,7 @@ export function LoanWizard() {
                   padding: '6px 0',
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                   {feeLabel}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1627,7 +1627,7 @@ export function LoanWizard() {
                   padding: '6px 0',
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                   {t('modal_term')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1642,7 +1642,7 @@ export function LoanWizard() {
                     padding: '6px 0',
                   }}
                 >
-                  <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                     {t('wiz_payroll_deduction')}
                   </span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1661,7 +1661,7 @@ export function LoanWizard() {
                   padding: '6px 0',
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
                   {t('wiz_deduction_date_label')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
@@ -1704,7 +1704,7 @@ export function LoanWizard() {
                 style={{
                   display: 'block',
                   fontSize: 13,
-                  color: 'var(--t3)',
+                  color: 'var(--t2)',
                   marginBottom: 8,
                 }}
               >
@@ -1804,7 +1804,7 @@ export function LoanWizard() {
 
       {/* Step description under card */}
       <div style={{ textAlign: 'center', marginTop: 20 }}>
-        <span style={{ fontSize: 12, color: 'var(--t3)' }}>
+        <span style={{ fontSize: 12, color: 'var(--t2)' }}>
           {t('wiz_step_indicator', { current: step, total: 4 })}
         </span>
       </div>
