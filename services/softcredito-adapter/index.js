@@ -17,7 +17,7 @@ const IORedis = require('ioredis');
 const { Worker } = require('bullmq');
 const pino = require('pino');
 const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting');
-const { scTokenRaw, scTokenProbe } = require('./lib/scToken');
+const { scTokenRaw } = require('./lib/scToken');
 const { getFetch } = require('./lib/fetchClient');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 const { parseBureauMode, withBureauFallback, classifyError } = require('./lib/bureauFallback');
@@ -121,14 +121,6 @@ async function scCall(method, path, body, callOpts = {}) {
   return d;
 }
 
-
-app.get('/debug-routes', (req, res) => {
-  const routes = [];
-  app._router.stack.forEach(r => {
-    if (r.route) routes.push({ method: Object.keys(r.route.methods)[0], path: r.route.path });
-  });
-  res.json({ routes, ts: new Date().toISOString() });
-});
 
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
@@ -273,99 +265,6 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
 
 
 // ── Bureau query via SoftCrédito API ────────────────────────────────────────
-app.get('/debug-connectivity', async (req, res) => {
-  const { execSync } = require('child_process');
-  const results = {};
-  
-  // 1. Our outbound IP
-  try {
-    const { default: fetch } = await import('node-fetch');
-    const r = await fetch('https://api.ipify.org?format=json');
-    results.outboundIP = (await r.json()).ip;
-  } catch(e) { results.outboundIP = 'ERROR: ' + e.message; }
-  
-  // 2. DNS resolution
-  try {
-    const dns = require('dns').promises;
-    results.dns_softcredito = await dns.resolve4('softcredito.com');
-    results.dns_pr_softcredito = await dns.resolve4('pr.softcredito.com').catch(() => 'NXDOMAIN');
-  } catch(e) { results.dns = 'ERROR: ' + e.message; }
-  
-  // 3. Direct HTTPS to softcredito.com
-  try {
-    const { default: fetch } = await import('node-fetch');
-    const start = Date.now();
-    const r = await fetch('https://softcredito.com/', { 
-      method: 'GET',
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10000)
-    });
-    results.https_softcredito = { 
-      status: r.status, 
-      statusText: r.statusText,
-      latencyMs: Date.now() - start,
-      headers: Object.fromEntries([...r.headers.entries()].slice(0, 5))
-    };
-  } catch(e) { results.https_softcredito = 'ERROR: ' + e.message; }
-  
-  // 4. Direct HTTPS to the token endpoint (supports ?token_url= override for probing).
-  // Uses native https.request — same code path as scToken() — to reflect production
-  // behavior. node-fetch lowercases headers on the wire, which causes a 404 from
-  // SoftCredito's Apache auth module (see VID3-702/703).
-  const tokenUrl = req.query.token_url
-    || process.env.SOFTCREDITO_TOKEN_URL
-    || 'https://softcredito.com/produccion/ALIADOSDECRED/app/api/oauth/token';
-  try {
-    const probe = await scTokenProbe(tokenUrl, {
-      product: process.env.SOFTCREDITO_PRODUCT_ID || process.env.SOFTCREDITO_CLIENT_ID,
-      application: process.env.SOFTCREDITO_APPLICATION_ID || process.env.SOFTCREDITO_CLIENT_SECRET,
-    });
-    const contentType = probe.headers['content-type'] || '';
-    results.token_endpoint = {
-      url: tokenUrl,
-      status: probe.status,
-      latencyMs: probe.latencyMs,
-      isJson: contentType.includes('application/json') || probe.body.trim().startsWith('{'),
-      bodyPreview: probe.body.substring(0, 300),
-      server: probe.headers['server'],
-      contentType,
-    };
-  } catch(e) { results.token_endpoint = { error: e.message, url: tokenUrl }; }
-
-  // 5. Direct IP connection to their production server
-  try {
-    const { default: fetch } = await import('node-fetch');
-    const start = Date.now();
-    const r = await fetch('https://3.128.113.238/', {
-      method: 'GET',
-      headers: { 'Host': 'softcredito.com' },
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10000),
-      agent: new (require('https').Agent)({ rejectUnauthorized: false })
-    });
-    results.direct_ip = {
-      status: r.status,
-      latencyMs: Date.now() - start,
-      server: r.headers.get('server'),
-    };
-  } catch(e) { results.direct_ip = 'ERROR: ' + e.message; }
-  
-  res.json(results);
-});
-
-app.get('/check-outbound-ip', async (req, res) => {
-  try {
-    const { default: fetch } = await import('node-fetch');
-    const r = await fetch('https://api.ipify.org?format=json');
-    const data = await r.json();
-    res.json({ outboundIP: data.ip, expectedIP: '162.220.232.99', match: data.ip === '162.220.232.99' });
-  } catch (e) {
-    res.json({ error: e.message });
-  }
-});
-
-app.get('/routes-check', (req, res) => res.json({routes: ['health','bureau/query','curp/validate','internal/*'], version: 'v2-bureau'}));
-
 app.post('/bureau/query', requireInternal, async (req, res) => {
   const { curp, fullName, dateOfBirth, rfc } = req.body;
   if (!curp || !fullName || !dateOfBirth) {

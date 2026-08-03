@@ -19,7 +19,6 @@ setBaseEnv();
 
 jest.mock('../lib/scToken', () => ({
   scTokenRaw: jest.fn(),
-  scTokenProbe: jest.fn(),
 }));
 jest.mock('../lib/fetchClient', () => ({ getFetch: jest.fn() }));
 

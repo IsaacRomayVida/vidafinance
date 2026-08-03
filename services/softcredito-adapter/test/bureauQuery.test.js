@@ -25,7 +25,6 @@ setBaseEnv();
 
 jest.mock('../lib/scToken', () => ({
   scTokenRaw: jest.fn().mockResolvedValue({ token: 'sc-access-token', expires_in: 900 }),
-  scTokenProbe: jest.fn(),
 }));
 jest.mock('../lib/fetchClient', () => ({
   getFetch: jest.fn(),
