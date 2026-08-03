@@ -34,6 +34,26 @@ const TIER_2_UPGRADE_CYCLES = 10;
 // by default.
 const TIER_1_MAX_AUTO_SLOTS = getSeedSlotGrowthConfig().tier1MaxAutoSlots;
 
+const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+
+/**
+ * Per-signal weights for the weighted scoring engine (#387/#388's
+ * scoring-model half). Sums to 100, matching this file's documented
+ * 0-100 score range. Not yet wired into `runEmployerDueDiligence` — see
+ * the file header — so this does not change today's shipped scoring,
+ * only makes the individual signal functions below independently callable
+ * and testable ahead of that rewrite.
+ */
+const WEIGHTS = Object.freeze({
+  satAge: 15,
+  denue: 10,
+  imssEmployees: 20,
+  fiscalDebt: 15,
+  presunto: 15,
+  sectorRisk: 10,
+  payrollHistory: 15,
+});
+
 /** score >= 70 -> Tier 1, 40-69 -> Tier 2, else reject (tier 0). Tier boundaries unchanged by ADR-007. */
 function assignTier(score) {
   if (score >= TIER_1_THRESHOLD) return 1;
@@ -105,6 +125,84 @@ function expandTier2(currentSlots, cleanPayrollCycles) {
       ? `${cycles} clean payroll cycles — eligible for Tier 1 upgrade review`
       : null,
   };
+}
+
+/**
+ * SAT registration age: full weight at 10+ years, 0 for a missing or
+ * future-dated registration, linear between. A future date is not a data
+ * error the function refuses to score — the same fail-toward-zero shape as
+ * the rest of this file's signals.
+ */
+function scoreSATAge(satRegistrationDate) {
+  if (!satRegistrationDate) return 0;
+  const years = (Date.now() - new Date(satRegistrationDate).getTime()) / MS_PER_YEAR;
+  if (years <= 0) return 0;
+  if (years >= 10) return WEIGHTS.satAge;
+  return Math.round(WEIGHTS.satAge * (years / 10));
+}
+
+/**
+ * DENUE business-establishment age: full weight at 5+ years, 3/4 weight for
+ * 2-5 years, half weight for under 2 years or for a match with no
+ * `fechaAlta` on record (treated the same — an unknown establishment date
+ * is no stronger a signal than a young one), 0 when DENUE has no match at
+ * all.
+ */
+function scoreDENUE(result) {
+  if (!result || !result.found) return 0;
+  const fechaAlta = result.topMatch && result.topMatch.fechaAlta;
+  if (!fechaAlta) return Math.round(WEIGHTS.denue * 0.5);
+  const years = (Date.now() - new Date(fechaAlta).getTime()) / MS_PER_YEAR;
+  if (years >= 5) return WEIGHTS.denue;
+  if (years >= 2) return Math.round(WEIGHTS.denue * 0.75);
+  return Math.round(WEIGHTS.denue * 0.5);
+}
+
+/**
+ * IMSS employee verification: weight scaled by the fraction of sampled
+ * CURPs that both match the employer's RFC and show as IMSS-active. A
+ * result missing either flag does not count as verified.
+ */
+function scoreIMSSEmployees(results) {
+  if (!results || results.length === 0) return 0;
+  const verified = results.filter((r) => r.rfcMatch && r.imssActive).length;
+  return Math.round((verified / results.length) * WEIGHTS.imssEmployees);
+}
+
+/** Fiscal debt (Art. 69 CFF): full weight when clean or unchecked, 0 on any debt. */
+function scoreFiscalDebt(result) {
+  if (!result) return WEIGHTS.fiscalDebt;
+  return result.hasDebt ? 0 : WEIGHTS.fiscalDebt;
+}
+
+/** SAT 69-B presumed/definitive EFOS listing: full weight when clean or unchecked, 0 on either flag. */
+function scorePresunto(result) {
+  if (!result) return WEIGHTS.presunto;
+  if (result.flag || result.hardReject) return 0;
+  return WEIGHTS.presunto;
+}
+
+/** Sector risk band from Part A: bajo full, medio half, alto zero, unknown/unchecked 3/4. */
+function scoreSectorRisk(result) {
+  if (!result) return WEIGHTS.sectorRisk;
+  switch (result.riskLevel) {
+    case "bajo":
+      return WEIGHTS.sectorRisk;
+    case "medio":
+      return Math.round(WEIGHTS.sectorRisk * 0.5);
+    case "alto":
+      return 0;
+    default:
+      return Math.round(WEIGHTS.sectorRisk * 0.75);
+  }
+}
+
+/** Clean payroll cycle history: full weight at 6+ cycles, 0 with none, linear between. */
+function scorePayrollHistory(cleanPayrollCycles) {
+  const cycles = cleanPayrollCycles || 0;
+  if (cycles <= 0) return 0;
+  if (cycles >= 6) return WEIGHTS.payrollHistory;
+  return Math.round((cycles / 6) * WEIGHTS.payrollHistory);
 }
 
 async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) {
@@ -206,4 +304,14 @@ module.exports = {
   computeInitialSlots,
   autoScaleTier1,
   expandTier2,
+  // Weighted scoring engine (#387/#388's scoring-model half). Not yet wired
+  // into runEmployerDueDiligence — see the file header.
+  WEIGHTS,
+  scoreSATAge,
+  scoreDENUE,
+  scoreIMSSEmployees,
+  scoreFiscalDebt,
+  scorePresunto,
+  scoreSectorRisk,
+  scorePayrollHistory,
 };

@@ -106,7 +106,7 @@ beforeEach(() => {
 // Individual scoring functions
 // ═══════════════════════════════════════════════════════════════════
 
-describe.skip("scoreSATAge", () => {
+describe("scoreSATAge", () => {
   it("returns full weight for >= 10 years", () => {
     expect(scoreSATAge("2010-01-01")).toBe(WEIGHTS.satAge);
   });
@@ -131,7 +131,7 @@ describe.skip("scoreSATAge", () => {
   });
 });
 
-describe.skip("scoreDENUE", () => {
+describe("scoreDENUE", () => {
   it("returns full weight for established business (>= 5 years)", () => {
     const result = { found: true, topMatch: { fechaAlta: "2015-01-01" } };
     expect(scoreDENUE(result)).toBe(WEIGHTS.denue);
@@ -155,7 +155,7 @@ describe.skip("scoreDENUE", () => {
   });
 });
 
-describe.skip("scoreIMSSEmployees", () => {
+describe("scoreIMSSEmployees", () => {
   it("returns full weight when all employees verified", () => {
     const results = [
       { rfcMatch: true, imssActive: true },
@@ -181,7 +181,7 @@ describe.skip("scoreIMSSEmployees", () => {
   });
 });
 
-describe.skip("scoreFiscalDebt", () => {
+describe("scoreFiscalDebt", () => {
   it("returns full weight when no debt", () => {
     expect(scoreFiscalDebt({ hasDebt: false })).toBe(WEIGHTS.fiscalDebt);
   });
@@ -195,7 +195,7 @@ describe.skip("scoreFiscalDebt", () => {
   });
 });
 
-describe.skip("scorePresunto", () => {
+describe("scorePresunto", () => {
   it("returns full weight when clean", () => {
     expect(scorePresunto({ pass: true, flag: false, hardReject: false })).toBe(WEIGHTS.presunto);
   });
@@ -213,7 +213,7 @@ describe.skip("scorePresunto", () => {
   });
 });
 
-describe.skip("scoreSectorRisk", () => {
+describe("scoreSectorRisk", () => {
   it("returns full weight for bajo", () => {
     expect(scoreSectorRisk({ riskLevel: "bajo" })).toBe(WEIGHTS.sectorRisk);
   });
@@ -235,7 +235,7 @@ describe.skip("scoreSectorRisk", () => {
   });
 });
 
-describe.skip("scorePayrollHistory", () => {
+describe("scorePayrollHistory", () => {
   it("returns full weight for >= 6 clean cycles", () => {
     expect(scorePayrollHistory(6)).toBe(WEIGHTS.payrollHistory);
     expect(scorePayrollHistory(12)).toBe(WEIGHTS.payrollHistory);
