@@ -843,7 +843,7 @@ export function Onboarding() {
             </div>
             <div className="onb-field">
               <label className="onb-label">{t('onb_e_step4_freq')}</label>
-              <div className="onb-tiles">
+              <div className="onb-tiles onb-tiles-cadence">
                 {PAY_FREQUENCIES.map((freq) => (
                   <button
                     key={freq}
@@ -1230,7 +1230,7 @@ export function Onboarding() {
             </div>
             <div className="onb-field">
               <label className="onb-label">{t('onb_m_step4_pay_freq')}</label>
-              <div className="onb-tiles">
+              <div className="onb-tiles onb-tiles-cadence">
                 {PAY_FREQUENCIES.map((freq) => (
                   <button
                     key={freq}

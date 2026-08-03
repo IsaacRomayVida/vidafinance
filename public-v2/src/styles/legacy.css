@@ -623,6 +623,14 @@ table tr:last-child td{border-bottom:none}
 
 /* Size tiles — minimal, no backgrounds */
 .onb-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:0;margin-bottom:28px;border:1px solid rgba(25,68,69,0.06);border-radius:12px;overflow:hidden}
+/* Pay-cadence tiles only: a fixed 2x2, never a single row of four (#446).
+   The four cadences must be visually comparable side by side — that is the
+   whole point of the pass that added 'semimonthly' — and 'Cada 14 dias' is
+   long enough to wrap in a quarter-width column. Scoped to a modifier rather
+   than changed on .onb-tiles, which three other tile groups also use. */
+.onb-tiles-cadence{grid-template-columns:repeat(2,1fr)}
+.onb-tiles-cadence .onb-tile:nth-child(2n){border-right:none}
+.onb-tiles-cadence .onb-tile:nth-child(-n+2){border-bottom:1px solid rgba(25,68,69,0.06)}
 .onb-tile{padding:24px 8px;border-right:1px solid rgba(25,68,69,0.06);background:transparent;cursor:pointer;transition:all .35s cubic-bezier(.16,1,.3,1);text-align:center}
 .onb-tile:last-child{border-right:none}
 .onb-tile:hover{background:var(--bg2)}
