@@ -60,6 +60,7 @@ vi.mock('firebase/firestore', () => ({
 
 import '../i18n';
 import { LoanWizard } from './LoanWizard';
+import { sliderFillPercent } from '../lib/loanSlider';
 
 /**
  * 1,000 principal at the real 30% rate ⇒ 300 fee, 1,300 total.
@@ -610,5 +611,47 @@ describe('LoanWizard — disclosure text is never in the low-contrast tertiary',
     await waitFor(() => expect(forwardButtons().some((b) => !b.disabled)).toBe(true));
     advance();
     await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
+  });
+});
+
+/**
+ * F9 — the step indicator used to hardcode `[1, 2, 3, 4]`, four segments for a
+ * three-step wizard (`TOTAL_STEPS = 3`, caption reads "de 3"). `step` never
+ * exceeds 3, so the fourth segment could never fill: the bar read 75% complete
+ * on the final step, above text saying "Paso 3 de 3".
+ */
+describe('LoanWizard — step indicator segment count (F9)', () => {
+  it('renders exactly TOTAL_STEPS segments, not a hardcoded fourth one', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await waitFor(() => expect(forwardButtons().length).toBeGreaterThan(0));
+
+    expect(screen.getAllByTestId('step-segment')).toHaveLength(3);
+  });
+});
+
+/**
+ * F10 — `sliderPct = ((amount - MIN_AMOUNT) / (cappedMax - MIN_AMOUNT)) * 100`
+ * divides by zero when `cappedMax === MIN_AMOUNT`, which happens whenever
+ * `availableCredit` (or the 30%-of-salary cap) collapses the amount range to a
+ * single point — reachable at a declared salary around 1,700 MXN. The fill
+ * bar then rendered `width: "NaN%"`.
+ *
+ * Asserted directly against the extracted `sliderFillPercent`, not against a
+ * rendered `style.width`: jsdom (like a real browser) silently rejects an
+ * invalid `"NaN%"` assignment and keeps whatever valid width was last
+ * committed, which makes a DOM-level assertion pass or fail depending on
+ * unrelated render-timing accidents rather than on the calculation itself.
+ */
+describe('LoanWizard — amount slider at a collapsed range (F10)', () => {
+  it('returns 100, not NaN, when the amount range collapses to a single point', () => {
+    expect(sliderFillPercent(500, 500)).toBe(100);
+  });
+
+  it('still computes the normal fraction when the range is a real span', () => {
+    expect(sliderFillPercent(1000, 5000)).toBeCloseTo(11.111, 2);
+    expect(sliderFillPercent(500, 5000)).toBe(0);
+    expect(sliderFillPercent(5000, 5000)).toBe(100);
   });
 });

@@ -5,7 +5,9 @@ import { AnimatePresence } from 'motion/react';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
+import { friendlyError } from '../lib/errors';
 import { useAuth } from '../hooks/useAuth';
+import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { LoanStatusCard } from '../components/LoanStatusCard';
 import { KYCBanner } from '../components/employee/KYCBanner';
 import { CreditWidget } from '../components/employee/CreditWidget';
@@ -30,6 +32,35 @@ export function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [paymentLoan, setPaymentLoan] = useState<Loan | null>(null);
   const [pageState, setPageState] = useState<'loading' | 'dashboard'>('loading');
+  // Two independent reads can take this page down — the employee document and
+  // the loans listener — and each owns its OWN error string. They used to
+  // share one, which was safe only while the clear happened synchronously at
+  // the top of each effect. That clear is no longer allowed there
+  // (`react-hooks/set-state-in-effect`, a CI-blocking lint error), so it moved
+  // onto the success paths — and the employee read's success path is async.
+  // With a shared string that reordering is a race: the loans listener writes
+  // its error during the commit, then the employee read's microtask resolves
+  // and wipes it, leaving the borrower on a dashboard that silently failed to
+  // load their loans. Separate owners make that wipe impossible no matter
+  // which read settles first.
+  const [employeeError, setEmployeeError] = useState('');
+  const [loansError, setLoansError] = useState('');
+  const [repaymentsError, setRepaymentsError] = useState('');
+  const [retryToken, setRetryToken] = useState(0);
+
+  // Whichever blocking read failed takes the page down; the employee document
+  // gates everything else, so it wins when both are broken.
+  const dashboardError = employeeError || loansError;
+
+  // Cleared here, in the event handler, not in the effect bodies below (same
+  // lint rule). The success paths clear their own error too, so a failure that
+  // resolves on its own also clears without a click.
+  const retry = () => {
+    setEmployeeError('');
+    setLoansError('');
+    setRepaymentsError('');
+    setRetryToken((n) => n + 1);
+  };
 
   const hasActiveLoan = loans.some(l => IN_FLIGHT_STATUSES.includes(l.status));
   const statusCardLoan =
@@ -40,19 +71,31 @@ export function EmployeeDashboard() {
     ? (!user.emailVerified && !user.email?.endsWith('@vida-test.com'))
     : false;
 
+  // The employee document gates the whole page: `pageState` only leaves
+  // 'loading' on the success path. Without a catch, a rejected read (offline
+  // client, transient permission error) left the borrower on a spinner
+  // forever — indistinguishable from "still loading" — plus an unhandled
+  // promise rejection (F7).
   useEffect(() => {
     if (!user || needsEmailVerification) return;
     (async () => {
-      const empDoc = await getDoc(doc(db, 'employees', user.uid));
-      if (!empDoc.exists()) {
-        navigate('/employer', { replace: true });
-        return;
+      try {
+        const empDoc = await getDoc(doc(db, 'employees', user.uid));
+        if (!empDoc.exists()) {
+          navigate('/employer', { replace: true });
+          return;
+        }
+        setEmployee(empDoc.data() as EmployeeData);
+        setPageState('dashboard');
+        setEmployeeError('');
+      } catch (err) {
+        setEmployeeError(friendlyError(err));
       }
-      setEmployee(empDoc.data() as EmployeeData);
-      setPageState('dashboard');
     })();
-  }, [user, navigate, needsEmailVerification]);
+  }, [user, navigate, needsEmailVerification, retryToken]);
 
+  // Same failure shape as the employee read: `setLoading(false)` lived only on
+  // the success path, so a listener error left the loan list spinning (F7).
   useEffect(() => {
     if (!user || pageState !== 'dashboard') return;
     const q = query(
@@ -60,21 +103,37 @@ export function EmployeeDashboard() {
       where('employeeId', '==', user.uid),
       orderBy('createdAt', 'desc'),
     );
-    const unsub = onSnapshot(q, (snap) => {
-      setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
+        setLoading(false);
+        setLoansError('');
+      },
+      (err) => {
+        setLoading(false);
+        setLoansError(friendlyError(err));
+      },
+    );
     return unsub;
-  }, [user, pageState]);
+  }, [user, pageState, retryToken]);
 
+  // A repayments failure doesn't block the page — the loan list is still
+  // usable — but it silently understates every balance shown, so it gets its
+  // own non-blocking banner rather than taking the page down.
   useEffect(() => {
     if (!user || pageState !== 'dashboard') return;
     const q = query(collection(db, 'repayments'), where('employeeId', '==', user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      setRepayments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Repayment)));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setRepayments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Repayment)));
+        setRepaymentsError('');
+      },
+      (err) => setRepaymentsError(friendlyError(err)),
+    );
     return unsub;
-  }, [user, pageState]);
+  }, [user, pageState, retryToken]);
 
   const repaymentsByLoan = repayments.reduce<Record<string, Repayment[]>>((acc, r) => {
     if (!acc[r.loanId]) acc[r.loanId] = [];
@@ -88,6 +147,19 @@ export function EmployeeDashboard() {
   // document on mount, so returning from the wizard refreshes the balance
   // without a callback threaded through the request UI.
   const goToApply = () => navigate('/employee/apply');
+
+  // Checked BEFORE the spinner: on a failed read `pageState` never leaves
+  // 'loading', so an error branch placed after it would be unreachable.
+  if (dashboardError) {
+    return (
+      <div className="mx-auto max-w-lg py-20 text-center">
+        <ErrorBanner message={dashboardError} style={{ textAlign: 'left', marginBottom: 16 }} />
+        <button onClick={retry} className="btn-primary">
+          {t('dash_retry', 'Reintentar')}
+        </button>
+      </div>
+    );
+  }
 
   if (pageState === 'loading') {
     return (
@@ -141,6 +213,17 @@ export function EmployeeDashboard() {
 
       {/* Content */}
       <div className="dash-content">
+        {repaymentsError && (
+          <div style={{ marginBottom: 20 }}>
+            <ErrorBanner
+              message={t(
+                'dash_repayments_error',
+                'No pudimos cargar tu historial de pagos. Los saldos mostrados podrían estar incompletos.',
+              )}
+            />
+          </div>
+        )}
+
         <CreditWidget
           employee={employee}
           loans={loans}
