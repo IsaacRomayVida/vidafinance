@@ -19,7 +19,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
-from models.scorecard_model import ScorecardChampion
+from models.scorecard_model import ScorecardChampion, lookup_woe
 
 SEED = 42
 rng = np.random.default_rng(SEED)
@@ -208,20 +208,17 @@ def train_and_save(output_path: str):
     print(f"\nSelected {len(selected_features)} features with IV >= {IV_THRESHOLD}")
 
     # Transform features to WoE values
+    # Transform through the SAME function the served model uses
+    # (models/scorecard_model.lookup_woe). This loop used to be a second copy,
+    # carrying the same out-of-range `bins[-1]` fallback that made a
+    # below-floor value score as the safest band; keeping one implementation is
+    # what stops a fix on the serving side from silently retraining the model
+    # under different semantics. No row of this frame is out of range, so the
+    # shipped artifact is unaffected — verified: 0 of 40,000 WoE values move.
     X_woe = np.zeros((len(df), len(selected_features)))
     for j, feat in enumerate(selected_features):
         for i in range(len(df)):
-            val = df[feat].iloc[i]
-            woe_val = 0.0
-            for bin_entry in woe_bins[feat]:
-                lo, hi = bin_entry["range"]
-                if lo <= val < hi:
-                    woe_val = bin_entry["woe"]
-                    break
-            else:
-                if woe_bins[feat]:
-                    woe_val = woe_bins[feat][-1]["woe"]
-            X_woe[i, j] = woe_val
+            X_woe[i, j] = lookup_woe(woe_bins[feat], df[feat].iloc[i])
 
     y = df[target].values
 
