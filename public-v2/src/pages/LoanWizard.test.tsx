@@ -578,4 +578,38 @@ describe('LoanWizard — disclosure text is never in the low-contrast tertiary',
     expect(notes.length).toBeGreaterThan(0);
     for (const note of notes) expect(t3Nodes(note)).toHaveLength(0);
   });
+  it('leaves no sub-AA text anywhere in the wizard, labels included', async () => {
+    // The categorical rule covers disclosures, reserved states and qualifiers.
+    // The 13px ROW LABELS were left on --t3 pending Design's ruling, which has
+    // now been given: all of them, not the three categories. Her reason is the
+    // one that generalises — a value rendered legibly beside a label that is
+    // not inverts the hierarchy of the row, which is the same defect one level
+    // down. Every --t3 in this file was a `color:`; none was a border, an icon
+    // or a divider, so there was no non-text use here to protect.
+    //
+    // Asserted across the whole rendered screen rather than per element: a list
+    // of nodes has to be re-derived every time someone adds a row.
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+
+    const noTertiary = (label: string) => {
+      const offenders = Array.from(document.body.querySelectorAll<HTMLElement>('*')).filter(
+        (el) => (el.getAttribute('style') ?? '').includes('--t3')
+      );
+      expect(
+        offenders.map((el) => (el.textContent ?? '').slice(0, 40)),
+        `sub-AA text at ${label}`
+      ).toEqual([]);
+    };
+
+    await goToTermStep();
+    noTertiary('step 2');
+    advance();
+    await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
+    noTertiary('step 3');
+    advance();
+    await waitFor(() => expect(screen.getAllByText(/paso 4|step 4/i).length).toBeGreaterThan(0));
+    noTertiary('step 4');
+  });
 });

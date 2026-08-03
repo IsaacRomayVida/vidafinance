@@ -183,7 +183,7 @@ function ProgressRing({ percent, size = 120 }: { percent: number; size?: number 
         <div style={{ fontFamily: 'var(--df)', fontSize: size * 0.28, color: 'var(--t1)', lineHeight: 1 }}>
           {Math.round(percent)}%
         </div>
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginTop: 4 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginTop: 4 }}>
           pagado
         </div>
       </div>
@@ -394,7 +394,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
         {/* Loan summary */}
         <div style={{ marginTop: 16, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 4 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
               {t('dash_th_amount', 'Monto')}
             </div>
             <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
@@ -402,7 +402,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 4 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
               {t('modal_total', 'Total a pagar')}
             </div>
             <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
@@ -436,14 +436,14 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
             {t('ls_disbursing_desc', 'Tu transferencia SPEI está siendo procesada. Los fondos llegarán a tu cuenta en minutos.')}
           </div>
           {loan.speiTrackingId && (
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--t3)' }}>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--t2)' }}>
               {t('ls_spei_tracking', 'Rastreo SPEI')}: <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--t1)' }}>{loan.speiTrackingId as string}</span>
             </div>
           )}
         </div>
         <div style={{ marginTop: 16, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 4 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
               {t('dash_th_amount', 'Monto')}
             </div>
             <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
@@ -481,16 +481,16 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
           {/* Stats */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
                 {t('pay_remaining', 'Saldo restante')}
               </div>
               <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--t1)' }}>
-                ${fmt(remaining)} <span style={{ fontSize: 12, color: 'var(--t3)', fontFamily: "'DM Sans'" }}>MXN</span>
+                ${fmt(remaining)} <span style={{ fontSize: 12, color: 'var(--t2)', fontFamily: "'DM Sans'" }}>MXN</span>
               </div>
             </div>
             {loan.dueDate && (
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 4 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
                   {t('ls_next_deduction', 'Próxima deducción')}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: loan.status === 'overdue' ? 'var(--danger)' : 'var(--t1)' }}>
@@ -500,7 +500,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
             )}
             <div style={{ display: 'flex', gap: 20 }}>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 2 }}>
                   {t('pay_total_paid', 'Total pagado')}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--success)' }}>
@@ -508,7 +508,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 2 }}>
                   {t('pay_total_owed', 'Total adeudado')}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>
@@ -591,7 +591,7 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
             background: colors.bg, border: `1px solid ${colors.accent}20`,
             marginBottom: 12,
           }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 6 }}>
               {t('ls_denial_reason', 'Motivo')}
             </div>
             <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5 }}>
