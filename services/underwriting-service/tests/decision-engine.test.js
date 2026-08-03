@@ -154,7 +154,7 @@ beforeEach(() => {
     if (typeof url === "string" && url.includes("/score")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ underwritingScore: 0.82, probability: 0.18, default_probability: 0.18 }),
+        json: () => Promise.resolve({ championScore: 0.82 }),
       });
     }
     // Default (fraud endpoint, etc.)
@@ -290,7 +290,7 @@ describe("Decision Engine — Pipeline", () => {
       if (typeof url === "string" && url.includes("/score")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ underwritingScore: 0.55, default_probability: 0.45 }),
+          json: () => Promise.resolve({ championScore: 0.55 }),
         });
       }
       return Promise.resolve({
@@ -321,7 +321,7 @@ describe("Decision Engine — Pipeline", () => {
       if (typeof url === "string" && url.includes("/score")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ underwritingScore: 0.55, default_probability: 0.45 }),
+          json: () => Promise.resolve({ championScore: 0.55 }),
         });
       }
       return Promise.resolve({
@@ -361,7 +361,7 @@ describe("Decision Engine — Pipeline", () => {
       if (typeof url === "string" && url.includes("/score")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ underwritingScore: 0.3, default_probability: 0.7 }),
+          json: () => Promise.resolve({ championScore: 0.30 }),
         });
       }
       return Promise.resolve({
@@ -400,7 +400,7 @@ describe("Decision Engine — Pipeline", () => {
       if (typeof url === "string" && url.includes("/score")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ underwritingScore: 0.3, default_probability: 0.7 }),
+          json: () => Promise.resolve({ championScore: 0.30 }),
         });
       }
       return Promise.resolve({
@@ -461,7 +461,7 @@ describe("Decision Engine — Pipeline", () => {
       if (typeof url === "string" && url.includes("/score")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ underwritingScore: 0.55, default_probability: 0.45 }),
+          json: () => Promise.resolve({ championScore: 0.55 }),
         });
       }
       return Promise.resolve({
@@ -525,7 +525,7 @@ describe("Stage Utilities", () => {
           imss: { tenureMonths: 36 },
           bureau: { score: 720, activeDefaults: 0, competitorLoans: 0 },
           lti: { value: 13.64 },
-          mlScore: { default_probability: 0.18, underwritingScore: 0.82 },
+          mlScore: { championScore: 0.82 },
         },
       },
     });

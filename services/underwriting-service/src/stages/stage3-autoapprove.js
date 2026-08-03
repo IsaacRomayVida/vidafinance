@@ -59,6 +59,50 @@ function provenanceOf(block) {
   return block && block.skipped !== true ? "read" : "assumed";
 }
 
+/**
+ * Convert an ML `/score` response into P(default), or `null` if it cannot be
+ * derived.
+ *
+ * THE WIRE CONTRACT, as it actually is (ml-service/main.py:485-494):
+ *   { decision, championScore, challengerScore, threshold,
+ *     championModel, challengerModel, shapTop5 }
+ *
+ * `championScore` is **P(repayment)** — higher is a SAFER borrower — so
+ * P(default) is its complement. Three primary sources agree, and the polarity
+ * matters more than the field name: inverting it would auto-approve precisely
+ * the applicants who should escalate.
+ *   - models/underwriting_model.py:37  "Return P(repayment) in [0.0, 1.0].
+ *     Higher = safer borrower."
+ *   - models/xgb_model.py:64           "Return calibrated P(repayment)."
+ *   - models/champion_challenger.py:65 `decision = "approved" if
+ *     champion_score >= threshold` — it approves on a HIGH score.
+ *
+ * This previously read `default_probability || probability ||
+ * (1 - underwritingScore)`. No ML response has ever carried any of those three
+ * fields, so every applicant silently fell through to `1 - 0.5 = 0.5` and no
+ * application could clear any cutoff below 0.5 — condition 8 failed for 100%
+ * of applicants. `underwritingScore` is real, but it is the key the async
+ * worker writes to Firestore (workers/underwriting_worker.py:383), never a key
+ * of the synchronous `/score` response this gate reads.
+ *
+ * `??`, not `||`: a championScore of exactly 0 is the worst possible borrower
+ * (P(default) 1.0) and is falsy. `||` would swallow it into the neutral 0.5 —
+ * the same class of defect this function exists to fix.
+ *
+ * Returns `null` on a malformed-but-present response so the caller fails
+ * CLOSED. A score we could not parse is not a score we can approve on.
+ */
+function deriveDefaultProbability(mlScore) {
+  const champion = mlScore?.championScore ?? null;
+  if (typeof champion !== "number" || !Number.isFinite(champion)) return null;
+  // Rounded to 4dp, matching the precision the ML service itself emits
+  // (champion_challenger.py:85 `round(champion_score, 4)`). Without this the
+  // complement carries binary-float noise — `1 - 0.88` is 0.12000000000000001 —
+  // into a value that is persisted on the loan and shown to admins as the
+  // reason a decision went the way it did.
+  return Math.round((1 - champion) * 1e4) / 1e4;
+}
+
 // ADR-005 Finding 6: stable numeric ids, alongside the names, for every
 // condition below. Denial reasons derived from these conditions reach
 // borrowers, and under the CONDUSEF regime a reason has to stay referenceable
@@ -258,20 +302,24 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
   // what `source === "read"` now says for all ten — it is the same test.
   //
   // ADR-005 Finding 5: this must read the CHAMPION model only — a `shadow:
-  // true` challenger is logged, never obeyed (ADR-001). `stage2Data.mlScore`
-  // is the flat object `fetchMLScore` gets back from the ML service
-  // (stage2-bureau.js) and carries no champion/challenger split today; it IS
-  // the champion score. If the ML service response ever grows a
-  // champion/challenger shape, this line must keep reading the champion only
-  // — promoting a challenger into this gate is a ratified event, not a
-  // fixture or response-shape change (ADR-001 §Decision.3).
+  // true` challenger is logged, never obeyed (ADR-001). The response HAS
+  // carried a champion/challenger split all along (`championScore` /
+  // `challengerScore`); the note this comment replaced treated that shape as a
+  // future hypothetical and read neither, which is how condition 8 came to
+  // fail for every applicant. `deriveDefaultProbability` reads `championScore`
+  // and only `championScore` — promoting a challenger into this gate is a
+  // ratified event, not a response-shape change (ADR-001 §Decision.3).
+  //
+  // See `deriveDefaultProbability` above for the polarity (championScore is
+  // P(repayment), so P(default) is its complement) and for why a null must
+  // fail closed here rather than compare as NaN.
   const mlScore = stage2Data.mlScore;
   const mlSource = provenanceOf(mlScore);
-  const pDefault = mlScore?.default_probability || mlScore?.probability || (1 - (mlScore?.underwritingScore || 0.5));
+  const pDefault = deriveDefaultProbability(mlScore);
   conditions.push({
     id: 8,
     name: "ml_default_prob",
-    pass: mlSource === "read" && pDefault < maxPDefaultCutoff,
+    pass: mlSource === "read" && pDefault !== null && pDefault < maxPDefaultCutoff,
     value: pDefault,
     required: `< ${maxPDefaultCutoff}`,
     source: mlSource,

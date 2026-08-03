@@ -141,7 +141,9 @@ describe("Decision Engine — MetaMap integration", () => {
         return Promise.resolve({
           ok: true,
           json: () =>
-            Promise.resolve({ underwritingScore: 0.82, probability: 0.12, default_probability: 0.12 }),
+            // Real `/score` wire shape (ml-service/main.py:485-494): championScore
+            // is P(repayment), so this is the same applicant at P(default) 0.12.
+            Promise.resolve({ championScore: 0.88 }),
         });
       }
       return Promise.resolve({
@@ -197,7 +199,9 @@ describe("Decision Engine — MetaMap integration", () => {
         return Promise.resolve({
           ok: true,
           json: () =>
-            Promise.resolve({ underwritingScore: 0.82, probability: 0.12, default_probability: 0.12 }),
+            // Real `/score` wire shape (ml-service/main.py:485-494): championScore
+            // is P(repayment), so this is the same applicant at P(default) 0.12.
+            Promise.resolve({ championScore: 0.88 }),
         });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ is_fraud: false, anomaly_score: 10 }) });
@@ -276,7 +280,9 @@ describe("Decision Engine — MetaMap integration", () => {
           return Promise.resolve({
             ok: true,
             json: () =>
-            Promise.resolve({ underwritingScore: 0.82, probability: 0.12, default_probability: 0.12 }),
+            // Real `/score` wire shape (ml-service/main.py:485-494): championScore
+            // is P(repayment), so this is the same applicant at P(default) 0.12.
+            Promise.resolve({ championScore: 0.88 }),
           });
         }
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ is_fraud: false, anomaly_score: 10 }) });

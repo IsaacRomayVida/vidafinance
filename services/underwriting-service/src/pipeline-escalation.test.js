@@ -162,11 +162,9 @@ function mlFetch({ bureauScore = 720, activeDefaults = 0, competitorLoans = 0, p
     if (typeof url === "string" && url.includes("/score")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({
-          underwritingScore: 1 - pDefault,
-          probability: pDefault,
-          default_probability: pDefault,
-        }),
+        // Real `/score` wire shape (ml-service/main.py:485-494): the service
+        // returns championScore = P(repayment), never a P(default) field.
+        json: () => Promise.resolve({ championScore: 1 - pDefault }),
       });
     }
     return Promise.resolve({

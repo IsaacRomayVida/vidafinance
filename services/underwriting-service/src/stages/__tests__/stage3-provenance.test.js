@@ -60,10 +60,16 @@ const ALL_DATA_PRESENT = {
         carteraVencida: false,
       },
       lti: { value: 13.64 },
-      // 0.12, not the 0.18 this fixture carried before: ADR-006 ratified
+      // Real `/score` wire shape (ml-service/main.py:485-494): championScore is
+      // P(repayment), so 0.88 is P(default) 0.12. Stated in the contract the ML
+      // service actually speaks — the fields this fixture carried before
+      // (`default_probability`/`underwritingScore`) appear on no response it has
+      // ever sent, which is how condition 8 came to fail for every applicant.
+      //
+      // 0.12 rather than the 0.18 of the original fixture: ADR-006 ratified
       // MAX_PDEFAULT at 0.15, so 0.18 is now a declining value and could no
       // longer stand for "all data present and every condition passes".
-      mlScore: { default_probability: 0.12, underwritingScore: 0.82 },
+      mlScore: { championScore: 0.88 },
     },
   },
 };
@@ -461,7 +467,7 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
     return {
       ...ALL_DATA_PRESENT,
       stage2: {
-        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { default_probability: pDefault } },
+        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { championScore: 1 - pDefault } },
       },
     };
   }
@@ -514,9 +520,13 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
       stage2: {
         data: {
           ...ALL_DATA_PRESENT.stage2.data,
+          // The real response carries champion and challenger as SIBLING keys,
+          // not a nested `challenger` object. That makes this the sharper test:
+          // `challengerScore` sits one line from the right field, and reading it
+          // would approve (P(default) 0.01) an applicant the champion declines.
           mlScore: {
-            default_probability: 0.18, // champion — what condition 8 must use
-            challenger: { pDefault: 0.01, model: "xgboost", shadow: true },
+            championScore: 0.82, // P(repayment) → P(default) 0.18, declines
+            challengerScore: 0.99, // shadow only, never obeyed (ADR-001)
           },
         },
       },
@@ -532,6 +542,113 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
     // seed and only the pinned `value` carried the argument.
     expect(cond.value).toBe(0.18);
     expect(cond.pass).toBe(false);
+  });
+});
+
+// These pin the WIRE CONTRACT rather than the gate's arithmetic, because the
+// contract is where this condition actually broke. Condition 8 read
+// `default_probability || probability || (1 - underwritingScore)`; the ML
+// service has never sent any of the three, so every applicant fell through to
+// a hardcoded `1 - 0.5 = 0.5` and no application could clear any cutoff below
+// 0.5 — condition 8 failed for 100% of applicants, in production, silently.
+//
+// The whole suite stayed green throughout, because every fixture in it mocked
+// the same three fields the gate was reading. Tests and code agreed with each
+// other and both disagreed with the service. So a test that feeds this gate a
+// hand-built object proves very little; what follows deliberately asserts
+// against the shape `ml-service/main.py:485-494` really returns.
+describe("ml_default_prob condition — the ML /score wire contract", () => {
+  function withMlScore(mlScore) {
+    return {
+      ...ALL_DATA_PRESENT,
+      stage2: { data: { ...ALL_DATA_PRESENT.stage2.data, mlScore } },
+    };
+  }
+
+  const condFrom = (data) =>
+    evaluateAutoApprove(APPLICANT, data).find((c) => c.name === "ml_default_prob");
+
+  it("derives P(default) from championScore alone, on the exact shape /score returns", () => {
+    // Verbatim response shape from ml-service/main.py:485-494 — every key, no
+    // P(default) field anywhere on it, which is the point.
+    const cond = condFrom(
+      withMlScore({
+        decision: "approved",
+        championScore: 0.93,
+        challengerScore: 0.41,
+        threshold: 0.65,
+        championModel: "logreg-v3",
+        challengerModel: "xgboost-v1",
+        shapTop5: [],
+      })
+    );
+
+    // championScore is P(repayment) (underwriting_model.py:37,
+    // xgb_model.py:64), and champion_challenger.py:65 approves on a HIGH
+    // score — so P(default) is its complement, not the score itself. Were the
+    // polarity inverted, 0.93 would read as a 93% chance of default and this
+    // strong applicant would be declined; worse, the genuinely risky
+    // applicants would be the ones auto-approved.
+    expect(cond.value).toBe(0.07);
+    expect(cond.pass).toBe(true);
+  });
+
+  it("fails closed on a response carrying only the fields the gate used to read", () => {
+    // The regression itself. This object is what every fixture in this repo
+    // used to assert against; the service has never produced it. It must now
+    // fail closed rather than quietly resolve to 0.5 or to 0.05.
+    const cond = condFrom(
+      withMlScore({ default_probability: 0.05, probability: 0.05, underwritingScore: 0.95 })
+    );
+
+    expect(cond.value).toBeNull();
+    expect(cond.pass).toBe(false);
+  });
+
+  it("treats championScore 0 as the worst borrower, not as a missing value", () => {
+    // A championScore of exactly 0 is P(repayment) 0 — certain default — and
+    // it is also falsy. Under a `||` chain it is swallowed by the fallback and
+    // reappears as a neutral 0.5 (or, before, as any default at all), turning
+    // the single worst applicant the model can describe into an average one.
+    const cond = condFrom(withMlScore({ championScore: 0 }));
+
+    expect(cond.value).toBe(1);
+    expect(cond.pass).toBe(false);
+  });
+
+  it("passes a championScore of exactly 1 through as P(default) 0", () => {
+    // The opposite bound, included so the `??` guard cannot be satisfied by
+    // something that merely special-cases zero.
+    const cond = condFrom(withMlScore({ championScore: 1 }));
+
+    expect(cond.value).toBe(0);
+    expect(cond.pass).toBe(true);
+  });
+
+  it.each([
+    ["a string score", { championScore: "0.93" }],
+    ["an explicit null", { championScore: null }],
+    ["NaN", { championScore: Number.NaN }],
+    ["a response with no score at all", { decision: "approved" }],
+  ])("fails closed on %s", (_label, mlScore) => {
+    // A malformed response is not a low-risk applicant. Note `source` is still
+    // "read" for all of these — the ML call succeeded and returned something —
+    // so the existing provenance guard does not cover this case and the null
+    // check in deriveDefaultProbability is what fails it closed.
+    const cond = condFrom(withMlScore(mlScore));
+
+    expect(cond.source).toBe("read");
+    expect(cond.value).toBeNull();
+    expect(cond.pass).toBe(false);
+  });
+
+  it("does not let a null P(default) compare its way past the cutoff", () => {
+    // Guarding the arithmetic, not just the value: `null < 0.15` is true in
+    // JavaScript, so a null that reached the comparison unguarded would
+    // AUTO-APPROVE every malformed response — a strictly worse failure than
+    // the one being fixed, and the reason `pass` tests `!== null` explicitly.
+    expect(null < 0.15).toBe(true);
+    expect(condFrom(withMlScore({ championScore: null })).pass).toBe(false);
   });
 });
 
@@ -551,7 +668,7 @@ describe("runAutoApproveGate — MAX_PDEFAULT config seam (ADR-005 Finding 5)", 
     const dataAtSeedBoundary = {
       ...ALL_DATA_PRESENT,
       stage2: {
-        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { default_probability: 0.14 } },
+        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { championScore: 0.86 } },
       },
     };
 
@@ -567,7 +684,7 @@ describe("runAutoApproveGate — MAX_PDEFAULT config seam (ADR-005 Finding 5)", 
     const dataAt020 = {
       ...ALL_DATA_PRESENT,
       stage2: {
-        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { default_probability: 0.20 } },
+        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { championScore: 0.80 } },
       },
     };
 
