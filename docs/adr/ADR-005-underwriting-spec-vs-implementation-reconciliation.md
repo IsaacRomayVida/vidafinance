@@ -234,6 +234,15 @@ definition, server-side, changeable without archaeology.
 
 ## Finding 4 — LTI is in different units, and the codebase has already voted
 
+**Status: shipped, PR #465 (2026-08-03).** `stage2-bureau.js` now names both
+quantities explicitly — `ltiPercent` (the producer's percentage, exposed on
+`data.lti.value` unchanged for the HTTP boundary and `decision-engine.test.js`)
+and `ltiRatio` (the ML feature's fraction, fed to `loan_to_salary_ratio`) —
+computed independently rather than derived from one another, so a future unit
+change on one side cannot silently move the other. Pinned in
+`stage2-bureau.test.js:219-244`. The rest of this finding is left as written
+below for the record of why the naming mattered.
+
 - **Producer:** `src/stages/stage2-bureau.js:91-95`. `computeLTI` returns a **percentage** —
   `Math.round((principal / netIncome) * 100 * 100) / 100`, with `return 100` for a
   fully-leveraged borrower. Written to `data.lti = { value, ... }` at `:197`.
@@ -353,6 +362,17 @@ regime, have to be referenceable across a rename. Ids are how that survives a re
 
 ## Finding 7 — competitor detection
 
+**Status: the adapter-settlement half is shipped, PR #466 (2026-08-03).**
+`stage2-bureau.js`'s `normalizeBureauAccount` now tolerates both `otorgante`
+and `nombreOtorgante` on input and emits a single `otorgante` on output, so no
+consumer — including the name-matching this finding describes — has to guess
+which field it will see. Pinned in `stage2-bureau.test.js:249-332`. The
+competitor list itself moved to configuration (`src/config/competitorLenders.js`,
+following ADR-002's `getLoanConfigValues()` seam) in the same PR. Neither
+change is wired into the gate: `stage3-autoapprove.js`'s `no_competitor_loans`
+condition still reads only the opaque SoftCrédito count, unchanged, pending
+C5 below.
+
 - **Spec:** `hasCompetitorLoans(accounts)` keyword-matches creditor names —
   `stage3-autoapprove.test.js:92-122`, matching KUESKI, MoneyMan and CREDITEA against
   either `otorgante` or `nombreOtorgante`.
@@ -372,6 +392,33 @@ should not require a deploy — the same argument, and the same seam, as ADR-002
 Separately: the spec matching on `otorgante` *or* `nombreOtorgante`
 (`stage3-autoapprove.test.js:107` vs `:112`) means the bureau adapter never settled which
 field it emits. Settle that in the adapter, not in every consumer that has to guess.
+
+## DECISION — commercial: does a competitor loan hard-decline? (C5 — first half RATIFIED)
+
+**Ratified by founder (Isaac), 2026-08-03: no.** A competitor loan does not hard-decline
+an applicant. It blocks the *auto-approval* path only, on exactly the same terms as every
+other Stage 3 condition: `no_competitor_loans` failing is one of ten inputs to
+`allPass`, and a failed `allPass` routes through `escalateToStage` to Stage 4 (full KYC)
+or Stage 5 (manual review) — never to a direct decline. `decision-engine.js`'s Stage 3
+handling only rejects on the gate's behalf when `escalateToStage` is neither 4 nor 5, and
+`stage3-autoapprove.js` never leaves it unset on a failure: every non-passing branch
+assigns one of the two before returning.
+
+This ratifies incumbent behaviour rather than changing it — the routing described above
+is what `runAutoApproveGate` already does today, before this decision and without any
+code change alongside it. It closes the "hard block on any" option from the table below
+and leaves the gate's shape untouched. Pinned in
+`stage3-provenance.test.js`'s `runAutoApproveGate — competitor loan routing (ADR-005 C5,
+ratified 2026-08-03)` cases: a competitor-loan-only failure on an otherwise clean
+applicant escalates to Stage 4 (`AUTO_APPROVE_FAILED`), and combined with a low bureau
+score escalates to Stage 5 (`MANUAL_REVIEW_REQUIRED`) — neither a decline.
+
+**Still open (C5, second half): which lenders count.** The seeded competitor list
+(`src/config/competitorLenders.js`, PR #466) is unchanged by this ruling — see Finding 7's
+ENGINEERING SHAPE for why it lives in config rather than code. Whether `no_competitor_loans`
+itself should ever be wired to name-based matching (`competitorLoansByName`, also from PR
+#466) instead of the opaque SoftCrédito count it reads today is likewise untouched; that is
+a separate, larger question about which of the ten conditions gate at all (C4).
 
 ## Finding 8 — the gate fails open, and the skipped spec is the fix's acceptance test
 
@@ -414,12 +461,12 @@ blind.* Stage 3 is the one place it was not applied.
 3. Rejected employers stay **tier 3**; the spec changes, not the code; and
    `stage3-autoapprove.js:30`'s `||` fallback chain is removed (Finding 3).
 4. LTI is a **percentage** end to end in the underwriting service; `ltiPercent` and
-   `ltiRatio` are named distinctly (Finding 4).
+   `ltiRatio` are named distinctly (Finding 4). **Shipped, PR #465.**
 5. The P(default) cutoff is a single declared `MAX_PDEFAULT`, read from the **champion**
-   model, with a vendor-neutral condition id (Finding 5).
-6. Conditions carry stable numeric ids (Finding 6).
+   model, with a vendor-neutral condition id (Finding 5). **Shipped, PR #465.**
+6. Conditions carry stable numeric ids (Finding 6). **Shipped, PR #465.**
 7. The competitor list is configuration, and the bureau adapter settles on one creditor-name
-   field (Finding 7).
+   field (Finding 7). **Shipped, PR #466.** Not wired into `no_competitor_loans` — see C5.
 8. Every condition fails closed on missing data, per `decision-engine.js:66-72`. Tracked as
    #458; `stage3-autoapprove.test.js:253-269` is its acceptance test and is unblocked by
    everything else here (Finding 8).
@@ -435,11 +482,11 @@ blind.* Stage 3 is the one place it was not applied.
 | C2 | Slot constants: initial 10 / step 10 / cap 100, Tier-2 3→6→10, upgrade at 10 cycles, thresholds 70/40 | Ratify the incumbents or replace them |
 | C3 | The auto-approve P(default) cutoff | 0.35 (incumbent) or 0.15 (spec) — or neither until backtested |
 | C4 | Which ten conditions gate auto-approval | Spec set (`dias_atraso` / `cartera_vencida`) or shipped set (`activeDefaults` / `age_range`) |
-| C5 | Does a competitor loan hard-block, and which lenders count? | Hard block on any / scored / not a condition |
+| C5 | Does a competitor loan hard-block, and which lenders count? | **First half DECIDED 2026-08-03: no hard block — blocks auto-approval only, routes to human review.** Which lenders count remains open. |
 
 Nothing in the engineering list waits on the commercial list. Items 3, 4, 5, 6 and 8 are
 implementable today and would leave the two suites strictly closer to green whichever way
-C1–C5 land.
+C1–C4 and the rest of C5 land.
 
 ## Consequences
 
