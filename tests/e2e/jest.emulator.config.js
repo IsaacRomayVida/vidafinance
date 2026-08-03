@@ -18,7 +18,17 @@ module.exports = {
   // would find them fine when functions/src/index.ts itself does the
   // requiring, but this test file's *own* jest.mock() calls resolve
   // relative to this file, so they need the same node_modules on the path.
-  moduleDirectories: ['node_modules', '../../functions/node_modules'],
+  //
+  // ORDER MATTERS, and it is not cosmetic. `firebase-admin` holds the
+  // initialised app in module state, so the test file and functions/src/index.ts
+  // must resolve to the SAME copy. functions/node_modules is listed FIRST so
+  // that stays true even when the repo root also declares firebase-admin (it
+  // does — scripts/migrations needs it). With the root listed first, this suite
+  // gets a second, un-initialised copy: `getFirestore()` hands back undefined
+  // and all six tests die on `Cannot read properties of undefined (reading
+  // 'recursiveDelete')`. That is a real regression this exact ordering caused
+  // once already.
+  moduleDirectories: ['../../functions/node_modules', 'node_modules'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
