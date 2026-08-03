@@ -13,7 +13,7 @@
 // WEIGHTS) and the Firestore-integrated `runEmployerDueDiligence` rewrite
 // this file specifies (#387/#388's scoring-model half) are now built in
 // `../employer-b`. `runEmployerDueDiligence` returns the NEW shape —
-// top-level `tier`, `score`, `activeSlots`, `signals`, `requiresApproval`,
+// top-level `tier`, `score`, `maxActiveSlots`, `signals`, `requiresApproval`,
 // `reason`; tier 0 (not 3) for a rejected employer — and
 // stage3-autoapprove.js reads that shape (`allResults.employerB.tier`,
 // with an upper AND lower bound so a spec-conformant 0 fails rather than
@@ -73,7 +73,7 @@ function makeEmployer(overrides = {}) {
     employeeCount: 50,
     payrollSystem: "CONTPAQi",
     cleanPayrollCycles: 0,
-    activeSlots: 0,
+    maxActiveSlots: 0,
     ...overrides,
   };
 }
@@ -387,7 +387,7 @@ describe("runEmployerDueDiligence", () => {
       expect(result.pass).toBe(true);
       expect(result.tier).toBe(1);
       expect(result.score).toBeGreaterThanOrEqual(TIER_1_THRESHOLD);
-      expect(result.activeSlots).toBe(TIER_1_INITIAL_SLOTS);
+      expect(result.maxActiveSlots).toBe(TIER_1_INITIAL_SLOTS);
       expect(result.signals).toBeDefined();
     });
 
@@ -400,7 +400,7 @@ describe("runEmployerDueDiligence", () => {
     it("auto-scales returning Tier 1 employer, capped at 2 credited increments per review", async () => {
       const employer = makeEmployer({
         satRegistrationDate: "2010-01-01",
-        activeSlots: 30,
+        maxActiveSlots: 30,
         cleanPayrollCycles: 4,
       });
       const partA = makePartAResults();
@@ -409,7 +409,7 @@ describe("runEmployerDueDiligence", () => {
 
       expect(result.pass).toBe(true);
       expect(result.tier).toBe(1);
-      expect(result.activeSlots).toBe(50); // 30 + min(4, 2) * 10
+      expect(result.maxActiveSlots).toBe(50); // 30 + min(4, 2) * 10
     });
   });
 
@@ -435,13 +435,13 @@ describe("runEmployerDueDiligence", () => {
       expect(result.tier).toBe(2);
       expect(result.score).toBeGreaterThanOrEqual(TIER_2_THRESHOLD);
       expect(result.score).toBeLessThan(TIER_1_THRESHOLD);
-      expect(result.activeSlots).toBe(TIER_2_INITIAL_SLOTS);
+      expect(result.maxActiveSlots).toBe(TIER_2_INITIAL_SLOTS);
     });
 
     it("expands returning Tier 2 employer with manual gate", async () => {
       const employer = makeEmployer({
         satRegistrationDate: "2022-01-01",
-        activeSlots: 3,
+        maxActiveSlots: 3,
         cleanPayrollCycles: 2,
       });
       const partA = makePartAResults({
@@ -457,7 +457,7 @@ describe("runEmployerDueDiligence", () => {
 
       expect(result.pass).toBe(true);
       expect(result.tier).toBe(2);
-      expect(result.activeSlots).toBe(6); // expanded from 3→6
+      expect(result.maxActiveSlots).toBe(6); // expanded from 3→6
       expect(result.requiresApproval).toBe(true);
     });
   });
@@ -481,7 +481,7 @@ describe("runEmployerDueDiligence", () => {
       expect(result.pass).toBe(false);
       expect(result.tier).toBe(0);
       expect(result.score).toBeLessThan(TIER_2_THRESHOLD);
-      expect(result.activeSlots).toBe(0);
+      expect(result.maxActiveSlots).toBe(0);
       expect(result.reason).toContain("rejected");
     });
   });
@@ -498,7 +498,7 @@ describe("runEmployerDueDiligence", () => {
       expect(mockUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           employerScore: expect.any(Number),
-          activeSlots: expect.any(Number),
+          maxActiveSlots: expect.any(Number),
           tierAssignedAt: "SERVER_TIMESTAMP",
           lastDueDiligenceAt: "SERVER_TIMESTAMP",
           dueDiligenceResult: expect.objectContaining({
@@ -510,7 +510,7 @@ describe("runEmployerDueDiligence", () => {
       );
     });
 
-    it("sets tier to null and activeSlots to 0 on rejection", async () => {
+    it("sets tier to null and maxActiveSlots to 0 on rejection", async () => {
       const employer = makeEmployer({ satRegistrationDate: null });
       const partA = makePartAResults({
         check69B: { pass: false, flag: true, hardReject: false },
@@ -525,7 +525,7 @@ describe("runEmployerDueDiligence", () => {
       expect(mockUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           tier: null,
-          activeSlots: 0,
+          maxActiveSlots: 0,
         })
       );
     });

@@ -987,6 +987,125 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       });
     });
   });
+
+  describe('ADR-008: due-diligence maxActiveSlots wiring', () => {
+    const UW_URL = 'https://uw.internal';
+
+    async function mockUnderwritingResponseWithEmployerB(maxActiveSlots: number | undefined) {
+      process.env['UNDERWRITING_SERVICE_URL'] = UW_URL;
+      process.env['INTERNAL_SECRET'] = 'test-secret';
+      const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
+      fetchModule.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          decision: 'approved',
+          reason: null,
+          correlationId: 'uw-adr008',
+          lastStage: 'stage3',
+          stages: {
+            employerB:
+              maxActiveSlots === undefined
+                ? { pass: true, tier: 1, score: 85 }
+                : { pass: true, tier: 1, score: 85, maxActiveSlots },
+          },
+        }),
+      });
+    }
+
+    function capWrites() {
+      return mockDb._transactionCalls.filter(
+        (c) => c.op === 'update' && (c.data as Record<string, unknown>)?.['maxActiveSlotsSource'] !== undefined
+      );
+    }
+
+    it('writes employer-b\'s computed capacity into maxActiveSlots, tagged due_diligence', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer, maxActiveSlots: 3 } });
+      await mockUnderwritingResponseWithEmployerB(10);
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+      const result = await fn({ auth, data: realClientPayload });
+      expect(result.loanId).toBeTruthy();
+
+      const writes = capWrites();
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toMatchObject({
+        data: { maxActiveSlots: 10, maxActiveSlotsSource: 'due_diligence' },
+      });
+    });
+
+    it('audit-logs the before/after of the due-diligence cap write', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer, maxActiveSlots: 3 } });
+      await mockUnderwritingResponseWithEmployerB(10);
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const entry = mockDb._auditWrites.find((w) => w['action'] === 'employer.due_diligence_cap');
+      expect(entry).toMatchObject({
+        action: 'employer.due_diligence_cap',
+        actorUid: auth.uid,
+        targetId: mockEmployee.employerId,
+        before: { maxActiveSlots: 3, maxActiveSlotsSource: null },
+        after: { maxActiveSlots: 10, maxActiveSlotsSource: 'due_diligence' },
+      });
+    });
+
+    it('never overwrites an ops-approved override, even when a MISSING source would still be writable', async () => {
+      mockDb = buildMockDb({
+        employer: { ...mockEmployer, maxActiveSlots: 50, maxActiveSlotsSource: 'ops_override' },
+      });
+      await mockUnderwritingResponseWithEmployerB(10);
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(capWrites()).toHaveLength(0);
+      expect(
+        mockDb._auditWrites.find((w) => w['action'] === 'employer.due_diligence_cap')
+      ).toBeUndefined();
+    });
+
+    it('treats a MISSING source as writable, not as an override', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer } }); // no maxActiveSlots, no source
+      await mockUnderwritingResponseWithEmployerB(10);
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(capWrites()).toHaveLength(1);
+    });
+
+    it('does not write when employer-b never returned a maxActiveSlots number', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer, maxActiveSlots: 3 } });
+      await mockUnderwritingResponseWithEmployerB(undefined);
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(capWrites()).toHaveLength(0);
+    });
+
+    it('never blocks loan creation when the due-diligence cap write itself fails', async () => {
+      mockDb = buildMockDb({ employer: { ...mockEmployer, maxActiveSlots: 3 } });
+      await mockUnderwritingResponseWithEmployerB(10);
+      // The ADR-008 cap write runs its own, separate transaction before the
+      // loan-creation transaction below it — fail only that first call.
+      mockDb.runTransaction.mockImplementationOnce(async () => {
+        throw new Error('employer doc transaction unavailable');
+      });
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+      const result = await fn({ auth, data: realClientPayload });
+
+      expect(result.loanId).toBeTruthy();
+    });
+  });
 });
 
 // Guards against the exact drift that caused P0-2: the fee rate re-declared as
