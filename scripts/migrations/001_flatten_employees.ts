@@ -14,7 +14,7 @@
  * Requires GOOGLE_APPLICATION_CREDENTIALS or Firebase default credentials.
  */
 
-import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
+import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 const DRY_RUN = process.argv.includes('--dry-run');
