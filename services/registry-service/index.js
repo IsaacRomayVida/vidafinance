@@ -73,6 +73,46 @@ function sendRegistryError(res, err, genericMessage) {
   return res.status(500).json({ error: genericMessage, message: err.message });
 }
 
+// Both write routes below own a transaction, and three things in that shape
+// can fail -- but only one of them used to be handled. Acquiring the
+// connection ran outside the try, and the ROLLBACK issued while handling a
+// failure can itself throw on a connection that has already died. Express 4
+// does not catch a rejected promise from an async route handler, so either of
+// those sent NO response at all: the caller hung until its own timeout (the
+// Cloud Functions callers here run an 8s one), and alert5xx never fired,
+// because alert5xx is wired to res.json. That made a database outage -- the
+// exact condition this service's alerting exists for -- look like latency
+// rather than failure. withTransaction makes all three paths end in a
+// response.
+async function withTransaction(res, genericMessage, work) {
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (err) {
+    // The pool is exhausted or the database is unreachable. Neither is the
+    // caller's fault and both are retryable, so 503 rather than 500.
+    return res.status(503).json({ error: 'registry_unavailable', message: err.message });
+  }
+  try {
+    await client.query('BEGIN');
+    const body = await work(client);
+    await client.query('COMMIT');
+    return res.json(body);
+  } catch (err) {
+    // Deliberately swallow a failing ROLLBACK. If the socket is dead the
+    // server aborts the transaction on its own, and the original error is
+    // the one worth reporting -- letting the secondary error replace it
+    // would report "Connection terminated" for every genuine 409 or 400
+    // that happened to race a disconnect.
+    await client.query('ROLLBACK').catch(() => {});
+    return sendRegistryError(res, err, genericMessage);
+  } finally {
+    // Must run on every path, including the failure ones: an outage that
+    // leaks one client per request drains the pool and then never recovers.
+    client.release();
+  }
+}
+
 // This service has no browser-facing routes -- every route below is called
 // server-to-server (Cloud Functions, other Railway services), same pattern
 // as underwriting-service's /riskseal/smoke and softcredito-adapter's
@@ -115,21 +155,13 @@ app.post('/internal/entities/resolve', requireInternal, async (req, res) => {
     return res.status(400).json({ error: 'refs must be an array of {system, externalId} strings' });
   }
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransaction(res, 'resolve failed', async (client) => {
     const entityId = await resolveOrCreateEntity(client, { system, externalId, kind, displayName, attrs });
     for (const ref of refs ?? []) {
       await addExternalRef(client, entityId, ref.system, ref.externalId);
     }
-    await client.query('COMMIT');
-    res.json({ entityId });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    sendRegistryError(res, err, 'resolve failed');
-  } finally {
-    client.release();
-  }
+    return { entityId };
+  });
 });
 
 // POST /internal/entities/:entityId/refs
@@ -143,18 +175,10 @@ app.post('/internal/entities/:entityId/refs', requireInternal, async (req, res) 
     return res.status(400).json({ error: 'system and externalId are required' });
   }
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransaction(res, 'add ref failed', async (client) => {
     await addExternalRef(client, entityId, system, externalId);
-    await client.query('COMMIT');
-    res.json({ ok: true });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    sendRegistryError(res, err, 'add ref failed');
-  } finally {
-    client.release();
-  }
+    return { ok: true };
+  });
 });
 
 const PORT = process.env.PORT || 3006;

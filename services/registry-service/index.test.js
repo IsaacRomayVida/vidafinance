@@ -242,3 +242,90 @@ test('an invalid externalId inside the refs[] batch rolls back the whole resolve
   );
   expect(lookup.rows[0].n).toBe(0);
 });
+
+// ── Database-outage behaviour ────────────────────────────────────────────────
+//
+// Every test above exercises a HEALTHY database. These three exercise the
+// database being unreachable, which is the state this service's alerting
+// exists for. Express 4 does not catch a rejected promise from an async route
+// handler, so any await that escapes the handler's own try/catch sends no
+// response at all: the caller hangs until its own timeout, and alert5xx never
+// fires because alert5xx is wired to res.json. A silent hang during an outage
+// is strictly worse than a 5xx -- it looks like latency, not failure.
+//
+// The explicit .timeout() below is what makes these tests discriminating: a
+// hang fails them as ECONNABORTED rather than as an assertion mismatch, and it
+// fails in 2s rather than sitting on jest's default.
+
+test('resolve returns 503 instead of hanging when the pool cannot hand out a connection', async () => {
+  const spy = jest
+    .spyOn(pool, 'connect')
+    .mockRejectedValueOnce(new Error('timeout exceeded when trying to connect'));
+  try {
+    const res = await request(app)
+      .post('/internal/entities/resolve')
+      .set('x-internal-secret', 'test-secret')
+      .send({ system: 'firebase', externalId: 'uid-pool-down', kind: 'worker' })
+      .timeout(2000);
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('registry_unavailable');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('refs route returns 503 instead of hanging when the pool cannot hand out a connection', async () => {
+  const spy = jest
+    .spyOn(pool, 'connect')
+    .mockRejectedValueOnce(new Error('timeout exceeded when trying to connect'));
+  try {
+    const res = await request(app)
+      .post('/internal/entities/00000000-0000-0000-0000-000000000000/refs')
+      .set('x-internal-secret', 'test-secret')
+      .send({ system: 'rfc', externalId: 'ABCD800101XXX' })
+      .timeout(2000);
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('registry_unavailable');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('a ROLLBACK that itself fails still reports the original error as 500', async () => {
+  // The realistic shape: the connection dies mid-transaction, so the work
+  // query fails AND the ROLLBACK issued to clean up fails on the same dead
+  // socket. The original failure is the one worth reporting; the secondary
+  // ROLLBACK error must not replace it, and must not escape the handler.
+  const release = jest.fn();
+  const deadClient = {
+    query: jest.fn(async (sql) => {
+      if (sql === 'BEGIN') return { rows: [] };
+      if (sql === 'ROLLBACK') throw new Error('Connection terminated unexpectedly');
+      throw new Error('server closed the connection unexpectedly');
+    }),
+    release,
+  };
+  const spy = jest.spyOn(pool, 'connect').mockResolvedValueOnce(deadClient);
+  try {
+    const res = await request(app)
+      .post('/internal/entities/resolve')
+      .set('x-internal-secret', 'test-secret')
+      .send({ system: 'firebase', externalId: 'uid-dead-conn', kind: 'worker' })
+      .timeout(2000);
+    expect(res.status).toBe(500);
+    // The ORIGINAL failure has to survive to the caller. resolveOrCreateEntity
+    // wraps it with its own open-transaction context, so match on containment
+    // rather than equality -- the point is which error is reported, not its
+    // exact prose.
+    expect(res.body.message).toContain('server closed the connection unexpectedly');
+    // And the secondary ROLLBACK failure must NOT have replaced it. This is
+    // the discriminating half of the assertion: swallowing the rollback error
+    // is only correct if the real cause still reaches the caller.
+    expect(res.body.message).not.toContain('Connection terminated unexpectedly');
+    // The connection must go back to the pool even on this path, or an
+    // outage leaks the pool one client per request until nothing is left.
+    expect(release).toHaveBeenCalled();
+  } finally {
+    spy.mockRestore();
+  }
+});
