@@ -197,4 +197,33 @@ describe("runBureauAndEmployment", () => {
     expect(result.pass).toBe(true);
     expect(result.data.mlScore.skipped).toBe(true);
   });
+
+  // ADR-005 Finding 4: LTI is computed twice, in two units, ten lines apart.
+  // `data.lti.value`/`ltiPercent` (percentage) and the ML feature
+  // `loan_to_salary_ratio` (fraction) must stay named and numerically
+  // distinct — a future "dedup" that collapses them is a 100x credit bug.
+  it("names the LTI percentage distinctly, keeping `value` for existing consumers", async () => {
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    // stage2-bureau.js prefers IMSS sbc (450, from IMSS_ACTIVE) over
+    // applicant.monthlySalary when IMSS returned one.
+    const monthlySalary = result.data.imss.sbc;
+    const expectedPercent = computeLTI(BASE_APPLICANT.principalAmount, monthlySalary);
+
+    expect(result.data.lti.value).toBeCloseTo(expectedPercent);
+    expect(result.data.lti.ltiPercent).toBe(result.data.lti.value);
+  });
+
+  it("sends the ML feature loan_to_salary_ratio as a fraction, not the LTI percentage", async () => {
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    const monthlySalary = result.data.imss.sbc;
+
+    const mlCall = fetch.mock.calls.find(([url]) => !url.includes("bureau"));
+    const body = JSON.parse(mlCall[1].body);
+
+    expect(body.loan_to_salary_ratio).toBeCloseTo(BASE_APPLICANT.principalAmount / monthlySalary);
+    // The ratio and the percentage are the same underlying quantity a factor
+    // of 100 apart — asserting that gap catches the exact bug the ADR warns
+    // about: someone deduplicating the two into a single unit.
+    expect(result.data.lti.ltiPercent).toBeCloseTo(body.loan_to_salary_ratio * 100);
+  });
 });

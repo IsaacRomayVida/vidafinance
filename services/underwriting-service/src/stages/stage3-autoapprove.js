@@ -10,7 +10,7 @@
  *   5. No competitor loans
  *   6. RiskSeal > 60
  *   7. Sector safe (CNBV not "alto")
- *   8. XGBoost/ML P(default) < threshold
+ *   8. ML P(default) < MAX_PDEFAULT (champion model only)
  *   9. No active defaults
  *  10. Age 18-65 (already validated in Stage 1, re-checked here)
  *
@@ -23,7 +23,25 @@
  * documented exception is `no_competitor_loans` — see condition 5.
  */
 
-const APPROVAL_THRESHOLD = () => parseFloat(process.env.APPROVAL_THRESHOLD || "0.65");
+// ADR-005 Finding 5: the cutoff used to be derived — `APPROVAL_THRESHOLD`
+// (default 0.65), read as `pDefault < (1 - threshold)` — so raising something
+// named "approval threshold" *loosened* credit. It is now declared directly.
+// Value is commercial and UNCHANGED: 1 - 0.65 = 0.35, same as today.
+const DEFAULT_MAX_PDEFAULT = 0.35;
+
+function maxPDefault() {
+  if (process.env.MAX_PDEFAULT != null) {
+    return parseFloat(process.env.MAX_PDEFAULT);
+  }
+  // Legacy fallback: APPROVAL_THRESHOLD may already be set in a deployed
+  // environment. A live env var that silently stops being read is a silent
+  // credit-policy change, so it is still honoured — as `1 - threshold`, its
+  // old meaning — until every environment is migrated to MAX_PDEFAULT.
+  if (process.env.APPROVAL_THRESHOLD != null) {
+    return 1 - parseFloat(process.env.APPROVAL_THRESHOLD);
+  }
+  return DEFAULT_MAX_PDEFAULT;
+}
 
 /**
  * Provenance for a condition's value: "read" if the upstream block that
@@ -43,6 +61,14 @@ function provenanceOf(block) {
   return block && block.skipped !== true ? "read" : "assumed";
 }
 
+// ADR-005 Finding 6: stable numeric ids, alongside the names, for every
+// condition below. Denial reasons derived from these conditions reach
+// borrowers, and under the CONDUSEF regime a reason has to stay referenceable
+// across a rename. Treat an id as permanent identity once assigned: never
+// renumber or reassign an id to a different condition, even if the condition
+// at that slot is later replaced (ADR-005 C4 governs which ten conditions
+// gate — not this file). If a condition is retired, retire its id with it
+// rather than recycling the number.
 function evaluateAutoApprove(applicant, allResults) {
   const conditions = [];
   const employerData = allResults.employerB?.data || {};
@@ -70,6 +96,7 @@ function evaluateAutoApprove(applicant, allResults) {
   const employerTierSource = employerData.tier != null ? "read" : "assumed";
   const employerTier = employerData.tier ?? null;
   conditions.push({
+    id: 1,
     name: "employer_tier",
     pass: employerTierSource === "read" && employerTier >= 1 && employerTier <= 2,
     value: employerTier,
@@ -81,6 +108,7 @@ function evaluateAutoApprove(applicant, allResults) {
   const imssSource = provenanceOf(stage2Data.imss);
   const tenure = stage2Data.imss?.tenureMonths || applicant.employmentTenureMonths || 0;
   conditions.push({
+    id: 2,
     name: "imss_tenure",
     pass: imssSource === "read" && tenure > 6,
     value: tenure,
@@ -92,6 +120,7 @@ function evaluateAutoApprove(applicant, allResults) {
   const bureauSource = provenanceOf(stage2Data.bureau);
   const bureauScore = stage2Data.bureau?.score || 500;
   conditions.push({
+    id: 3,
     name: "bureau_score",
     pass: bureauSource === "read" && bureauScore > 600,
     value: bureauScore,
@@ -107,6 +136,7 @@ function evaluateAutoApprove(applicant, allResults) {
   const ltiSource = provenanceOf(stage2Data.lti);
   const lti = stage2Data.lti?.value || 0;
   conditions.push({
+    id: 4,
     name: "lti",
     pass: ltiSource === "read" && lti <= 25,
     value: lti,
@@ -138,6 +168,7 @@ function evaluateAutoApprove(applicant, allResults) {
   const bureauBlockAbsent = stage2Data.bureau == null;
   const competitorLoans = stage2Data.bureau?.competitorLoans || 0;
   conditions.push({
+    id: 5,
     name: "no_competitor_loans",
     pass: (bureauSource === "read" || bureauBlockAbsent) && competitorLoans === 0,
     value: competitorLoans,
@@ -153,6 +184,7 @@ function evaluateAutoApprove(applicant, allResults) {
   const risksealSource = provenanceOf(stage0Data.riskseal);
   const risksealScore = stage0Data.riskseal?.score ?? 100;
   conditions.push({
+    id: 6,
     name: "riskseal_score",
     pass: risksealSource === "read" && risksealScore > 60,
     value: risksealScore,
@@ -169,6 +201,7 @@ function evaluateAutoApprove(applicant, allResults) {
   const sectorSource = provenanceOf(stage1Data.cnbv);
   const sectorSafe = stage1Data.cnbv?.pass !== false;
   conditions.push({
+    id: 7,
     name: "sector_safe",
     pass: sectorSource === "read" && sectorSafe,
     value: stage1Data.cnbv?.riskLevel || "unknown",
@@ -176,19 +209,29 @@ function evaluateAutoApprove(applicant, allResults) {
     source: sectorSource,
   });
 
-  // 8. ML P(default) < threshold
+  // 8. ML P(default) < MAX_PDEFAULT
   //
   // The explicit `!mlScore?.skipped` guard this condition already carried is
   // what `source === "read"` now says for all ten — it is the same test.
+  //
+  // ADR-005 Finding 5: this must read the CHAMPION model only — a `shadow:
+  // true` challenger is logged, never obeyed (ADR-001). `stage2Data.mlScore`
+  // is the flat object `fetchMLScore` gets back from the ML service
+  // (stage2-bureau.js) and carries no champion/challenger split today; it IS
+  // the champion score. If the ML service response ever grows a
+  // champion/challenger shape, this line must keep reading the champion only
+  // — promoting a challenger into this gate is a ratified event, not a
+  // fixture or response-shape change (ADR-001 §Decision.3).
   const mlScore = stage2Data.mlScore;
   const mlSource = provenanceOf(mlScore);
   const pDefault = mlScore?.default_probability || mlScore?.probability || (1 - (mlScore?.underwritingScore || 0.5));
-  const threshold = APPROVAL_THRESHOLD();
+  const cutoff = maxPDefault();
   conditions.push({
+    id: 8,
     name: "ml_default_prob",
-    pass: mlSource === "read" && pDefault < (1 - threshold),
+    pass: mlSource === "read" && pDefault < cutoff,
     value: pDefault,
-    required: `< ${1 - threshold}`,
+    required: `< ${cutoff}`,
     source: mlSource,
   });
 
@@ -198,6 +241,7 @@ function evaluateAutoApprove(applicant, allResults) {
   // behind. Zero defaults found on a report nobody read is not zero defaults.
   const activeDefaults = stage2Data.bureau?.activeDefaults || 0;
   conditions.push({
+    id: 9,
     name: "no_active_defaults",
     pass: bureauSource === "read" && activeDefaults === 0,
     value: activeDefaults,
@@ -209,6 +253,7 @@ function evaluateAutoApprove(applicant, allResults) {
   const ageSource = stage1Data.age != null ? "read" : "assumed";
   const age = stage1Data.age || applicant.age;
   conditions.push({
+    id: 10,
     name: "age_range",
     pass: ageSource === "read" && age >= 18 && age <= 65,
     value: age,
