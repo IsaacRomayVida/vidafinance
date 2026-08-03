@@ -64,11 +64,11 @@ export function CreditWidget({ employee, loans, hasActiveLoan, onOpenModal }: Cr
           </div>
         </div>
         <div style={{ textAlign: 'center', marginTop: 20 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 6 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 6 }}>
             {t('dash_credit_limit')}
           </div>
           <div className="money" style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t2)' }}>
-            ${fmt(employee.creditLimit)} <span style={{ fontSize: 12, color: 'var(--t3)', fontFamily: 'var(--db)' }}>MXN</span>
+            ${fmt(employee.creditLimit)} <span style={{ fontSize: 12, color: 'var(--t2)', fontFamily: 'var(--db)' }}>MXN</span>
           </div>
         </div>
       </div>
@@ -85,7 +85,7 @@ export function CreditWidget({ employee, loans, hasActiveLoan, onOpenModal }: Cr
           <span style={{ fontSize: 24, color: 'var(--aqua)', opacity: 0.6, verticalAlign: 'top', marginRight: 2 }}>$</span>
           {fmt(employee.availableCredit)}
         </div>
-        <div style={{ fontSize: 14, color: 'var(--t3)', marginBottom: 32 }}>MXN</div>
+        <div style={{ fontSize: 14, color: 'var(--t2)', marginBottom: 32 }}>MXN</div>
 
         <button
           onClick={handleCTA}
@@ -129,7 +129,7 @@ export function CreditWidget({ employee, loans, hasActiveLoan, onOpenModal }: Cr
         {/* Quick stats row */}
         <div style={{ display: 'flex', gap: 32, marginTop: 32, paddingTop: 24, borderTop: '1px solid rgba(25,68,69,0.05)' }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 4 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
               {t('dash_active_loans', 'Préstamos activos')}
             </div>
             <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--t1)' }}>
@@ -137,7 +137,7 @@ export function CreditWidget({ employee, loans, hasActiveLoan, onOpenModal }: Cr
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 4 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
               {t('dash_total_borrowed', 'Total prestado')}
             </div>
             <div className="money" style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--t1)' }}>

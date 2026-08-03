@@ -108,11 +108,11 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
           marginBottom: 20,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-            <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('pay_total_owed', 'Total Owed')}</span>
+            <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('pay_total_owed', 'Total Owed')}</span>
             <span className="money" style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>${fmt(totalOwed)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-            <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('pay_total_paid', 'Total Paid')}</span>
+            <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('pay_total_paid', 'Total Paid')}</span>
             <span className="money" style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>${fmt(totalPaid)}</span>
           </div>
           <div style={{ height: 1, background: 'rgba(25,68,69,0.06)', margin: '4px 0' }} />
@@ -126,7 +126,7 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
           </div>
           {loan.dueDate && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_due_date')}</span>
+              <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_due_date')}</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: loan.status === 'overdue' ? 'var(--danger)' : 'var(--t1)' }}>
                 {new Date(loan.dueDate.seconds * 1000).toLocaleDateString('es-MX')}
               </span>
@@ -173,7 +173,7 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
             </div>
             <button
               onClick={() => { setPaymentUrl(''); setError(''); }}
-              style={{ background: 'none', border: 'none', color: 'var(--t3)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+              style={{ background: 'none', border: 'none', color: 'var(--t2)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
             >
               {t('pay_generate_new', 'Generate new link')}
             </button>
@@ -206,7 +206,7 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
                     {statusBadge(r.status)}
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+                    <div style={{ fontSize: 12, color: 'var(--t2)' }}>
                       {r.paidAt || r.createdAt
                         ? new Date(((r.paidAt || r.createdAt)!.seconds) * 1000).toLocaleDateString('es-MX')
                         : '—'}
