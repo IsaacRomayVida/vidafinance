@@ -41,6 +41,13 @@
 // condition read before — see config/maxPDefaultCutoff.js.
 const { getMaxPDefault, getSeedMaxPDefault } = require("../config/maxPDefaultCutoff");
 
+// The named-match competitor check already lives in config/competitorLenders.js
+// (ADR-005 Finding 7 / ADR-006 §3) — condition 5 above calls it indirectly via
+// stage2-bureau.js's precomputed `competitorLoansByName`. Re-exported here,
+// not reimplemented, so the spec's `hasCompetitorLoans` and the pipeline's
+// competitor detection are the same function rather than two that can drift.
+const { hasCompetitorLoans } = require("../config/competitorLenders");
+
 /**
  * Provenance for a condition's value: "read" if the upstream block that
  * computes it ran and did not mark itself `skipped: true`, "assumed"
@@ -390,6 +397,30 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
   return conditions;
 }
 
+// Which stage a failed gate escalates to, and why. Split out of
+// `runAutoApproveGate` so the flat-params adapters below (`evaluateGate`,
+// `runStage3`) share this exact decision instead of re-deriving it — the
+// same "one place decides" rule Finding 6 already applies to the conditions
+// themselves.
+function decideEscalation(allResults, applicant) {
+  const bureauScore = allResults.stage2?.data?.bureau?.score || 500;
+  const activeDefaults = allResults.stage2?.data?.bureau?.activeDefaults || 0;
+  const principalAmount = applicant.principalAmount || 0;
+
+  // Stage 5 triggers: AML hits, score < 400, active defaults
+  if (activeDefaults > 0 || bureauScore < 400) {
+    return { escalateToStage: 5, reason: "MANUAL_REVIEW_REQUIRED" };
+  }
+
+  // Stage 4 triggers: > $2k, score 400-600, or Stage 3 fail
+  if (principalAmount > 2000 || (bureauScore >= 400 && bureauScore <= 600)) {
+    return { escalateToStage: 4, reason: "FULL_KYC_REQUIRED" };
+  }
+
+  // Default: escalate to Stage 4
+  return { escalateToStage: 4, reason: "AUTO_APPROVE_FAILED" };
+}
+
 async function runAutoApproveGate(applicant, allResults, { logger } = {}) {
   const log = logger || console;
 
@@ -430,43 +461,166 @@ async function runAutoApproveGate(applicant, allResults, { logger } = {}) {
     "Auto-approve gate failed"
   );
 
-  // Determine escalation: Stage 4 or Stage 5
-  const bureauScore = allResults.stage2?.data?.bureau?.score || 500;
-  const activeDefaults = allResults.stage2?.data?.bureau?.activeDefaults || 0;
-  const principalAmount = applicant.principalAmount || 0;
-
-  // Stage 5 triggers: AML hits, score < 400, active defaults
-  if (activeDefaults > 0 || bureauScore < 400) {
-    log.info({ stage: "stage3", rfc: applicant.rfc }, "Escalating to Stage 5 — manual review");
-    return {
-      pass: false,
-      escalateToStage: 5,
-      reason: "MANUAL_REVIEW_REQUIRED",
-      data,
-      cost: [],
-    };
-  }
-
-  // Stage 4 triggers: > $2k, score 400-600, or Stage 3 fail
-  if (principalAmount > 2000 || (bureauScore >= 400 && bureauScore <= 600)) {
-    log.info({ stage: "stage3", rfc: applicant.rfc }, "Escalating to Stage 4 — full KYC");
-    return {
-      pass: false,
-      escalateToStage: 4,
-      reason: "FULL_KYC_REQUIRED",
-      data,
-      cost: [],
-    };
-  }
-
-  // Default: escalate to Stage 4
+  const { escalateToStage, reason } = decideEscalation(allResults, applicant);
+  log.info(
+    { stage: "stage3", rfc: applicant.rfc },
+    escalateToStage === 5 ? "Escalating to Stage 5 — manual review" : "Escalating to Stage 4 — full KYC"
+  );
   return {
     pass: false,
-    escalateToStage: 4,
-    reason: "AUTO_APPROVE_FAILED",
+    escalateToStage,
+    reason,
     data,
     cost: [],
   };
 }
 
-module.exports = { runAutoApproveGate, evaluateAutoApprove, RETIRED_CONDITION_IDS };
+// ════════════════════════════════════════════════════════════════════
+// Flat-params adapters — evaluateGate / runStage3 / hasCompetitorLoans
+// (re-exported above). ADR-006 closed the policy questions blocking
+// `stage3-autoapprove.test.js` (cutoff, competitor list, the condition
+// set); what was left was an API-shape gap — the spec destructures these
+// three names and this module never exported them. These are thin
+// translations from the spec's flat-object calling convention to the
+// applicant/allResults shape `evaluateAutoApprove` already decides
+// conditions from. No condition's pass/fail is re-decided here; that
+// stays the single responsibility of `evaluateAutoApprove` above.
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Shapes flat bureau-ish inputs into the `stage2Data.bureau` block
+ * `evaluateAutoApprove` reads. Returns `undefined` — an absent block,
+ * exactly like a stage the pipeline never ran — when every bureau-sourced
+ * field is unset, so the fail-closed behaviour (and condition 5's one
+ * documented exception) is inherited rather than reimplemented.
+ */
+function buildBureauBlock({ bureauScore, cuentasActivas, diasAtraso, carteraVencida, activeDefaults }) {
+  const allUnset =
+    bureauScore == null &&
+    cuentasActivas == null &&
+    diasAtraso == null &&
+    carteraVencida == null &&
+    activeDefaults == null;
+  if (allUnset) return undefined;
+
+  return {
+    score: bureauScore,
+    competitorLoansByName: cuentasActivas !== undefined ? (hasCompetitorLoans(cuentasActivas) ? 1 : 0) : null,
+    diasAtraso,
+    carteraVencida,
+    activeDefaults,
+  };
+}
+
+/**
+ * The flat-params -> applicant/allResults translation shared by
+ * `evaluateGate` and `runStage3`. `championScore` is reconstructed from the
+ * already-resolved P(default) the caller hands in (`1 - pDefault`) purely so
+ * `deriveDefaultProbability`'s complement recovers the same number — this is
+ * a units round-trip, not a second policy decision.
+ */
+function toGateInputs({
+  employerTier,
+  tenureMonths,
+  bureauScore,
+  lti,
+  cuentasActivas,
+  riskSealScore,
+  sectorFlagged,
+  diasAtraso,
+  carteraVencida,
+  xgboostPDefault,
+  age,
+  activeDefaults,
+}) {
+  const applicant = { employerTier, employmentTenureMonths: tenureMonths, age };
+  const allResults = {
+    employerB: { data: { tier: employerTier } },
+    stage0: { data: { riskseal: riskSealScore != null ? { score: riskSealScore } : undefined } },
+    stage1: { data: { cnbv: sectorFlagged != null ? { pass: !sectorFlagged } : undefined, age } },
+    stage2: {
+      data: {
+        imss: tenureMonths != null ? { tenureMonths } : undefined,
+        bureau: buildBureauBlock({ bureauScore, cuentasActivas, diasAtraso, carteraVencida, activeDefaults }),
+        lti: lti != null ? { value: lti } : undefined,
+        mlScore: xgboostPDefault != null ? { championScore: 1 - xgboostPDefault } : undefined,
+      },
+    },
+  };
+  return { applicant, allResults };
+}
+
+/** Assembles the flat `{decision, allPass, conditions, ...}` shape both adapters return. */
+function toFlatResult(conditions, allResults, applicant) {
+  const allPass = conditions.every(c => c.pass);
+  const failures = conditions.filter(c => !c.pass);
+  const { escalateToStage } = allPass ? { escalateToStage: null } : decideEscalation(allResults, applicant);
+  return {
+    decision: allPass ? "approved" : "escalate",
+    allPass,
+    conditions,
+    conditionsPassed: conditions.length - failures.length,
+    conditionsTotal: conditions.length,
+    failures,
+    escalateToStage,
+  };
+}
+
+/**
+ * The flat-params pure form of the gate: one object in, one object out, no
+ * pipeline shape to assemble. See `evaluateAutoApprove` for what each
+ * condition actually checks.
+ */
+function evaluateGate(params = {}) {
+  const { applicant, allResults } = toGateInputs(params);
+  const conditions = evaluateAutoApprove(applicant, allResults);
+  return toFlatResult(conditions, allResults, applicant);
+}
+
+/**
+ * Runs the gate from a pipeline-shaped `stage2Result` plus the handful of
+ * lookups (`employerTier`, `riskSealScore`, `sectorFlagged`,
+ * `cuentasActivasDetail`) that live outside Stage 2's own bureau/employment
+ * blocks. Synchronous, like `evaluateGate` — callers that need the
+ * server-configured cutoff should go through `runAutoApproveGate`, which
+ * awaits `getMaxPDefault()`; this form uses the compile-time seed, as
+ * `evaluateAutoApprove`'s own default parameter already does for every
+ * caller that omits a cutoff.
+ */
+function runStage3({
+  stage2Result = {},
+  employerTier,
+  riskSealScore,
+  sectorFlagged,
+  cuentasActivasDetail,
+} = {}) {
+  const { applicant, allResults } = toGateInputs({
+    employerTier,
+    tenureMonths: stage2Result.employment?.tenureMonths,
+    bureauScore: stage2Result.bureau?.score,
+    lti: stage2Result.lti?.value,
+    cuentasActivas: cuentasActivasDetail,
+    riskSealScore,
+    sectorFlagged,
+    diasAtraso: stage2Result.bureau?.diasAtraso,
+    carteraVencida: stage2Result.bureau?.carteraVencida,
+    // Champion model only (ADR-005 Finding 5, ADR-001 §Decision.2): the
+    // challenger is scored and logged in parallel but never gates a live
+    // decision, so it is deliberately not read here even though
+    // `stage2Result.ml.challenger` exists on the fixture shape.
+    xgboostPDefault: stage2Result.ml?.champion?.pDefault,
+    age: stage2Result.age,
+    activeDefaults: stage2Result.bureau?.activeDefaults,
+  });
+  const conditions = evaluateAutoApprove(applicant, allResults);
+  return toFlatResult(conditions, allResults, applicant);
+}
+
+module.exports = {
+  runAutoApproveGate,
+  evaluateAutoApprove,
+  RETIRED_CONDITION_IDS,
+  hasCompetitorLoans,
+  evaluateGate,
+  runStage3,
+};
