@@ -20,6 +20,7 @@ governs the code belongs beside it.
 | [006](ADR-006-auto-approve-gate-policy-ratified.md) | The Stage 3 auto-approve gate policy, ratified | ACCEPTED — ratified by Isaac 2026-08-03; implemented, C4 still open | Stage 3 auto-approve gate |
 | [007](ADR-007-lending-slot-hybrid-growth.md) | Lending-slot hybrid growth: +10 per clean cycle, credited at review, capped at 2 per review | ACCEPTED — ratified by Isaac 2026-08-03 | `services/underwriting-service/src/stages/employer-b.js`, `src/config/lendingSlotGrowth.js` |
 | [008](ADR-008-due-diligence-capacity-wired-to-enforced-cap.md) | Due-diligence capacity is wired to the field the loan-cap transaction enforces | ACCEPTED and IMPLEMENTED — shipped #487, 2026-08-03 | `functions/src/index.ts` (`requestLoan`, `updateEmployerTier`), `services/underwriting-service/src/stages/employer-b.js` |
+| [009](ADR-009-slot-accrual-ledger-and-the-review-boundary.md) | The slot accrual ledger: two cycle counters, and the review boundary nobody has defined | ACCEPTED (engineering shape) — shipped #522, 2026-08-03; **Q1/Q2 open** | `functions/src/index.ts` (`requestLoan`), `services/underwriting-service/src/stages/employer-b.js`, `DATABASE.md`, `firestore.rules` |
 
 ## Open commercial questions
 
@@ -39,6 +40,14 @@ ruled on it — his only words on it were "explain question four, I don't get it
 rules, the gate runs twelve conditions rather than ten. Nothing in the engineering list
 waits on these, and no one implementing from these ADRs should decide one by picking a
 default.
+
+**ADR-009 adds Q1 and Q2**, both also Isaac's alone. Q1: what event increments a clean
+payroll cycle, and who writes it — nothing in this repository writes either cycle counter
+today, so ADR-007's growth rule, though now reachable, credits nothing. Q2: what closes a
+due-diligence review, since ADR-007 forfeits the accrual "at each review" and the codebase
+has no review boundary to forfeit at. Until both are answered the ledger is deliberately
+inert and exposure-neutral, which is the safe direction — an unanswered Q1 grows no one's
+cap rather than growing it by a guess.
 
 ADR-006 is implemented as of this branch. Note that ADR-006 §"The finding that limits all
 of the above" still records why the ratified cutoff binds less than it appears to until
