@@ -233,6 +233,67 @@ function PriceValue({
  * text: #b08420 on white is 3.4:1, which clears the 3:1 bar for a non-text UI
  * boundary but fails AA for body copy. Text stays on --t1/--t2.
  */
+/**
+ * The CAT disclosure.
+ *
+ * Deliberately NOT a row in the quote breakdown. The CAT is a regulated
+ * disclosure (LTOSF Art. 8), not a line item of the quote: it is the one figure
+ * a borrower can carry to another lender and compare, it is the only non-peso
+ * value in a column of pesos, and at this product's rate it is four digits, so
+ * inline it stops reading as a line item and becomes the first thing the eye
+ * lands on.
+ *
+ * It is a component rather than two copies of the same markup because it had
+ * already drifted: the step-3 card rendered it as this block while the step-4
+ * summary rendered it as an inline row, so the same disclosure had two
+ * treatments in one flow. One definition means the next change reaches both.
+ */
+function CatDisclosure({ cat, status }: { cat: string | null; status: ConfigStatus }) {
+  const { t } = useTranslation();
+  return (
+    <div
+      style={{
+        background: 'var(--bg2)',
+        borderRadius: 12,
+        padding: '14px 16px',
+        border: '1px solid rgba(25,68,69,0.04)',
+        marginBottom: 24,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 6,
+        }}
+      >
+        <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_cat_label')}</span>
+        <span className="cat-highlight">
+          <PriceValue
+            value={cat}
+            status={status}
+            prefix=""
+            suffix={t('modal_cat_annual')}
+            shimmerWidth={56}
+          />
+        </span>
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--t3)', margin: 0, lineHeight: 1.5 }}>
+        {t('modal_cat_note')}{' '}
+        <a
+          href="https://www.condusef.gob.mx"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--brand)' }}
+        >
+          {t('modal_cat_condusef')}
+        </a>
+      </p>
+    </div>
+  );
+}
+
 function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
   return (
@@ -1407,56 +1468,7 @@ export function LoanWizard() {
               </p>
             )}
 
-            {/* CAT disclosure */}
-            <div
-              style={{
-                background: 'var(--bg2)',
-                borderRadius: 12,
-                padding: '14px 16px',
-                border: '1px solid rgba(25,68,69,0.04)',
-                marginBottom: 24,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 6,
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('modal_cat_label')}
-                </span>
-                <span className="cat-highlight">
-                  <PriceValue
-                    value={cat}
-                    status={configStatus}
-                    prefix=""
-                    suffix={t('modal_cat_annual')}
-                    shimmerWidth={56}
-                  />
-                </span>
-              </div>
-              <p
-                style={{
-                  fontSize: 11,
-                  color: 'var(--t3)',
-                  margin: 0,
-                  lineHeight: 1.5,
-                }}
-              >
-                {t('modal_cat_note')}{' '}
-                <a
-                  href="https://www.condusef.gob.mx"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'var(--brand)' }}
-                >
-                  {t('modal_cat_condusef')}
-                </a>
-              </p>
-            </div>
+            <CatDisclosure cat={cat} status={configStatus} />
 
             {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
             <div style={{ display: 'flex', gap: 10 }}>
@@ -1666,27 +1678,9 @@ export function LoanWizard() {
                   {t('wiz_single_charge_notice')}
                 </p>
               )}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '6px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('modal_cat_label')}
-                </span>
-                <span className="cat-highlight">
-                  <PriceValue
-                    value={cat}
-                    status={configStatus}
-                    prefix=""
-                    suffix={t('modal_cat_annual')}
-                    shimmerWidth={56}
-                  />
-                </span>
-              </div>
             </div>
+
+            <CatDisclosure cat={cat} status={configStatus} />
 
             {/* Loan Purpose (optional) */}
             <div style={{ marginBottom: 20 }}>
