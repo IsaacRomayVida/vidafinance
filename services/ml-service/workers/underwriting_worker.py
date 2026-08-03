@@ -182,7 +182,7 @@ async def process_underwrite_loan(job, job_token=None):
         borrowerSnapshot: {
           employmentTenureMonths: int,
           monthlySalary: float,
-          payFrequency: "weekly"|"biweekly"|"monthly",
+          payFrequency: "weekly"|"biweekly"|"semimonthly"|"monthly",
           employerIndustry: str,
           curpHash: str,
           fullName: str,

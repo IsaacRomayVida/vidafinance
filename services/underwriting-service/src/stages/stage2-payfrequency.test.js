@@ -50,12 +50,19 @@ describe("encodePayFrequency", () => {
     expect(log.warn).toHaveBeenCalledTimes(1);
   });
 
-  it("covers every cadence calculateNextPayrollDate has a branch for", () => {
-    // The union in functions/src/loans/calculateNextPayrollDate.ts. A value the
-    // date calculator understands but this map does not is exactly the gap that
-    // produced the defect.
+  it("covers exactly the canonical TS pay-frequency set, with no alias needed", () => {
+    // Cross-language check against PAY_FREQUENCY_VALUES in
+    // functions/src/loans/calculateNextPayrollDate.ts. This service is plain
+    // JS and cannot import that union, so the four values are restated here on
+    // purpose. Unlike the ml-service thin-file index (see
+    // test_thin_file_pay_frequency.py), this map has a real, distinct entry
+    // for every canonical cadence — no aliasing — because it was retrained
+    // implicitly, by being a plain arithmetic map rather than a model with a
+    // fixed trained vocabulary. A value the date calculator understands but
+    // this map does not is exactly the gap that produced the defect.
+    const canonicalTsPayFrequencies = ["weekly", "biweekly", "semimonthly", "monthly"];
     expect(Object.keys(PAY_PERIODS_PER_MONTH).sort()).toEqual(
-      ["biweekly", "monthly", "semimonthly", "weekly"]
+      [...canonicalTsPayFrequencies].sort()
     );
   });
 });

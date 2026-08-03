@@ -10,6 +10,7 @@ import { Queue } from 'bullmq';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { resolveEntity } from '../utils/registryClient';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
+import type { PayFrequency } from '../loans/calculateNextPayrollDate';
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ export interface EmployerDocument {
   employeeCount: number;
   estimatedMonthlyPayroll: number;
   payrollSystem: string;
-  payFrequency: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+  payFrequency: PayFrequency;
   address: {
     street: string;
     city: string;

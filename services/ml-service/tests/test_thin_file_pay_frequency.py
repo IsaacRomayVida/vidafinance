@@ -55,6 +55,30 @@ def test_every_alias_target_is_in_the_trained_vocabulary():
         assert target in TRAINED_PAY_FREQUENCIES, f"{source} -> {target} is not trained"
 
 
+def test_trained_vocabulary_plus_aliases_covers_the_canonical_ts_set():
+    """
+    Cross-language check against the canonical TypeScript declaration:
+    PAY_FREQUENCY_VALUES in functions/src/loans/calculateNextPayrollDate.ts
+    (weekly, biweekly, semimonthly, monthly). Python cannot import that union,
+    so the four values are restated here on purpose, and this proves every one
+    of them is reachable — either trained directly or aliased onto a trained
+    cadence. A canonical value that is neither is exactly #435's defect: a
+    token the embedding has never seen, matching worst for the applicants with
+    the least other signal.
+    """
+    from models.thin_file_knn import PAY_FREQUENCY_ALIASES, TRAINED_PAY_FREQUENCIES
+
+    canonical_ts_pay_frequencies = {"weekly", "biweekly", "semimonthly", "monthly"}
+    reachable = set(TRAINED_PAY_FREQUENCIES) | set(PAY_FREQUENCY_ALIASES)
+    assert reachable == canonical_ts_pay_frequencies
+
+    # The alias is deliberate and singular — 'semimonthly' is folded onto
+    # 'biweekly' because both are two paydays a month for this model's
+    # purposes. Any other alias here would be silently changing what a
+    # borrower's cadence is scored as, not filling this gap.
+    assert PAY_FREQUENCY_ALIASES == {"semimonthly": "biweekly"}
+
+
 def test_trained_cadences_pass_through_unchanged():
     from models.thin_file_knn import TRAINED_PAY_FREQUENCIES, normalise_pay_frequency
 

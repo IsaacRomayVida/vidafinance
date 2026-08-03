@@ -1,7 +1,7 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 
-import type { PayFrequency } from './calculateNextPayrollDate';
+import { PAY_FREQUENCY_VALUES, type PayFrequency } from './calculateNextPayrollDate';
 
 /**
  * Where a borrower's pay frequency came from.
@@ -23,10 +23,9 @@ export interface ResolvedPayFrequency {
   source: PayFrequencySource;
 }
 
-const VALID_FREQUENCIES: readonly PayFrequency[] = ['weekly', 'biweekly', 'semimonthly', 'monthly'];
-
 function asPayFrequency(value: unknown): PayFrequency | null {
-  return typeof value === 'string' && (VALID_FREQUENCIES as readonly string[]).includes(value)
+  return typeof value === 'string' &&
+    (PAY_FREQUENCY_VALUES as readonly string[]).includes(value)
     ? (value as PayFrequency)
     : null;
 }
