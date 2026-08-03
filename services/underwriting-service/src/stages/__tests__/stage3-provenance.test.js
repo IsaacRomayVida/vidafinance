@@ -60,9 +60,15 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
   it("emits byte-identical conditions to the pre-#458 gate when every value was read", () => {
     // The whole change is confined to unread data. A borrower whose pipeline
     // ran cleanly must see the same ten conditions, the same values and the
-    // same required strings as before — no threshold, bound or wording moved.
+    // same pass results as before — no threshold or bound moved.
+    //
+    // One `required` string did move: employer_tier reads "1-2" rather than
+    // "<= 2", because the condition now states its lower bound instead of
+    // resting on employer-b never emitting tier 0. employer-b emits only 1, 2
+    // or 3, so no live decision changes — see the tier-0 case below for the
+    // reason the bound is written down anyway.
     expect(evaluateAutoApprove(APPLICANT, ALL_DATA_PRESENT)).toEqual([
-      { name: "employer_tier", pass: true, value: 1, required: "<= 2", source: "read" },
+      { name: "employer_tier", pass: true, value: 1, required: "1-2", source: "read" },
       { name: "imss_tenure", pass: true, value: 36, required: "> 6 months", source: "read" },
       { name: "bureau_score", pass: true, value: 720, required: "> 600", source: "read" },
       { name: "lti", pass: true, value: 13.64, required: "<= 25%", source: "read" },
@@ -73,6 +79,26 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
       { name: "no_active_defaults", pass: true, value: 0, required: "0", source: "read" },
       { name: "age_range", pass: true, value: 35, required: "18-65", source: "read" },
     ]);
+  });
+
+  it("declines a tier-0 employer instead of approving it, without relying on employer-b's encoding", () => {
+    // ADR-005 Finding 3: the spec encodes a rejected employer as tier 0 while
+    // shipped code uses 3. Under a bare `<= 2` upper bound a spec-conformant 0
+    // is the *best* possible tier and clears condition 1 — a worker at a
+    // rejected employer walks the gate. Nothing in this repo produces a 0
+    // today, which is exactly why it is worth pinning: the safety of condition
+    // 1 should not be a property of employer-b's current branch layout.
+    const rejectedEmployer = {
+      ...ALL_DATA_PRESENT,
+      employerB: { data: { ...ALL_DATA_PRESENT.employerB.data, tier: 0 } },
+    };
+    const tierCondition = evaluateAutoApprove(APPLICANT, rejectedEmployer)
+      .find((c) => c.name === "employer_tier");
+
+    // Read, so this is a credit decline rather than an outage escalation.
+    expect(tierCondition).toEqual({
+      name: "employer_tier", pass: false, value: 0, required: "1-2", source: "read",
+    });
   });
 
   it("marks bureau_score, no_active_defaults and no_competitor_loans unread from a single bureau outage, and fails all three closed", () => {
