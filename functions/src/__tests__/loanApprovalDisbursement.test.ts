@@ -204,11 +204,14 @@ function approvalEvent(loanId: string, beforeStatus: string, afterStatus: string
 }
 
 async function loadTriggers() {
-  const { onLoanApproved, onLoanStatusChange, isLoanApprovalTransition } = await import('../index');
+  const { onLoanApproved, onLoanStatusChange } = await import('../index');
+  // The predicate lives in its own module, not in index.ts: every export from
+  // index.ts is read as a deployable Cloud Function by the #376 deploy-drift gate.
+  const { isLoanApprovalTransition } = await import('../loans/loanStatusTransitions');
   return {
     onLoanApproved: onLoanApproved as unknown as (event: TriggerEvent) => Promise<unknown>,
     onLoanStatusChange: onLoanStatusChange as unknown as (event: TriggerEvent) => Promise<unknown>,
-    isLoanApprovalTransition: isLoanApprovalTransition as (before: unknown, after: unknown) => boolean,
+    isLoanApprovalTransition,
   };
 }
 
