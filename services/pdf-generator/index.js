@@ -352,6 +352,10 @@ app.get("/health", async (req, res) => {
   });
 });
 
-app.listen(process.env.PORT || 3004, () =>
-  console.log("vida-pdf-generator on", process.env.PORT || 3004)
-);
+if (require.main === module) {
+  app.listen(process.env.PORT || 3004, () =>
+    console.log("vida-pdf-generator on", process.env.PORT || 3004)
+  );
+}
+
+module.exports = { app, worker };

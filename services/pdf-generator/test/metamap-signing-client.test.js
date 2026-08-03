@@ -1,7 +1,3 @@
-// TODO: wire test runner in package.json (no framework in devDependencies yet).
-// These tests are written against jest-style assertions; once a runner lands,
-// they should run as-is.
-
 const path = require('path');
 
 const CLIENT_PATH = path.join(__dirname, '..', 'src', 'metamap-signing-client');
