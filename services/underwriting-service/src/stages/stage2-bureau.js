@@ -190,11 +190,35 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
     bureauResult = await fetchBureauScore(applicant);
     costItems.push({ api: "softcredito", mxn: 8.0 });
     const rawAccounts = bureauResult.cuentas || bureauResult.accounts || [];
+    // días de atraso / cartera vencida — ADR-006 (2026-08-03) wires these
+    // straight into the auto-approve gate (conditions 11/12), so they need
+    // to survive this mapping the same way active_defaults/competitor_loans
+    // already do. The live SoftCrédito payload is undocumented (see
+    // ../../softcredito-adapter/src/underwrite.js's header), so this reads a
+    // flat field first — the same top-level shape every other field here
+    // reads — and falls back to the cdc/bdc split that file documents (días
+    // de atraso as the worse of the two circles, cartera vencida if either
+    // flags it) only when a cdc or bdc block is actually present. `??`
+    // throughout, never `||`: a real 0 or false must survive, only an
+    // actually-absent value should read as unread.
+    const cdc = bureauResult.cdc || {};
+    const bdc = bureauResult.bdc || {};
+    const hasCdcOrBdc = bureauResult.cdc != null || bureauResult.bdc != null;
+    const diasAtraso =
+      bureauResult.dias_atraso ??
+      bureauResult.diasAtraso ??
+      (hasCdcOrBdc ? Math.max(cdc.diasAtraso || 0, bdc.diasAtraso || 0) : undefined);
+    const carteraVencida =
+      bureauResult.cartera_vencida ??
+      bureauResult.carteraVencida ??
+      (hasCdcOrBdc ? !!(cdc.carteraVencida || bdc.carteraVencida) : undefined);
     data.bureau = {
       score: bureauResult.bureau_score || bureauResult.score || 500,
       hasBureauRecord: bureauResult.has_bureau_record ?? true,
       activeDefaults: bureauResult.active_defaults || 0,
       competitorLoans: bureauResult.competitor_loans || 0,
+      diasAtraso,
+      carteraVencida,
       accounts: (Array.isArray(rawAccounts) ? rawAccounts : []).map(normalizeBureauAccount),
       raw: bureauResult,
     };

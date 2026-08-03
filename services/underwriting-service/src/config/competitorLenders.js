@@ -11,11 +11,14 @@
  * yet and THROWS — rather than silently substituting the seed — when the
  * document exists but cannot be trusted.
  *
- * SCOPE: this is the seam only. Nothing here decides whether holding a
- * competitor loan blocks auto-approval, or which lenders belong on the list
- * in production — that is credit policy, reserved for Isaac (ADR-005
- * commercial C5). stage3-autoapprove.js's `no_competitor_loans` condition
- * is untouched and does not read from this module.
+ * SCOPE: this is the seam only. ADR-005 C5 ratified that a competitor loan
+ * blocks auto-approval only (never a hard decline) and left two things open:
+ * which lenders count, and whether `no_competitor_loans` should read this
+ * named-match signal at all instead of the opaque SoftCrédito count. ADR-006
+ * (2026-08-03) ratified the seeded list below as-is and closed both:
+ * `stage3-autoapprove.js`'s `no_competitor_loans` condition now reads
+ * `competitorLoansByName` (derived in stage2-bureau.js from this module),
+ * not the opaque count.
  */
 
 const admin = require("firebase-admin");
@@ -123,6 +126,21 @@ function matchesCompetitorLender(creditorName, competitorNames) {
   });
 }
 
+/**
+ * Whether `accounts` (bureau accounts, each carrying an `otorgante` —
+ * see stage2-bureau.js's normalizeBureauAccount — or a raw `nombreOtorgante`)
+ * includes a competitor loan. A thin, synchronous wrapper around
+ * `matchesCompetitorLender` for callers that have a whole account list
+ * rather than one creditor name at a time; defaults to the compile-time
+ * seed so it is usable without a Firestore round trip.
+ */
+function hasCompetitorLoans(accounts, competitorNames = getSeedCompetitorLenders()) {
+  if (!Array.isArray(accounts) || accounts.length === 0) return false;
+  return accounts.some((acct) =>
+    matchesCompetitorLender(acct?.otorgante ?? acct?.nombreOtorgante, competitorNames)
+  );
+}
+
 module.exports = {
   SEED_COMPETITOR_LENDERS,
   COMPETITOR_CONFIG_COLLECTION,
@@ -133,4 +151,5 @@ module.exports = {
   getCompetitorLenderNames,
   normalizeForMatch,
   matchesCompetitorLender,
+  hasCompetitorLoans,
 };

@@ -2,19 +2,24 @@
 /**
  * Stage 3: Auto-Approve Gate
  *
- * 10 conditions ALL must pass:
+ * 12 conditions ALL must pass:
  *   1. Employer tier >= 1 (not rejected)
  *   2. IMSS tenure > 6 months
  *   3. Bureau score > 600
  *   4. LTI <= 25%
- *   5. No competitor loans
+ *   5. No competitor loans (named-match against the admin-editable list)
  *   6. RiskSeal > 60
  *   7. Sector safe (CNBV not "alto")
  *   8. ML P(default) < MAX_PDEFAULT (champion model only)
  *   9. No active defaults
  *  10. Age 18-65 (already validated in Stage 1, re-checked here)
+ *  11. Bureau días de atraso == 0
+ *  12. Bureau cartera vencida == false
  *
- * 55% approved here. Cost: $21-47 MXN total pipeline.
+ * ADR-006 (2026-08-03) added ids 11 and 12 and left 9 and 10 in place. A
+ * draft of that ADR proposed retiring 9 and 10; retiring them would loosen
+ * the gate, which is a commercial change, so it stays an open question for
+ * Isaac and the gate only tightens for now. See RETIRED_CONDITION_IDS.
  *
  * Every condition fails closed on data the pipeline never read (#458). A
  * condition passes only when its `source` is "read" AND its bound holds; an
@@ -32,9 +37,8 @@
 // used until an admin config document exists, and a read path
 // (`getMaxPDefault`) that throws — rather than silently falling back to the
 // seed — when that document exists but cannot be trusted. Value is
-// commercial and UNCHANGED today: 1 - 0.65 = 0.35, same as before this file
-// existed, whether the value comes from the seed or an unconfigured
-// deployment.
+// RATIFIED by ADR-006 (2026-08-03) at 0.15, superseding the 0.35 this
+// condition read before — see config/maxPDefaultCutoff.js.
 const { getMaxPDefault, getSeedMaxPDefault } = require("../config/maxPDefaultCutoff");
 
 /**
@@ -55,12 +59,56 @@ function provenanceOf(block) {
   return block && block.skipped !== true ? "read" : "assumed";
 }
 
+/**
+ * Convert an ML `/score` response into P(default), or `null` if it cannot be
+ * derived.
+ *
+ * THE WIRE CONTRACT, as it actually is (ml-service/main.py:485-494):
+ *   { decision, championScore, challengerScore, threshold,
+ *     championModel, challengerModel, shapTop5 }
+ *
+ * `championScore` is **P(repayment)** — higher is a SAFER borrower — so
+ * P(default) is its complement. Three primary sources agree, and the polarity
+ * matters more than the field name: inverting it would auto-approve precisely
+ * the applicants who should escalate.
+ *   - models/underwriting_model.py:37  "Return P(repayment) in [0.0, 1.0].
+ *     Higher = safer borrower."
+ *   - models/xgb_model.py:64           "Return calibrated P(repayment)."
+ *   - models/champion_challenger.py:65 `decision = "approved" if
+ *     champion_score >= threshold` — it approves on a HIGH score.
+ *
+ * This previously read `default_probability || probability ||
+ * (1 - underwritingScore)`. No ML response has ever carried any of those three
+ * fields, so every applicant silently fell through to `1 - 0.5 = 0.5` and no
+ * application could clear any cutoff below 0.5 — condition 8 failed for 100%
+ * of applicants. `underwritingScore` is real, but it is the key the async
+ * worker writes to Firestore (workers/underwriting_worker.py:383), never a key
+ * of the synchronous `/score` response this gate reads.
+ *
+ * `??`, not `||`: a championScore of exactly 0 is the worst possible borrower
+ * (P(default) 1.0) and is falsy. `||` would swallow it into the neutral 0.5 —
+ * the same class of defect this function exists to fix.
+ *
+ * Returns `null` on a malformed-but-present response so the caller fails
+ * CLOSED. A score we could not parse is not a score we can approve on.
+ */
+function deriveDefaultProbability(mlScore) {
+  const champion = mlScore?.championScore ?? null;
+  if (typeof champion !== "number" || !Number.isFinite(champion)) return null;
+  // Rounded to 4dp, matching the precision the ML service itself emits
+  // (champion_challenger.py:85 `round(champion_score, 4)`). Without this the
+  // complement carries binary-float noise — `1 - 0.88` is 0.12000000000000001 —
+  // into a value that is persisted on the loan and shown to admins as the
+  // reason a decision went the way it did.
+  return Math.round((1 - champion) * 1e4) / 1e4;
+}
+
 // ADR-005 Finding 6: stable numeric ids, alongside the names, for every
 // condition below. Denial reasons derived from these conditions reach
 // borrowers, and under the CONDUSEF regime a reason has to stay referenceable
 // across a rename. Treat an id as permanent identity once assigned: never
 // renumber or reassign an id to a different condition, even if the condition
-// at that slot is later replaced (ADR-005 C4 governs which ten conditions
+// at that slot is later replaced (ADR-005 C4 governs which conditions
 // gate — not this file). If a condition is retired, retire its id with it
 // rather than recycling the number.
 //
@@ -69,6 +117,19 @@ function provenanceOf(block) {
 // without a Firestore mock in every call site. Callers that omit it — every
 // existing direct test of this function — get the compile-time seed, which
 // is exactly today's shipped value, so omitting it changes no behaviour.
+//
+// RETIRED CONDITION IDS — none today, and the list is deliberately empty.
+// A draft of ADR-006 proposed retiring id 9 (`no_active_defaults`) as
+// subsumed by the bureau's own días-de-atraso/cartera-vencida fields, and
+// id 10 (`age_range`) as a redundant re-check of a bound Stage 1 already
+// validates. Both readings are defensible, but retiring a condition loosens
+// the auto-approve gate, and no such loosening has been ratified — so both
+// ids remain LIVE and ADR-006 carries the retirement as an open question.
+// The two conditions ADR-006 does add take the next unused ids, 11 and 12.
+// When a retirement is eventually ratified, record the id here; a retired
+// id's number is never reassigned.
+const RETIRED_CONDITION_IDS = Object.freeze({});
+
 function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedMaxPDefault()) {
   const conditions = [];
   const employerData = allResults.employerB?.data || {};
@@ -144,7 +205,16 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
     source: ltiSource,
   });
 
-  // 5. No competitor loans — the one condition allowed to pass on a value the
+  // 5. No competitor loans — wired to the named-match signal
+  //    (`competitorLoansByName`, config/competitorLenders.js +
+  //    stage2-bureau.js) rather than the opaque SoftCrédito count, per
+  //    ADR-005 C5 (competitor loan blocks auto-approval only, ratified) and
+  //    ADR-006 (2026-08-03, the seeded list — KUESKI/MoneyMan/CREDITEA —
+  //    ratified as-is). The condition's EFFECT is unchanged by this rewiring:
+  //    a failure here still only escalates, never declines (C5). Only which
+  //    signal decides the count changed.
+  //
+  //    This is still the one condition allowed to pass on a value the
   //    pipeline did not read, and only in one shape.
   //
   //    Every other condition tests a bound on a value we have to *obtain* — a
@@ -153,27 +223,44 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
   //    account list. With no bureau block at all there is no account list
   //    either, and "no competitor accounts were found" is then literally true
   //    rather than assumed. It is safe to let that pass, not merely convenient:
-  //    bureau_score and no_active_defaults read the same missing block and both
-  //    now fail closed, and all ten conditions must hold, so a missing bureau
-  //    can never be the margin between an outage and an approval. Failing this
-  //    one as well would only restate a single root cause a third time in
-  //    `failedConditions`. ADR-005 Finding 8 fixes exactly this as the
-  //    acceptance criterion: all-null input yields 9 failures out of 10, with
-  //    this the sole legitimate pass.
+  //    bureau_score, no_active_defaults, dias_atraso_zero and
+  //    cartera_vencida_false all read the same missing block and all fail
+  //    closed, and all twelve conditions must hold, so a missing bureau can
+  //    never be the margin between an outage and an approval. ADR-005
+  //    Finding 8 fixes this as the acceptance criterion: all-null input
+  //    yields 11 failures out of 12, with this the sole legitimate pass.
   //
-  //    What must NOT pass is the bureau *error stub* (stage2-bureau.js:183-189),
-  //    which fabricates `competitorLoans: 0` after a failed call. There a bureau
-  //    file exists and we know we failed to read it, so the zero is invented
-  //    rather than observed — unread, and it fails closed like the rest.
+  //    What must NOT pass is the bureau *error stub* (stage2-bureau.js's
+  //    catch block, `skipped: true`) — a bureau block that exists, ran, and
+  //    gave up. Nor may a bureau block that WAS read but whose name-match
+  //    could not be computed (config/competitorLenders.js's Firestore doc
+  //    unreadable — stage2-bureau.js leaves `competitorLoansByName` unset in
+  //    that case rather than fabricating a count). Both are "we tried and
+  //    don't know", not "we checked and found nothing", and both fail closed
+  //    like every other condition that reads a value it could not obtain.
+  //
+  //    NOTE on `source`: when the bureau block is absent this condition
+  //    reports `source: "assumed"` and still passes. It is tempting to call
+  //    it "read" instead — "no account list means no competitor accounts
+  //    were found" — which would make the fail-closed invariant universal
+  //    with no exception to document. That is rejected deliberately: nothing
+  //    was read, and relabelling an absence as a measurement is precisely
+  //    the #458 failure this file exists to prevent. The exception stays
+  //    visible and narrow rather than being defined away.
   const bureauBlockAbsent = stage2Data.bureau == null;
-  const competitorLoans = stage2Data.bureau?.competitorLoans || 0;
+  const competitorLoansByName = stage2Data.bureau?.competitorLoansByName;
+  const competitorSource =
+    !bureauBlockAbsent && bureauSource === "read" && competitorLoansByName != null
+      ? "read"
+      : "assumed";
+  const competitorLoansValue = bureauBlockAbsent ? 0 : competitorLoansByName ?? 0;
   conditions.push({
     id: 5,
     name: "no_competitor_loans",
-    pass: (bureauSource === "read" || bureauBlockAbsent) && competitorLoans === 0,
-    value: competitorLoans,
+    pass: bureauBlockAbsent || (competitorSource === "read" && competitorLoansValue === 0),
+    value: competitorLoansValue,
     required: "0",
-    source: bureauSource,
+    source: competitorSource,
   });
 
   // 6. RiskSeal > 60
@@ -215,20 +302,24 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
   // what `source === "read"` now says for all ten — it is the same test.
   //
   // ADR-005 Finding 5: this must read the CHAMPION model only — a `shadow:
-  // true` challenger is logged, never obeyed (ADR-001). `stage2Data.mlScore`
-  // is the flat object `fetchMLScore` gets back from the ML service
-  // (stage2-bureau.js) and carries no champion/challenger split today; it IS
-  // the champion score. If the ML service response ever grows a
-  // champion/challenger shape, this line must keep reading the champion only
-  // — promoting a challenger into this gate is a ratified event, not a
-  // fixture or response-shape change (ADR-001 §Decision.3).
+  // true` challenger is logged, never obeyed (ADR-001). The response HAS
+  // carried a champion/challenger split all along (`championScore` /
+  // `challengerScore`); the note this comment replaced treated that shape as a
+  // future hypothetical and read neither, which is how condition 8 came to
+  // fail for every applicant. `deriveDefaultProbability` reads `championScore`
+  // and only `championScore` — promoting a challenger into this gate is a
+  // ratified event, not a response-shape change (ADR-001 §Decision.3).
+  //
+  // See `deriveDefaultProbability` above for the polarity (championScore is
+  // P(repayment), so P(default) is its complement) and for why a null must
+  // fail closed here rather than compare as NaN.
   const mlScore = stage2Data.mlScore;
   const mlSource = provenanceOf(mlScore);
-  const pDefault = mlScore?.default_probability || mlScore?.probability || (1 - (mlScore?.underwritingScore || 0.5));
+  const pDefault = deriveDefaultProbability(mlScore);
   conditions.push({
     id: 8,
     name: "ml_default_prob",
-    pass: mlSource === "read" && pDefault < maxPDefaultCutoff,
+    pass: mlSource === "read" && pDefault !== null && pDefault < maxPDefaultCutoff,
     value: pDefault,
     required: `< ${maxPDefaultCutoff}`,
     source: mlSource,
@@ -258,6 +349,42 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
     value: age,
     required: "18-65",
     source: ageSource,
+  });
+
+  // 11. Bureau días de atraso == 0 — ADR-006 (2026-08-03). Reads the
+  // bureau's own delinquency-days field directly (stage2-bureau.js plumbs
+  // it from the bureau response). This SUPPLEMENTS condition 9's derived
+  // count rather than replacing it: an earlier draft of this change retired
+  // ids 9 and 10 in favour of 11/12, but retiring a condition LOOSENS the
+  // gate (fewer conditions must hold ⇒ more auto-approvals), and that is a
+  // commercial change nobody ratified. ADR-006 records the retirement as an
+  // open question for Isaac; until he rules, the gate only tightens.
+  // Same fail-closed shape as every other condition here: a bureau block
+  // that ran but never carried this specific field reads as unread
+  // (`diasAtrasoValue != null` on top of the block's own `source`), so an
+  // outage cannot manufacture a clean value the way the error stub could.
+  const diasAtrasoValue = stage2Data.bureau?.diasAtraso;
+  const diasAtrasoSource = bureauSource === "read" && diasAtrasoValue != null ? "read" : "assumed";
+  conditions.push({
+    id: 11,
+    name: "dias_atraso_zero",
+    pass: diasAtrasoSource === "read" && diasAtrasoValue === 0,
+    value: diasAtrasoValue ?? null,
+    required: "0",
+    source: diasAtrasoSource,
+  });
+
+  // 12. Bureau cartera vencida == false — ADR-006 (2026-08-03), the
+  // bureau's own active-default flag, alongside dias_atraso_zero above.
+  const carteraVencidaValue = stage2Data.bureau?.carteraVencida;
+  const carteraVencidaSource = bureauSource === "read" && carteraVencidaValue != null ? "read" : "assumed";
+  conditions.push({
+    id: 12,
+    name: "cartera_vencida_false",
+    pass: carteraVencidaSource === "read" && carteraVencidaValue === false,
+    value: carteraVencidaValue ?? null,
+    required: "false",
+    source: carteraVencidaSource,
   });
 
   return conditions;
@@ -342,4 +469,4 @@ async function runAutoApproveGate(applicant, allResults, { logger } = {}) {
   };
 }
 
-module.exports = { runAutoApproveGate, evaluateAutoApprove };
+module.exports = { runAutoApproveGate, evaluateAutoApprove, RETIRED_CONDITION_IDS };

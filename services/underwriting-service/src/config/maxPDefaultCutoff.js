@@ -14,19 +14,21 @@
  * than silently substituting the seed — when the document exists but cannot
  * be trusted.
  *
- * SCOPE: this is the seam only. The cutoff VALUE (0.35) is the incumbent,
- * unratified commercial number ADR-005 C3 leaves with Isaac — switching the
- * mechanism by which it is read does not, by itself, change which
- * applicants auto-approve.
+ * SCOPE: this is the seam only. The cutoff VALUE is now RATIFIED — see
+ * ADR-006 (2026-08-03) — at 0.15, superseding the 0.35 this file shipped
+ * with. 0.35 is no longer "the incumbent"; it is the number ADR-006 replaced.
  */
 
 const admin = require("firebase-admin");
 
-// Incumbent, NOT ratified (ADR-005 C3) — carried over verbatim from the
-// derived value this config replaces (1 - the old APPROVAL_THRESHOLD default
-// of 0.65), so switching the mechanism does not, by itself, change who is
-// currently auto-approved.
-const SEED_MAX_PDEFAULT = 0.35;
+// Ratified by founder (Isaac), 2026-08-03 (ADR-006), closing ADR-005 C3.
+// 0.15 roughly halves the modelled-risk ceiling for the auto-approve path
+// relative to the 0.35 this constant held before — a deliberately
+// conservative call while the model producing pDefault is unbacktested
+// (ADR-001 §Follow-up). The seam is server-side (getMaxPDefault, below), so
+// this seed only governs a fresh environment before any admin config
+// document exists; it is not read once that document is written.
+const SEED_MAX_PDEFAULT = 0.15;
 
 const MAX_PDEFAULT_CONFIG_COLLECTION = "config";
 const MAX_PDEFAULT_CONFIG_DOC_ID = "maxPDefault";
