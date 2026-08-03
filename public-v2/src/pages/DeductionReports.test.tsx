@@ -51,11 +51,11 @@ vi.mock('firebase/firestore', () => ({
 import '../i18n';
 import {
   buildCsvRows,
-  DeductionReports,
   getDeductionAmount,
   groupByPeriod,
   type Loan,
-} from './DeductionReports';
+} from '../lib/deductionReport';
+import { DeductionReports } from './DeductionReports';
 
 const FEE_LOAN: Loan = {
   id: 'loan-fee',
