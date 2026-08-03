@@ -106,7 +106,28 @@ a request path, and `shared/health-monitor.js:154-161` logs every poll. Both byp
 logger, so they carry no correlation id and are not queryable — the two properties that make a log
 useful during an incident. Low severity, but the v1.7 claim of zero was false.
 
-**D5 — Two audit-log collections still coexist.**
+**D5 — Two audit-log collections still coexist.** *(re-measured 2026-08-03; scope was narrower than
+stated)*
 Noted as residual in `CRITICAL_DEFECTS.md` P2-2. Not a defect — the security-critical grant path
-audit-logs before minting a claim, and a failed audit write aborts the grant. Consolidation is
-cleanup; worth doing before launch so incident forensics has one place to look.
+audit-logs before minting a claim, and a failed audit write aborts the grant.
+
+The **write side is already consolidated**, which the v1.8 wording did not reflect. Every writer goes
+through `functions/src/utils/auditLog.ts` (`audit_log`); grep across `functions/`, `services/`,
+`public/`, `public-v2/`, `scripts/` and `tests/` finds **no writer to `auditLogs` at all**. Rules and
+all four composite indexes target `audit_log`. So there is no ambiguity about which collection holds
+a *new* record.
+
+Two things were genuinely open, and are now addressed:
+
+- **The grant-ordering invariant had no test.** `onEmployerDocCreated` — the trigger that mints
+  `employer_admin` — was covered by nothing; a refactor that minted before logging would have passed
+  every suite in the repo. Now pinned by
+  `functions/src/employers/__tests__/onEmployerDocCreated.test.ts` (8 tests), verified by mutation:
+  reordering the production code fails 2 of them.
+- **Legacy history is not migrated.** Pre-consolidation records still live in `auditLogs`, and the
+  ops console (`public/js/app.js:2602`) queries only `audit_log`, so they are invisible in the UI.
+  `scripts/migrations/002_consolidate_audit_logs.ts` copies them forward — committed, **not run**;
+  procedure and sign-offs in `docs/runbooks/audit-log-consolidation.md`.
+
+Until that migration runs, `firestore.rules` deliberately keeps ops read on `auditLogs` so the
+history is not stranded. Removing that rule is a follow-up, gated on the migration being verified.
