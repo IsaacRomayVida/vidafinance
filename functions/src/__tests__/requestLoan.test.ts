@@ -459,6 +459,35 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       });
     });
 
+    it('persists condition provenance (source field) verbatim, since #458', async () => {
+      const conditionsWithProvenance = [
+        { name: 'age_range', pass: true, value: 34, required: '18-65', source: 'read' },
+        { name: 'bureau_score', pass: false, value: 500, required: '> 600', source: 'assumed' },
+      ];
+      await mockUnderwritingResponse(
+        uwResponse(
+          {
+            decision: 'approved',
+            reason: null,
+            correlationId: 'uw-789',
+            lastStage: 'stage3',
+          },
+          { conditions: conditionsWithProvenance, allPass: true },
+        ),
+      );
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      const loanData = getLoanWrite();
+      const persisted = loanData['underwritingDecision'] as Record<string, unknown>;
+      expect(persisted['conditions']).toEqual(conditionsWithProvenance);
+      const persistedConditions = persisted['conditions'] as Array<Record<string, unknown>>;
+      expect(persistedConditions[0]['source']).toBe('read');
+      expect(persistedConditions[1]['source']).toBe('assumed');
+    });
+
     it('creates the loan with no breakdown, and does not throw, when underwriting is unreachable', async () => {
       await mockUnderwritingResponse(null);
 

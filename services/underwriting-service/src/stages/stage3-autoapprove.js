@@ -19,9 +19,23 @@
 
 const APPROVAL_THRESHOLD = () => parseFloat(process.env.APPROVAL_THRESHOLD || "0.65");
 
+/**
+ * Provenance for a condition's value: "read" if the upstream block that
+ * computes it ran and did not mark itself `skipped: true`, "assumed"
+ * otherwise — the block was never reached (stage error, stage2Data.{} on a
+ * whole-stage failure) or it ran and gave up (stage2-bureau.js:183-189 and
+ * the IMSS/AFORE/ML blocks). Modelled on `payFrequencySource` (#433): a
+ * value the pipeline never read must not be shown with the same confidence
+ * as one it did (#458). Purely observational — does not feed `pass`.
+ */
+function provenanceOf(block) {
+  return block && block.skipped !== true ? "read" : "assumed";
+}
+
 function evaluateAutoApprove(applicant, allResults) {
   const conditions = [];
-  const employerData = allResults.employerB?.data || {};
+  const employerBBlock = allResults.employerB?.data;
+  const employerData = employerBBlock || {};
   const stage0Data = allResults.stage0?.data || {};
   const stage1Data = allResults.stage1?.data || {};
   const stage2Data = allResults.stage2?.data || {};
@@ -33,6 +47,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: employerTier <= 2,
     value: employerTier,
     required: "<= 2",
+    source: employerBBlock?.tier != null ? "read" : "assumed",
   });
 
   // 2. IMSS tenure > 6 months
@@ -42,6 +57,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: tenure > 6,
     value: tenure,
     required: "> 6 months",
+    source: provenanceOf(stage2Data.imss),
   });
 
   // 3. Bureau score > 600
@@ -51,6 +67,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: bureauScore > 600,
     value: bureauScore,
     required: "> 600",
+    source: provenanceOf(stage2Data.bureau),
   });
 
   // 4. LTI <= 25%
@@ -60,6 +77,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: lti <= 25,
     value: lti,
     required: "<= 25%",
+    source: provenanceOf(stage2Data.lti),
   });
 
   // 5. No competitor loans
@@ -69,6 +87,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: competitorLoans === 0,
     value: competitorLoans,
     required: "0",
+    source: provenanceOf(stage2Data.bureau),
   });
 
   // 6. RiskSeal > 60
@@ -78,6 +97,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: risksealScore > 60,
     value: risksealScore,
     required: "> 60",
+    source: provenanceOf(stage0Data.riskseal),
   });
 
   // 7. Sector safe
@@ -87,6 +107,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: sectorSafe,
     value: stage1Data.cnbv?.riskLevel || "unknown",
     required: "not alto",
+    source: provenanceOf(stage1Data.cnbv),
   });
 
   // 8. ML P(default) < threshold
@@ -98,6 +119,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: !mlScore?.skipped && pDefault < (1 - threshold),
     value: pDefault,
     required: `< ${1 - threshold}`,
+    source: provenanceOf(mlScore),
   });
 
   // 9. No active defaults
@@ -107,6 +129,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: activeDefaults === 0,
     value: activeDefaults,
     required: "0",
+    source: provenanceOf(stage2Data.bureau),
   });
 
   // 10. Age 18-65
@@ -116,6 +139,7 @@ function evaluateAutoApprove(applicant, allResults) {
     pass: age >= 18 && age <= 65,
     value: age,
     required: "18-65",
+    source: stage1Data.age != null ? "read" : "assumed",
   });
 
   return conditions;
