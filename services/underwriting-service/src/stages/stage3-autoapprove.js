@@ -2,19 +2,24 @@
 /**
  * Stage 3: Auto-Approve Gate
  *
- * 10 conditions ALL must pass:
+ * 12 conditions ALL must pass:
  *   1. Employer tier >= 1 (not rejected)
  *   2. IMSS tenure > 6 months
  *   3. Bureau score > 600
  *   4. LTI <= 25%
- *   5. No competitor loans
+ *   5. No competitor loans (named-match against the admin-editable list)
  *   6. RiskSeal > 60
  *   7. Sector safe (CNBV not "alto")
  *   8. ML P(default) < MAX_PDEFAULT (champion model only)
  *   9. No active defaults
  *  10. Age 18-65 (already validated in Stage 1, re-checked here)
+ *  11. Bureau días de atraso == 0
+ *  12. Bureau cartera vencida == false
  *
- * 55% approved here. Cost: $21-47 MXN total pipeline.
+ * ADR-006 (2026-08-03) added ids 11 and 12 and left 9 and 10 in place. A
+ * draft of that ADR proposed retiring 9 and 10; retiring them would loosen
+ * the gate, which is a commercial change, so it stays an open question for
+ * Isaac and the gate only tightens for now. See RETIRED_CONDITION_IDS.
  *
  * Every condition fails closed on data the pipeline never read (#458). A
  * condition passes only when its `source` is "read" AND its bound holds; an
@@ -32,9 +37,8 @@
 // used until an admin config document exists, and a read path
 // (`getMaxPDefault`) that throws — rather than silently falling back to the
 // seed — when that document exists but cannot be trusted. Value is
-// commercial and UNCHANGED today: 1 - 0.65 = 0.35, same as before this file
-// existed, whether the value comes from the seed or an unconfigured
-// deployment.
+// RATIFIED by ADR-006 (2026-08-03) at 0.15, superseding the 0.35 this
+// condition read before — see config/maxPDefaultCutoff.js.
 const { getMaxPDefault, getSeedMaxPDefault } = require("../config/maxPDefaultCutoff");
 
 /**
@@ -69,6 +73,19 @@ function provenanceOf(block) {
 // without a Firestore mock in every call site. Callers that omit it — every
 // existing direct test of this function — get the compile-time seed, which
 // is exactly today's shipped value, so omitting it changes no behaviour.
+//
+// RETIRED CONDITION IDS — none today, and the list is deliberately empty.
+// A draft of ADR-006 proposed retiring id 9 (`no_active_defaults`) as
+// subsumed by the bureau's own días-de-atraso/cartera-vencida fields, and
+// id 10 (`age_range`) as a redundant re-check of a bound Stage 1 already
+// validates. Both readings are defensible, but retiring a condition loosens
+// the auto-approve gate, and no such loosening has been ratified — so both
+// ids remain LIVE and ADR-006 carries the retirement as an open question.
+// The two conditions ADR-006 does add take the next unused ids, 11 and 12.
+// When a retirement is eventually ratified, record the id here; a retired
+// id's number is never reassigned.
+const RETIRED_CONDITION_IDS = Object.freeze({});
+
 function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedMaxPDefault()) {
   const conditions = [];
   const employerData = allResults.employerB?.data || {};
@@ -144,7 +161,16 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
     source: ltiSource,
   });
 
-  // 5. No competitor loans — the one condition allowed to pass on a value the
+  // 5. No competitor loans — wired to the named-match signal
+  //    (`competitorLoansByName`, config/competitorLenders.js +
+  //    stage2-bureau.js) rather than the opaque SoftCrédito count, per
+  //    ADR-005 C5 (competitor loan blocks auto-approval only, ratified) and
+  //    ADR-006 (2026-08-03, the seeded list — KUESKI/MoneyMan/CREDITEA —
+  //    ratified as-is). The condition's EFFECT is unchanged by this rewiring:
+  //    a failure here still only escalates, never declines (C5). Only which
+  //    signal decides the count changed.
+  //
+  //    This is still the one condition allowed to pass on a value the
   //    pipeline did not read, and only in one shape.
   //
   //    Every other condition tests a bound on a value we have to *obtain* — a
@@ -153,27 +179,36 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
   //    account list. With no bureau block at all there is no account list
   //    either, and "no competitor accounts were found" is then literally true
   //    rather than assumed. It is safe to let that pass, not merely convenient:
-  //    bureau_score and no_active_defaults read the same missing block and both
-  //    now fail closed, and all ten conditions must hold, so a missing bureau
-  //    can never be the margin between an outage and an approval. Failing this
-  //    one as well would only restate a single root cause a third time in
-  //    `failedConditions`. ADR-005 Finding 8 fixes exactly this as the
-  //    acceptance criterion: all-null input yields 9 failures out of 10, with
-  //    this the sole legitimate pass.
+  //    bureau_score, no_active_defaults, dias_atraso_zero and
+  //    cartera_vencida_false all read the same missing block and all fail
+  //    closed, and all twelve conditions must hold, so a missing bureau can
+  //    never be the margin between an outage and an approval. ADR-005
+  //    Finding 8 fixes this as the acceptance criterion: all-null input
+  //    yields 11 failures out of 12, with this the sole legitimate pass.
   //
-  //    What must NOT pass is the bureau *error stub* (stage2-bureau.js:183-189),
-  //    which fabricates `competitorLoans: 0` after a failed call. There a bureau
-  //    file exists and we know we failed to read it, so the zero is invented
-  //    rather than observed — unread, and it fails closed like the rest.
+  //    What must NOT pass is the bureau *error stub* (stage2-bureau.js's
+  //    catch block, `skipped: true`) — a bureau block that exists, ran, and
+  //    gave up. Nor may a bureau block that WAS read but whose name-match
+  //    could not be computed (config/competitorLenders.js's Firestore doc
+  //    unreadable — stage2-bureau.js leaves `competitorLoansByName` unset in
+  //    that case rather than fabricating a count). Both are "we tried and
+  //    don't know", not "we checked and found nothing", and both fail closed
+  //    like every other condition that reads a value it could not obtain.
   const bureauBlockAbsent = stage2Data.bureau == null;
-  const competitorLoans = stage2Data.bureau?.competitorLoans || 0;
+  const competitorLoansByName = stage2Data.bureau?.competitorLoansByName;
+  const competitorSource = bureauBlockAbsent
+    ? "read"
+    : bureauSource === "read" && competitorLoansByName != null
+      ? "read"
+      : "assumed";
+  const competitorLoansValue = bureauBlockAbsent ? 0 : competitorLoansByName ?? 0;
   conditions.push({
     id: 5,
     name: "no_competitor_loans",
-    pass: (bureauSource === "read" || bureauBlockAbsent) && competitorLoans === 0,
-    value: competitorLoans,
+    pass: competitorSource === "read" && competitorLoansValue === 0,
+    value: competitorLoansValue,
     required: "0",
-    source: bureauSource,
+    source: competitorSource,
   });
 
   // 6. RiskSeal > 60
@@ -260,6 +295,42 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
     source: ageSource,
   });
 
+  // 11. Bureau días de atraso == 0 — ADR-006 (2026-08-03). Reads the
+  // bureau's own delinquency-days field directly (stage2-bureau.js plumbs
+  // it from the bureau response). This SUPPLEMENTS condition 9's derived
+  // count rather than replacing it: an earlier draft of this change retired
+  // ids 9 and 10 in favour of 11/12, but retiring a condition LOOSENS the
+  // gate (fewer conditions must hold ⇒ more auto-approvals), and that is a
+  // commercial change nobody ratified. ADR-006 records the retirement as an
+  // open question for Isaac; until he rules, the gate only tightens.
+  // Same fail-closed shape as every other condition here: a bureau block
+  // that ran but never carried this specific field reads as unread
+  // (`diasAtrasoValue != null` on top of the block's own `source`), so an
+  // outage cannot manufacture a clean value the way the error stub could.
+  const diasAtrasoValue = stage2Data.bureau?.diasAtraso;
+  const diasAtrasoSource = bureauSource === "read" && diasAtrasoValue != null ? "read" : "assumed";
+  conditions.push({
+    id: 11,
+    name: "dias_atraso_zero",
+    pass: diasAtrasoSource === "read" && diasAtrasoValue === 0,
+    value: diasAtrasoValue ?? null,
+    required: "0",
+    source: diasAtrasoSource,
+  });
+
+  // 12. Bureau cartera vencida == false — ADR-006 (2026-08-03), the
+  // bureau's own active-default flag, alongside dias_atraso_zero above.
+  const carteraVencidaValue = stage2Data.bureau?.carteraVencida;
+  const carteraVencidaSource = bureauSource === "read" && carteraVencidaValue != null ? "read" : "assumed";
+  conditions.push({
+    id: 12,
+    name: "cartera_vencida_false",
+    pass: carteraVencidaSource === "read" && carteraVencidaValue === false,
+    value: carteraVencidaValue ?? null,
+    required: "false",
+    source: carteraVencidaSource,
+  });
+
   return conditions;
 }
 
@@ -342,4 +413,4 @@ async function runAutoApproveGate(applicant, allResults, { logger } = {}) {
   };
 }
 
-module.exports = { runAutoApproveGate, evaluateAutoApprove };
+module.exports = { runAutoApproveGate, evaluateAutoApprove, RETIRED_CONDITION_IDS };

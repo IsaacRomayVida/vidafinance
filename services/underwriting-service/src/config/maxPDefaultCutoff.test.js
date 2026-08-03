@@ -20,9 +20,9 @@ const {
 // ── getSeedMaxPDefault ────────────────────────────────────────────────────
 
 describe("getSeedMaxPDefault", () => {
-  it("returns the incumbent value", () => {
-    expect(getSeedMaxPDefault()).toBe(0.35);
-    expect(SEED_MAX_PDEFAULT).toBe(0.35);
+  it("returns the ratified value (ADR-006, 2026-08-03)", () => {
+    expect(getSeedMaxPDefault()).toBe(0.15);
+    expect(SEED_MAX_PDEFAULT).toBe(0.15);
   });
 });
 
