@@ -30,10 +30,14 @@
 //     APPROVAL_THRESHOLD and lands on 0.35 (stage3-autoapprove.js:20,
 //     :98), which would approve the very applicant this spec requires
 //     us to escalate.
-//   - LTI is in different units. Here it is a fraction: "passes
-//     condition 4: LTI exactly 25%" passes 0.25 and "fails condition
-//     4" fails 0.26. Shipped, it is a percentage compared against 25
-//     (stage3-autoapprove.js:60), under which 0.26 sails through.
+//   - LTI units are RESOLVED (ADR-005 Finding 4, engineering shape,
+//     accepted): percentage wins end to end, matching the shipped
+//     producer (stage2-bureau.js's computeLTI) and the one green test
+//     (decision-engine.test.js) that already asserts a percentage. The
+//     fixtures below were rewritten from a fraction (0.25/0.26, and a
+//     bare `lti` number) to a percentage (25/26, in a `{ value }`
+//     object) to match. This is the one axis of this file that is no
+//     longer an open disagreement — everything else below still is.
 //
 // Which of those is right is a credit-policy question, not an
 // engineering one, so it is not being answered here. See
@@ -61,7 +65,7 @@ const ALL_PASS_PARAMS = {
   employerTier: 1,
   tenureMonths: 12,
   bureauScore: 700,
-  lti: 0.20,
+  lti: 20, // percentage (ADR-005 Finding 4) — was 0.20 (a fraction), which disagreed with the shipped producer
   cuentasActivas: [],
   riskSealScore: 75,
   sectorFlagged: false,
@@ -80,7 +84,9 @@ const STAGE2_RESULT = {
   employment: {
     tenureMonths: 12,
   },
-  lti: 0.20,
+  // { value } percentage, matching the shape and units stage2-bureau.js's
+  // computeLTI actually produces (ADR-005 Finding 4) — was a bare fraction.
+  lti: { value: 20 },
   ml: {
     champion: { pDefault: 0.05, model: "woe_scorecard" },
     challenger: { pDefault: 0.08, model: "xgboost", shadow: true },
@@ -169,7 +175,10 @@ describe.skip("evaluateGate", () => {
   });
 
   it("fails condition 4: LTI > 25%", () => {
-    const result = evaluateGate({ ...ALL_PASS_PARAMS, lti: 0.26 });
+    // 26, not 0.26 — percentage (ADR-005 Finding 4): the fraction disagreed
+    // with the shipped producer, computeLTI, and with the one green test
+    // (decision-engine.test.js) that already asserts a percentage value.
+    const result = evaluateGate({ ...ALL_PASS_PARAMS, lti: 26 });
     expect(result.allPass).toBe(false);
     const failure = result.failures.find(f => f.id === 4);
     expect(failure).toBeDefined();
@@ -177,7 +186,7 @@ describe.skip("evaluateGate", () => {
   });
 
   it("passes condition 4: LTI exactly 25%", () => {
-    const result = evaluateGate({ ...ALL_PASS_PARAMS, lti: 0.25 });
+    const result = evaluateGate({ ...ALL_PASS_PARAMS, lti: 25 });
     const cond = result.conditions.find(c => c.id === 4);
     expect(cond.pass).toBe(true);
   });

@@ -68,16 +68,16 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
     // or 3, so no live decision changes — see the tier-0 case below for the
     // reason the bound is written down anyway.
     expect(evaluateAutoApprove(APPLICANT, ALL_DATA_PRESENT)).toEqual([
-      { name: "employer_tier", pass: true, value: 1, required: "1-2", source: "read" },
-      { name: "imss_tenure", pass: true, value: 36, required: "> 6 months", source: "read" },
-      { name: "bureau_score", pass: true, value: 720, required: "> 600", source: "read" },
-      { name: "lti", pass: true, value: 13.64, required: "<= 25%", source: "read" },
-      { name: "no_competitor_loans", pass: true, value: 0, required: "0", source: "read" },
-      { name: "riskseal_score", pass: true, value: 72, required: "> 60", source: "read" },
-      { name: "sector_safe", pass: true, value: "bajo", required: "not alto", source: "read" },
-      { name: "ml_default_prob", pass: true, value: 0.18, required: "< 0.35", source: "read" },
-      { name: "no_active_defaults", pass: true, value: 0, required: "0", source: "read" },
-      { name: "age_range", pass: true, value: 35, required: "18-65", source: "read" },
+      { id: 1, name: "employer_tier", pass: true, value: 1, required: "1-2", source: "read" },
+      { id: 2, name: "imss_tenure", pass: true, value: 36, required: "> 6 months", source: "read" },
+      { id: 3, name: "bureau_score", pass: true, value: 720, required: "> 600", source: "read" },
+      { id: 4, name: "lti", pass: true, value: 13.64, required: "<= 25%", source: "read" },
+      { id: 5, name: "no_competitor_loans", pass: true, value: 0, required: "0", source: "read" },
+      { id: 6, name: "riskseal_score", pass: true, value: 72, required: "> 60", source: "read" },
+      { id: 7, name: "sector_safe", pass: true, value: "bajo", required: "not alto", source: "read" },
+      { id: 8, name: "ml_default_prob", pass: true, value: 0.18, required: "< 0.35", source: "read" },
+      { id: 9, name: "no_active_defaults", pass: true, value: 0, required: "0", source: "read" },
+      { id: 10, name: "age_range", pass: true, value: 35, required: "18-65", source: "read" },
     ]);
   });
 
@@ -97,7 +97,7 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
 
     // Read, so this is a credit decline rather than an outage escalation.
     expect(tierCondition).toEqual({
-      name: "employer_tier", pass: false, value: 0, required: "1-2", source: "read",
+      id: 1, name: "employer_tier", pass: false, value: 0, required: "1-2", source: "read",
     });
   });
 
@@ -367,5 +367,99 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
         }
       }
     }
+  });
+});
+
+// ADR-005 Finding 6: every condition carries a stable numeric id alongside
+// its name. Denial reasons derived from these conditions reach borrowers and
+// have to stay referenceable across a rename (CONDUSEF).
+describe("evaluateAutoApprove — condition ids (ADR-005 Finding 6)", () => {
+  it("assigns every condition a unique id from 1 to 10, in order", () => {
+    const conditions = evaluateAutoApprove(APPLICANT, ALL_DATA_PRESENT);
+    expect(conditions.map((c) => c.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it("keeps ids pinned to today's names, so a future rename doesn't move them", () => {
+    const conditions = evaluateAutoApprove(APPLICANT, ALL_DATA_PRESENT);
+    const idsByName = Object.fromEntries(conditions.map((c) => [c.name, c.id]));
+    expect(idsByName).toEqual({
+      employer_tier: 1,
+      imss_tenure: 2,
+      bureau_score: 3,
+      lti: 4,
+      no_competitor_loans: 5,
+      riskseal_score: 6,
+      sector_safe: 7,
+      ml_default_prob: 8,
+      no_active_defaults: 9,
+      age_range: 10,
+    });
+  });
+
+  it("keeps ids stable regardless of which conditions pass or fail", () => {
+    const conditions = evaluateAutoApprove({}, {});
+    expect(conditions.map((c) => c.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
+// ADR-005 Finding 5: the P(default) cutoff is a single declared MAX_PDEFAULT,
+// not a derived complement of APPROVAL_THRESHOLD. The effective cutoff must
+// stay exactly 0.35 — this is naming only, zero behaviour change.
+describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () => {
+  const ORIGINAL_ENV = process.env;
+
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    delete process.env.MAX_PDEFAULT;
+    delete process.env.APPROVAL_THRESHOLD;
+  });
+
+  afterAll(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  function dataWithPDefault(pDefault) {
+    return {
+      ...ALL_DATA_PRESENT,
+      stage2: {
+        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { default_probability: pDefault } },
+      },
+    };
+  }
+
+  it("defaults to an effective cutoff of 0.35, unchanged from the old derived APPROVAL_THRESHOLD behaviour", () => {
+    const passing = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.34))
+      .find((c) => c.name === "ml_default_prob");
+    const failing = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.35))
+      .find((c) => c.name === "ml_default_prob");
+
+    expect(passing.pass).toBe(true);
+    expect(passing.required).toBe("< 0.35");
+    expect(failing.pass).toBe(false);
+  });
+
+  it("honours MAX_PDEFAULT directly when set", () => {
+    process.env.MAX_PDEFAULT = "0.15";
+    const cond = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.20))
+      .find((c) => c.name === "ml_default_prob");
+    expect(cond.pass).toBe(false);
+    expect(cond.required).toBe("< 0.15");
+  });
+
+  it("still honours a deployed-but-unmigrated APPROVAL_THRESHOLD as its old complement", () => {
+    process.env.APPROVAL_THRESHOLD = "0.5"; // effective cutoff: 1 - 0.5 = 0.5
+    const cond = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.4))
+      .find((c) => c.name === "ml_default_prob");
+    expect(cond.pass).toBe(true);
+    expect(cond.required).toBe("< 0.5");
+  });
+
+  it("prefers MAX_PDEFAULT over a legacy APPROVAL_THRESHOLD when both are set", () => {
+    process.env.APPROVAL_THRESHOLD = "0.5"; // would give 0.5 if honoured
+    process.env.MAX_PDEFAULT = "0.15";
+    const cond = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.2))
+      .find((c) => c.name === "ml_default_prob");
+    expect(cond.pass).toBe(false);
+    expect(cond.required).toBe("< 0.15");
   });
 });

@@ -191,10 +191,36 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
   }
 
   // 4. LTI calculation
+  //
+  // ADR-005 Finding 4: this quantity gets computed twice, ten lines apart, in
+  // two different units, and neither was named — the exact setup for a future
+  // "dedup" that mixes a percentage into a fraction and ships a 100x credit
+  // bug. `ltiPercent` (here) and `ltiRatio` (below, for the ML feature) are
+  // now named distinctly on purpose; do not collapse them into one variable.
   const infonavitDeduction = priorResults?.stage0?.data?.infonavitDeduction || 0;
   const monthlySalary = data.imss.sbc || applicant.monthlySalary || 0;
-  const lti = computeLTI(applicant.principalAmount || 0, monthlySalary, infonavitDeduction);
-  data.lti = { value: lti, monthlySalary, infonavitDeduction, principalAmount: applicant.principalAmount };
+  const ltiPercent = computeLTI(applicant.principalAmount || 0, monthlySalary, infonavitDeduction);
+  // `value` is the field name kept for compatibility: `data.lti` is serialized
+  // wholesale across the /underwrite HTTP boundary into `functions`
+  // (index.js's response includes `stages`) and `value` is asserted directly
+  // by decision-engine.test.js and read by stage3-autoapprove.js. Do not
+  // rename or remove it. `ltiPercent` is the same number, explicitly named,
+  // for any new consumer.
+  data.lti = {
+    value: ltiPercent,
+    ltiPercent,
+    monthlySalary,
+    infonavitDeduction,
+    principalAmount: applicant.principalAmount,
+  };
+
+  // Percentage-vs-fraction of the same LTI quantity, computed separately for
+  // the ML feature (ml-service consumes LTI as a fraction throughout — see
+  // ADR-005 Finding 4). This is intentionally NOT derived from `ltiPercent`
+  // (e.g. `ltiPercent / 100`) so a rounding or unit change on one side cannot
+  // silently move the other; they are two independent expressions of the same
+  // ratio, named so nobody mistakes one for the other.
+  const ltiRatio = monthlySalary > 0 ? (applicant.principalAmount || 0) / monthlySalary : 0;
 
   // 5. ML model score (Champions LR + Challenger XGBoost)
   let mlScore;
@@ -203,7 +229,7 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
       employment_tenure_months: data.imss.tenureMonths || applicant.employmentTenureMonths || 0,
       monthly_salary: monthlySalary,
       pay_frequency_encoded: encodePayFrequency(applicant.payFrequency, log),
-      loan_to_salary_ratio: monthlySalary > 0 ? (applicant.principalAmount || 0) / monthlySalary : 0,
+      loan_to_salary_ratio: ltiRatio,
       employer_industry_encoded: applicant.industryCode || 0,
       principal_amount: applicant.principalAmount || 0,
       bureau_score: data.bureau.score,
