@@ -73,6 +73,43 @@ const INLINE_ML_MAX_DEFAULT_PROBABILITY = 0.4;
 // out is exactly what stranded borrowers there before.
 const ACTIVE_LOAN_STATUSES = ['pending', 'under_review', 'approved', 'disbursement_queued', 'active'];
 
+// Loan statuses a legitimate pre-approval decision can transition FROM into
+// 'approved' and have the disbursement pipeline fire. `pending` is the
+// direct-approval path (auto-approved by the underwriting pipeline);
+// `under_review` is the manual-review path (submitReviewDecision) — and since
+// deployed config is ML_MODE=manual_review_all, EVERY non-rejected loan takes
+// that path today (P0). Both onLoanStatusChange and onLoanApproved below gate
+// on this same set so the two triggers cannot disagree about what counts as
+// an approval.
+//
+// Deliberately NOT "any status → approved": a loan already past approval
+// (disbursement_queued, active, disbursed, paid) re-entering 'approved' must
+// not re-fire disbursement. See the idempotency guard inside onLoanApproved
+// and the rewind guard in updateLoanStatus, both of which exist because ops
+// tooling can otherwise reproduce this exact transition twice on a loan that
+// has already been disbursed and re-call the real SoftCrédito transfer.
+const LOAN_APPROVAL_SOURCE_STATUSES = ['pending', 'under_review'];
+
+export function isLoanApprovalTransition(beforeStatus: unknown, afterStatus: unknown): boolean {
+  return (
+    typeof beforeStatus === 'string' &&
+    LOAN_APPROVAL_SOURCE_STATUSES.includes(beforeStatus) &&
+    afterStatus === 'approved'
+  );
+}
+
+// Loan statuses reached only once a disbursement attempt has actually started
+// — the SPEI transfer is queued, sent, or the loan otherwise left
+// pre-approval limbo. Ops/admin corrections within this set are legitimate
+// (e.g. nudging a stuck `disbursement_failed` loan back to
+// `disbursement_queued` for a manual retry), but rewinding one of these back
+// to a pre-disbursement status is exactly the two-call replay
+// (set 'pending', then set 'approved') that reproduces the trigger diff above
+// and re-fires a real transfer — SPEI has no idempotency key of its own, so
+// refusing the rewind in updateLoanStatus is the only guard on that path.
+const DISBURSEMENT_INITIATED_STATUSES = ['disbursement_queued', 'disbursement_failed', 'active', 'disbursed', 'paid'];
+const PRE_DISBURSEMENT_STATUSES = ['pending', 'under_review', 'approved'];
+
 // Mirrors services/underwriting-service/src/stages/employer-b.js's
 // `computeInitialSlots(assignTier(score))` for the two tiers that are ever
 // granted a nonzero cap (ADR-007). Duplicated here rather than imported:
@@ -930,6 +967,19 @@ export const updateLoanStatus = onCall(
         if (!['approved', 'rejected'].includes(status)) {
           throw new HttpsError('invalid-argument', 'Employers may only approve or reject pending loans');
         }
+      } else if (
+        DISBURSEMENT_INITIATED_STATUSES.includes(loan['status'] as string) &&
+        PRE_DISBURSEMENT_STATUSES.includes(status)
+      ) {
+        // Ops/admin correction paths within DISBURSEMENT_INITIATED_STATUSES stay
+        // open (e.g. disbursement_failed → disbursement_queued to retry) — only
+        // rewinding back to pending/under_review/approved is blocked, since that
+        // is the transition that lets the onLoanApproved trigger fire again on a
+        // loan that has already had a real SPEI transfer queued or sent (P0-B).
+        throw new HttpsError(
+          'failed-precondition',
+          `Cannot move loan from '${loan['status']}' back to '${status}' — disbursement has already started`
+        );
       }
 
       const update: Record<string, unknown> = { status };
@@ -1689,7 +1739,7 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
   const afterData = event.data!.after.data();
   const loanId = event.params['loanId'];
 
-  if (beforeData['status'] === 'pending' && afterData['status'] === 'approved') {
+  if (isLoanApprovalTransition(beforeData['status'], afterData['status'])) {
     await db.collection('employers').doc(afterData['employerId'] as string).update({
       activeLoans: FieldValue.increment(1),
       totalDisbursed: FieldValue.increment(afterData['amount'] as number),
@@ -1747,25 +1797,51 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
 export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) => {
   const before = event.data!.before.data();
   const after = event.data!.after.data();
-  if (!(before['status'] === 'pending' && after['status'] === 'approved')) return null;
+  if (!isLoanApprovalTransition(before['status'], after['status'])) return null;
 
   const loanId = event.params['loanId'];
   const emp = (await db.collection('employees').doc(after['employeeId'] as string).get()).data() ?? {};
 
-  await db.collection('disbursement_queue').doc(loanId).set({
-    loanId,
-    employeeId: after['employeeId'],
-    employeeName: after['employeeName'],
-    employerName: after['employerName'],
-    amount: after['amount'],
-    total: after['total'],
-    clabe: emp['bankClabe'] ?? null,
-    bankName: emp['bankName'] ?? null,
-    concept: 'VIDA-' + loanId.slice(0, 8).toUpperCase(),
-    status: 'queued',
-    queuedAt: FieldValue.serverTimestamp(),
+  const loanRef = db.collection('loans').doc(loanId);
+  const disbursementQueueRef = db.collection('disbursement_queue').doc(loanId);
+
+  // Idempotency guard (P0-B): this trigger fires on every pending/under_review
+  // → approved transition, and updateLoanStatus's admin branch used to let ops
+  // reproduce that exact diff twice on the same loan (rewind to pending, then
+  // re-approve) with no server-side dedup — replaying a real SoftCrédito SPEI
+  // transfer. Claim the disbursement_queue doc and the loan's move to
+  // disbursement_queued atomically in one transaction: if a queue entry
+  // already exists, or the loan already carries a disbursedAt from an earlier
+  // fire, this fire is a duplicate and must not reach the adapter call below.
+  const claimed = await db.runTransaction(async (tx) => {
+    const [loanSnap, queueSnap] = await Promise.all([tx.get(loanRef), tx.get(disbursementQueueRef)]);
+    const loanData = loanSnap.data() ?? {};
+    if (queueSnap.exists || loanData['disbursedAt']) return false;
+
+    tx.set(disbursementQueueRef, {
+      loanId,
+      employeeId: after['employeeId'],
+      employeeName: after['employeeName'],
+      employerName: after['employerName'],
+      amount: after['amount'],
+      total: after['total'],
+      clabe: emp['bankClabe'] ?? null,
+      bankName: emp['bankName'] ?? null,
+      concept: 'VIDA-' + loanId.slice(0, 8).toUpperCase(),
+      status: 'queued',
+      queuedAt: FieldValue.serverTimestamp(),
+    });
+    tx.update(loanRef, { status: 'disbursement_queued' });
+    return true;
   });
-  await db.collection('loans').doc(loanId).update({ status: 'disbursement_queued' });
+
+  if (!claimed) {
+    logger.warn('Disbursement already claimed for loan — skipping duplicate trigger fire', {
+      loanId,
+      service: 'functions',
+    });
+    return null;
+  }
 
   const softcreditoUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
   const internalSecret = process.env['INTERNAL_SECRET'] ?? '';

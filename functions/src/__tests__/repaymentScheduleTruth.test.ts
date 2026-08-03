@@ -169,6 +169,7 @@ function buildMockDb() {
           ...loansQuery,
           doc: jest.fn().mockReturnValue({
             id: 'new-loan-id',
+            _kind: 'loanDocRef',
             update: jest.fn(async (data: unknown) => {
               writes.push({ op: 'loan.update', data });
             }),
@@ -178,6 +179,7 @@ function buildMockDb() {
       if (name === 'disbursement_queue') {
         return {
           doc: jest.fn().mockReturnValue({
+            _kind: 'disbursementQueueDocRef',
             set: jest.fn(async (data: unknown) => writes.push({ op: 'queue.set', data })),
             update: jest.fn(async (data: unknown) => writes.push({ op: 'queue.update', data })),
           }),
@@ -198,7 +200,7 @@ function buildMockDb() {
       throw new Error(`Unexpected collection: ${name}`);
     }),
     runTransaction: jest.fn(
-      async (fn: (txn: { get: jest.Mock; update: jest.Mock; set: jest.Mock }) => Promise<void>) => {
+      async (fn: (txn: { get: jest.Mock; update: jest.Mock; set: jest.Mock }) => Promise<unknown>) => {
         const txn = {
           get: jest.fn((refOrQuery: { _kind?: string } | undefined) => {
             if (refOrQuery?._kind === 'employerDocRef') {
@@ -207,12 +209,22 @@ function buildMockDb() {
             if (refOrQuery?._kind === 'employerActiveLoansCountQuery') {
               return Promise.resolve({ data: () => ({ count: 0 }) });
             }
+            // onLoanApproved's idempotency claim (P0-B): a fresh loan mid-approval,
+            // with no prior disbursement_queue entry, so the claim proceeds.
+            if (refOrQuery?._kind === 'loanDocRef') {
+              return Promise.resolve({ exists: true, data: () => ({ status: 'approved' }) });
+            }
+            if (refOrQuery?._kind === 'disbursementQueueDocRef') {
+              return Promise.resolve({ exists: false, data: () => undefined });
+            }
             throw new Error('Mock tx.get() called with an unrecognized ref/query');
           }),
           update: jest.fn(),
-          set: jest.fn((_ref: unknown, data: unknown) => writes.push({ op: 'loan.set', data })),
+          set: jest.fn((ref: { _kind?: string } | undefined, data: unknown) =>
+            writes.push({ op: ref?._kind === 'disbursementQueueDocRef' ? 'queue.set' : 'loan.set', data })
+          ),
         };
-        await fn(txn);
+        return fn(txn);
       }
     ),
     _writes: writes,
