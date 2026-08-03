@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { DISBURSED_STATUSES, isDisbursedStatus } from '../loans/loanStatus';
 
 export const getEmployerDashboard = onCall(
   { enforceAppCheck: true },
@@ -33,7 +34,7 @@ export const getEmployerDashboard = onCall(
         db
           .collection('loans')
           .where('employerId', '==', employerId)
-          .where('status', 'in', ['disbursed', 'repaid', 'overdue'])
+          .where('status', 'in', [...DISBURSED_STATUSES, 'repaid', 'overdue'])
           .orderBy('requestedAt', 'desc')
           .limit(100)
           .get(),
@@ -49,7 +50,7 @@ export const getEmployerDashboard = onCall(
       }
 
       const loans = loansSnap.docs.map((d) => d.data());
-      const activeLoans = loans.filter((l) => l['status'] === 'disbursed');
+      const activeLoans = loans.filter((l) => isDisbursedStatus(l['status']));
       const overdueLoans = loans.filter((l) => l['status'] === 'overdue');
       const totalEmployees = employeesSnap.size || 1;
 

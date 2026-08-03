@@ -7,6 +7,7 @@ import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { validateInput } from '../utils/validateInput';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { POST_DISBURSEMENT_STATUSES, DEFAULT_STATUSES, isRepaidStatus } from '../loans/loanStatus';
 
 const PortfolioReportSchema = z.object({
   period: z.enum(['7d', '30d', '90d', 'all']),
@@ -60,23 +61,24 @@ export const getPortfolioReport = onCall(
         byEmployer[eid].volume += (l['principalAmount'] as number) || 0;
       });
 
-      const disbursedStatuses = ['disbursed', 'repaid', 'overdue', 'written_off'];
-      const defaultStatuses = ['overdue', 'in_collections', 'written_off'];
-
+      // Every status from "funds sent" onward — this must include BOTH live
+      // disbursement spellings ('active' from the automatic SoftCrédito path,
+      // 'disbursed' from the manual ops-confirmed path), not just one of them,
+      // or half the disbursed portfolio silently drops out of this total.
       const totalDisbursed = loans
-        .filter((l) => disbursedStatuses.includes(l['status'] as string))
+        .filter((l) => POST_DISBURSEMENT_STATUSES.includes(l['status'] as string))
         .reduce((sum, l) => sum + ((l['principalAmount'] as number) || 0), 0);
 
       const totalRepaid = loans
-        .filter((l) => l['status'] === 'repaid')
+        .filter((l) => isRepaidStatus(l['status']))
         .reduce((sum, l) => sum + ((l['totalRepaymentAmount'] as number) || 0), 0);
 
       const totalRevenue = loans
-        .filter((l) => l['status'] === 'repaid')
+        .filter((l) => isRepaidStatus(l['status']))
         .reduce((sum, l) => sum + ((l['feeAmount'] as number) || 0), 0);
 
       const defaultCount = loans.filter((l) =>
-        defaultStatuses.includes(l['status'] as string)
+        DEFAULT_STATUSES.includes(l['status'] as string)
       ).length;
 
       return {
