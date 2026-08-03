@@ -39,7 +39,7 @@ Measured 2026-08-03 against `4581cd6`. Reproduce with the command in the evidenc
 | A6 | Zero references to Truora / Incode / Sardine / EFL in shipped code | ✅ | `grep -rniE "truora\|incode\|sardine\|\bEFL\b" services/ functions/src/ public-v2/src/` → 2 hits, both in `ml-service/tests/test_prompt_loader.py` asserting their **absence**. The guard is the only mention |
 | A7 | The 8 P0/P1/P2 defects of 2026-08-02 are fixed | ✅ | `outputs/CRITICAL_DEFECTS.md` audit table, re-verified against source 2026-08-03T01:30Z; P0-1 and P0-2 re-read again this pass |
 | A8 | Loan pricing has one server-side source of truth | ✅ | `functions/src/index.ts:395,449,657` all read `loanConfig.feeRate`; `feeRate` frozen onto the loan at creation so a later config change cannot reprice a signed loan. ADR-002 |
-| A9 | Stage-3 auto-approve breakdown persisted for ops | ✅ | `functions/src/index.ts:608-638` writes `underwritingDecision` (decision, reason, allPass, all 10 conditions with value/bound/source). Fail-soft: omitted, never blocking |
+| A9 | Stage-3 auto-approve breakdown persisted for ops | ✅ | `functions/src/index.ts:608-638` writes `underwritingDecision` (decision, reason, allPass, all 12 conditions with value/bound/source). Fail-soft: omitted, never blocking |
 | A10 | Every service exposes `/health` | ✅ | 7/7: payment-server, softcredito-adapter, notification-service, pdf-generator, ml-service, underwriting-service, registry-service |
 
 ---
