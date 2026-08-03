@@ -485,10 +485,142 @@ describe('getReviewQueue', () => {
           'feeRate',
           'totalDue',
           'requestedAt',
+          'slaDeadline',
           'status',
           'underwritingDecision',
+          'riskLevel',
+          'llmRiskLevel',
+          'aml',
+          'riskSignals',
         ].sort()
       );
+    });
+  });
+
+  // #517 — the console rendered its risk pill, High Risk tile, Reason column and
+  // LTI sort from a direct `onSnapshot` on `review_queue` because the projection
+  // dropped these fields. They come off the review doc the handler already holds,
+  // so they cost no extra read.
+  describe('risk fields', () => {
+    const fullRisk = {
+      risk_level: 'high',
+      slaDeadline: '2026-08-02T00:00:00.000Z',
+      llm_narrative: {
+        risk_level: 'critical',
+        summary: 'Applicant shows several concerning patterns.',
+        key_signals: ['thin file'],
+        recommendation: 'decline',
+        confidence: 0.51,
+      },
+      aml_result: { amlHit: true, criminalRecordFound: false, isPEP: true, amlLists: [{ list: 'OFAC' }] },
+      signals: {
+        riskseal: { score: 22 },
+        bureau: { score: 380, activeDefaults: 2 },
+        loan: { loanToSalaryRatio: 0.42, amount: 5000, employerName: 'Acme Corp' },
+      },
+    };
+
+    it('serves the risk grade, AML flags and signal leaves the console renders', async () => {
+      seedReview('r1', fullRisk);
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row).toMatchObject({
+        riskLevel: 'high',
+        llmRiskLevel: 'critical',
+        slaDeadline: '2026-08-02T00:00:00.000Z',
+        aml: { amlHit: true, criminalRecordFound: false, isPEP: true },
+        riskSignals: {
+          riskSealScore: 22,
+          bureauScore: 380,
+          bureauActiveDefaults: 2,
+          loanToSalaryRatio: 0.42,
+        },
+      });
+    });
+
+    it('does not put the LLM narrative prose or the matched AML lists on the wire', async () => {
+      seedReview('r1', fullRisk);
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      // The grade is the only part of the narrative any listed element renders.
+      expect(Object.keys(row.aml as object).sort()).toEqual(
+        ['amlHit', 'criminalRecordFound', 'isPEP'].sort()
+      );
+      expect(JSON.stringify(row)).not.toContain('concerning patterns');
+      expect(JSON.stringify(row)).not.toContain('OFAC');
+    });
+
+    it('returns null — never false — for AML flags the pipeline never wrote', async () => {
+      // A missing `isPEP` means "not checked". Reporting it as `false` would be
+      // this backend asserting a clean PEP screen it never performed, and the
+      // Reason column would silently stop escalating.
+      seedReview('r1', { aml_result: { amlHit: true } });
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row.aml).toEqual({ amlHit: true, criminalRecordFound: null, isPEP: null });
+    });
+
+    it('nulls a risk grade outside the vocabulary this backend understands', async () => {
+      seedReview('r1', { risk_level: 'SEVERE', llm_narrative: { risk_level: 7 } });
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row.riskLevel).toBeNull();
+      expect(row.llmRiskLevel).toBeNull();
+    });
+
+    it('nulls each signal leaf independently when the sub-documents are partial', async () => {
+      seedReview('r1', { signals: { loan: { loanToSalaryRatio: 0.18 } } });
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row.riskSignals).toEqual({
+        riskSealScore: null,
+        bureauScore: null,
+        bureauActiveDefaults: null,
+        loanToSalaryRatio: 0.18,
+      });
+    });
+
+    it('returns null sub-objects, and does not throw, for a review predating these fields', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row).toMatchObject({
+        riskLevel: null,
+        llmRiskLevel: null,
+        aml: null,
+        riskSignals: null,
+        slaDeadline: null,
+      });
+    });
+
+    it('survives sub-documents that are not objects at all', async () => {
+      // Firestore returns whatever was written. Indexing into a string must not
+      // take down the whole queue read.
+      seedReview('r1', { aml_result: 'unavailable', signals: [], llm_narrative: 'n/a' });
+      seedLoan('loan-r1');
+
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+
+      expect(row).toMatchObject({ aml: null, riskSignals: null, llmRiskLevel: null });
     });
   });
 

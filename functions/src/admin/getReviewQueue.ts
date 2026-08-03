@@ -57,6 +57,38 @@ interface UnderwritingSummary {
   unreadFailures: string[];
 }
 
+// The risk vocabulary stage5-review.js can actually produce: `assessRiskLevel`
+// returns "high" for a PEP or a fuzzy AML match, otherwise the LLM's own grade,
+// otherwise "medium"; the LLM parse paths seed "unknown" on failure
+// (stage5-review.js:65,147,204,213). Anything outside this set is a value this
+// backend does not understand, and it degrades to null rather than being passed
+// through — a reviewer must not see a risk pill rendering a string we cannot
+// vouch for.
+type RiskLevel = 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+const RISK_LEVELS: readonly string[] = ['low', 'medium', 'high', 'critical', 'unknown'];
+
+// The three AML flags the Reason column renders, and nothing else. `amlLists`
+// is deliberately NOT projected: it carries the matched watchlist entries, it
+// feeds no UI element, and an unused list of a named person's sanctions matches
+// has no business on the wire.
+interface AmlSummary {
+  criminalRecordFound: boolean | null;
+  amlHit: boolean | null;
+  isPEP: boolean | null;
+}
+
+// The four `signals.*` leaves the console reads — the RiskSeal score and bureau
+// score/defaults behind the Reason column, and the ratio behind the LTI sort.
+// Projected leaf-by-leaf rather than by spreading `signals`, which is an
+// open-ended bag written by the pipeline: spreading it would put every future
+// provider field on the wire the day it is added, without anyone deciding to.
+interface RiskSignals {
+  riskSealScore: number | null;
+  bureauScore: number | null;
+  bureauActiveDefaults: number | null;
+  loanToSalaryRatio: number | null;
+}
+
 interface ReviewQueueRow {
   id: string;
   loanId: string | null;
@@ -78,8 +110,28 @@ interface ReviewQueueRow {
   feeRate: number | null;
   totalDue: number | null;
   requestedAt: unknown;
+  // The 24h SLA stamped at queue time (stage5-review.js). Surfaced rather than
+  // recomputed as `requestedAt + 24h`: the window is the pipeline's to set, and
+  // a client that derives it would keep asserting 24h on the day it changes.
+  // Null for a review written before the field existed — the console must then
+  // show no deadline, not a fabricated one.
+  slaDeadline: unknown;
   status: string;
   underwritingDecision: UnderwritingSummary | null;
+  // ── ML/LLM risk grade — NOT the same assertion as `underwritingDecision` ────
+  // `underwritingDecision` is deterministic: named conditions, each with a value
+  // and the bound it was tested against. `riskLevel`/`llmRiskLevel` is a graded
+  // judgement from the AML rules and the LLM narrative. They answer different
+  // questions and are kept as separate fields on purpose. Mapping one onto the
+  // other would leave the console's risk pill looking identical while silently
+  // changing what it asserts to a human deciding someone's loan (#517).
+  riskLevel: RiskLevel | null;
+  // `llm_narrative.risk_level` only. The narrative's `summary`,
+  // `key_signals`, `recommendation` and `confidence` are free-text model output
+  // that no listed console element renders, so they stay off the row.
+  llmRiskLevel: RiskLevel | null;
+  aml: AmlSummary | null;
+  riskSignals: RiskSignals | null;
 }
 
 interface GetReviewQueueResult {
@@ -107,6 +159,57 @@ interface GetReviewQueueResult {
 // must not reach a currency cell as "NaN" — they degrade to null like a missing field.
 function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+// A flag is either a real boolean or unknown. Deliberately NOT truthiness:
+// a missing `isPEP` must reach the console as null ("we did not check") and
+// never as `false` ("we checked, and this person is not a PEP"). The Reason
+// column treats these as reasons to escalate, so a fabricated `false` is a
+// suppressed escalation.
+function bool(v: unknown): boolean | null {
+  return typeof v === 'boolean' ? v : null;
+}
+
+// Narrow to the vocabulary this backend understands; anything else is null.
+function riskLevel(v: unknown): RiskLevel | null {
+  return typeof v === 'string' && RISK_LEVELS.includes(v) ? (v as RiskLevel) : null;
+}
+
+// Read a nested sub-document off the review only when it really is an object.
+// Firestore will hand back whatever was written, including a string or an
+// array, and indexing into that must not throw inside the row map.
+function obj(v: unknown): Record<string, unknown> | null {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
+// Fail-soft, same contract as `summarizeUnderwriting`: a review missing the
+// sub-document entirely yields null (the console renders "—"), and a review
+// carrying a partial one yields an object whose absent leaves are individually
+// null. Never an empty-but-present object claiming all-clear.
+function summarizeAml(review: Record<string, unknown>): AmlSummary | null {
+  const aml = obj(review['aml_result']);
+  if (!aml) return null;
+  return {
+    criminalRecordFound: bool(aml['criminalRecordFound']),
+    amlHit: bool(aml['amlHit']),
+    isPEP: bool(aml['isPEP']),
+  };
+}
+
+function summarizeSignals(review: Record<string, unknown>): RiskSignals | null {
+  const signals = obj(review['signals']);
+  if (!signals) return null;
+  const riskseal = obj(signals['riskseal']);
+  const bureau = obj(signals['bureau']);
+  const loan = obj(signals['loan']);
+  return {
+    riskSealScore: num(riskseal?.['score']),
+    bureauScore: num(bureau?.['score']),
+    bureauActiveDefaults: num(bureau?.['activeDefaults']),
+    loanToSalaryRatio: num(loan?.['loanToSalaryRatio']),
+  };
 }
 
 // Fail-soft: loans created before PR #393 shipped (or whose pipeline never
@@ -280,8 +383,18 @@ export const getReviewQueue = onCall(
             feeRate: num(loan?.['feeRate']),
             totalDue: num(loan?.['total']),
             requestedAt: review['queuedAt'] ?? null,
+            slaDeadline: review['slaDeadline'] ?? null,
             status: review['status'] as string,
             underwritingDecision: summarizeUnderwriting(underwritingDetail),
+            // All five read from `review` — the document already in memory from
+            // the page query above. This adds no Firestore read: the fields were
+            // being fetched and then discarded by the projection, which is what
+            // forced the console to keep its own direct `onSnapshot` on
+            // `review_queue` (#517).
+            riskLevel: riskLevel(review['risk_level']),
+            llmRiskLevel: riskLevel(obj(review['llm_narrative'])?.['risk_level']),
+            aml: summarizeAml(review),
+            riskSignals: summarizeSignals(review),
           };
         });
 
