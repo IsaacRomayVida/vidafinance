@@ -478,14 +478,10 @@ async def score_loan_direct(payload: dict, x_internal_secret: str = Header(None)
 
         # Before the score becomes a lending decision, not after.
         try:
-            assert_scores_in_range(
-                result["champion_score"], result["challenger_score"]
-            )
+            assert_scores_in_range(result["champion_score"], result["challenger_score"])
         except HTTPException:
             outcome = "score_out_of_range"
-            fallback_total.labels(
-                endpoint=endpoint, reason="score_out_of_range"
-            ).inc()
+            fallback_total.labels(endpoint=endpoint, reason="score_out_of_range").inc()
             raise
 
         decision = result["decision"]

@@ -10,7 +10,6 @@ Both defects this module closes are documented on the functions below.
 
 from fastapi import HTTPException
 
-
 # Fields /score cannot invent a default for without fabricating an applicant.
 # Each one feeds a value that decides the outcome:
 #   principalAmount              -> lti = principal / salary
@@ -114,14 +113,19 @@ def read_scoreable_payload(payload):
     # rejection reason describes a field nobody ever sent.
     tenure = borrower["employmentTenureMonths"]
     if isinstance(tenure, bool) or not isinstance(tenure, (int, float, str)):
-        raise HTTPException(422, "borrowerSnapshot.employmentTenureMonths must be a number")
+        raise HTTPException(
+            422, "borrowerSnapshot.employmentTenureMonths must be a number"
+        )
     try:
         tenure = float(tenure)
     except (TypeError, ValueError):
-        raise HTTPException(422, "borrowerSnapshot.employmentTenureMonths must be a number")
+        raise HTTPException(
+            422, "borrowerSnapshot.employmentTenureMonths must be a number"
+        )
     if tenure != tenure or tenure in (float("inf"), float("-inf")) or tenure < 0:
         raise HTTPException(
-            422, "borrowerSnapshot.employmentTenureMonths must be a finite, non-negative number"
+            422,
+            "borrowerSnapshot.employmentTenureMonths must be a finite, non-negative number",
         )
 
     return borrower, principal, monthly_salary
@@ -161,5 +165,3 @@ def assert_scores_in_range(champion_score, challenger_score):
                 f"model returned {name} outside [0, 1]; refusing to serve it as "
                 "a probability",
             )
-
-

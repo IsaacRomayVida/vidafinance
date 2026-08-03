@@ -34,7 +34,6 @@ from fastapi import HTTPException
 
 from score_contract import assert_scores_in_range, read_scoreable_payload
 
-
 # The exact body services/underwriting-service/src/stages/stage2-bureau.js:310
 # builds and POSTs to /score today. Copied field-for-field; if that call site
 # ever changes shape, this constant is what has to change with it.
@@ -84,9 +83,7 @@ class TestRefusesPayloadsItCannotActuallyScore:
             read_scoreable_payload({"principalAmount": 4500, "borrowerSnapshot": bad})
         assert exc.value.status_code == 422
 
-    @pytest.mark.parametrize(
-        "field", ["monthlySalary", "employmentTenureMonths"]
-    )
+    @pytest.mark.parametrize("field", ["monthlySalary", "employmentTenureMonths"])
     def test_missing_required_borrower_field_is_refused(self, field):
         borrower = dict(VALID_PAYLOAD["borrowerSnapshot"])
         borrower.pop(field)
@@ -106,7 +103,18 @@ class TestRefusesPayloadsItCannotActuallyScore:
 
     @pytest.mark.parametrize(
         "value",
-        [0, -1, -0.01, float("nan"), float("inf"), float("-inf"), "abc", None, True, []],
+        [
+            0,
+            -1,
+            -0.01,
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+            "abc",
+            None,
+            True,
+            [],
+        ],
     )
     def test_non_positive_or_unparseable_principal_is_refused(self, value):
         with pytest.raises(HTTPException) as exc:
@@ -132,9 +140,7 @@ class TestRefusesPayloadsItCannotActuallyScore:
 
     @pytest.mark.parametrize("value", [-1, float("nan"), float("inf"), "abc", None])
     def test_invalid_tenure_is_refused(self, value):
-        borrower = dict(
-            VALID_PAYLOAD["borrowerSnapshot"], employmentTenureMonths=value
-        )
+        borrower = dict(VALID_PAYLOAD["borrowerSnapshot"], employmentTenureMonths=value)
         with pytest.raises(HTTPException) as exc:
             read_scoreable_payload(
                 {"principalAmount": 4500, "borrowerSnapshot": borrower}
@@ -148,9 +154,7 @@ class TestRefusesPayloadsItCannotActuallyScore:
         kind of content that must not reach a log line — a real salary figure
         and a CURP — so a future `f"{path}={value}"` style message fails here.
         """
-        borrower = dict(
-            VALID_PAYLOAD["borrowerSnapshot"], monthlySalary="41234.99 MXN"
-        )
+        borrower = dict(VALID_PAYLOAD["borrowerSnapshot"], monthlySalary="41234.99 MXN")
         with pytest.raises(HTTPException) as exc:
             read_scoreable_payload(
                 {"principalAmount": "GOMC960212HDFXXX09", "borrowerSnapshot": borrower}
