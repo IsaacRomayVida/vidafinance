@@ -17,6 +17,7 @@ from firebase_admin import credentials, firestore
 
 load_dotenv()
 from internal_auth import load_internal_secret, secret_matches
+from score_contract import assert_scores_in_range, read_scoreable_payload
 from scoring import employer_score, employee_score, fraud_score
 from services.firestore_client import FirestoreClient
 from monitoring.alerts import (
@@ -454,9 +455,11 @@ async def score_loan_direct(payload: dict, x_internal_secret: str = Header(None)
         from models.champion_challenger import ModelRouter
         import os as _os
 
-        borrower = payload.get("borrowerSnapshot", {})
-        principal = float(payload.get("principalAmount", 0))
-        monthly_salary = float(borrower.get("monthlySalary", 1))
+        try:
+            borrower, principal, monthly_salary = read_scoreable_payload(payload)
+        except HTTPException:
+            outcome = "unscoreable"
+            raise
 
         features = build_model_features(borrower, principal, monthly_salary)
 
@@ -472,6 +475,18 @@ async def score_loan_direct(payload: dict, x_internal_secret: str = Header(None)
             fallback_total.labels(endpoint=endpoint, reason="model_load_failed").inc()
             raise
         result = router.predict(features, threshold=APPROVAL_THRESHOLD)
+
+        # Before the score becomes a lending decision, not after.
+        try:
+            assert_scores_in_range(
+                result["champion_score"], result["challenger_score"]
+            )
+        except HTTPException:
+            outcome = "score_out_of_range"
+            fallback_total.labels(
+                endpoint=endpoint, reason="score_out_of_range"
+            ).inc()
+            raise
 
         decision = result["decision"]
         if features["employment_tenure_months"] < 3:
