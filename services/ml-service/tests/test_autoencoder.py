@@ -29,7 +29,6 @@ from models.autoencoder import (
 )
 from scoring import parse_device_signals, device_fraud_score
 
-
 # ── Architecture tests ───────────────────────────────────────────────────────
 
 
@@ -206,12 +205,10 @@ class TestFraudDetection:
 
     def test_fraud_error_exceeds_legit_error(self):
         fraud_errors = [
-            self.detector.predict(f)["reconstruction_error"]
-            for f in KNOWN_FRAUD_INPUTS
+            self.detector.predict(f)["reconstruction_error"] for f in KNOWN_FRAUD_INPUTS
         ]
         legit_errors = [
-            self.detector.predict(l)["reconstruction_error"]
-            for l in KNOWN_LEGIT_INPUTS
+            self.detector.predict(l)["reconstruction_error"] for l in KNOWN_LEGIT_INPUTS
         ]
         assert min(fraud_errors) > max(legit_errors), (
             f"Fraud min error ({min(fraud_errors):.6f}) should exceed "

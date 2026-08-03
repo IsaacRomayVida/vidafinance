@@ -45,7 +45,10 @@ def test_model_parity_matches_pre_repickle_baseline():
             f"predicted class label changed for {features}: "
             f"was {expected['predict_label']}, now {label}"
         )
-        assert prob == expected["predict_proba"] or abs(prob - expected["predict_proba"]) < 1e-6, (
+        assert (
+            prob == expected["predict_proba"]
+            or abs(prob - expected["predict_proba"]) < 1e-6
+        ), (
             f"predict_proba drifted for {features}: "
             f"was {expected['predict_proba']}, now {prob}"
         )

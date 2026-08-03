@@ -72,7 +72,8 @@ class HumanReviewRouter:
         if route:
             logger.info(
                 "Routing to human review: uncertainty=%.4f (threshold=%.4f)",
-                uncertainty, self.uncertainty_threshold,
+                uncertainty,
+                self.uncertainty_threshold,
             )
 
         return {
@@ -94,9 +95,7 @@ class HumanReviewRouter:
         Returns:
             Tuple of (indices, selected_X).
         """
-        query_idx, query_instances = self.learner.query(
-            X_pool, n_instances=n_instances
-        )
+        query_idx, query_instances = self.learner.query(X_pool, n_instances=n_instances)
         return query_idx, query_instances
 
     def teach(self, X: np.ndarray, y: np.ndarray):
@@ -147,6 +146,7 @@ class HumanReviewRouter:
 
         logger.info(
             "Created active learner with %d initial samples (threshold=%.2f)",
-            len(y_initial), uncertainty_threshold,
+            len(y_initial),
+            uncertainty_threshold,
         )
         return cls(learner=learner, uncertainty_threshold=uncertainty_threshold)

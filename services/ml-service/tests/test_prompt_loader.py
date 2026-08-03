@@ -23,7 +23,6 @@ from prompts.loader import (
     _cache,
 )
 
-
 STAGE5_TEMPLATE = "stage5_risk_narrative_v1.7.0"
 
 
@@ -49,7 +48,9 @@ def test_parse_frontmatter_missing():
 
 
 def test_parse_sections_splits():
-    body = "# System Prompt\n\nSystem content.\n\n# User Prompt Template\n\nUser content."
+    body = (
+        "# System Prompt\n\nSystem content.\n\n# User Prompt Template\n\nUser content."
+    )
     system, user = _parse_sections(body)
     assert "System content." in system
     assert "User content." in user

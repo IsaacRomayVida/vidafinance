@@ -24,12 +24,8 @@ logger = logging.getLogger("ml-service.thin_file_knn")
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIM = 1536
 DEFAULT_K = 10
-DEFAULT_INDEX_PATH = os.path.join(
-    os.path.dirname(__file__), "thin_file_index.faiss"
-)
-DEFAULT_META_PATH = os.path.join(
-    os.path.dirname(__file__), "thin_file_meta.json"
-)
+DEFAULT_INDEX_PATH = os.path.join(os.path.dirname(__file__), "thin_file_index.faiss")
+DEFAULT_META_PATH = os.path.join(os.path.dirname(__file__), "thin_file_meta.json")
 
 
 # The pay-frequency vocabulary this index was TRAINED on
@@ -109,9 +105,8 @@ class ThinFileKNN:
     def openai_client(self):
         if self._openai_client is None:
             from openai import OpenAI
-            self._openai_client = OpenAI(
-                api_key=os.environ.get("OPENAI_API_KEY", "")
-            )
+
+            self._openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
         return self._openai_client
 
     def embed(self, text: str) -> np.ndarray:
@@ -179,11 +174,13 @@ class ThinFileKNN:
         # Distance-weighted average (closer neighbors get more weight)
         # Add epsilon to avoid division by zero
         weights = 1.0 / (valid_distances + 1e-6)
-        weighted_outcomes = np.array(outcomes) * weights[:len(outcomes)]
-        repayment_prob = float(weighted_outcomes.sum() / weights[:len(outcomes)].sum())
+        weighted_outcomes = np.array(outcomes) * weights[: len(outcomes)]
+        repayment_prob = float(weighted_outcomes.sum() / weights[: len(outcomes)].sum())
 
         # Confidence based on neighbor count and distance spread
-        confidence = min(1.0, len(outcomes) / k) * (1.0 / (1.0 + float(valid_distances.mean())))
+        confidence = min(1.0, len(outcomes) / k) * (
+            1.0 / (1.0 + float(valid_distances.mean()))
+        )
 
         return {
             "repayment_probability": round(repayment_prob, 4),
@@ -208,13 +205,18 @@ class ThinFileKNN:
         self.index.add(embedding)
         self.metadata.append({"outcome": outcome, "loan_id": loan_id})
 
-    def save(self, index_path: str = DEFAULT_INDEX_PATH, meta_path: str = DEFAULT_META_PATH):
+    def save(
+        self, index_path: str = DEFAULT_INDEX_PATH, meta_path: str = DEFAULT_META_PATH
+    ):
         """Save FAISS index and metadata."""
         import faiss
+
         faiss.write_index(self.index, index_path)
         with open(meta_path, "w") as f:
             json.dump(self.metadata, f)
-        logger.info("Saved thin-file index (%d vectors) to %s", self.index.ntotal, index_path)
+        logger.info(
+            "Saved thin-file index (%d vectors) to %s", self.index.ntotal, index_path
+        )
 
     @classmethod
     def load(
@@ -224,6 +226,7 @@ class ThinFileKNN:
     ) -> "ThinFileKNN":
         """Load FAISS index and metadata from disk."""
         import faiss
+
         index = faiss.read_index(index_path)
         with open(meta_path) as f:
             metadata = json.load(f)
@@ -233,5 +236,6 @@ class ThinFileKNN:
     def create_empty(cls) -> "ThinFileKNN":
         """Create a new empty index."""
         import faiss
+
         index = faiss.IndexFlatL2(EMBEDDING_DIM)
         return cls(index=index, metadata=[])

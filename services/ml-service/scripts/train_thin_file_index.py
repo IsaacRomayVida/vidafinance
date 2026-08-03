@@ -27,7 +27,14 @@ logger = logging.getLogger("train_thin_file_index")
 def generate_synthetic_profiles(n: int = 500, seed: int = 42) -> list[dict]:
     """Generate synthetic borrower profiles with outcomes."""
     rng = np.random.RandomState(seed)
-    industries = ["manufacturing", "logistics", "retail", "technology", "healthcare", "construction"]
+    industries = [
+        "manufacturing",
+        "logistics",
+        "retail",
+        "technology",
+        "healthcare",
+        "construction",
+    ]
     pay_freqs = ["weekly", "biweekly", "monthly"]
 
     profiles = []
@@ -38,25 +45,33 @@ def generate_synthetic_profiles(n: int = 500, seed: int = 42) -> list[dict]:
         risk = int(rng.choice([1, 2, 3], p=[0.3, 0.4, 0.3]))
 
         # Outcome correlates with salary, tenure, tier
-        repay_prob = 0.3 + 0.2 * (salary / 45000) + 0.2 * (tenure / 120) + 0.15 * (1 - tier / 3) + 0.1 * (1 - risk / 3)
+        repay_prob = (
+            0.3
+            + 0.2 * (salary / 45000)
+            + 0.2 * (tenure / 120)
+            + 0.15 * (1 - tier / 3)
+            + 0.1 * (1 - risk / 3)
+        )
         outcome = float(rng.binomial(1, min(0.95, max(0.05, repay_prob))))
 
-        profiles.append({
-            "borrower": {
-                "monthlySalary": salary,
-                "employmentTenureMonths": tenure,
-                "employerIndustry": rng.choice(industries),
-                "employerTier": tier,
-                "payFrequency": rng.choice(pay_freqs),
-                "companySize": rng.choice(["1-10", "11-50", "51-200", "201-500"]),
-                "sectorRisk": risk,
-                "aforeRegularity": float(rng.uniform(0.3, 1.0)),
-                "riskSealScore": float(rng.uniform(20, 90)),
-                "principalAmount": float(rng.uniform(1000, 5000)),
-            },
-            "outcome": outcome,
-            "loan_id": f"synthetic_{i:04d}",
-        })
+        profiles.append(
+            {
+                "borrower": {
+                    "monthlySalary": salary,
+                    "employmentTenureMonths": tenure,
+                    "employerIndustry": rng.choice(industries),
+                    "employerTier": tier,
+                    "payFrequency": rng.choice(pay_freqs),
+                    "companySize": rng.choice(["1-10", "11-50", "51-200", "201-500"]),
+                    "sectorRisk": risk,
+                    "aforeRegularity": float(rng.uniform(0.3, 1.0)),
+                    "riskSealScore": float(rng.uniform(20, 90)),
+                    "principalAmount": float(rng.uniform(1000, 5000)),
+                },
+                "outcome": outcome,
+                "loan_id": f"synthetic_{i:04d}",
+            }
+        )
     return profiles
 
 
@@ -65,11 +80,14 @@ def main():
 
     openai_key = os.environ.get("OPENAI_API_KEY", "")
     if not openai_key:
-        logger.warning("OPENAI_API_KEY not set — generating synthetic embeddings for testing")
+        logger.warning(
+            "OPENAI_API_KEY not set — generating synthetic embeddings for testing"
+        )
         _build_synthetic_index()
         return
 
     from openai import OpenAI
+
     client = OpenAI(api_key=openai_key)
 
     profiles = generate_synthetic_profiles(500)
@@ -112,10 +130,12 @@ def _build_synthetic_index():
         embedding = rng.randn(EMBEDDING_DIM).astype(np.float32)
         embedding /= np.linalg.norm(embedding)
         index.add(embedding.reshape(1, -1))
-        metadata.append({
-            "outcome": profile["outcome"],
-            "loan_id": profile["loan_id"],
-        })
+        metadata.append(
+            {
+                "outcome": profile["outcome"],
+                "loan_id": profile["loan_id"],
+            }
+        )
 
     output_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

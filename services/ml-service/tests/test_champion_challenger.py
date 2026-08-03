@@ -42,9 +42,11 @@ if "services" not in sys.modules:
 
 # ── Scorecard Champion Tests ─────────────────────────────────────────────────
 
+
 class TestScorecardChampion:
     def test_model_loads(self):
         from models.scorecard_model import ScorecardChampion
+
         model = ScorecardChampion.load("models/scorecard_champion_v2.joblib")
         assert model is not None
         assert model.version == "scorecard_champion_v2.0"
@@ -52,6 +54,7 @@ class TestScorecardChampion:
 
     def test_iv_values_above_threshold(self):
         from models.scorecard_model import ScorecardChampion
+
         model = ScorecardChampion.load("models/scorecard_champion_v2.joblib")
         for feat in model.selected_features:
             iv = model.iv_values[feat]
@@ -59,6 +62,7 @@ class TestScorecardChampion:
 
     def test_predict_returns_probability(self):
         from models.scorecard_model import ScorecardChampion
+
         model = ScorecardChampion.load("models/scorecard_champion_v2.joblib")
         features = {
             "scDiasAtraso": 0,
@@ -77,6 +81,7 @@ class TestScorecardChampion:
 
     def test_good_borrower_high_score(self):
         from models.scorecard_model import ScorecardChampion
+
         model = ScorecardChampion.load("models/scorecard_champion_v2.joblib")
         good_features = {
             "scDiasAtraso": 0,
@@ -95,6 +100,7 @@ class TestScorecardChampion:
 
     def test_risky_borrower_low_score(self):
         from models.scorecard_model import ScorecardChampion
+
         model = ScorecardChampion.load("models/scorecard_champion_v2.joblib")
         risky_features = {
             "scDiasAtraso": 120,
@@ -113,6 +119,7 @@ class TestScorecardChampion:
 
     def test_woe_bins_exist(self):
         from models.scorecard_model import ScorecardChampion
+
         model = ScorecardChampion.load("models/scorecard_champion_v2.joblib")
         for feat in model.selected_features:
             assert feat in model.woe_bins
@@ -125,9 +132,11 @@ class TestScorecardChampion:
 
 # ── XGBoost Challenger Tests ─────────────────────────────────────────────────
 
+
 class TestXGBChallenger:
     def test_model_loads(self):
         from models.xgb_model import XGBChallenger
+
         model = XGBChallenger.load("models/xgb_challenger_v2.joblib")
         assert model is not None
         assert model.version == "xgb_challenger_v2.0"
@@ -135,6 +144,7 @@ class TestXGBChallenger:
 
     def test_predict_returns_probability(self):
         from models.xgb_model import XGBChallenger
+
         model = XGBChallenger.load("models/xgb_challenger_v2.joblib")
         features = {f: 50.0 for f in model.FEATURE_SET}
         features["monthly_salary"] = 20000
@@ -144,6 +154,7 @@ class TestXGBChallenger:
 
     def test_shap_returns_top5(self):
         from models.xgb_model import XGBChallenger
+
         model = XGBChallenger.load("models/xgb_challenger_v2.joblib")
         features = {f: 50.0 for f in model.FEATURE_SET}
         features["monthly_salary"] = 20000
@@ -158,6 +169,7 @@ class TestXGBChallenger:
 
     def test_shap_sorted_by_abs_value(self):
         from models.xgb_model import XGBChallenger
+
         model = XGBChallenger.load("models/xgb_challenger_v2.joblib")
         features = {f: 50.0 for f in model.FEATURE_SET}
         features["monthly_salary"] = 20000
@@ -167,13 +179,22 @@ class TestXGBChallenger:
 
     def test_good_borrower_high_score(self):
         from models.xgb_model import XGBChallenger
+
         model = XGBChallenger.load("models/xgb_challenger_v2.joblib")
         features = {
-            "scDiasAtraso": 0, "cdcScore": 750, "carteraVencida": 0,
-            "imss_tenure_months": 48, "lti": 0.08, "riskSeal_score": 80,
-            "employer_tier": 1, "sector_risk": 1, "afore_regularity": 0.95,
-            "monthly_salary": 30000, "scCuentasActivas": 2,
-            "belvo_cash_flow_avg": 35000, "employer_score": 85,
+            "scDiasAtraso": 0,
+            "cdcScore": 750,
+            "carteraVencida": 0,
+            "imss_tenure_months": 48,
+            "lti": 0.08,
+            "riskSeal_score": 80,
+            "employer_tier": 1,
+            "sector_risk": 1,
+            "afore_regularity": 0.95,
+            "monthly_salary": 30000,
+            "scCuentasActivas": 2,
+            "belvo_cash_flow_avg": 35000,
+            "employer_score": 85,
             "payroll_regularity": 0.95,
         }
         prob = model.predict_proba(features)
@@ -182,9 +203,11 @@ class TestXGBChallenger:
 
 # ── Champion/Challenger Router Tests ─────────────────────────────────────────
 
+
 class TestModelRouter:
     def _get_router(self):
         from models.champion_challenger import ModelRouter
+
         return ModelRouter.load(
             "models/scorecard_champion_v2.joblib",
             "models/xgb_challenger_v2.joblib",
@@ -198,11 +221,19 @@ class TestModelRouter:
     def test_predict_returns_both_scores(self):
         router = self._get_router()
         features = {
-            "scDiasAtraso": 0, "cdcScore": 700, "carteraVencida": 0,
-            "imss_tenure_months": 36, "lti": 0.10, "riskSeal_score": 70,
-            "employer_tier": 2, "sector_risk": 2, "afore_regularity": 0.9,
-            "monthly_salary": 25000, "scCuentasActivas": 3,
-            "belvo_cash_flow_avg": 20000, "employer_score": 70,
+            "scDiasAtraso": 0,
+            "cdcScore": 700,
+            "carteraVencida": 0,
+            "imss_tenure_months": 36,
+            "lti": 0.10,
+            "riskSeal_score": 70,
+            "employer_tier": 2,
+            "sector_risk": 2,
+            "afore_regularity": 0.9,
+            "monthly_salary": 25000,
+            "scCuentasActivas": 3,
+            "belvo_cash_flow_avg": 20000,
+            "employer_score": 70,
             "payroll_regularity": 0.85,
         }
         result = router.predict(features)
@@ -220,15 +251,25 @@ class TestModelRouter:
         """The champion's score determines the decision, not the challenger's."""
         router = self._get_router()
         features = {
-            "scDiasAtraso": 0, "cdcScore": 700, "carteraVencida": 0,
-            "imss_tenure_months": 36, "lti": 0.10, "riskSeal_score": 70,
-            "employer_tier": 2, "sector_risk": 2, "afore_regularity": 0.9,
-            "monthly_salary": 25000, "scCuentasActivas": 3,
-            "belvo_cash_flow_avg": 20000, "employer_score": 70,
+            "scDiasAtraso": 0,
+            "cdcScore": 700,
+            "carteraVencida": 0,
+            "imss_tenure_months": 36,
+            "lti": 0.10,
+            "riskSeal_score": 70,
+            "employer_tier": 2,
+            "sector_risk": 2,
+            "afore_regularity": 0.9,
+            "monthly_salary": 25000,
+            "scCuentasActivas": 3,
+            "belvo_cash_flow_avg": 20000,
+            "employer_score": 70,
             "payroll_regularity": 0.85,
         }
         result = router.predict(features, threshold=0.65)
-        expected_decision = "approved" if result["champion_score"] >= 0.65 else "rejected"
+        expected_decision = (
+            "approved" if result["champion_score"] >= 0.65 else "rejected"
+        )
         assert result["decision"] == expected_decision
 
     def test_shap_included_in_result(self):
@@ -249,6 +290,7 @@ class TestModelRouter:
 
     def test_gini_coefficient(self):
         from models.champion_challenger import ModelRouter
+
         # Perfect ranking: scores match actuals
         actuals = np.array([1, 1, 1, 0, 0, 0])
         predictions = np.array([0.9, 0.8, 0.7, 0.3, 0.2, 0.1])
@@ -318,7 +360,9 @@ async def test_worker_returns_champion_challenger_scores():
 
     with (
         patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
-        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch(
+            "workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock
+        ),
         patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
     ):
         result = await process_underwrite_loan(make_job(GOOD_JOB_DATA))
@@ -346,7 +390,9 @@ async def test_worker_stores_shap_in_firestore():
 
     with (
         patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
-        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch(
+            "workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock
+        ),
         patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
     ):
         await process_underwrite_loan(make_job(GOOD_JOB_DATA))
@@ -375,7 +421,9 @@ async def test_worker_low_tenure_still_rejected():
 
     with (
         patch("workers.underwriting_worker.get_firestore", return_value=firestore_mock),
-        patch("workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock),
+        patch(
+            "workers.underwriting_worker.AsyncRedis.from_url", return_value=redis_mock
+        ),
         patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}),
     ):
         result = await process_underwrite_loan(make_job(LOW_TENURE_JOB_DATA))

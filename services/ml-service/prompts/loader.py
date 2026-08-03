@@ -74,7 +74,9 @@ def load_prompt(name: str) -> dict[str, Any]:
         "user_template": user_template,
     }
     _cache[name] = template
-    logger.info("Loaded prompt template '%s' (version %s)", name, metadata.get("version", "?"))
+    logger.info(
+        "Loaded prompt template '%s' (version %s)", name, metadata.get("version", "?")
+    )
     return template
 
 

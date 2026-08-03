@@ -21,7 +21,9 @@ def _loan(score, **uw_features):
 
 
 def test_extract_drops_feature_absent_from_every_loan():
-    present = {name: 1.0 for name in FEATURE_NAMES if name != "employer_industry_encoded"}
+    present = {
+        name: 1.0 for name in FEATURE_NAMES if name != "employer_industry_encoded"
+    }
     loans = [_loan(0.5, **present), _loan(0.6, **present)]
 
     features, scores, available = _extract_features_and_scores(loans)
