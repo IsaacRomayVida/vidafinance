@@ -382,58 +382,24 @@ describe('markLoanDisbursed', () => {
       expect(serialized).not.toContain('012180001234567895');
     });
 
-    it('re-registers the SoftCrédito deduction at the new due date when the adapter is configured', async () => {
+    // Guard, not an omission. `onLoanApproved` already registered a deduction,
+    // and the adapter only offers POST /deductions/register — a create, with no
+    // cancel or replace. A second call would leave two live deductions at
+    // SoftCrédito and overwrite the id of the first, so the borrower would be
+    // collected twice. This test fails the moment someone "finishes" #437 by
+    // adding that call back without a vendor-side replace path.
+    it('never re-registers the deduction, even with the adapter configured (would double-collect)', async () => {
       process.env['SOFTCREDITO_ADAPTER_URL'] = 'http://softcredito-adapter.railway.internal:3002';
       process.env['INTERNAL_SECRET'] = 'secret';
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ deductionId: 'ded-999' }),
-      });
       _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
 
       const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://softcredito-adapter.railway.internal:3002/internal/register-deduction',
-        expect.objectContaining({ method: 'POST' })
-      );
-      const [, options] = mockFetch.mock.calls[0] as [string, { body: string }];
-      const body = JSON.parse(options.body);
-      expect(body.dueDate).toBe(result['dueDate']);
-      expect(body.loanId).toBe('loan-abc');
-
-      const deductionUpdate = _mockStore.docUpdates.find(
-        (u) => u.collection === 'loans' && u.data['softcreditoDeductionId'] !== undefined
-      );
-      expect(deductionUpdate?.data['softcreditoDeductionId']).toBe('ded-999');
-    });
-
-    it('fails soft and records the failure when re-registration fails, without undoing the disbursement', async () => {
-      process.env['SOFTCREDITO_ADAPTER_URL'] = 'http://softcredito-adapter.railway.internal:3002';
-      process.env['INTERNAL_SECRET'] = 'secret';
-      mockFetch.mockRejectedValue(new Error('adapter unreachable'));
-      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
-
-      const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
-
-      // The disbursement itself must not be rolled back or reported as failed.
       expect(result['success']).toBe(true);
-      expect(result['status']).toBe('disbursed');
-
-      const failureEntry = _mockStore.auditLog.find(
-        (e) => e['action'] === 'loan.disbursement_deduction_reregister_failed'
-      ) as { targetId: string; meta: Record<string, unknown> } | undefined;
-      expect(failureEntry).toBeDefined();
-      expect(failureEntry!.targetId).toBe('loan-abc');
-      expect(failureEntry!.meta['error']).toContain('adapter unreachable');
-    });
-
-    it('does not attempt re-registration when the adapter is not configured', async () => {
-      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
-
-      await fn({ auth: opsAuth, data: validInput });
-
-      expect(mockFetch).not.toHaveBeenCalled();
+      const registerCalls = mockFetch.mock.calls.filter(([url]) =>
+        String(url).endsWith('/internal/register-deduction')
+      );
+      expect(registerCalls).toHaveLength(0);
     });
   });
 });

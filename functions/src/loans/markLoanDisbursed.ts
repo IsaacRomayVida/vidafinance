@@ -2,14 +2,13 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
-import fetch from 'node-fetch';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { getRedis } from '../utils/redis';
 import { checkRateLimit } from '../utils/rateLimiter';
-import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, auditLog } from '../utils/auditLog';
-import { buildLoanInstallments, toPayrollDeduction, DEFAULT_LOAN_TERM_DAYS } from '../config/loanConfig';
+import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
+import { buildLoanInstallments, DEFAULT_LOAN_TERM_DAYS } from '../config/loanConfig';
 import { calculateNextPayrollDate } from './calculateNextPayrollDate';
 import { resolvePayFrequency } from './resolvePayFrequency';
 
@@ -111,7 +110,6 @@ export const markLoanDisbursed = onCall(
           const term = (loan['term'] as number | undefined) ?? DEFAULT_LOAN_TERM_DAYS;
           const oldDueDate = loan['dueDate'] as Timestamp | undefined;
           const installments = buildLoanInstallments(total, dueDate.toDate(), term);
-          const deduction = toPayrollDeduction(installments);
 
           const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
 
@@ -171,65 +169,21 @@ export const markLoanDisbursed = onCall(
             );
           });
 
-          // Re-register the deduction against the new date. The disbursement
-          // itself already committed above; this must never undo it — on
-          // failure it fails soft and is recorded, not thrown.
-          try {
-            const scUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
-            const secret = process.env['INTERNAL_SECRET'] ?? '';
-            if (scUrl && secret) {
-              const scRes = await fetch(`${scUrl}/internal/register-deduction`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
-                body: JSON.stringify({
-                  loanId: input.loanId,
-                  employeeId: borrowerUid,
-                  employerId,
-                  amount: deduction.amount,
-                  dueDate: deduction.dueDate,
-                }),
-                signal: AbortSignal.timeout(10000),
-              });
-              if (scRes.ok) {
-                const result = (await scRes.json()) as Record<string, unknown>;
-                await loanRef.update({ softcreditoDeductionId: result['deductionId'] ?? null });
-                logger.info('Payroll deduction re-registered at the disbursement-aligned date', {
-                  loanId: input.loanId,
-                  service: 'functions',
-                });
-              } else {
-                const errBody = await scRes.text();
-                throw new Error(`Adapter returned ${scRes.status}: ${errBody}`);
-              }
-            }
-          } catch (e: unknown) {
-            const message = (e as Error).message;
-            logger.warn('Payroll deduction re-registration failed after disbursement date moved', {
-              error: message,
-              loanId: input.loanId,
-              service: 'functions',
-            });
-            try {
-              await auditLog({
-                action: 'loan.disbursement_deduction_reregister_failed',
-                actorUid: auth.uid,
-                actorRole: auth.role,
-                actorEmail: auth.email ?? null,
-                targetId: input.loanId,
-                meta: {
-                  entityType: 'loan',
-                  error: message,
-                  newDueDate: dueDate.toDate().toISOString(),
-                },
-              });
-            } catch (auditErr: unknown) {
-              logger.error('Failed to record deduction re-registration failure', {
-                error: (auditErr as Error).message,
-                loanId: input.loanId,
-                service: 'functions',
-              });
-            }
-          }
+          // #437 DELIBERATELY NOT DONE HERE: re-registering the payroll
+          // deduction at the new date. `onLoanApproved` already registered one
+          // at approval (`onLoanApproved.ts:139`), and the adapter exposes
+          // exactly one deduction route — POST /internal/register-deduction
+          // (a create) — with no cancel, update or replace. Calling it again
+          // would leave a SECOND live deduction at SoftCrédito on the old date
+          // and overwrite `softcreditoDeductionId`, losing the handle to the
+          // first. The borrower would be collected twice: strictly worse than
+          // the inconsistency this change fixes.
+          //
+          // Realigning the deduction needs a cancel/replace capability from the
+          // vendor that does not exist yet. Until it does, the schedule and the
+          // audit trail below are the record of the move, and the registered
+          // deduction is knowingly still on the request-time date. Do not
+          // "complete" this by adding a second register call.
 
           try {
           const redis = getRedis();
