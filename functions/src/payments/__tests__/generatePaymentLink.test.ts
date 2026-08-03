@@ -25,8 +25,11 @@ const approvedLoan = {
     userId: 'employee-uid',
     employeeId: 'employee-uid',
     employerId: 'employer-001',
+    // Real loan documents (index.ts:~761-769) never write `principalAmount` —
+    // only `amount`, `fee`, and `total` (= amount + fee).
     amount: 2000,
-    principalAmount: 2000,
+    fee: 600,
+    total: 2600,
     employeeName: 'Test Employee',
     borrowerSnapshot: { fullName: 'Test Employee', payFrequency: 'monthly' },
   },
@@ -189,6 +192,61 @@ describe('generatePaymentLink', () => {
           }),
         })
       );
+    });
+
+    it('charges loan.total (principal + fee), not the bare principal', async () => {
+      _mockStore.loans['loan-xyz'] = approvedLoan;
+      (fetch as jest.Mock).mockResolvedValue(
+        mockFetchResponse(true, { paymentUrl: 'https://oxxo.link', orderId: 'ord-001' })
+      );
+      await fn({ auth: employeeAuth, data: validInput });
+
+      const body = JSON.parse((fetch as jest.Mock).mock.calls[0][1].body as string);
+      expect(body.amount).toBe(2600);
+    });
+
+    it('throws internal when loan.total is missing', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, total: undefined },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'internal',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('throws internal when loan.total is NaN', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, total: NaN },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'internal',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('throws internal when loan.total is zero', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, total: 0 },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'internal',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('throws internal when loan.total is negative', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, total: -100 },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'internal',
+      });
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it('uses borrowerSnapshot.fullName when available', async () => {
