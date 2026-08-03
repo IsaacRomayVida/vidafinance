@@ -116,6 +116,13 @@ async function goToQuote() {
   await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
 }
 
+/** Step 1 → step 4, the final review card. */
+async function goToReview() {
+  await goToQuote();
+  advance();
+  await waitFor(() => expect(screen.getAllByText(/paso 4|step 4/i).length).toBeGreaterThan(0));
+}
+
 /** Step 1 → step 2, the first step that displays a server-priced figure. */
 async function goToTermStep() {
   await waitFor(() => expect(forwardButtons().length).toBeGreaterThan(0));
@@ -458,5 +465,38 @@ describe('LoanWizard — the deduction date comes from the server', () => {
     expect(text).not.toMatch(/previsto para el|expected on/i);
     // And above all, no silently substituted local date.
     expect(text).not.toMatch(/Invalid Date|NaN/i);
+  });
+});
+
+/**
+ * The CAT is a regulated disclosure, not a line item of the quote — and it has
+ * to be the same disclosure on every card that carries it. Step 3 rendered it
+ * as a standalone block with the CONDUSEF reference; the step-4 review card
+ * rendered it as a bare row inside the price breakdown, with no note and no
+ * reference. Same figure, same flow, two treatments.
+ */
+describe('LoanWizard — the CAT disclosure is the same on every card', () => {
+  it('renders the full disclosure, not a bare row, on the step-4 review card', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await goToReview();
+
+    const text = screenText();
+    expect(text).toMatch(/2334\s*%/);
+    // The note and the CONDUSEF reference are what make it a disclosure rather
+    // than a number in a list. Their absence is what this test exists to catch.
+    expect(text).toMatch(/El CAT es una medida estandarizada|standardised measure|standardized measure/i);
+    expect(screen.getAllByRole('link', { name: /condusef/i }).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the disclosure on the step-3 quote card', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    expect(screenText()).toMatch(/2334\s*%/);
+    expect(screen.getAllByRole('link', { name: /condusef/i }).length).toBeGreaterThan(0);
   });
 });
