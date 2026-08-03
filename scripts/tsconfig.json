@@ -1,0 +1,17 @@
+{
+  "//": "scripts/**/*.ts (the migrations) were typechecked by nothing before 003. Same compiler options as functions/tsconfig.json so a migration cannot compile here and fail there. noEmit — these run under ts-node, they are never built.",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "es2020",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node", "jest"]
+  },
+  "include": ["**/*.ts"]
+}

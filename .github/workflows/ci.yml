@@ -44,6 +44,17 @@ jobs:
       - name: Unit tests (functions) — hard gate
         run: cd functions && npm run test:ci
 
+      # scripts/migrations/*.ts was typechecked by nothing and tested by nothing
+      # before migration 003. That migration deletes a field from every
+      # historical loan document, so its precedence and skip logic is exactly the
+      # kind of code that must not be allowed to regress unnoticed. Root deps are
+      # already installed above, so these two steps cost seconds.
+      - name: TypeScript typecheck (migration scripts)
+        run: npm run typecheck:scripts
+
+      - name: Unit tests (migration scripts) — hard gate
+        run: npm run test:migrations
+
   underwriting-service:
     name: "Underwriting Service Tests"
     runs-on: ubuntu-latest
