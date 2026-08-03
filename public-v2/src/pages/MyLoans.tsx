@@ -10,7 +10,9 @@ import {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { classifyError, friendlyError } from '../lib/errors';
+import { OUTSTANDING_STATUSES } from '../lib/loanStatus';
 import { useAuth } from '../hooks/useAuth';
+import { ErrorBanner } from '../components/ui/ErrorBanner';
 
 interface Loan {
   id: string;
@@ -69,11 +71,19 @@ export function MyLoans() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loansError, setLoansError] = useState('');
+  const [repaymentsError, setRepaymentsError] = useState('');
+  const [retryToken, setRetryToken] = useState(0);
   const [expandedLoanId, setExpandedLoanId] = useState<string | null>(null);
 
-  // Real-time loans listener
+  const retry = () => setRetryToken((n) => n + 1);
+
+  // Real-time loans listener. Without an error callback here, a permission
+  // error, a missing index or an offline client left `loading` stuck at
+  // `true` forever — indistinguishable from "still loading" (F7).
   useEffect(() => {
     if (!user) return;
+    setLoansError('');
 
     const q = query(
       collection(db, 'loans'),
@@ -81,31 +91,45 @@ export function MyLoans() {
       orderBy('createdAt', 'desc'),
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
+        setLoading(false);
+      },
+      (err) => {
+        setLoading(false);
+        setLoansError(friendlyError(err));
+      },
+    );
 
     return unsub;
-  }, [user]);
+  }, [user, retryToken]);
 
-  // Real-time repayments listener
+  // Real-time repayments listener. A failure here doesn't block the page —
+  // the loans list is still usable — but it silently understates every
+  // balance and "Total Repaid" figure, so it needs its own visible error.
   useEffect(() => {
     if (!user) return;
+    setRepaymentsError('');
 
     const q = query(
       collection(db, 'repayments'),
       where('employeeId', '==', user.uid),
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      setRepayments(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Repayment)),
-      );
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setRepayments(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as Repayment)),
+        );
+      },
+      (err) => setRepaymentsError(friendlyError(err)),
+    );
 
     return unsub;
-  }, [user]);
+  }, [user, retryToken]);
 
   // Group repayments by loanId
   const repaymentsByLoan = repayments.reduce<Record<string, Repayment[]>>(
@@ -135,9 +159,7 @@ export function MyLoans() {
   };
 
   // Summary stats
-  const activeLoans = loans.filter((l) =>
-    ['pending', 'under_review', 'approved', 'disbursed', 'active', 'overdue'].includes(l.status),
-  );
+  const activeLoans = loans.filter((l) => OUTSTANDING_STATUSES.includes(l.status));
   const totalOutstanding = activeLoans.reduce(
     (sum, l) => sum + remainingBalance(l),
     0,
@@ -158,6 +180,17 @@ export function MyLoans() {
     );
   }
 
+  if (loansError) {
+    return (
+      <div style={{ maxWidth: 420, margin: '80px auto', textAlign: 'center' }}>
+        <ErrorBanner message={loansError} style={{ textAlign: 'left', marginBottom: 16 }} />
+        <button onClick={retry} className="btn-primary">
+          {t('loans_retry', 'Reintentar')}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Header */}
@@ -166,6 +199,30 @@ export function MyLoans() {
       </div>
 
       <div className="dash-content">
+        {repaymentsError && (
+          <div style={{ marginBottom: 20 }}>
+            <ErrorBanner
+              message={t(
+                'loans_repayments_error',
+                'No pudimos cargar tu historial de pagos. Los saldos mostrados podrían estar incompletos.',
+              )}
+            />
+            <button
+              onClick={retry}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--t2)',
+                fontSize: 12,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                marginTop: 6,
+              }}
+            >
+              {t('loans_retry', 'Reintentar')}
+            </button>
+          </div>
+        )}
         {/* Summary Stats */}
         <div className="stat-grid">
           <div className="stat-card">

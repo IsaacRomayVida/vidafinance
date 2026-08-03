@@ -122,6 +122,19 @@ function repaymentTermsFor(config: LoanConfig | null, termDays: number | null): 
   return (config?.repayment ?? []).find((r) => r.termDays === termDays) ?? null;
 }
 
+/**
+ * The amount slider's fill percentage. `cappedMax` collapses to MIN_AMOUNT
+ * when availableCredit itself is below MIN_AMOUNT (`Math.max(effectiveMax,
+ * MIN_AMOUNT)` at the call site) — the amount range is then a single point,
+ * not a span, so the usual (amount - MIN) / (max - MIN) division is 0/0.
+ * That single point IS the borrower's full available credit, so the fill
+ * should read 100%, not NaN.
+ */
+export function sliderFillPercent(amount: number, cappedMax: number): number {
+  if (cappedMax === MIN_AMOUNT) return 100;
+  return ((amount - MIN_AMOUNT) / (cappedMax - MIN_AMOUNT)) * 100;
+}
+
 interface EmployeeData {
   name?: string;
   email?: string;
@@ -401,6 +414,7 @@ export function LoanWizard() {
 
   // Real-time tracking of pending loan after submit
   const [pendingLoan, setPendingLoan] = useState<LoanDoc | null>(null);
+  const [statusStale, setStatusStale] = useState(false);
 
   // Salary-based max amount
   const salaryMax = employee?.monthlySalary
@@ -450,7 +464,7 @@ export function LoanWizard() {
   const singleCharge = installmentCount === null || installmentCount === 1;
   const cat = repaymentTerms === null ? null : String(repaymentTerms.catPercent);
   const pricingReady = configStatus === 'ready' && feeRate !== null && repaymentTerms !== null;
-  const sliderPct = ((amount - MIN_AMOUNT) / (cappedMax - MIN_AMOUNT)) * 100;
+  const sliderPct = sliderFillPercent(amount, cappedMax);
 
   // ── Fetch pricing config ──────────────────────────────────────────────────
   // Deliberately SEPARATE from the eligibility fetch below. Bundling the two (as
@@ -582,20 +596,30 @@ export function LoanWizard() {
   }, [user, navigate, t]);
 
   // ── Real-time loan listener after successful submit ──
+  // Without an error callback the listener could die silently and leave the
+  // badge frozen on its initial 'pending' — actively telling the borrower
+  // their application is still under review when the client had simply
+  // stopped listening. A dead listener must read as "we lost the live
+  // connection", never as a status (F7).
   useEffect(() => {
     if (!success || !user) return;
+    setStatusStale(false);
 
-    const unsub = onSnapshot(doc(db, 'loans', success.loanId), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setPendingLoan({
-          id: snap.id,
-          status: data.status,
-          amount: data.principalAmount || data.amount,
-          createdAt: data.requestedAt || data.createdAt,
-        });
-      }
-    });
+    const unsub = onSnapshot(
+      doc(db, 'loans', success.loanId),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setPendingLoan({
+            id: snap.id,
+            status: data.status,
+            amount: data.principalAmount || data.amount,
+            createdAt: data.requestedAt || data.createdAt,
+          });
+        }
+      },
+      () => setStatusStale(true),
+    );
 
     return unsub;
   }, [success, user]);
@@ -885,6 +909,17 @@ export function LoanWizard() {
                 {statusLabel}
               </span>
             </div>
+            {statusStale && (
+              <div
+                role="status"
+                style={{ fontSize: 12, color: 'var(--t2)', marginTop: 8, lineHeight: 1.5 }}
+              >
+                {t(
+                  'wizard_status_stale',
+                  'Perdimos la conexión en vivo; este estado podría no estar actualizado. Consulta Mis Préstamos.',
+                )}
+              </div>
+            )}
           </div>
 
           {/* Summary */}
@@ -968,9 +1003,10 @@ export function LoanWizard() {
 
       {/* Step indicator */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
-        {[1, 2, 3, 4].map((s) => (
+        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
           <div
             key={s}
+            data-testid="step-segment"
             style={{
               flex: 1,
               height: 3,

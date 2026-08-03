@@ -7,9 +7,14 @@
 // deduction report needs, and loanStatus.test.ts is what keeps the two in
 // agreement.
 export const LOAN_STATUS = {
+  PENDING: 'pending',
+  UNDER_REVIEW: 'under_review',
+  APPROVED: 'approved',
+  DISBURSEMENT_QUEUED: 'disbursement_queued',
   ACTIVE: 'active',
   DISBURSED: 'disbursed',
   OVERDUE: 'overdue',
+  IN_COLLECTIONS: 'in_collections',
   REPAID: 'repaid',
 } as const;
 
@@ -35,6 +40,24 @@ export const DEDUCTION_REPORT_STATUSES: readonly string[] = [
   ...DISBURSED_STATUSES,
   LOAN_STATUS.OVERDUE,
   ...REPAID_STATUSES,
+];
+
+/**
+ * A loan the borrower still owes on and that has not been repaid, written
+ * off, or rejected. Mirrors OUTSTANDING_STATUSES in
+ * functions/src/loans/loanStatus.ts — the dashboard's "Outstanding" total
+ * used to hardcode a shorter list that omitted DISBURSEMENT_QUEUED and
+ * IN_COLLECTIONS, so a loan mid-disbursement or already in collections read
+ * as if it were not owed at all.
+ */
+export const OUTSTANDING_STATUSES: readonly string[] = [
+  LOAN_STATUS.PENDING,
+  LOAN_STATUS.UNDER_REVIEW,
+  LOAN_STATUS.APPROVED,
+  LOAN_STATUS.DISBURSEMENT_QUEUED,
+  ...DISBURSED_STATUSES,
+  LOAN_STATUS.OVERDUE,
+  LOAN_STATUS.IN_COLLECTIONS,
 ];
 
 export function isRepaidStatus(status: unknown): boolean {
