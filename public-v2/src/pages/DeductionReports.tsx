@@ -3,98 +3,20 @@ import { useTranslation } from 'react-i18next';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { DEDUCTION_REPORT_STATUSES, isActiveDeductionStatus, isRepaidStatus } from '../lib/loanStatus';
 
-interface Loan {
-  id: string;
-  employeeName?: string;
-  amount: number;
-  repaymentAmount?: number;
-  deductionAmount?: number;
-  frequency?: string;
-  termDays?: number;
-  status: string;
-  softcreditoDeductionId?: string;
-  createdAt?: { seconds: number };
-  [key: string]: unknown;
-}
-
-interface PeriodGroup {
-  key: string;
-  label: string;
-  loans: Loan[];
-  total: number;
-}
-
-function fmt(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function fmtCurrency(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function getDeductionAmount(loan: Loan): number {
-  return loan.deductionAmount ?? loan.repaymentAmount ?? loan.amount;
-}
-
-function getPeriodKey(loan: Loan): string {
-  if (!loan.createdAt) return '0000-00';
-  const d = new Date(loan.createdAt.seconds * 1000);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
-}
-
-function getPeriodLabel(key: string): string {
-  if (key === '0000-00') return 'Unknown';
-  const [y, m] = key.split('-');
-  const months = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-  ];
-  return `${months[Number(m) - 1]} ${y}`;
-}
-
-function groupByPeriod(loans: Loan[]): PeriodGroup[] {
-  const map = new Map<string, Loan[]>();
-  for (const loan of loans) {
-    const key = getPeriodKey(loan);
-    const arr = map.get(key) ?? [];
-    arr.push(loan);
-    map.set(key, arr);
-  }
-
-  return Array.from(map.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([key, groupLoans]) => ({
-      key,
-      label: getPeriodLabel(key),
-      loans: groupLoans,
-      total: groupLoans.reduce((s, l) => s + getDeductionAmount(l), 0),
-    }));
-}
+import {
+  type Loan,
+  type PeriodGroup,
+  fmt,
+  fmtCurrency,
+  getDeductionAmount,
+  buildCsv,
+  groupByPeriod,
+} from '../lib/deductionReport';
 
 function exportToCsv(groups: PeriodGroup[]) {
-  const headers = ['Period', 'Employee', 'Deduction Amount', 'Frequency', 'Status', 'Deduction ID'];
-  const rows: string[][] = [];
-
-  for (const group of groups) {
-    for (const loan of group.loans) {
-      rows.push([
-        group.label,
-        loan.employeeName ?? '',
-        fmtCurrency(getDeductionAmount(loan)),
-        loan.frequency ?? 'monthly',
-        loan.status,
-        loan.softcreditoDeductionId ?? '',
-      ]);
-    }
-    rows.push([group.label, 'TOTAL', fmtCurrency(group.total), '', '', '']);
-  }
-
-  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  const csv = [headers, ...rows].map((r) => r.map(escape).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\uFEFF' + buildCsv(groups)], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -110,14 +32,14 @@ export function DeductionReports() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Real-time loans listener — only active/paid loans have deductions
+  // Real-time loans listener — every status with a live or completed deduction
   useEffect(() => {
     if (!user) return;
 
     const q = query(
       collection(db, 'loans'),
       where('employerId', '==', user.uid),
-      where('status', 'in', ['active', 'paid']),
+      where('status', 'in', DEDUCTION_REPORT_STATUSES as string[]),
       orderBy('createdAt', 'desc'),
     );
 
@@ -133,9 +55,9 @@ export function DeductionReports() {
   const groups = useMemo(() => groupByPeriod(loans), [loans]);
 
   // Summary stats
-  const totalDeductions = loans.reduce((s, l) => s + getDeductionAmount(l), 0);
-  const activeCount = loans.filter((l) => l.status === 'active').length;
-  const completedCount = loans.filter((l) => l.status === 'paid').length;
+  const totalDeductions = loans.reduce((s, l) => s + (getDeductionAmount(l) ?? 0), 0);
+  const activeCount = loans.filter((l) => isActiveDeductionStatus(l.status)).length;
+  const completedCount = loans.filter((l) => isRepaidStatus(l.status)).length;
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '48px 0 64px' }}>
@@ -240,11 +162,13 @@ export function DeductionReports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {group.loans.map((loan) => (
+                  {group.loans.map((loan) => {
+                    const amount = getDeductionAmount(loan);
+                    return (
                     <tr key={loan.id}>
                       <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
                       <td style={{ fontWeight: 600, color: 'var(--brand)' }}>
-                        ${fmtCurrency(getDeductionAmount(loan))}
+                        {amount === null ? '—' : `$${fmtCurrency(amount)}`}
                       </td>
                       <td style={{ textTransform: 'capitalize' }}>
                         {t(`freq_${loan.frequency ?? 'monthly'}`, loan.frequency ?? 'monthly')}
@@ -258,7 +182,8 @@ export function DeductionReports() {
                         {loan.softcreditoDeductionId || '—'}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
