@@ -27,9 +27,26 @@ vi.mock('firebase/storage', () => ({
   getDownloadURL: vi.fn(),
 }));
 
+// Mirrors EmployerDashboardStats (functions/src/employers/computeEmployerDashboardStats.ts):
+// the server always returns every field, never an empty/partial object, so
+// the mock must too — an incomplete `stats` here does not model any real
+// getEmployerDashboard response and previously masked a real caller (E14/E15
+// only touches the loans table, not this stats card) from a mock that could
+// never occur in production.
 vi.mock('firebase/functions', () => ({
   getFunctions: () => ({}),
-  httpsCallable: () => async () => ({ data: { stats: {} } }),
+  httpsCallable: () => async () => ({
+    data: {
+      stats: {
+        totalEmployees: 1,
+        activeLoans: 1,
+        overdueCount: 0,
+        totalDisbursed: 1000,
+        outstandingBalance: 1000,
+        adoptionRate: '100%',
+      },
+    },
+  }),
 }));
 
 let loanDocs: Array<{ id: string; data: () => Record<string, unknown> }> = [];
