@@ -25,6 +25,11 @@ const LOAN_PURPOSES = [
   'other',
 ] as const;
 
+// Three borrower-facing steps since the term step was dropped (#423): a screen
+// offering one option was a full page tap for no decision. The count lives here
+// rather than inline so the indicator, the step labels and the branches cannot
+// drift apart the way the old "de 4" copy did.
+const TOTAL_STEPS = 3;
 const MIN_AMOUNT = 500;
 const MAX_AMOUNT = 5000;
 const STEP = 100;
@@ -112,7 +117,8 @@ function allocateInstallments(
 }
 
 /** The published terms for one term length, or null if the server sent none. */
-function repaymentTermsFor(config: LoanConfig | null, termDays: number): RepaymentTerms | null {
+function repaymentTermsFor(config: LoanConfig | null, termDays: number | null): RepaymentTerms | null {
+  if (termDays === null) return null;
   return (config?.repayment ?? []).find((r) => r.termDays === termDays) ?? null;
 }
 
@@ -379,7 +385,14 @@ export function LoanWizard() {
   // Wizard state
   const [step, setStep] = useState(1);
   const [amount, setAmount] = useState(1000);
-  const [termDays, setTermDays] = useState<number>(30);
+  // `null` until the server says otherwise. It used to initialise to a literal
+  // 30, which was invisible while the term had its own step and a visible list —
+  // but now the term sits inside the quote card, and a hardcoded 30 rendered
+  // beside prices that honestly read "no disponible" is a client-side fact
+  // wearing a server fact's clothes. It is right today only because
+  // ALLOWED_LOAN_TERM_DAYS is [30]; the same accident that made the old
+  // "Quincenal" cadence encode correctly (#435).
+  const [termDays, setTermDays] = useState<number | null>(null);
   const [purpose, setPurpose] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -601,6 +614,12 @@ export function LoanWizard() {
     feeRatePct === null ? t('wiz_flat_fee_unknown') : t('wiz_flat_fee', { rate: feeRatePct });
 
   const handleConfirm = async () => {
+    // A submission with no server-published term is not a degraded quote, it is
+    // a request the server cannot price. The confirm button is already disabled
+    // on !pricingReady, which cannot be true with a null term — this is the
+    // belt to that suspenders, so the type stays honest instead of being
+    // asserted away.
+    if (termDays === null) return;
     setError('');
     setSubmitting(true);
     try {
@@ -1095,7 +1114,8 @@ export function LoanWizard() {
           </div>
         )}
 
-        {/* ─── Step 2: Term Selection ─── */}
+
+        {/* ─── Step 2: Repayment Preview ─── */}
         {step === 2 && (
           <div>
             <div
@@ -1115,172 +1135,10 @@ export function LoanWizard() {
                 fontFamily: 'var(--df)',
                 fontSize: 20,
                 color: 'var(--t1)',
-                margin: '0 0 8px',
-              }}
-            >
-              {t('wiz_step_2_title')}
-            </h3>
-            <p style={{ fontSize: 13, color: 'var(--t2)', margin: '0 0 24px' }}>
-              {t('wiz_step_2_desc')}
-            </p>
-
-            {/* Term options */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-              {configStatus !== 'ready' || feeRate === null ? (
-                // The term list itself comes from the config, so without it there
-                // is nothing to choose from — an empty list would read as "no
-                // terms available to you", which is a statement about the
-                // borrower rather than about our outage.
-                configStatus === 'loading' ? (
-                  <div data-testid="terms-loading" style={{ padding: '8px 0' }}>
-                    <PriceShimmer width={220} />
-                  </div>
-                ) : (
-                  <PricingErrorBanner onRetry={retryLoanConfig} />
-                )
-              ) : (
-                // Driven by the server's published repayment terms rather than
-                // by `allowedTermDays`, so a term can never be offered without
-                // the schedule that says how it is actually collected (#424).
-                (loanConfig?.repayment ?? []).map((terms) => {
-                const days = terms.termDays;
-                const optionInstallments = allocateInstallments(
-                  amount + Math.round(amount * feeRate),
-                  terms
-                );
-                const deduction = optionInstallments?.[0]?.amount;
-                // A term whose schedule we cannot read is not offered at all.
-                // Rendering it with a 0 would quote a payment nobody will take.
-                if (!optionInstallments || deduction === undefined) return null;
-                const periods = optionInstallments.length;
-                const isSelected = termDays === days;
-
-                return (
-                  <button
-                    key={days}
-                    type="button"
-                    onClick={() => setTermDays(days)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '16px 18px',
-                      borderRadius: 14,
-                      border: isSelected
-                        ? '1.5px solid var(--brand)'
-                        : '1.5px solid rgba(25,68,69,0.08)',
-                      background: isSelected ? 'rgba(25,68,69,0.03)' : 'transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.25s ease',
-                      textAlign: 'left',
-                      fontFamily: 'var(--db)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div
-                        style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: '50%',
-                          border: isSelected
-                            ? '6px solid var(--brand)'
-                            : '2px solid rgba(25,68,69,0.15)',
-                          flexShrink: 0,
-                          transition: 'border 0.2s ease',
-                        }}
-                      />
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 600,
-                            color: isSelected ? 'var(--t1)' : 'var(--t2)',
-                          }}
-                        >
-                          {t('wiz_term_days', { days })}
-                        </div>
-                        <div style={{ fontSize: 12, color: 'var(--t2)', marginTop: 2 }}>
-                          {periods === 1
-                            ? t('wiz_term_installments', { count: periods })
-                            : t('wiz_term_installments_plural', { count: periods })}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 700,
-                          color: isSelected ? 'var(--t1)' : 'var(--t2)',
-                        }}
-                      >
-                        ${fmt(deduction)}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--t2)' }}>
-                        {t('wiz_payroll_deduction')}
-                      </div>
-                    </div>
-                  </button>
-                );
-                })
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setStep(1)}
-                type="button"
-                style={{
-                  flex: '0 0 auto',
-                  padding: '14px 20px',
-                  borderRadius: 12,
-                  border: '1.5px solid rgba(25,68,69,0.08)',
-                  background: 'transparent',
-                  color: 'var(--t2)',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  fontFamily: 'var(--db)',
-                  cursor: 'pointer',
-                }}
-              >
-                {t('wiz_back')}
-              </button>
-              <button
-                onClick={() => setStep(3)}
-                className="btn-primary"
-                style={{ flex: 1 }}
-                disabled={!pricingReady}
-              >
-                {t('wiz_next')}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ─── Step 3: Repayment Preview ─── */}
-        {step === 3 && (
-          <div>
-            <div
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: 2.2,
-                color: 'var(--gold)',
-                marginBottom: 8,
-              }}
-            >
-              {t('wiz_step_3_label')}
-            </div>
-            <h3
-              style={{
-                fontFamily: 'var(--df)',
-                fontSize: 20,
-                color: 'var(--t1)',
                 margin: '0 0 24px',
               }}
             >
-              {t('wiz_step_3_title')}
+              {t('wiz_step_2_title')}
             </h3>
 
             {/* Term & fee summary row */}
@@ -1313,7 +1171,13 @@ export function LoanWizard() {
                   {t('modal_term')}
                 </div>
                 <div style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>
-                  {termDays} {t('calc_days')}
+                  <PriceValue
+                    value={termDays}
+                    status={configStatus}
+                    prefix=""
+                    suffix={` ${t('calc_days')}`}
+                    shimmerWidth={64}
+                  />
                 </div>
               </div>
               <div
@@ -1487,7 +1351,7 @@ export function LoanWizard() {
             {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
             <div style={{ display: 'flex', gap: 10 }}>
               <button
-                onClick={() => setStep(2)}
+                onClick={() => setStep(1)}
                 type="button"
                 style={{
                   flex: '0 0 auto',
@@ -1505,7 +1369,7 @@ export function LoanWizard() {
                 {t('wiz_back')}
               </button>
               <button
-                onClick={() => setStep(4)}
+                onClick={() => setStep(3)}
                 className="btn-primary"
                 style={{ flex: 1 }}
                 disabled={!pricingReady}
@@ -1516,8 +1380,8 @@ export function LoanWizard() {
           </div>
         )}
 
-        {/* ─── Step 4: Review & Confirm ─── */}
-        {step === 4 && (
+        {/* ─── Step 3: Review & Confirm ─── */}
+        {step === 3 && (
           <div>
             <div
               style={{
@@ -1529,7 +1393,7 @@ export function LoanWizard() {
                 marginBottom: 8,
               }}
             >
-              {t('wiz_step_4_label')}
+              {t('wiz_step_3_label')}
             </div>
             <h3
               style={{
@@ -1539,7 +1403,7 @@ export function LoanWizard() {
                 margin: '0 0 24px',
               }}
             >
-              {t('wiz_step_4_title')}
+              {t('wiz_step_3_title')}
             </h3>
 
             {/* Review summary */}
@@ -1631,7 +1495,13 @@ export function LoanWizard() {
                   {t('modal_term')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  {termDays} {t('calc_days')}
+                  <PriceValue
+                    value={termDays}
+                    status={configStatus}
+                    prefix=""
+                    suffix={` ${t('calc_days')}`}
+                    shimmerWidth={64}
+                  />
                 </span>
               </div>
               {!singleCharge && (
@@ -1766,7 +1636,7 @@ export function LoanWizard() {
             {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
             <div style={{ display: 'flex', gap: 10 }}>
               <button
-                onClick={() => setStep(3)}
+                onClick={() => setStep(2)}
                 type="button"
                 style={{
                   flex: '0 0 auto',
@@ -1805,7 +1675,7 @@ export function LoanWizard() {
       {/* Step description under card */}
       <div style={{ textAlign: 'center', marginTop: 20 }}>
         <span style={{ fontSize: 12, color: 'var(--t2)' }}>
-          {t('wiz_step_indicator', { current: step, total: 4 })}
+          {t('wiz_step_indicator', { current: step, total: TOTAL_STEPS })}
         </span>
       </div>
     </div>
