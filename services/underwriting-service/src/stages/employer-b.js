@@ -288,17 +288,30 @@ async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) 
 
   if (employer.employerId) {
     const db = getFirestore();
-    await db
-      .collection("employers")
-      .doc(employer.employerId)
-      .update({
+    const ref = db.collection("employers").doc(employer.employerId);
+    // ADR-008: an ops-approved expansion (updateEmployerTier's
+    // `approve_expansion`, which tags `maxActiveSlotsSource: 'ops_override'`)
+    // outranks this automated re-score. Read the stored source inside a
+    // transaction and leave `maxActiveSlots` alone when ops owns it —
+    // otherwise this write silently reverts a human decision on the next
+    // due-diligence run. Everything else (score, tier, timestamps) is still
+    // refreshed. A MISSING source is NOT an override.
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const opsOwnsCap = (snap.data() || {}).maxActiveSlotsSource === "ops_override";
+      const update = {
         employerScore: score,
-        maxActiveSlots,
         tier: pass ? tier : null,
         tierAssignedAt: FieldValue.serverTimestamp(),
         lastDueDiligenceAt: FieldValue.serverTimestamp(),
         dueDiligenceResult: { pass, tier, score },
-      });
+      };
+      if (!opsOwnsCap) {
+        update.maxActiveSlots = maxActiveSlots;
+        update.maxActiveSlotsSource = "due_diligence";
+      }
+      tx.update(ref, update);
+    });
   }
 
   return {

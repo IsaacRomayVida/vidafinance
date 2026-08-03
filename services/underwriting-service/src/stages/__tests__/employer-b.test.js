@@ -32,7 +32,21 @@
 const mockUpdate = jest.fn().mockResolvedValue();
 const mockDoc = jest.fn(() => ({ update: mockUpdate }));
 const mockCollection = jest.fn(() => ({ doc: mockDoc }));
-const mockGetFirestore = jest.fn(() => ({ collection: mockCollection }));
+// The employer document the ADR-008 guard reads inside the transaction to
+// decide whether ops owns `maxActiveSlots`. Tests override it per-case.
+let mockEmployerDocData = {};
+const mockRunTransaction = jest.fn(async (fn) =>
+  fn({
+    get: jest.fn().mockResolvedValue({ data: () => mockEmployerDocData }),
+    // Assert on `mockUpdate` with the payload only, so the existing
+    // expectations keep reading the same regardless of doc-vs-transaction.
+    update: (_ref, payload) => mockUpdate(payload),
+  })
+);
+const mockGetFirestore = jest.fn(() => ({
+  collection: mockCollection,
+  runTransaction: mockRunTransaction,
+}));
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: mockGetFirestore,
@@ -100,6 +114,7 @@ function makePartAResults(overrides = {}) {
 // ── Reset mocks ─────────────────────────────────────────────────────
 beforeEach(() => {
   jest.clearAllMocks();
+  mockEmployerDocData = {};
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -537,6 +552,47 @@ describe("runEmployerDueDiligence", () => {
       await runEmployerDueDiligence(employer, partA);
 
       expect(mockCollection).not.toHaveBeenCalled();
+    });
+
+    // ── ADR-008: ops override outranks the automated re-score ─────────
+    it("does NOT overwrite maxActiveSlots when ops owns the cap", async () => {
+      mockEmployerDocData = { maxActiveSlots: 25, maxActiveSlotsSource: "ops_override" };
+      const employer = makeEmployer();
+      const partA = makePartAResults();
+
+      await runEmployerDueDiligence(employer, partA);
+
+      const payload = mockUpdate.mock.calls[0][0];
+      expect(payload).not.toHaveProperty("maxActiveSlots");
+      expect(payload).not.toHaveProperty("maxActiveSlotsSource");
+      // score/tier/timestamps are still refreshed — only the cap is frozen
+      expect(payload).toHaveProperty("employerScore");
+      expect(payload.lastDueDiligenceAt).toBe("SERVER_TIMESTAMP");
+    });
+
+    it("writes maxActiveSlots tagged due_diligence when no ops override exists", async () => {
+      mockEmployerDocData = { maxActiveSlots: 3 };
+      const employer = makeEmployer();
+      const partA = makePartAResults();
+
+      await runEmployerDueDiligence(employer, partA);
+
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          maxActiveSlots: expect.any(Number),
+          maxActiveSlotsSource: "due_diligence",
+        })
+      );
+    });
+
+    it("treats a MISSING maxActiveSlotsSource as not-an-override", async () => {
+      mockEmployerDocData = { maxActiveSlots: 7 };
+      const employer = makeEmployer();
+      const partA = makePartAResults();
+
+      await runEmployerDueDiligence(employer, partA);
+
+      expect(mockUpdate.mock.calls[0][0]).toHaveProperty("maxActiveSlots");
     });
   });
 
