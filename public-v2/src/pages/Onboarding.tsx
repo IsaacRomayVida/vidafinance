@@ -13,6 +13,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { safeSetItem } from '../lib/safeStorage';
+import { PAY_FREQUENCIES } from '../lib/payFrequencies';
 
 
 type Role = 'employer' | 'employee' | null;
@@ -60,7 +61,6 @@ interface EmployeeData {
 
 const COMPANY_SIZES = ['1-50', '51-200', '201-500', '500+'];
 const PAYROLL_SYSTEMS = ['Nomipaq', 'Aspel NOI', 'CONTPAQi', 'Workday', 'ADP'];
-const PAY_FREQUENCIES = ['weekly', 'biweekly', 'monthly'];
 const TENURE_OPTIONS = ['<6m', '6m-1y', '1-2y', '2-5y', '5y+'];
 const INDUSTRIES = [
   'manufacturing', 'retail', 'services', 'technology', 'construction',

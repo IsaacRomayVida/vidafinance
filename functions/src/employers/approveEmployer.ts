@@ -36,7 +36,7 @@ export interface EmployerDocument {
   employeeCount: number;
   estimatedMonthlyPayroll: number;
   payrollSystem: string;
-  payFrequency: 'weekly' | 'biweekly' | 'monthly';
+  payFrequency: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
   address: {
     street: string;
     city: string;
