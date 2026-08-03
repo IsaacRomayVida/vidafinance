@@ -91,6 +91,25 @@ async function announceRepayment(result, { loanId, employeeId, chargeId }) {
   await getQueue('vida-pdfs').add('repayment_receipt', { type: 'repayment_receipt', loanId, employeeId, amount, chargeId });
 }
 
+// An audit write must never be the reason a request goes unanswered. Every
+// incident_log write on the webhook path records a decision that has ALREADY
+// been made -- failing to record a rejection must not also fail to perform it.
+// Express 4 does not catch a rejected promise from an async route handler, so
+// an unguarded `await ...add()` on a failure path sends no response at all and
+// the caller hangs until its own timeout. Conekta retries on timeout as well as
+// on non-2xx, so a hang turns a fast, logged failure into a slow one that holds
+// a connection per retry for the length of the outage. Same defect class as the
+// registry-service transaction fix (#524), here in the service that moves money.
+async function logIncident(fields) {
+  try {
+    await db.collection('incident_log').add({ ...fields, ts: admin.firestore.FieldValue.serverTimestamp() });
+  } catch (err) {
+    // Deliberately swallowed. The caller is mid-failure already; replacing its
+    // cause with the logger's own error helps no one and costs the response.
+    console.error('[payment-server] incident_log write failed:', err.message, JSON.stringify(fields));
+  }
+}
+
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
   res.set('Content-Type', metricsRegister.contentType);
@@ -144,11 +163,27 @@ app.post('/webhooks/conekta', async (req, res) => {
     }
   } catch (_) { valid = false; }
   if (!valid) {
-    await db.collection('incident_log').add({ source: 'conekta-webhook', error: 'invalid_signature', ts: admin.firestore.FieldValue.serverTimestamp() });
+    await logIncident({ source: 'conekta-webhook', error: 'invalid_signature' });
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
-  const { type, data } = JSON.parse(req.body.toString());
+  let type, data;
+  try {
+    ({ type, data } = JSON.parse(req.body.toString()));
+  } catch (err) {
+    // Signature-valid but unreadable: Conekta believes it told us something we
+    // could not parse, so record it — silently dropping it loses a real event.
+    // 400 rather than 500, because the body is the caller's to get right and a
+    // 4xx tells Conekta the retry is pointless; retrying a body that cannot
+    // parse cannot ever succeed.
+    await logIncident({
+      source: 'conekta-webhook',
+      error: `unparseable body: ${err.message}`,
+      bodyPreview: req.body.toString().slice(0, 200),
+    });
+    return res.status(400).json({ error: 'Malformed JSON body' });
+  }
+
   try {
     if (type === 'order.paid') {
       const { loanId, employeeId } = data.object.metadata || {};
@@ -222,7 +257,7 @@ app.post('/webhooks/conekta', async (req, res) => {
 
     res.json({ received: true });
   } catch (err) {
-    await db.collection('incident_log').add({ source: 'conekta-webhook', error: err.message, ts: admin.firestore.FieldValue.serverTimestamp() });
+    await logIncident({ source: 'conekta-webhook', error: err.message });
     res.status(500).json({ error: 'Internal error' });
   }
 });
