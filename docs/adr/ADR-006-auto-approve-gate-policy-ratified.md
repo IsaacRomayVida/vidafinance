@@ -88,9 +88,24 @@ count. This does not change the condition's *effect* — per C5 (#472) a competi
 blocks auto-approval and routes to a human; it is never a decline. Only which signal
 decides it changed.
 
-## The finding that limits all of the above
+## The finding that limited all of the above — RESOLVED the same day
 
-**Condition 8 currently fails for 100% of applicants, and 0.15 does not change that.**
+> **Fixed 2026-08-03.** The polarity question this section deliberately stopped at has
+> been settled from primary source, and the contract is wired. `championScore` is
+> **P(repayment)** — higher is a safer borrower — so P(default) is its complement:
+> `underwriting_model.py:37` ("Higher = safer borrower"), `xgb_model.py:64`, and
+> `champion_challenger.py:65`, which approves when `champion_score >= threshold`.
+> Condition 8 now reads `championScore` via `deriveDefaultProbability`, fails **closed**
+> on a malformed-but-present response, and uses `??` so a `championScore` of 0 — the
+> worst borrower the model can describe — is not swallowed as falsy.
+> **The 0.15 cutoff ratified above is now live rather than inert.**
+>
+> The section below is kept exactly as written. The reason the defect survived is worth
+> more than a tidy record of its absence: every fixture in the repo mocked the same three
+> fields the gate was reading, so the tests and the code agreed with each other and both
+> disagreed with the service. A green suite was evidence of nothing.
+
+**Condition 8 failed for 100% of applicants, and 0.15 did not change that.**
 Verified against both sides of the wire on this branch:
 
 - `services/ml-service/main.py:485-494` — `POST /score` returns `decision`,
@@ -121,8 +136,13 @@ asserted the pre-ADR-006 shape have been reconciled and the package is green:
 
 ```
 Test Suites: 1 skipped, 18 passed, 18 of 19 total
-Tests:       61 skipped, 274 passed, 335 total
+Tests:       61 skipped, 283 passed, 344 total
 ```
+
+The condition-8 contract fix adds the 9 tests above 274. They are real coverage, not
+self-confirming: reverting `stage3-autoapprove.js` alone and rerunning fails 15 of them.
+The remaining 61 skipped are `stage3-autoapprove.test.js`, which specs a different,
+unbuilt gate (#387) and is out of scope for this ADR.
 
 Each reconciled assertion was judged individually rather than relaxed to fit:
 
