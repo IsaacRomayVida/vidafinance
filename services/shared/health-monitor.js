@@ -15,6 +15,9 @@
 
 require('dotenv').config();
 const { sendAlert } = require('./alerting');
+const createLogger = require('./logger');
+
+const log = createLogger('vida-health-monitor');
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || '60000', 10);
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '';
@@ -219,8 +222,8 @@ async function main() {
   while (true) {
     try {
       const results = await checkAlertingRules();
-      const statuses = Object.entries(results).map(([name, h]) => `${name}: ${h.status}`);
-      console.log(`[health-monitor] ${new Date().toISOString()} — ${statuses.join(', ')}`);
+      const statuses = Object.fromEntries(Object.entries(results).map(([name, h]) => [name, h.status]));
+      log.info({ statuses }, 'Health poll complete');
     } catch (err) {
       console.error('[health-monitor] Error:', err.message);
     }
