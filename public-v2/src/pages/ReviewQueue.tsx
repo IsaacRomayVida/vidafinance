@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
+import { OPEN_REVIEW_STATUSES } from '../lib/reviewStatus';
 import { useAuth } from '../hooks/useAuth';
 
 /* ── review_queue document shape ─────────────────────────────────────────── */
@@ -143,9 +144,15 @@ export function ReviewQueue() {
 
   // Real-time listener
   useEffect(() => {
+    // All four OPEN statuses, not just the two un-triaged ones. `info_requested`
+    // and `escalated` are outstanding work — the backend keeps both decidable —
+    // and this is the only surface in the app that queries `review_queue`, so
+    // excluding them here removed them from the product entirely: the review
+    // could not be reached, the loan stayed `under_review`, and `under_review`
+    // occupies the borrower's only loan slot. See src/lib/reviewStatus.ts.
     const q = query(
       collection(db, 'review_queue'),
-      where('status', 'in', ['pending', 'pending_review']),
+      where('status', 'in', [...OPEN_REVIEW_STATUSES]),
       orderBy('queuedAt', 'asc'),
     );
     const unsub = onSnapshot(

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useAuth } from '../hooks/useAuth';
+import { availableDecisions, blockedReason, canDecideReview } from '../lib/reviewStatus';
 
 /* ── types ────────────────────────────────────────────────────────────────── */
 
@@ -71,7 +72,9 @@ function slaLabel(queuedAt: string): string {
 /* ── component ────────────────────────────────────────────────────────────── */
 
 export function ReviewDetail() {
-  useAuth();
+  // The role decides whether an escalated review is actionable from here, so it
+  // is read rather than discarded.
+  const { role } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<ReviewDetailData | null>(null);
@@ -216,7 +219,16 @@ export function ReviewDetail() {
   const aml = review['aml_result'] as Record<string, unknown> | undefined;
   const risk = riskColor(str(review['risk_level'], 'unknown'));
   const queuedAt = review['queuedAt'] as string;
-  const isActionable = ['pending', 'pending_review'].includes(review['status'] as string);
+  // Mirrors the server's own guard rather than a narrower copy of it: an
+  // `info_requested` review stays decidable by anyone (the answer ops asked for
+  // has to be able to land), and an `escalated` one by admin/super_admin.
+  // Gating on ['pending','pending_review'] hid the buttons on reviews the
+  // server would have accepted — that is how a triaged loan became
+  // unresolvable and its borrower lost their only loan slot.
+  const reviewStatus = str(review['status'], '');
+  const isActionable = canDecideReview(reviewStatus, role);
+  const offeredDecisions = availableDecisions(reviewStatus, role);
+  const cannotActReason = blockedReason(reviewStatus, role);
 
   /* ── render ──────────────────────────────────────────────────────────────── */
 
@@ -625,23 +637,36 @@ export function ReviewDetail() {
             >
               Request More Info
             </button>
-            <button
-              onClick={() => submitDecision('escalate')}
-              disabled={actionLoading}
-              style={pillBtn('rgba(147,170,169,0.10)', 'var(--t2)')}
-            >
-              Escalate to Senior
-            </button>
+            {/* Hidden on an already-escalated review: the server answers that
+                with failed-precondition, so the button can only produce an
+                error. */}
+            {offeredDecisions.includes('escalate') && (
+              <button
+                onClick={() => submitDecision('escalate')}
+                disabled={actionLoading}
+                style={pillBtn('rgba(147,170,169,0.10)', 'var(--t2)')}
+              >
+                Escalate to Senior
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* Non-actionable status */}
+      {/* Non-actionable status.
+          An escalated review is not resolved — it is waiting on someone more
+          senior. Rendering it with the same flat "this review has status: x"
+          as a closed one is what made escalation read as a dead end. */}
       {!isActionable && (
         <div style={{ ...cardStyle, textAlign: 'center' }}>
           <div style={{ fontSize: 14, color: 'var(--t3)' }}>
             This review has status: <strong>{String(review['status'])}</strong>
           </div>
+          {cannotActReason && (
+            <div style={{ fontSize: 13, color: 'var(--t2)', marginTop: 8 }}>
+              {cannotActReason}
+            </div>
+          )}
         </div>
       )}
 
