@@ -49,7 +49,12 @@ vi.mock('firebase/firestore', () => ({
 
 const { ReviewQueue } = await import('./ReviewQueue');
 
-const ALL_CLEAR = /all caught up/i;
+// The console is Spanish (Funpay Design's call, 2026-08-03: every other Funpay
+// surface is Spanish-first, so the English admin console was the anomaly). This
+// matches the rendered `rq_empty` string, and is deliberately the *claim*
+// itself rather than the i18n key — the defect was ops reading a false
+// all-clear, so the assertion is on what a human actually sees.
+const ALL_CLEAR = /todo al d\u00eda/i;
 
 beforeEach(() => {
   errorHandler = null;
