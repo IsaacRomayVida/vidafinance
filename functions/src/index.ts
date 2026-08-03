@@ -1025,6 +1025,13 @@ export const updateLoanStatus = onCall(
 
 interface ApproveEmployerData {
   employerUid: string;
+  // This callable has only ever implemented approval — see the guard below.
+  // Both fields are accepted (not just read and discarded) purely so a
+  // reject request can be told apart from an approve request and refused
+  // loudly. EmployerMgmt.tsx sends `approved`; AdminDashboard.tsx sends
+  // `decision`. Neither shape drives any approve/reject branching here.
+  approved?: boolean;
+  decision?: 'approved' | 'rejected';
 }
 
 export const approveEmployer = onCall(
@@ -1044,8 +1051,25 @@ export const approveEmployer = onCall(
           logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
-        const { employerUid } = data;
+        const { employerUid, approved, decision } = data;
         if (!employerUid) throw new HttpsError('invalid-argument', 'employerUid is required');
+
+        // This handler has no reject branch — every call below unconditionally
+        // activates the employer. Before this guard, AdminDashboard.tsx's
+        // "reject employer" button (`decision: 'rejected'`) and a would-be
+        // reject from EmployerMgmt.tsx (`approved: false`) both silently
+        // APPROVED the employer instead — activating them, scoring them, and
+        // emailing an approval notice — with no error surfaced to the admin
+        // who clicked reject. Fail loudly instead of doing the opposite of
+        // what was asked. A real reject branch needs a decision record, a
+        // notification template and an appeal path, so it is left out here
+        // deliberately rather than bolted on.
+        if (approved === false || decision === 'rejected') {
+          throw new HttpsError(
+            'unimplemented',
+            'Rejecting an employer application is not yet supported'
+          );
+        }
 
         const empDoc = await db.collection('employers').doc(employerUid).get();
         if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');

@@ -260,10 +260,17 @@ export function Onboarding() {
           setInviteToken(token);
           setInviteId(data.inviteId);
           setInviteEmployerName(data.employerName);
+          // employeeEmail is deliberately masked server-side (lookupInvite is
+          // reachable unauthenticated, so it never returns a usable raw
+          // email — see maskEmail in functions/src/invites/lookupInvite.ts).
+          // Prefilling the signup email field with it put a string like
+          // "j***@example.com" into the exact field createUserWithEmail
+          // AndPassword uses to create the account, and checkEmailAvailability
+          // reported it "available" since nothing is registered under that
+          // literal string — nothing here caught it before account creation.
           setMemData((d) => ({
             ...d,
             name: d.name || data.employeeName,
-            email: d.email || data.employeeEmail,
           }));
         } else {
           setInviteInvalid(true);

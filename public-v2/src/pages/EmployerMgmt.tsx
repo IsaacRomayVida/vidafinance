@@ -87,7 +87,10 @@ export function EmployerMgmt() {
     try {
       const functions = getFunctions();
       const fn = httpsCallable(functions, 'approveEmployer');
-      await fn({ employerId, approved });
+      // The deployed callable (index.ts) destructures `employerUid`, not
+      // `employerId` — sending `employerId` alone made every approve/reject
+      // click here throw "employerUid is required".
+      await fn({ employerUid: employerId, approved });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       alert('Error: ' + msg);
