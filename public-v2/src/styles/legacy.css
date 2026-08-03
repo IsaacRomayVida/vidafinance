@@ -494,14 +494,14 @@ table tr:last-child td{border-bottom:none}
 .badge-approved,.badge-disbursement_queued{background:#e8f0fd;color:#1a3a8b}
 .badge-active{background:#e8f6f6;color:#194445}
 .badge-paid{background:#edf7f0;color:#1a5e3a}
-.badge-rejected{background:#fdf0f0;color:#8b2020}
+.badge-rejected,.badge-rejected_ml{background:#fdf0f0;color:#8b2020}
 .badge-disbursed{background:#e8f0fd;color:#1a3a8b}
 .badge-under_review{background:#fdf7e8;color:#7a5a10}
 .badge-repaid{background:#edf7f0;color:#1a5e3a}
 .badge-in_collections{background:#fdf0f0;color:#8b2020}
 .badge-written_off{background:#f0f0f0;color:#666}
 .badge-cancelled{background:#f0f0f0;color:#666}
-.badge-escalated{background:#fdf7e8;color:#7a5a10}
+.badge-escalated,.badge-disbursement_failed{background:#fdf7e8;color:#7a5a10}
 .badge-overdue{background:#8b2020;color:#fff;animation:pulse 1.5s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 .doc-link{display:inline-block;padding:3px 10px;font-size:12px;font-weight:600;color:var(--brand);background:var(--bg2);border-radius:6px;text-decoration:none;border:1px solid rgba(25,68,69,.12);transition:all .2s;margin-right:4px}

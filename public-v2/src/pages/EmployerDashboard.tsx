@@ -939,7 +939,7 @@ export function EmployerDashboard() {
                       <td>{loan.termDays ?? 30} {t('dash_days')}</td>
                       <td>
                         <span className={`badge badge-${loan.status}`}>
-                          {t(`status_${loan.status}`)}
+                          {t(`status_${loan.status}`, loan.status)}
                         </span>
                       </td>
                       <td>

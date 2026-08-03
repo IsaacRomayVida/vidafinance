@@ -757,7 +757,7 @@ export function LoanWizard() {
   // ── Success / Pending tracking screen ──
   if (success) {
     const statusLabel = pendingLoan?.status
-      ? t(`status_${pendingLoan.status}`)
+      ? t(`status_${pendingLoan.status}`, pendingLoan.status)
       : t('status_pending');
 
     return (

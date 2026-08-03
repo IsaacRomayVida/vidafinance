@@ -43,7 +43,7 @@ function fmt(n: number): string {
 
 /* ── Status helpers ── */
 
-type StatusGroup = 'pending_review' | 'approved' | 'disbursing' | 'active' | 'repaid' | 'denied' | 'escalated';
+type StatusGroup = 'pending_review' | 'approved' | 'disbursing' | 'active' | 'repaid' | 'denied' | 'escalated' | 'other';
 
 function resolveGroup(status: string): StatusGroup {
   switch (status) {
@@ -62,12 +62,25 @@ function resolveGroup(status: string): StatusGroup {
     case 'repaid':
     case 'completed':
       return 'repaid';
+    // `rejected_ml` (ML auto-rejection) shares the rejected card and copy
+    // verbatim — the ML-vs-human distinction is an internal audit fact, not
+    // something the borrower needs surfaced.
     case 'rejected':
+    case 'rejected_ml':
       return 'denied';
     case 'escalated':
       return 'escalated';
+    // `disbursement_failed`, `cancelled`, `in_collections` and `written_off`
+    // deliberately fall through to 'other' rather than being folded into a
+    // neighbouring group: every existing card asserts something that is false
+    // for them (the disbursing card promises "los fondos llegarán en minutos",
+    // the denied card shows a rejection reason and a re-apply cooldown, the
+    // repaid card congratulates). 'other' states the status and nothing else
+    // until Funpay Design supplies real card copy for each. Previously these
+    // hit `default: 'pending_review'`, which told a written-off borrower their
+    // application was under review and drew a pending timeline.
     default:
-      return 'pending_review';
+      return 'other';
   }
 }
 
@@ -79,6 +92,9 @@ const GROUP_COLORS: Record<StatusGroup, { bg: string; accent: string; text: stri
   repaid:         { bg: 'var(--success-bg)', accent: 'var(--brand-light)', text: 'var(--success-text)' },
   denied:         { bg: 'var(--danger-bg)', accent: 'var(--danger)', text: 'var(--danger-text)' },
   escalated:      { bg: 'var(--warning-bg)', accent: '#d4a017', text: 'var(--warning-text)' },
+  // Neutral grey, matching the .badge-written_off / .badge-cancelled values
+  // already in legacy.css — no new palette invented for the interim card.
+  other:          { bg: '#f0f0f0', accent: '#666', text: '#444' },
 };
 
 /* ── Timeline steps for pending flow ── */
@@ -625,6 +641,23 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
         }}>
           <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5 }}>
             {t('ls_escalated_desc', 'Estamos revisando detalles adicionales de tu solicitud. No se requiere ninguna acción de tu parte. Te notificaremos cuando haya una actualización.')}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── other (interim: status line only, no narrative claim) ── */
+  if (group === 'other') {
+    return (
+      <div style={cardStyle} className="loan-status-card">
+        <div style={headerStyle}>
+          <div style={iconWrapStyle}><AlertIcon /></div>
+          <div>
+            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
+              {t(`status_${loan.status}`, loan.status)}
+            </div>
           </div>
         </div>
       </div>
