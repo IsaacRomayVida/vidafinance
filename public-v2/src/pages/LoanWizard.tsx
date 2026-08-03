@@ -49,6 +49,35 @@ interface LoanConfig {
   allowedTermDays: number[];
   defaultTermDays: number;
   repayment: RepaymentTerms[];
+  /**
+   * The borrower's next payroll date, resolved server-side (#433). ISO string.
+   * "Estimated" is literal: disbursement recomputes it against the clock at that
+   * moment, and a loan waits for human review in between.
+   */
+  estimatedDeductionDate: string;
+  /**
+   * Where the cadence behind that date came from. Only 'default_monthly' is a
+   * guess — it means the borrower's cadence could not be read and monthly was
+   * assumed (#431), which must not be presented as confidently as a known one.
+   */
+  payFrequencySource: 'loan_snapshot' | 'employee_record' | 'default_monthly';
+}
+
+/**
+ * The server's ISO deduction date, or null if it is missing or unparseable.
+ *
+ * There is deliberately no local fallback. This screen used to compute the date
+ * itself as `Date.now() + termDays` (#439) — a calendar offset that had nothing
+ * to do with when the borrower is actually paid, and that the system never used
+ * for anything: the loan is collected on a payday. A plausible wrong date is
+ * worse than a visibly absent one, so an unreadable date renders in the same
+ * reserved slot as an unreadable price rather than degrading to something that
+ * looks right.
+ */
+function parseDeductionDate(iso: string | undefined): Date | null {
+  if (typeof iso !== 'string' || iso === '') return null;
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 /**
@@ -260,7 +289,7 @@ function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
 }
 
 export function LoanWizard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -300,13 +329,37 @@ export function LoanWizard() {
   const feeRatePct = feeRate === null ? null : Math.round(feeRate * 100);
   const fee = feeRate === null ? null : Math.round(amount * feeRate);
   const total = fee === null ? null : amount + fee;
-  const dueDate = new Date(Date.now() + termDays * 24 * 60 * 60 * 1000);
+  // Deduction date and CAT: read, never derived — see parseDeductionDate.
+  const deductionDate = parseDeductionDate(loanConfig?.estimatedDeductionDate);
+  const deductionDateText =
+    deductionDate === null
+      ? null
+      : t('wiz_deduction_date_value', {
+          date: deductionDate.toLocaleDateString(i18n.language, {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          }),
+        });
+  // Only 'default_monthly' is an assumption (#431). The date text itself reads
+  // "previsto" in BOTH cases — human review sits between quote and disbursement,
+  // so it is a prediction either way. What the assumed case adds is the extra
+  // line saying we could not read the cadence.
+  const deductionCadenceAssumed = loanConfig?.payFrequencySource === 'default_monthly';
   // Schedule and CAT: read, never derived. `null` propagates exactly like the
   // fee rate does — a schedule we could not read must not render as "$0 × 0".
   const repaymentTerms = repaymentTermsFor(loanConfig, termDays);
   const installments = total === null ? null : allocateInstallments(total, repaymentTerms);
   const installmentCount = installments?.length ?? null;
   const deductionAmount = installments?.[0]?.amount ?? null;
+  // Today the server always publishes exactly one installment
+  // (REPAYMENT_STRUCTURE), and toPayrollDeduction() refuses to register anything
+  // else — so "a single charge" is a guarantee of the system, not a claim by
+  // this screen. It is still asked rather than assumed: if the repayment product
+  // ever really changes, the per-installment row comes back and the
+  // single-charge sentence disappears, instead of becoming a false statement
+  // nobody remembered was hardcoded.
+  const singleCharge = installmentCount === null || installmentCount === 1;
   const cat = repaymentTerms === null ? null : String(repaymentTerms.catPercent);
   const pricingReady = configStatus === 'ready' && feeRate !== null && repaymentTerms !== null;
   const sliderPct = ((amount - MIN_AMOUNT) / (cappedMax - MIN_AMOUNT)) * 100;
@@ -1290,6 +1343,26 @@ export function LoanWizard() {
                   <PriceValue value={total} status={configStatus} />
                 </span>
               </div>
+              {!singleCharge && (
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '8px 0',
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                    {t('wiz_payroll_deduction')}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
+                    <PriceValue
+                      value={deductionAmount}
+                      status={configStatus}
+                      suffix={` × ${installmentCount}`}
+                    />
+                  </span>
+                </div>
+              )}
               <div
                 style={{
                   display: 'flex',
@@ -1298,31 +1371,41 @@ export function LoanWizard() {
                 }}
               >
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('wiz_payroll_deduction')}
+                  {t('wiz_deduction_date_label')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
                   <PriceValue
-                    value={deductionAmount}
+                    value={deductionDateText}
                     status={configStatus}
-                    suffix={installmentCount && installmentCount > 1 ? ` × ${installmentCount}` : ''}
+                    prefix=""
+                    shimmerWidth={140}
                   />
                 </span>
               </div>
-              <div
+              {deductionDateText !== null && deductionCadenceAssumed && (
+                <p
+                  data-testid="deduction-cadence-assumed"
+                  style={{ fontSize: 11, color: 'var(--t3)', margin: '2px 0 0', lineHeight: 1.5 }}
+                >
+                  {t('wiz_deduction_date_note')}
+                </p>
+              )}
+            </div>
+
+            {/* One charge, not a payment plan — stated only while the published
+                schedule actually is one installment. */}
+            {singleCharge && (
+              <p
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '8px 0',
+                  fontSize: 12,
+                  color: 'var(--t2)',
+                  lineHeight: 1.5,
+                  margin: '0 0 16px',
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('modal_due_date')}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  {dueDate.toLocaleDateString()}
-                </span>
-              </div>
-            </div>
+                {t('wiz_single_charge_notice')}
+              </p>
+            )}
 
             {/* CAT disclosure */}
             <div
@@ -1525,6 +1608,26 @@ export function LoanWizard() {
                   {termDays} {t('calc_days')}
                 </span>
               </div>
+              {!singleCharge && (
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '6px 0',
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: 'var(--t3)' }}>
+                    {t('wiz_payroll_deduction')}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
+                    <PriceValue
+                      value={deductionAmount}
+                      status={configStatus}
+                      suffix={` × ${installmentCount}`}
+                    />
+                  </span>
+                </div>
+              )}
               <div
                 style={{
                   display: 'flex',
@@ -1533,30 +1636,36 @@ export function LoanWizard() {
                 }}
               >
                 <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('wiz_payroll_deduction')}
+                  {t('wiz_deduction_date_label')}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
                   <PriceValue
-                    value={deductionAmount}
+                    value={deductionDateText}
                     status={configStatus}
-                    suffix={installmentCount && installmentCount > 1 ? ` × ${installmentCount}` : ''}
+                    prefix=""
+                    shimmerWidth={140}
                   />
                 </span>
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '6px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t3)' }}>
-                  {t('modal_due_date')}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  {dueDate.toLocaleDateString()}
-                </span>
-              </div>
+              {deductionDateText !== null && deductionCadenceAssumed && (
+                <p
+                  style={{ fontSize: 11, color: 'var(--t3)', margin: '2px 0 0', lineHeight: 1.5 }}
+                >
+                  {t('wiz_deduction_date_note')}
+                </p>
+              )}
+              {singleCharge && (
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--t2)',
+                    lineHeight: 1.5,
+                    margin: '10px 0 0',
+                  }}
+                >
+                  {t('wiz_single_charge_notice')}
+                </p>
+              )}
               <div
                 style={{
                   display: 'flex',
