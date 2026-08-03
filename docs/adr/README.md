@@ -14,14 +14,18 @@ governs the code belongs beside it.
 |---|---|---|---|
 | [001](ADR-001-ml-shadow-mode-gate.md) | ML models run shadow-only until empirically validated | ACCEPTED | `services/ml-service`, the underwriting decision path |
 | [002](ADR-002-fee-rate-single-source-of-truth.md) | Fee rate: 30%, behind a single server-side source of truth | ACCEPTED — ratified by Isaac 2026-08-02 | `functions/src/config/loanConfig.ts`, all borrower pricing |
-| [003](ADR-003-lending-slot-autoscale-not-implemented.md) | Lending-slot auto-scaling stays unimplemented; CI gate goes hard around it | ACCEPTED | `services/underwriting-service`, `ci.yml` |
+| [003](ADR-003-lending-slot-autoscale-not-implemented.md) | Lending-slot auto-scaling stays unimplemented; CI gate goes hard around it | SUPERSEDED by ADR-007 | `services/underwriting-service`, `ci.yml` |
 | [004](ADR-004-underwriting-worker-not-the-decision-path.md) | Retire the 11 decision-engine tests in `underwriting_worker` | ACCEPTED | `services/ml-service/workers`, `pytest.ini` |
-| [005](ADR-005-underwriting-spec-vs-implementation-reconciliation.md) | Reconciling the underwriting spec with the underwriting implementation | ACCEPTED (engineering); five commercial questions open | Stage 3 auto-approve gate, employer slots |
+| [005](ADR-005-underwriting-spec-vs-implementation-reconciliation.md) | Reconciling the underwriting spec with the underwriting implementation | ACCEPTED (engineering); commercial questions C1/C2 answered by ADR-007, C3/C4 open | Stage 3 auto-approve gate, employer slots |
+| [007](ADR-007-lending-slot-hybrid-growth.md) | Lending-slot hybrid growth: +10 per clean cycle, credited at review, capped at 2 per review | ACCEPTED — ratified by Isaac 2026-08-03 | `services/underwriting-service/src/stages/employer-b.js`, `src/config/lendingSlotGrowth.js` |
 
 ## Open commercial questions
 
-ADR-005 separates what engineering may settle from what only the founder may. Its five
+ADR-005 separates what engineering may settle from what only the founder may. Of its five
 commercial questions — C1–C5, covering slot increments, slot constants, the P(default)
 cutoff, which ten conditions gate auto-approval, and whether a competitor loan blocks —
-are unanswered. Nothing in the engineering list waits on them, and no one implementing
-from these ADRs should decide one by picking a default.
+**C1 (slot growth rule) and the increment/cap/ceiling portion of C2 are now answered by
+ADR-007**; C5's hard-block question was decided in ADR-005 itself. C3, C4, and the
+remainder of C2 (Tier-2 bands, upgrade cycles, tier thresholds) remain unanswered. Nothing
+in the engineering list waits on them, and no one implementing from these ADRs should
+decide one by picking a default.

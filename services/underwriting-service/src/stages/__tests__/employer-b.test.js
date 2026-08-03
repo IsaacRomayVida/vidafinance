@@ -1,35 +1,31 @@
 "use strict";
 
 // ════════════════════════════════════════════════════════════════════
-// PENDING — THIS FEATURE DOES NOT EXIST. See #387 and #388.
+// PARTIALLY BUILT. See #387, #388, ADR-003 (superseded), ADR-007.
 //
-// Every describe in this file is `describe.skip`. Nothing here is
-// checked, and nothing here has ever passed. This is a specification
-// for an employer scoring model that was never built, committed as
-// tests. `../employer-b` exports exactly one function today,
-// `runEmployerDueDiligence` (employer-b.js:98) — a flat +/- point
-// scorer with no Firestore integration. Of the twenty names
-// destructured below, nineteen are `undefined` at require time.
+// ADR-007 (2026-08-03) ratified the slot-growth commercial rule ADR-003
+// left open: Tier 1 earns +10 slots per clean payroll cycle, credited only
+// at a due-diligence review, capped at 2 increments (20 slots) per review,
+// never past the 100-slot ceiling. `assignTier`, `computeInitialSlots`,
+// `autoScaleTier1`, and `expandTier2` are now implemented in
+// `../employer-b` against that ruling and are un-skipped below.
 //
-// It is skipped rather than deleted because it is the only surviving
-// record that these features were ever specified, and rather than
-// excluded by path because an excluded path is invisible: a reader of
-// CI output could not tell "never built" from "checked and fine". As
-// `describe.skip` the suite is collected and reported as skipped, so
-// the gap is counted in every run. This replaces the
-// testPathIgnorePatterns exclusion added in #395.
+// Everything else in this file is STILL `describe.skip` and still does not
+// exist: the weighted scoring engine (scoreSATAge through
+// scorePayrollHistory, WEIGHTS) and the Firestore-integrated
+// `runEmployerDueDiligence` rewrite this file also specifies. That is a
+// separate, larger feature build (#387/#388's scoring-model half) that
+// ADR-007 does not cover and that was NOT part of what was ratified today.
+// `runEmployerDueDiligence` in `../employer-b` still returns its original,
+// simpler shape (tier 3 for reject, not 0; data.tier, not top-level tier)
+// because stage3-autoapprove.js depends on that exact contract.
 //
-// DO NOT make this green by weakening the assertions to match the
-// current source. The assertions are the specification; the source is
-// the thing that has not caught up. And do not implement the slot
-// scaling without a ruling on #388 — the tests underdetermine it, and
-// the reading you pick decides how much credit an employer's
-// workforce can draw. See docs/adr/ADR-003-lending-slot-autoscale-not-implemented.md.
+// DO NOT make the still-skipped blocks green by weakening the assertions to
+// match the current source. The assertions are the specification; the
+// source is the thing that has not caught up.
 //
-// To un-skip: implement the API, then replace `describe.skip` with
-// `describe` one block at a time. The scoring helpers (scoreSATAge
-// through scorePayrollHistory) are fully determined by these tests and
-// need no ruling; autoScaleTier1's call site does.
+// To un-skip further: implement the API, then replace `describe.skip` with
+// `describe` one block at a time.
 // ════════════════════════════════════════════════════════════════════
 
 // ── Mock firebase-admin/firestore ───────────────────────────────────
@@ -259,7 +255,7 @@ describe.skip("scorePayrollHistory", () => {
 // Tier assignment
 // ═══════════════════════════════════════════════════════════════════
 
-describe.skip("assignTier", () => {
+describe("assignTier", () => {
   it("assigns Tier 1 for score >= 70", () => {
     expect(assignTier(70)).toBe(1);
     expect(assignTier(85)).toBe(1);
@@ -283,7 +279,7 @@ describe.skip("assignTier", () => {
 // Slot management
 // ═══════════════════════════════════════════════════════════════════
 
-describe.skip("computeInitialSlots", () => {
+describe("computeInitialSlots", () => {
   it("returns 10 for Tier 1", () => {
     expect(computeInitialSlots(1)).toBe(TIER_1_INITIAL_SLOTS);
   });
@@ -297,17 +293,27 @@ describe.skip("computeInitialSlots", () => {
   });
 });
 
-describe.skip("autoScaleTier1", () => {
+describe("autoScaleTier1", () => {
   it("adds 10 slots per clean cycle", () => {
     const result = autoScaleTier1(10, 1);
     expect(result.newSlots).toBe(20);
     expect(result.requiresManualReview).toBe(false);
   });
 
-  it("scales across multiple cycles", () => {
+  // ADR-007 (2026-08-03) ratified the hybrid rule ADR-003 found this fixture
+  // contradicting: +10/cycle EARNED, but credited only at a review and
+  // capped at 2 increments (20 slots) per review. 3 clean cycles earn 30,
+  // but only 2 increments (20) are credited this review, so 10 + 20 = 30,
+  // not the flat-math 40 this fixture asserted before ADR-007. The
+  // remaining clean cycle is forfeited under the conservative reading (see
+  // ADR-007's open question) — it does not carry forward to the next
+  // review.
+  it("caps at 2 credited increments per review even when more cycles were earned", () => {
     const result = autoScaleTier1(10, 3);
-    expect(result.newSlots).toBe(40);
+    expect(result.newSlots).toBe(30);
     expect(result.requiresManualReview).toBe(false);
+    expect(result.incrementsCredited).toBe(2);
+    expect(result.cyclesForfeited).toBe(1);
   });
 
   it("caps at 100 and flags manual review", () => {
@@ -329,7 +335,7 @@ describe.skip("autoScaleTier1", () => {
   });
 });
 
-describe.skip("expandTier2", () => {
+describe("expandTier2", () => {
   it("expands from 3 to 6", () => {
     const result = expandTier2(3, 1);
     expect(result.newSlots).toBe(6);
@@ -385,7 +391,13 @@ describe.skip("runEmployerDueDiligence", () => {
       expect(result.signals).toBeDefined();
     });
 
-    it("auto-scales returning Tier 1 employer", async () => {
+    // ADR-007 (2026-08-03): 4 clean cycles earn 40, but only 2 increments
+    // (20 slots) are credited per review — "let's do two max" — so
+    // 30 + 20 = 50, not the flat-math 40 ("// 30 + 10") this fixture
+    // asserted before ADR-007 superseded ADR-003. The other 2 earned
+    // cycles are forfeited under the conservative reading (see ADR-007's
+    // open question), not banked for the next review.
+    it("auto-scales returning Tier 1 employer, capped at 2 credited increments per review", async () => {
       const employer = makeEmployer({
         satRegistrationDate: "2010-01-01",
         activeSlots: 30,
@@ -397,7 +409,7 @@ describe.skip("runEmployerDueDiligence", () => {
 
       expect(result.pass).toBe(true);
       expect(result.tier).toBe(1);
-      expect(result.activeSlots).toBe(40); // 30 + 10
+      expect(result.activeSlots).toBe(50); // 30 + min(4, 2) * 10
     });
   });
 
