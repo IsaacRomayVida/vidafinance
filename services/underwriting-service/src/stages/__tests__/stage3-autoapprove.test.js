@@ -1,5 +1,54 @@
 "use strict";
 
+// ════════════════════════════════════════════════════════════════════
+// PENDING — THIS FEATURE DOES NOT EXIST. See #387.
+//
+// Every describe in this file is `describe.skip`. Nothing here is
+// checked, and nothing here has ever passed. All three functions
+// destructured below are `undefined` at require time:
+// `../stage3-autoapprove` exports `runAutoApproveGate` and
+// `evaluateAutoApprove` (stage3-autoapprove.js:185) and nothing else.
+//
+// This is not a rename. The shipped gate and the gate specified here
+// disagree on which conditions are checked and on the numbers behind
+// them:
+//
+//   - Competitor detection. The `hasCompetitorLoans` block below
+//     specifies keyword matching on the creditor name (KUESKI /
+//     MoneyMan / CREDITEA). Shipped, it is a numeric count the bureau
+//     already handed us (stage3-autoapprove.js:66) — no names, no
+//     matching.
+//   - Three of ten conditions differ. This spec checks
+//     dias_atraso_zero, cartera_vencida_false and xgboost_pdefault.
+//     The shipped gate checks no_active_defaults and age_range
+//     instead (stage3-autoapprove.js:104-119).
+//   - The P(default) cutoff disagrees. "fails condition 10: xgboost
+//     P(default) >= threshold" requires 0.20 to FAIL, and "pulls
+//     xgboostPDefault from challenger model" requires 0.08 to pass,
+//     so this spec puts the cutoff in (0.08, 0.20] — its own inline
+//     comment says 0.15. The shipped gate derives the cutoff from
+//     APPROVAL_THRESHOLD and lands on 0.35 (stage3-autoapprove.js:20,
+//     :98), which would approve the very applicant this spec requires
+//     us to escalate.
+//   - LTI is in different units. Here it is a fraction: "passes
+//     condition 4: LTI exactly 25%" passes 0.25 and "fails condition
+//     4" fails 0.26. Shipped, it is a percentage compared against 25
+//     (stage3-autoapprove.js:60), under which 0.26 sails through.
+//
+// Which of those is right is a credit-policy question, not an
+// engineering one, so it is not being answered here. See
+// docs/adr/ADR-003-lending-slot-autoscale-not-implemented.md.
+//
+// Unlike employer-b.test.js this suite does NOT contradict itself —
+// it is implementable exactly as written once the cutoff and the
+// condition set are ratified. #387's title says the spec
+// self-contradicts; that is true of employer-b and not of this file.
+//
+// DO NOT make this green by weakening the assertions to match the
+// current source, and do not delete it: it is the only surviving
+// record of the intended ten-condition gate.
+// ════════════════════════════════════════════════════════════════════
+
 const {
   runStage3,
   evaluateGate,
@@ -40,7 +89,7 @@ const STAGE2_RESULT = {
 
 // ── hasCompetitorLoans ──────────────────────────────────────────────────────
 
-describe("hasCompetitorLoans", () => {
+describe.skip("hasCompetitorLoans", () => {
   it("returns false for empty or null accounts", () => {
     expect(hasCompetitorLoans(null)).toBe(false);
     expect(hasCompetitorLoans([])).toBe(false);
@@ -75,7 +124,7 @@ describe("hasCompetitorLoans", () => {
 
 // ── evaluateGate ────────────────────────────────────────────────────────────
 
-describe("evaluateGate", () => {
+describe.skip("evaluateGate", () => {
   it("approves when all 10 conditions pass", () => {
     const result = evaluateGate(ALL_PASS_PARAMS);
     expect(result.decision).toBe("approved");
@@ -222,7 +271,7 @@ describe("evaluateGate", () => {
 
 // ── runStage3 ───────────────────────────────────────────────────────────────
 
-describe("runStage3", () => {
+describe.skip("runStage3", () => {
   it("approves when stage2 result + lookups all pass", () => {
     const result = runStage3({
       stage2Result: STAGE2_RESULT,

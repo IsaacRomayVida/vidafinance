@@ -1,5 +1,37 @@
 "use strict";
 
+// ════════════════════════════════════════════════════════════════════
+// PENDING — THIS FEATURE DOES NOT EXIST. See #387 and #388.
+//
+// Every describe in this file is `describe.skip`. Nothing here is
+// checked, and nothing here has ever passed. This is a specification
+// for an employer scoring model that was never built, committed as
+// tests. `../employer-b` exports exactly one function today,
+// `runEmployerDueDiligence` (employer-b.js:98) — a flat +/- point
+// scorer with no Firestore integration. Of the twenty names
+// destructured below, nineteen are `undefined` at require time.
+//
+// It is skipped rather than deleted because it is the only surviving
+// record that these features were ever specified, and rather than
+// excluded by path because an excluded path is invisible: a reader of
+// CI output could not tell "never built" from "checked and fine". As
+// `describe.skip` the suite is collected and reported as skipped, so
+// the gap is counted in every run. This replaces the
+// testPathIgnorePatterns exclusion added in #395.
+//
+// DO NOT make this green by weakening the assertions to match the
+// current source. The assertions are the specification; the source is
+// the thing that has not caught up. And do not implement the slot
+// scaling without a ruling on #388 — the tests underdetermine it, and
+// the reading you pick decides how much credit an employer's
+// workforce can draw. See docs/adr/ADR-003-lending-slot-autoscale-not-implemented.md.
+//
+// To un-skip: implement the API, then replace `describe.skip` with
+// `describe` one block at a time. The scoring helpers (scoreSATAge
+// through scorePayrollHistory) are fully determined by these tests and
+// need no ruling; autoScaleTier1's call site does.
+// ════════════════════════════════════════════════════════════════════
+
 // ── Mock firebase-admin/firestore ───────────────────────────────────
 const mockUpdate = jest.fn().mockResolvedValue();
 const mockDoc = jest.fn(() => ({ update: mockUpdate }));
@@ -78,7 +110,7 @@ beforeEach(() => {
 // Individual scoring functions
 // ═══════════════════════════════════════════════════════════════════
 
-describe("scoreSATAge", () => {
+describe.skip("scoreSATAge", () => {
   it("returns full weight for >= 10 years", () => {
     expect(scoreSATAge("2010-01-01")).toBe(WEIGHTS.satAge);
   });
@@ -103,7 +135,7 @@ describe("scoreSATAge", () => {
   });
 });
 
-describe("scoreDENUE", () => {
+describe.skip("scoreDENUE", () => {
   it("returns full weight for established business (>= 5 years)", () => {
     const result = { found: true, topMatch: { fechaAlta: "2015-01-01" } };
     expect(scoreDENUE(result)).toBe(WEIGHTS.denue);
@@ -127,7 +159,7 @@ describe("scoreDENUE", () => {
   });
 });
 
-describe("scoreIMSSEmployees", () => {
+describe.skip("scoreIMSSEmployees", () => {
   it("returns full weight when all employees verified", () => {
     const results = [
       { rfcMatch: true, imssActive: true },
@@ -153,7 +185,7 @@ describe("scoreIMSSEmployees", () => {
   });
 });
 
-describe("scoreFiscalDebt", () => {
+describe.skip("scoreFiscalDebt", () => {
   it("returns full weight when no debt", () => {
     expect(scoreFiscalDebt({ hasDebt: false })).toBe(WEIGHTS.fiscalDebt);
   });
@@ -167,7 +199,7 @@ describe("scoreFiscalDebt", () => {
   });
 });
 
-describe("scorePresunto", () => {
+describe.skip("scorePresunto", () => {
   it("returns full weight when clean", () => {
     expect(scorePresunto({ pass: true, flag: false, hardReject: false })).toBe(WEIGHTS.presunto);
   });
@@ -185,7 +217,7 @@ describe("scorePresunto", () => {
   });
 });
 
-describe("scoreSectorRisk", () => {
+describe.skip("scoreSectorRisk", () => {
   it("returns full weight for bajo", () => {
     expect(scoreSectorRisk({ riskLevel: "bajo" })).toBe(WEIGHTS.sectorRisk);
   });
@@ -207,7 +239,7 @@ describe("scoreSectorRisk", () => {
   });
 });
 
-describe("scorePayrollHistory", () => {
+describe.skip("scorePayrollHistory", () => {
   it("returns full weight for >= 6 clean cycles", () => {
     expect(scorePayrollHistory(6)).toBe(WEIGHTS.payrollHistory);
     expect(scorePayrollHistory(12)).toBe(WEIGHTS.payrollHistory);
@@ -227,7 +259,7 @@ describe("scorePayrollHistory", () => {
 // Tier assignment
 // ═══════════════════════════════════════════════════════════════════
 
-describe("assignTier", () => {
+describe.skip("assignTier", () => {
   it("assigns Tier 1 for score >= 70", () => {
     expect(assignTier(70)).toBe(1);
     expect(assignTier(85)).toBe(1);
@@ -251,7 +283,7 @@ describe("assignTier", () => {
 // Slot management
 // ═══════════════════════════════════════════════════════════════════
 
-describe("computeInitialSlots", () => {
+describe.skip("computeInitialSlots", () => {
   it("returns 10 for Tier 1", () => {
     expect(computeInitialSlots(1)).toBe(TIER_1_INITIAL_SLOTS);
   });
@@ -265,7 +297,7 @@ describe("computeInitialSlots", () => {
   });
 });
 
-describe("autoScaleTier1", () => {
+describe.skip("autoScaleTier1", () => {
   it("adds 10 slots per clean cycle", () => {
     const result = autoScaleTier1(10, 1);
     expect(result.newSlots).toBe(20);
@@ -297,7 +329,7 @@ describe("autoScaleTier1", () => {
   });
 });
 
-describe("expandTier2", () => {
+describe.skip("expandTier2", () => {
   it("expands from 3 to 6", () => {
     const result = expandTier2(3, 1);
     expect(result.newSlots).toBe(6);
@@ -338,7 +370,7 @@ describe("expandTier2", () => {
 // Integration: runEmployerDueDiligence
 // ═══════════════════════════════════════════════════════════════════
 
-describe("runEmployerDueDiligence", () => {
+describe.skip("runEmployerDueDiligence", () => {
   describe("Tier 1 outcome", () => {
     it("assigns Tier 1 with 10 initial slots for a strong employer", async () => {
       const employer = makeEmployer({ satRegistrationDate: "2010-01-01" });
