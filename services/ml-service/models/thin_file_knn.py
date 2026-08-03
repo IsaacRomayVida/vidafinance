@@ -32,6 +32,37 @@ DEFAULT_META_PATH = os.path.join(
 )
 
 
+# The pay-frequency vocabulary this index was TRAINED on
+# (scripts/train_thin_file_index.py). Anything outside it is a token the
+# embedding has never seen.
+TRAINED_PAY_FREQUENCIES = ("weekly", "biweekly", "monthly")
+
+# Cadences that arrived after the index was built, mapped onto the trained token
+# that means the same thing for this feature.
+#
+# 'semimonthly' (the 15th and the last day) became writable at onboarding in
+# #435. It is two paydays a month, which is what 'biweekly' represents here, so
+# it embeds as biweekly rather than as an out-of-vocabulary token. This is the
+# bounded fix: the alternative is retraining the index, and a retrain is a model
+# change with its own evidence requirements rather than a bug fix. Retraining
+# remains the right long-term answer and is tracked on #435.
+PAY_FREQUENCY_ALIASES = {"semimonthly": "biweekly"}
+
+
+def normalise_pay_frequency(value: object) -> str:
+    """
+    Map a borrower's cadence onto the trained vocabulary.
+
+    Unknown values fall back to 'monthly' — the same default this function has
+    always applied to a missing field — rather than embedding a token the index
+    has never seen. An unseen token does not fail; it just matches badly, on the
+    applicants who by definition have the least other signal.
+    """
+    frequency = value if isinstance(value, str) else "monthly"
+    frequency = PAY_FREQUENCY_ALIASES.get(frequency, frequency)
+    return frequency if frequency in TRAINED_PAY_FREQUENCIES else "monthly"
+
+
 def build_profile_text(borrower: dict) -> str:
     """
     Build a text representation of a borrower profile for embedding.
@@ -44,7 +75,7 @@ def build_profile_text(borrower: dict) -> str:
         f"tenure_months:{borrower.get('employmentTenureMonths', 0)}",
         f"industry:{borrower.get('employerIndustry', 'unknown')}",
         f"employer_tier:{borrower.get('employerTier', 3)}",
-        f"pay_frequency:{borrower.get('payFrequency', 'monthly')}",
+        f"pay_frequency:{normalise_pay_frequency(borrower.get('payFrequency'))}",
         f"company_size:{borrower.get('companySize', 'unknown')}",
         f"sector_risk:{borrower.get('sectorRisk', 3)}",
         f"afore_regularity:{borrower.get('aforeRegularity', 0.0):.2f}",
