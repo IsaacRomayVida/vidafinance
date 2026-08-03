@@ -253,3 +253,70 @@ describe("POST /webhooks/metamap", () => {
     expect(mockGetVerificationResult).not.toHaveBeenCalled();
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  Contract: the REAL module vs what index.js assumes                */
+/* ------------------------------------------------------------------ */
+/**
+ * Everything above this line runs against `jest.mock("./metamap-client")`.
+ * That mock is why two production defects survived review: it declared
+ * `getVerificationResult` and returned a `{ valid, ... }` envelope from
+ * `parseWebhook`, while the real module after #346 exported neither. The
+ * webhook suite was green against a contract the module had stopped honouring.
+ *
+ * These cases deliberately reach past the mock with `jest.requireActual` and
+ * assert the real module still satisfies what index.js destructures. A mock is
+ * a claim about a collaborator; this is the test that the claim is true.
+ */
+describe("metamap-client contract (real module, not the mock)", () => {
+  const actual = jest.requireActual("./metamap-client");
+
+  it("exports getVerificationResult — index.js:134 calls it on verification_completed", () => {
+    // Absent after #346: every verification_completed webhook threw
+    // "getVerificationResult is not a function", was swallowed by the handler's
+    // catch, and landed in incident_log instead of metamap_shadow_log.
+    expect(typeof actual.getVerificationResult).toBe("function");
+  });
+
+  it("parseWebhook returns the envelope index.js:115 destructures", () => {
+    const body = { eventName: "verification_completed", resource: "v-123", metadata: { loanId: "L1" } };
+    const secretBefore = process.env.METAMAP_WEBHOOK_SECRET;
+    delete process.env.METAMAP_WEBHOOK_SECRET;
+    try {
+      const out = actual.parseWebhook(body, undefined);
+      // A bare parsed result (the old return) has none of these keys, so `valid`
+      // read as undefined and every correctly-signed webhook took the 401 branch.
+      expect(out).toHaveProperty("valid");
+      expect(out).toHaveProperty("eventName", "verification_completed");
+      expect(out).toHaveProperty("verificationId", "v-123");
+      expect(out).toHaveProperty("metadata");
+      expect(out.valid).toBe(true);
+    } finally {
+      if (secretBefore === undefined) delete process.env.METAMAP_WEBHOOK_SECRET;
+      else process.env.METAMAP_WEBHOOK_SECRET = secretBefore;
+    }
+  });
+
+  it("parseWebhook returns valid:false on a bad signature instead of throwing", () => {
+    // It used to throw. index.js has no try/catch around this call, so a bad
+    // signature produced an unhandled rejection and no response at all — the
+    // one case the 401 branch existed for was the one it never reached.
+    const secretBefore = process.env.METAMAP_WEBHOOK_SECRET;
+    process.env.METAMAP_WEBHOOK_SECRET = "a-secret";
+    try {
+      const body = { eventName: "verification_completed", resource: "v-123" };
+      let out;
+      expect(() => { out = actual.parseWebhook(body, "not-the-right-signature"); }).not.toThrow();
+      expect(out.valid).toBe(false);
+      expect(out.result).toBeNull();
+    } finally {
+      if (secretBefore === undefined) delete process.env.METAMAP_WEBHOOK_SECRET;
+      else process.env.METAMAP_WEBHOOK_SECRET = secretBefore;
+    }
+  });
+
+  it("parseWebhook survives a malformed body rather than throwing out of the handler", () => {
+    const out = actual.parseWebhook("{not json", undefined);
+    expect(out.valid).toBe(false);
+  });
+});
