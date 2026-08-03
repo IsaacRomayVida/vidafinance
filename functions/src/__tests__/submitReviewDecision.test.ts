@@ -3,6 +3,12 @@
 // review moved to `info_requested` or `escalated` no further decision could ever be
 // submitted. The loan stayed in `under_review`, which requestLoan counts as an
 // occupied slot, locking the employee out of the product with no recovery path.
+
+// This file has no top-level `import`, so without an explicit export TypeScript
+// treats it as a global script and every `const` here collides with the identically
+// named `const` in the sibling suites. Keep this.
+export {};
+
 jest.mock('firebase-admin/app', () => ({ initializeApp: jest.fn() }));
 
 jest.mock('firebase-functions/v2/https', () => ({
