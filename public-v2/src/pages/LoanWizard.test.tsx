@@ -81,6 +81,15 @@ const READY_CONFIG = {
         catPercent: 2334,
       },
     ],
+    // The borrower's next payroll date, resolved server-side (#433/#439). A
+    // deliberately un-round date: the value the screen used to compute for
+    // itself was `Date.now() + 30 days`, so a fixture 30 days out could not
+    // tell the two apart.
+    // Midday UTC on purpose: a midnight timestamp renders as the previous day
+    // in any timezone behind UTC, which would make these assertions pass or
+    // fail depending on where CI happens to run.
+    estimatedDeductionDate: '2026-09-15T12:00:00.000Z',
+    payFrequencySource: 'employee_record',
   },
 };
 
@@ -105,6 +114,13 @@ async function goToQuote() {
   await waitFor(() => expect(screen.getAllByText(/paso 2|step 2/i).length).toBeGreaterThan(0));
   advance();
   await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
+}
+
+/** Step 1 → step 4, the final review card. */
+async function goToReview() {
+  await goToQuote();
+  advance();
+  await waitFor(() => expect(screen.getAllByText(/paso 4|step 4/i).length).toBeGreaterThan(0));
 }
 
 /** Step 1 → step 2, the first step that displays a server-priced figure. */
@@ -262,10 +278,12 @@ describe('LoanWizard — pricing available', () => {
 
     expect(screen.queryByTestId('pricing-error-banner')).toBeNull();
     expect(screen.getByText(/\$300/)).toBeInTheDocument();
-    // Twice, not once: the total AND the single payroll deduction, which are the
-    // same figure because the loan is collected in one payment (#424). Before
-    // that fix the deduction row showed $650 and this matched a single element.
-    expect(screen.getAllByText(/\$1,300/)).toHaveLength(2);
+    // Once, not twice. It used to render twice — the total AND a "payroll
+    // deduction" row that, with a single-installment schedule, is the same
+    // figure by construction (shareOfTotal: 1). The same peso amount under two
+    // labels on adjacent rows reads as two charges; the single-charge sentence
+    // says it in words instead (#439).
+    expect(screen.getAllByText(/\$1,300/)).toHaveLength(1);
   });
 });
 
@@ -297,7 +315,10 @@ describe('LoanWizard — repayment schedule comes from the server', () => {
     advance();
     await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
     const quoteText = screenText();
-    expect(quoteText).toMatch(/(Deducción de nómina|Payroll deduction) ?\$1,300/i);
+    // A single-installment schedule states the one charge in words rather than
+    // repeating the total under a second label (#439).
+    expect(quoteText).toMatch(/un solo cargo|a single charge/i);
+    expect(quoteText).not.toMatch(/(Deducción de nómina|Payroll deduction)/i);
     expect(quoteText).not.toMatch(/\$650/);
     expect(quoteText).not.toMatch(/quincenal|biweekly/i);
   });
@@ -366,5 +387,116 @@ describe('LoanWizard — repayment schedule comes from the server', () => {
     expect(screen.queryByText(/^\$0$/)).toBeNull();
     expect(screen.queryByText(/^0\s*%/)).toBeNull();
     expect(advance()).toBe(false);
+  });
+});
+
+/**
+ * #439 — the deduction date is the borrower's payroll date, read from the
+ * server, not a calendar offset invented here.
+ *
+ * This screen used to render `new Date(Date.now() + termDays * 86400000)`. That
+ * is not when the money leaves anyone's paycheck: the loan is collected on a
+ * payday, resolved from the borrower's cadence (#433). Meanwhile
+ * `estimatedDeductionDate` was published on the quote payload and read by
+ * nobody. These tests pin the direction — the screen states the server's date
+ * or states nothing.
+ */
+describe('LoanWizard — the deduction date comes from the server', () => {
+  it('renders the payroll date the server sent, not today plus the term', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    const text = screenText();
+    expect(text).toMatch(/15 de septiembre de 2026|September 15, 2026/i);
+
+    // The date the old code would have produced, computed the same way it did.
+    // Asserting its absence rather than a fixed string keeps this honest no
+    // matter when the suite runs.
+    const localOffset = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const localOffsetText = localOffset.toLocaleDateString('es', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    expect(text).not.toMatch(new RegExp(localOffsetText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+  });
+
+  it('qualifies the date when the cadence was assumed rather than read', async () => {
+    getLoanConfigMock.mockResolvedValue({
+      data: { ...READY_CONFIG.data, payFrequencySource: 'default_monthly' },
+    });
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    expect(screen.getByTestId('deduction-cadence-assumed')).toBeInTheDocument();
+    // The date itself still reads as a prediction in both cases — human review
+    // sits between quote and disbursement. What the assumed case adds is the
+    // admission that we could not read the cadence.
+    expect(screenText()).toMatch(/previsto para el|expected on/i);
+  });
+
+  it('does not qualify a date derived from the borrower\'s own record', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    expect(screen.queryByTestId('deduction-cadence-assumed')).toBeNull();
+    expect(screenText()).toMatch(/previsto para el|expected on/i);
+  });
+
+  it('shows an unreadable date as unavailable rather than inventing one', async () => {
+    getLoanConfigMock.mockResolvedValue({
+      data: { ...READY_CONFIG.data, estimatedDeductionDate: 'not-a-date' },
+    });
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    const text = screenText();
+    // The prices are fine, so this is not a pricing failure and must not be
+    // reported as one — only the date slot degrades.
+    expect(screen.queryByTestId('pricing-error-banner')).toBeNull();
+    expect(text).toMatch(/\$1,300/);
+    expect(text).toMatch(/Fecha de descuento ?No disponible|Deduction date ?Unavailable/i);
+    expect(text).not.toMatch(/previsto para el|expected on/i);
+    // And above all, no silently substituted local date.
+    expect(text).not.toMatch(/Invalid Date|NaN/i);
+  });
+});
+
+/**
+ * The CAT is a regulated disclosure, not a line item of the quote — and it has
+ * to be the same disclosure on every card that carries it. Step 3 rendered it
+ * as a standalone block with the CONDUSEF reference; the step-4 review card
+ * rendered it as a bare row inside the price breakdown, with no note and no
+ * reference. Same figure, same flow, two treatments.
+ */
+describe('LoanWizard — the CAT disclosure is the same on every card', () => {
+  it('renders the full disclosure, not a bare row, on the step-4 review card', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await goToReview();
+
+    const text = screenText();
+    expect(text).toMatch(/2334\s*%/);
+    // The note and the CONDUSEF reference are what make it a disclosure rather
+    // than a number in a list. Their absence is what this test exists to catch.
+    expect(text).toMatch(/El CAT es una medida estandarizada|standardised measure|standardized measure/i);
+    expect(screen.getAllByRole('link', { name: /condusef/i }).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the disclosure on the step-3 quote card', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    expect(screenText()).toMatch(/2334\s*%/);
+    expect(screen.getAllByRole('link', { name: /condusef/i }).length).toBeGreaterThan(0);
   });
 });
