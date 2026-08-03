@@ -18,6 +18,7 @@ const { Worker } = require('bullmq');
 const pino = require('pino');
 const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting');
 const { scTokenRaw, scTokenProbe } = require('./lib/scToken');
+const { getFetch } = require('./lib/fetchClient');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 const { parseBureauMode, withBureauFallback } = require('./lib/bureauFallback');
 
@@ -80,7 +81,7 @@ async function scToken() {
 }
 
 async function scCall(method, path, body) {
-  const { default: fetch } = await import('node-fetch');
+  const fetch = await getFetch();
   const token = await scToken();
   const opts = {
     method,
@@ -208,7 +209,7 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const data = await scCall('GET', '/deductions/completed?date=' + today);
     let synced = 0;
-    const { default: fetch } = await import('node-fetch');
+    const fetch = await getFetch();
     for (const item of data.deductions || []) {
       const snap = await db.collection('loans')
         .where('softcreditoDeductionId', '==', item.deductionId)
@@ -363,4 +364,8 @@ app.post('/curp/validate', requireInternal, async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3002, () => log.info({ port: process.env.PORT || 3002 }, 'vida-softcredito-adapter started'));
+if (require.main === module) {
+  app.listen(process.env.PORT || 3002, () => log.info({ port: process.env.PORT || 3002 }, 'vida-softcredito-adapter started'));
+}
+
+module.exports = { app };
