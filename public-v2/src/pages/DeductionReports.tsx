@@ -3,13 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { DEDUCTION_REPORT_STATUSES, isActiveDeductionStatus, isRepaidStatus } from '../lib/loanStatus';
 
-interface Loan {
+export interface Loan {
   id: string;
   employeeName?: string;
   amount: number;
-  repaymentAmount?: number;
-  deductionAmount?: number;
+  fee?: number;
+  total?: number;
+  remainingBalance?: number;
   frequency?: string;
   termDays?: number;
   status: string;
@@ -33,8 +35,30 @@ function fmtCurrency(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function getDeductionAmount(loan: Loan): number {
-  return loan.deductionAmount ?? loan.repaymentAmount ?? loan.amount;
+/**
+ * What the employer still owes on this loan via payroll deduction.
+ *
+ * `loan.remainingBalance` is the live outstanding figure once processPayroll
+ * has run at least once (functions/src/payroll/processPayroll.ts:125); before
+ * that it doesn't exist on the document yet, and the full obligation is
+ * `loan.total` (= amount + fee, functions/src/index.ts:838) — never bare
+ * `loan.amount`, which is principal only and always understates it. If
+ * neither field is present the true obligation is unknown; returning null
+ * (rather than silently falling back to `amount`) is what this fixes.
+ */
+export function getDeductionAmount(loan: Loan): number | null {
+  if (typeof loan.remainingBalance === 'number' && Number.isFinite(loan.remainingBalance)) {
+    return loan.remainingBalance;
+  }
+  if (typeof loan.total === 'number' && Number.isFinite(loan.total)) {
+    return loan.total;
+  }
+  return null;
+}
+
+function formatDeductionAmount(loan: Loan): string {
+  const amount = getDeductionAmount(loan);
+  return amount === null ? '—' : fmtCurrency(amount);
 }
 
 function getPeriodKey(loan: Loan): string {
@@ -55,7 +79,7 @@ function getPeriodLabel(key: string): string {
   return `${months[Number(m) - 1]} ${y}`;
 }
 
-function groupByPeriod(loans: Loan[]): PeriodGroup[] {
+export function groupByPeriod(loans: Loan[]): PeriodGroup[] {
   const map = new Map<string, Loan[]>();
   for (const loan of loans) {
     const key = getPeriodKey(loan);
@@ -70,12 +94,13 @@ function groupByPeriod(loans: Loan[]): PeriodGroup[] {
       key,
       label: getPeriodLabel(key),
       loans: groupLoans,
-      total: groupLoans.reduce((s, l) => s + getDeductionAmount(l), 0),
+      total: groupLoans.reduce((s, l) => s + (getDeductionAmount(l) ?? 0), 0),
     }));
 }
 
-function exportToCsv(groups: PeriodGroup[]) {
-  const headers = ['Period', 'Employee', 'Deduction Amount', 'Frequency', 'Status', 'Deduction ID'];
+const CSV_HEADERS = ['Period', 'Employee', 'Deduction Amount', 'Frequency', 'Status', 'Deduction ID'];
+
+export function buildCsvRows(groups: PeriodGroup[]): string[][] {
   const rows: string[][] = [];
 
   for (const group of groups) {
@@ -83,7 +108,7 @@ function exportToCsv(groups: PeriodGroup[]) {
       rows.push([
         group.label,
         loan.employeeName ?? '',
-        fmtCurrency(getDeductionAmount(loan)),
+        formatDeductionAmount(loan),
         loan.frequency ?? 'monthly',
         loan.status,
         loan.softcreditoDeductionId ?? '',
@@ -92,8 +117,13 @@ function exportToCsv(groups: PeriodGroup[]) {
     rows.push([group.label, 'TOTAL', fmtCurrency(group.total), '', '', '']);
   }
 
+  return rows;
+}
+
+function exportToCsv(groups: PeriodGroup[]) {
+  const rows = buildCsvRows(groups);
   const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  const csv = [headers, ...rows].map((r) => r.map(escape).join(',')).join('\n');
+  const csv = [CSV_HEADERS, ...rows].map((r) => r.map(escape).join(',')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -110,14 +140,14 @@ export function DeductionReports() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Real-time loans listener — only active/paid loans have deductions
+  // Real-time loans listener — every status with a live or completed deduction
   useEffect(() => {
     if (!user) return;
 
     const q = query(
       collection(db, 'loans'),
       where('employerId', '==', user.uid),
-      where('status', 'in', ['active', 'paid']),
+      where('status', 'in', DEDUCTION_REPORT_STATUSES as string[]),
       orderBy('createdAt', 'desc'),
     );
 
@@ -133,9 +163,9 @@ export function DeductionReports() {
   const groups = useMemo(() => groupByPeriod(loans), [loans]);
 
   // Summary stats
-  const totalDeductions = loans.reduce((s, l) => s + getDeductionAmount(l), 0);
-  const activeCount = loans.filter((l) => l.status === 'active').length;
-  const completedCount = loans.filter((l) => l.status === 'paid').length;
+  const totalDeductions = loans.reduce((s, l) => s + (getDeductionAmount(l) ?? 0), 0);
+  const activeCount = loans.filter((l) => isActiveDeductionStatus(l.status)).length;
+  const completedCount = loans.filter((l) => isRepaidStatus(l.status)).length;
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '48px 0 64px' }}>
@@ -240,11 +270,13 @@ export function DeductionReports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {group.loans.map((loan) => (
+                  {group.loans.map((loan) => {
+                    const amount = getDeductionAmount(loan);
+                    return (
                     <tr key={loan.id}>
                       <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
                       <td style={{ fontWeight: 600, color: 'var(--brand)' }}>
-                        ${fmtCurrency(getDeductionAmount(loan))}
+                        {amount === null ? '—' : `$${fmtCurrency(amount)}`}
                       </td>
                       <td style={{ textTransform: 'capitalize' }}>
                         {t(`freq_${loan.frequency ?? 'monthly'}`, loan.frequency ?? 'monthly')}
@@ -258,7 +290,8 @@ export function DeductionReports() {
                         {loan.softcreditoDeductionId || '—'}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
