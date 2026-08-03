@@ -48,6 +48,46 @@ async function fetchMLScore(features) {
   return res.json();
 }
 
+/**
+ * Pay periods per month, as the ML model's `pay_frequency_encoded` feature.
+ *
+ * `biweekly` (every 14 days) and `semimonthly` (the 15th and the last day) are
+ * both TWICE A MONTH for this feature's purpose, so both encode as 2.
+ *
+ * This was a ternary with an implicit `else` — `weekly ? 4 : biweekly ? 2 : 1`.
+ * That was survivable only while `semimonthly` could not be written. #435 made
+ * it selectable at onboarding (the tile reading "Quincenal" used to store
+ * `biweekly`), and from that moment every borrower paid on the 15th fell
+ * through to 1 and was scored as if paid monthly — understating how often a
+ * borrower is paid, silently, inside a credit decision.
+ *
+ * Note what that implies about the bug it replaced: while "Quincenal" stored
+ * `biweekly`, this feature was accidentally RIGHT (2) and the deduction date
+ * was wrong. Correcting the cadence without correcting this line swapped which
+ * half was broken rather than fixing either. The map is explicit so the next
+ * cadence added cannot repeat it.
+ */
+const PAY_PERIODS_PER_MONTH = Object.freeze({
+  weekly: 4,
+  biweekly: 2,
+  semimonthly: 2,
+  monthly: 1,
+});
+
+/**
+ * Unknown cadences still score as monthly — an application must not fail on an
+ * unrecognised enum — but they are LOGGED. A silent default is what let this
+ * run; a noisy one is a bug report.
+ */
+function encodePayFrequency(payFrequency, log) {
+  const encoded = PAY_PERIODS_PER_MONTH[payFrequency];
+  if (encoded === undefined) {
+    log.warn({ stage: "stage2", payFrequency }, "Unknown pay frequency — scoring as monthly");
+    return PAY_PERIODS_PER_MONTH.monthly;
+  }
+  return encoded;
+}
+
 function computeLTI(principalAmount, monthlySalary, existingDeductions = 0) {
   const netIncome = monthlySalary - existingDeductions;
   if (netIncome <= 0) return 100; // 100% = over-leveraged
@@ -162,7 +202,7 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
     mlScore = await fetchMLScore({
       employment_tenure_months: data.imss.tenureMonths || applicant.employmentTenureMonths || 0,
       monthly_salary: monthlySalary,
-      pay_frequency_encoded: applicant.payFrequency === "weekly" ? 4 : applicant.payFrequency === "biweekly" ? 2 : 1,
+      pay_frequency_encoded: encodePayFrequency(applicant.payFrequency, log),
       loan_to_salary_ratio: monthlySalary > 0 ? (applicant.principalAmount || 0) / monthlySalary : 0,
       employer_industry_encoded: applicant.industryCode || 0,
       principal_amount: applicant.principalAmount || 0,
@@ -185,4 +225,4 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
   };
 }
 
-module.exports = { runBureauAndEmployment, computeLTI };
+module.exports = { runBureauAndEmployment, computeLTI, encodePayFrequency, PAY_PERIODS_PER_MONTH };
