@@ -115,10 +115,19 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
   const writes: Array<{ op: string; collection?: string; data?: Doc }> = [];
   const loans: Record<string, Doc> = {};
 
-  const loansQuery: { where: jest.Mock; limit: jest.Mock; get: jest.Mock } = {
+  // ADR-005 Finding 2 / ADR-007: requestLoan's employer-slot-cap check reads
+  // this employer's active-loan count inside the transaction via an
+  // aggregate `.count()` query. Tagged so the transaction mock's `get()`
+  // below can recognize it was handed the aggregate query object, not a
+  // document reference. This file always exercises a fresh employer with no
+  // active loans, so the count is fixed at 0 — well under the Tier-2
+  // fallback (3) EMPLOYER's absent riskTier resolves to.
+  const employerActiveLoansCountQuery = { _kind: 'employerActiveLoansCountQuery' as const };
+  const loansQuery: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
     where: jest.fn(),
     limit: jest.fn(),
     get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+    count: jest.fn().mockReturnValue(employerActiveLoansCountQuery),
   };
   loansQuery.where.mockReturnValue(loansQuery);
   loansQuery.limit.mockReturnValue(loansQuery);
@@ -126,6 +135,7 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
   const docRef = (collection: string, id: string) => ({
     id,
     _collection: collection,
+    _kind: collection === 'employers' ? ('employerDocRef' as const) : undefined,
     get: jest.fn(async () => {
       if (collection === 'employees') {
         return { exists: employee !== null, data: () => employee };
@@ -156,7 +166,7 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
       add: jest.fn(async () => ({ id: 'generated-id' })),
     })),
     runTransaction: jest.fn(
-      async (fn: (txn: { update: jest.Mock; set: jest.Mock }) => Promise<void>) => {
+      async (fn: (txn: { get: jest.Mock; update: jest.Mock; set: jest.Mock }) => Promise<void>) => {
         const record = (op: string) =>
           jest.fn((ref: unknown, data: Doc) => {
             writes.push({
@@ -165,7 +175,19 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
               data,
             });
           });
-        const txn = { update: record('txn.update'), set: record('txn.set') };
+        const txn = {
+          get: jest.fn((refOrQuery: { _kind?: string } | undefined) => {
+            if (refOrQuery?._kind === 'employerDocRef') {
+              return Promise.resolve({ exists: true, data: () => EMPLOYER });
+            }
+            if (refOrQuery?._kind === 'employerActiveLoansCountQuery') {
+              return Promise.resolve({ data: () => ({ count: 0 }) });
+            }
+            throw new Error('Mock tx.get() called with an unrecognized ref/query');
+          }),
+          update: record('txn.update'),
+          set: record('txn.set'),
+        };
         await fn(txn);
         return txn;
       }

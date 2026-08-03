@@ -77,10 +77,16 @@ jest.mock('../utils/slackAlert', () => ({ sendSlackAlert: jest.fn().mockResolved
 jest.mock('../utils/sentry', () => ({ initSentry: jest.fn(), captureException: jest.fn() }));
 
 function makeQuery(getResult: { empty: boolean; docs: Array<{ data: () => Record<string, unknown>; id: string }> }) {
-  const query: { where: jest.Mock; limit: jest.Mock; get: jest.Mock } = {
+  const query: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
     where: jest.fn(),
     limit: jest.fn(),
     get: jest.fn().mockResolvedValue(getResult),
+    // requestLoan's employer-slot-cap check builds `.where().where().count()`
+    // against this same 'loans' collection mock, distinct from the
+    // `.where().where().limit(1).get()` per-employee duplicate check above.
+    // Tagged so the runTransaction mock's `get()` below can recognize it was
+    // handed the aggregate query object, not a document reference.
+    count: jest.fn(),
   };
   query.where.mockReturnValue(query);
   query.limit.mockReturnValue(query);
@@ -115,15 +121,27 @@ function buildMockDb({
   // Simulates the audit collection itself being unwritable, to prove a failed
   // audit write never changes the error the borrower receives.
   auditWriteFails = false,
+  // How many OTHER loans are currently active against this employer, across
+  // all of its employees — the count the transactional slot-cap check reads.
+  // Deliberately independent of `activeLoans` above, which only backs the
+  // per-EMPLOYEE duplicate-application guard.
+  activeEmployerLoansCount = 0,
 } = {}) {
   const loansQuery = makeQuery({
     empty: activeLoans.length === 0,
     docs: activeLoans.map((d) => ({ data: () => d, id: 'active-loan-id' })),
   });
+  // The object requestLoan's `.count()` call returns, and the same object it
+  // then hands to `tx.get()`. Tagged so the transaction mock's `get()` below
+  // can tell it apart from a document reference without depending on the
+  // real Firestore AggregateQuery shape.
+  const employerActiveLoansCountQuery = { _kind: 'employerActiveLoansCountQuery' as const };
+  loansQuery.count.mockReturnValue(employerActiveLoansCountQuery);
 
   const transactionCalls: Array<{ op: string; data?: unknown }> = [];
   const auditWrites: Array<Record<string, unknown>> = [];
   let currentConfigData = configData;
+  let currentEmployer = employer;
 
   // One stable object across every collection('audit_log') call, so a test can
   // read what was written. `auditWriteFails` makes the write reject, which is
@@ -136,6 +154,17 @@ function buildMockDb({
     }),
   };
 
+  // Same tagging idea as the aggregate query above: requestLoan reads the
+  // employer doc once outside the transaction (the status check) and again
+  // via `tx.get(employerRef)` inside it (the slot-cap check), and both must
+  // resolve to the SAME ref object for the transaction mock to recognize it.
+  const employerDocRef = {
+    _kind: 'employerDocRef' as const,
+    get: jest.fn().mockImplementation(() =>
+      Promise.resolve({ exists: currentEmployer !== null, data: () => currentEmployer })
+    ),
+  };
+
   return {
     collection: jest.fn().mockImplementation((name: string) => {
       if (name === 'employees') {
@@ -146,11 +175,7 @@ function buildMockDb({
         };
       }
       if (name === 'employers') {
-        return {
-          doc: jest.fn().mockReturnValue({
-            get: jest.fn().mockResolvedValue({ exists: employer !== null, data: () => employer }),
-          }),
-        };
+        return { doc: jest.fn().mockReturnValue(employerDocRef) };
       }
       if (name === 'loans') {
         return { ...loansQuery, doc: jest.fn().mockReturnValue({ id: 'new-loan-id' }) };
@@ -172,14 +197,30 @@ function buildMockDb({
       }
       throw new Error(`Unexpected collection: ${name}`);
     }),
-    runTransaction: jest.fn(async (fn: (txn: { update: jest.Mock; set: jest.Mock }) => Promise<void>) => {
-      const txn = {
-        update: jest.fn((_ref: unknown, data: unknown) => transactionCalls.push({ op: 'update', data })),
-        set: jest.fn((_ref: unknown, data: unknown) => transactionCalls.push({ op: 'set', data })),
-      };
-      await fn(txn);
-      return transactionCalls;
-    }),
+    runTransaction: jest.fn(
+      async (
+        fn: (txn: { get: jest.Mock; update: jest.Mock; set: jest.Mock }) => Promise<void>
+      ) => {
+        const txn = {
+          get: jest.fn((refOrQuery: { _kind?: string } | undefined) => {
+            if (refOrQuery?._kind === 'employerDocRef') {
+              return Promise.resolve({ exists: currentEmployer !== null, data: () => currentEmployer });
+            }
+            if (refOrQuery?._kind === 'employerActiveLoansCountQuery') {
+              return Promise.resolve({ data: () => ({ count: activeEmployerLoansCount }) });
+            }
+            throw new Error('Mock tx.get() called with an unrecognized ref/query');
+          }),
+          update: jest.fn((ref: { _kind?: string }, data: Record<string, unknown>) => {
+            if (ref?._kind === 'employerDocRef') currentEmployer = { ...(currentEmployer ?? {}), ...data };
+            transactionCalls.push({ op: 'update', data });
+          }),
+          set: jest.fn((_ref: unknown, data: unknown) => transactionCalls.push({ op: 'set', data })),
+        };
+        await fn(txn);
+        return transactionCalls;
+      }
+    ),
     _transactionCalls: transactionCalls,
     _auditWrites: auditWrites,
     // Lets a test simulate an admin approving a config change (#389's propose
@@ -797,6 +838,153 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       expect(result.status).toBe('pending');
       expect(mockDb._auditWrites.some((w) => w['action'] === 'loan.request_denied')).toBe(false);
       expect(mockDb._auditWrites.some((w) => w['action'] === 'loan.requested')).toBe(true);
+    });
+  });
+
+  // ADR-005 Finding 2 / ADR-007: maxActiveSlots was written and audit-logged
+  // but never read as a constraint anywhere. This is the enforcement point.
+  describe('employer slot cap (ADR-005 Finding 2 / ADR-007)', () => {
+    function slotError() {
+      return { code: 'failed-precondition', message: 'EMPLOYER_SLOT_LIMIT_REACHED' };
+    }
+
+    it('allows the Nth loan (count one below an admin-set cap)', async () => {
+      mockDb = buildMockDb({
+        employer: { ...mockEmployer, maxActiveSlots: 2 },
+        activeEmployerLoansCount: 1,
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+      const result = await fn({ auth, data: realClientPayload });
+
+      expect(result.loanId).toBeTruthy();
+    });
+
+    it('refuses the N+1th loan (count already at the admin-set cap)', async () => {
+      mockDb = buildMockDb({
+        employer: { ...mockEmployer, maxActiveSlots: 2 },
+        activeEmployerLoansCount: 2,
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+      await expect(fn({ auth, data: realClientPayload })).rejects.toMatchObject(slotError());
+      // The cap must bind before the loan/credit-hold write, not after.
+      expect(mockDb._transactionCalls.some((c) => c.op === 'set')).toBe(false);
+    });
+
+    it('respects an admin-set cap even when it is lower than the tier default', async () => {
+      // maxActiveSlots=1 on a Tier 1 employer (whose tier default would be
+      // 10) must still bind at 1 — an explicit admin value always wins over
+      // the tier fallback, never the other way around.
+      mockDb = buildMockDb({
+        employer: { ...mockEmployer, maxActiveSlots: 1, riskTier: 1 },
+        activeEmployerLoansCount: 1,
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+      await expect(fn({ auth, data: realClientPayload })).rejects.toMatchObject(slotError());
+    });
+
+    it('does not tell the borrower they were declined for credit', async () => {
+      mockDb = buildMockDb({
+        employer: { ...mockEmployer, maxActiveSlots: 1 },
+        activeEmployerLoansCount: 1,
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+      const error = (await fn({ auth, data: realClientPayload }).catch((e: unknown) => e)) as Error;
+      expect(error.message).not.toMatch(/crédito|riesgo|sospechosa/i);
+      expect(error.message).toBe('EMPLOYER_SLOT_LIMIT_REACHED');
+    });
+
+    describe('seeding maxActiveSlots when it has never been set', () => {
+      it('falls back to the Tier 1 initial slot count (10) for a Tier 1 employer', async () => {
+        mockDb = buildMockDb({
+          employer: { ...mockEmployer, riskTier: 1 }, // no maxActiveSlots
+          activeEmployerLoansCount: 9,
+        });
+        const { requestLoan } = await import('../index');
+        const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+        const result = await fn({ auth, data: realClientPayload });
+        expect(result.loanId).toBeTruthy();
+
+        const seedWrite = mockDb._transactionCalls.find(
+          (c) => c.op === 'update' && (c.data as Record<string, unknown>)?.['maxActiveSlots'] !== undefined
+        );
+        expect(seedWrite).toMatchObject({ op: 'update', data: { maxActiveSlots: 10 } });
+      });
+
+      it('falls back to the Tier 2 initial slot count (3) for a Tier 2 employer', async () => {
+        mockDb = buildMockDb({
+          employer: { ...mockEmployer, riskTier: 2 },
+          activeEmployerLoansCount: 2,
+        });
+        const { requestLoan } = await import('../index');
+        const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+        const result = await fn({ auth, data: realClientPayload });
+        expect(result.loanId).toBeTruthy();
+
+        const seedWrite = mockDb._transactionCalls.find(
+          (c) => c.op === 'update' && (c.data as Record<string, unknown>)?.['maxActiveSlots'] !== undefined
+        );
+        expect(seedWrite).toMatchObject({ op: 'update', data: { maxActiveSlots: 3 } });
+      });
+
+      it('defaults an employer with NO riskTier at all to the Tier 2 count (3), not zero', async () => {
+        // The most common real state today (ADR-005 Finding 2): approveEmployer.ts
+        // never sets riskTier, so this is the fallback nearly the entire
+        // existing employer book hits on first deploy of this change.
+        mockDb = buildMockDb({
+          employer: { ...mockEmployer }, // no maxActiveSlots, no riskTier
+          activeEmployerLoansCount: 2,
+        });
+        const { requestLoan } = await import('../index');
+        const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+        const result = await fn({ auth, data: realClientPayload });
+        expect(result.loanId).toBeTruthy();
+
+        const seedWrite = mockDb._transactionCalls.find(
+          (c) => c.op === 'update' && (c.data as Record<string, unknown>)?.['maxActiveSlots'] !== undefined
+        );
+        expect(seedWrite).toMatchObject({ op: 'update', data: { maxActiveSlots: 3 } });
+      });
+
+      it('fails closed to zero for a riskTier that is an actual due-diligence rejection (3), not the "never scored" default', async () => {
+        // Distinguishes "we have no idea" (defaults to Tier 2, above) from
+        // "we know, and it's bad" (0) — an explicit non-1/2 riskTier is a
+        // real signal, not a data gap, and must not be softened.
+        mockDb = buildMockDb({
+          employer: { ...mockEmployer, riskTier: 3 },
+          activeEmployerLoansCount: 0,
+        });
+        const { requestLoan } = await import('../index');
+        const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+        await expect(fn({ auth, data: realClientPayload })).rejects.toMatchObject(slotError());
+      });
+
+      it('does not overwrite an already-seeded/admin-set maxActiveSlots', async () => {
+        mockDb = buildMockDb({
+          employer: { ...mockEmployer, maxActiveSlots: 7, riskTier: 1 },
+          activeEmployerLoansCount: 0,
+        });
+        const { requestLoan } = await import('../index');
+        const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+        await fn({ auth, data: realClientPayload });
+
+        const seedWrite = mockDb._transactionCalls.find(
+          (c) => c.op === 'update' && (c.data as Record<string, unknown>)?.['maxActiveSlots'] !== undefined
+        );
+        expect(seedWrite).toBeUndefined();
+      });
     });
   });
 });

@@ -65,6 +65,57 @@ const EMPLOYEE_CREDIT_CEILING = 5000;
 // apart into two separately-editable literals.
 const INLINE_ML_MAX_DEFAULT_PROBABILITY = 0.4;
 
+// Loan statuses that occupy a "slot" — one employee-at-one-employer allowed to
+// have a loan outstanding at the same time (ADR-005 Finding 2 / ADR-007). This
+// is the same status set requestLoan's per-employee duplicate-application
+// guard already treats as "an open application", per the #407 comment near
+// DECIDABLE_REVIEW_STATUSES below: `under_review` counts, because leaving it
+// out is exactly what stranded borrowers there before.
+const ACTIVE_LOAN_STATUSES = ['pending', 'under_review', 'approved', 'disbursement_queued', 'active'];
+
+// Mirrors services/underwriting-service/src/stages/employer-b.js's
+// `computeInitialSlots(assignTier(score))` for the two tiers that are ever
+// granted a nonzero cap (ADR-007). Duplicated here rather than imported:
+// firebase.json's `functions.source` is "functions" only, so a Cloud
+// Functions deploy never uploads services/underwriting-service — a
+// cross-package `require` would compile locally and then fail to resolve in
+// the deployed function. Keep the two literals below in sync with
+// TIER_1_INITIAL_SLOTS / TIER_2_INITIAL_SLOTS in employer-b.js if either
+// changes there.
+const EMPLOYER_TIER_1_INITIAL_SLOTS = 10;
+const EMPLOYER_TIER_2_INITIAL_SLOTS = 3;
+
+/**
+ * The employer-level loan concurrency cap to enforce when `maxActiveSlots`
+ * has never been written (true for every employer that predates the
+ * updateEmployerTier admin control — ADR-005 Finding 2).
+ *
+ * Fail-direction, deliberately NOT a flat 0: this codebase's credit-path
+ * convention is to fail closed on missing data (getLoanConfigValues above;
+ * decision-engine.js:66-72 in the underwriting service), and that is followed
+ * here for a `riskTier` that is present but not 1 or 2 (e.g. 3, an actual
+ * due-diligence rejection, or any other unrecognized value) — those get 0,
+ * genuinely no capacity. But a `riskTier` that is simply ABSENT — the
+ * default state of most of the existing employer book today, since neither
+ * approveEmployer.ts nor onboarding ever sets it — is treated as Tier 2
+ * (3 slots), not 0. That mirrors the existing fallback this exact function
+ * already uses for the same field a few lines below
+ * (`employerTier: employer['riskTier'] ?? 2` in the inline-ML call), and
+ * avoids the alternative: a flat 0 default would silently zero out loan
+ * origination for essentially every current employer the moment this ships,
+ * since none of them have ever had a tier assigned. That is a materially
+ * larger blast radius than the missing-config-document case the fail-closed
+ * convention was written for, so it is not applied mechanically here. This
+ * is a judgment call, not a settled ADR ruling — flagged for Isaac to
+ * confirm, same as ADR-007's forfeit-vs-carry-forward question.
+ */
+function initialSlotsForEmployerTier(riskTier: unknown): number {
+  const tier = riskTier ?? 2;
+  if (tier === 1) return EMPLOYER_TIER_1_INITIAL_SLOTS;
+  if (tier === 2) return EMPLOYER_TIER_2_INITIAL_SLOTS;
+  return 0;
+}
+
 function getQueue(name: string): Queue {
   const redisUrl = process.env['REDIS_URL'] ?? '';
   if (!redisUrl) throw new Error('REDIS_URL not configured — queue unavailable');
@@ -373,17 +424,29 @@ export const requestLoan = onCall(
         const active = await db
           .collection('loans')
           .where('employeeId', '==', uid)
-          .where('status', 'in', ['pending', 'under_review', 'approved', 'disbursement_queued', 'active'])
+          .where('status', 'in', ACTIVE_LOAN_STATUSES)
           .limit(1)
           .get();
         if (!active.empty)
           throw new HttpsError('failed-precondition', VidaErrorCode.DUPLICATE_LOAN_APPLICATION);
 
-        const employerSnap = await db.collection('employers').doc(emp['employerId']).get();
+        const employerRef = db.collection('employers').doc(emp['employerId']);
+        const employerSnap = await employerRef.get();
         const employer = employerSnap.data() ?? {};
 
         if (employer['status'] !== 'active' && employer['status'] !== 'pending_verification')
           throw new HttpsError('failed-precondition', VidaErrorCode.EMPLOYER_NOT_APPROVED);
+
+        // The employer-wide concurrency-cap query, read for real INSIDE the
+        // transaction below (tx.get) alongside the write it gates — never
+        // here. Building the Query object is cheap and side-effect-free;
+        // resolving it here and trusting the count would be exactly the race
+        // this change exists to close (see the comment at the transaction).
+        const activeEmployerLoansCountQuery = db
+          .collection('loans')
+          .where('employerId', '==', emp['employerId'])
+          .where('status', 'in', ACTIVE_LOAN_STATUSES)
+          .count();
 
         // Read the live, admin-approved rate. Fails closed (#389): if the config
         // document is unreadable or out of bounds this THROWS and no loan is
@@ -638,6 +701,54 @@ export const requestLoan = onCall(
         }
 
         await db.runTransaction(async (tx) => {
+          // Employer slot cap (ADR-005 Finding 2 / ADR-007): both reads that
+          // decide whether this loan is allowed to exist — the employer's
+          // cap and how many of its slots are already occupied — happen
+          // INSIDE this transaction, alongside the write that would occupy
+          // one more. A read taken before the transaction (as the guards
+          // above deliberately do NOT do for this check) is decorative for a
+          // cap: two concurrent requests would both read N-1-of-N used and
+          // both commit, overshooting the cap by exactly the race this
+          // change exists to prevent.
+          //
+          // `tx.get()` on a Query (here, an aggregate `.count()`) is
+          // documented by the Admin SDK to hold a pessimistic lock on every
+          // document matched by the underlying query — including documents
+          // that come to match it before this transaction commits. A second,
+          // concurrent requestLoan for the same employer that would push the
+          // count over the cap is therefore not just reading stale data, it
+          // is forced to retry against this transaction's write, which is
+          // the actual guarantee a slot cap needs.
+          //
+          // Both reads happen before any write in this transaction, per
+          // Firestore's requirement that all reads precede all writes.
+          const [employerTxSnap, activeCountSnap] = await Promise.all([
+            tx.get(employerRef),
+            tx.get(activeEmployerLoansCountQuery),
+          ]);
+          const employerTxData = employerTxSnap.data() ?? {};
+          const storedMaxSlots = employerTxData['maxActiveSlots'];
+          const maxSlots =
+            typeof storedMaxSlots === 'number'
+              ? storedMaxSlots
+              : initialSlotsForEmployerTier(employerTxData['riskTier']);
+
+          // Seed: this employer has never had maxActiveSlots written (true
+          // for every employer that predates the updateEmployerTier admin
+          // control). Persist the computed value now so it is a real,
+          // ops-visible number the next updateEmployerTier audit log's
+          // `before` snapshot can show, instead of staying undefined
+          // forever. Tagged `update`, not `set`, since the employer document
+          // is already known to exist (its `status` was read and checked
+          // above) — an update here can never race a document creation.
+          if (typeof storedMaxSlots !== 'number') {
+            tx.update(employerRef, { maxActiveSlots: maxSlots });
+          }
+
+          if (activeCountSnap.data().count >= maxSlots) {
+            throw new HttpsError('failed-precondition', VidaErrorCode.EMPLOYER_SLOT_LIMIT_REACHED);
+          }
+
           if (holdCredit) tx.update(empRef, { availableCredit: FieldValue.increment(-amount) });
           tx.set(db.collection('loans').doc(loanId), {
             employeeId: uid,

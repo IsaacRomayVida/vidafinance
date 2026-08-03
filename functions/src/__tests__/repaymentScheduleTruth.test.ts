@@ -125,19 +125,32 @@ const EMPLOYER = {
 };
 
 function makeQuery() {
-  const query: { where: jest.Mock; limit: jest.Mock; get: jest.Mock } = {
+  const query: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
     where: jest.fn(),
     limit: jest.fn(),
     get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+    // ADR-005 Finding 2 / ADR-007: requestLoan's employer-slot-cap check
+    // aggregates this same 'loans' collection via `.count()`, tagged so the
+    // transaction mock's `get()` below can recognize the aggregate query
+    // object (as opposed to a document reference) without depending on the
+    // real Firestore AggregateQuery shape.
+    count: jest.fn(),
   };
   query.where.mockReturnValue(query);
   query.limit.mockReturnValue(query);
+  const employerActiveLoansCountQuery = { _kind: 'employerActiveLoansCountQuery' as const };
+  query.count.mockReturnValue(employerActiveLoansCountQuery);
   return query;
 }
 
 function buildMockDb() {
   const loansQuery = makeQuery();
   const writes: Array<{ op: string; data?: unknown }> = [];
+
+  const employerDocRef = {
+    _kind: 'employerDocRef' as const,
+    get: jest.fn().mockResolvedValue({ exists: true, data: () => EMPLOYER }),
+  };
 
   return {
     collection: jest.fn().mockImplementation((name: string) => {
@@ -149,11 +162,7 @@ function buildMockDb() {
         };
       }
       if (name === 'employers') {
-        return {
-          doc: jest.fn().mockReturnValue({
-            get: jest.fn().mockResolvedValue({ exists: true, data: () => EMPLOYER }),
-          }),
-        };
+        return { doc: jest.fn().mockReturnValue(employerDocRef) };
       }
       if (name === 'loans') {
         return {
@@ -188,13 +197,24 @@ function buildMockDb() {
       }
       throw new Error(`Unexpected collection: ${name}`);
     }),
-    runTransaction: jest.fn(async (fn: (txn: { update: jest.Mock; set: jest.Mock }) => Promise<void>) => {
-      const txn = {
-        update: jest.fn(),
-        set: jest.fn((_ref: unknown, data: unknown) => writes.push({ op: 'loan.set', data })),
-      };
-      await fn(txn);
-    }),
+    runTransaction: jest.fn(
+      async (fn: (txn: { get: jest.Mock; update: jest.Mock; set: jest.Mock }) => Promise<void>) => {
+        const txn = {
+          get: jest.fn((refOrQuery: { _kind?: string } | undefined) => {
+            if (refOrQuery?._kind === 'employerDocRef') {
+              return Promise.resolve({ exists: true, data: () => EMPLOYER });
+            }
+            if (refOrQuery?._kind === 'employerActiveLoansCountQuery') {
+              return Promise.resolve({ data: () => ({ count: 0 }) });
+            }
+            throw new Error('Mock tx.get() called with an unrecognized ref/query');
+          }),
+          update: jest.fn(),
+          set: jest.fn((_ref: unknown, data: unknown) => writes.push({ op: 'loan.set', data })),
+        };
+        await fn(txn);
+      }
+    ),
     _writes: writes,
   };
 }
