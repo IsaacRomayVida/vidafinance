@@ -11,6 +11,7 @@ import {
   fmt,
   fmtCurrency,
   getDeductionAmount,
+  getPayFrequency,
   buildCsv,
   groupByPeriod,
 } from '../lib/deductionReport';
@@ -164,6 +165,7 @@ export function DeductionReports() {
                 <tbody>
                   {group.loans.map((loan) => {
                     const amount = getDeductionAmount(loan);
+                    const frequency = getPayFrequency(loan);
                     return (
                     <tr key={loan.id}>
                       <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
@@ -171,7 +173,7 @@ export function DeductionReports() {
                         {amount === null ? '—' : `$${fmtCurrency(amount)}`}
                       </td>
                       <td style={{ textTransform: 'capitalize' }}>
-                        {t(`freq_${loan.frequency ?? 'monthly'}`, loan.frequency ?? 'monthly')}
+                        {frequency ? t(`freq_${frequency}`, frequency) : '—'}
                       </td>
                       <td>
                         <span className={`badge badge-${loan.status}`}>
