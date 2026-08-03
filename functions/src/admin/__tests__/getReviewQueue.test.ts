@@ -339,6 +339,77 @@ describe('getReviewQueue', () => {
       });
     });
 
+    // #458/#462 background: after #462, an "assumed" condition fails closed and
+    // escalates. Ops needs to tell that apart from a genuine credit failure.
+    it('reports all-read failures with an empty unreadFailures roll-up', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1', {
+        underwritingDecision: {
+          decision: 'pending_review',
+          allPass: false,
+          conditions: [
+            { name: 'min_tenure', pass: true, value: 12, required: 6, source: 'read' },
+            { name: 'max_dti', pass: false, value: 0.55, required: 0.4, source: 'read' },
+          ],
+        },
+      });
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+      expect(row.underwritingDecision).toMatchObject({
+        failedConditions: ['max_dti'],
+        failedConditionDetails: [{ name: 'max_dti', source: 'read' }],
+        unreadFailures: [],
+      });
+    });
+
+    it('surfaces a bureau-outage shape: assumed failures land in unreadFailures', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1', {
+        underwritingDecision: {
+          decision: 'escalated',
+          allPass: false,
+          conditions: [
+            { name: 'min_tenure', pass: true, value: 12, required: 6, source: 'read' },
+            { name: 'bureau_score', pass: false, value: null, required: 500, source: 'assumed' },
+            { name: 'imss_tenure', pass: false, value: null, required: 6, source: 'assumed' },
+          ],
+        },
+      });
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+      expect(row.underwritingDecision).toMatchObject({
+        failedConditions: ['bureau_score', 'imss_tenure'],
+        failedConditionDetails: [
+          { name: 'bureau_score', source: 'assumed' },
+          { name: 'imss_tenure', source: 'assumed' },
+        ],
+        unreadFailures: ['bureau_score', 'imss_tenure'],
+      });
+    });
+
+    // Loans written before #459 have conditions with no `source` key at all. That
+    // is not the same claim as "a provider was down" — it must not appear in
+    // unreadFailures, which is reserved for confirmed-assumed values.
+    it('treats a legacy loan with no source field as unknown, not assumed', async () => {
+      seedReview('r1');
+      seedLoan('loan-r1', {
+        underwritingDecision: {
+          decision: 'pending_review',
+          allPass: false,
+          conditions: [
+            { name: 'max_dti', pass: false, value: 0.55, required: 0.4 }, // no `source` key
+          ],
+        },
+      });
+      const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
+      const row = (result.reviews as Array<Record<string, unknown>>)[0];
+      expect(row.underwritingDecision).toMatchObject({
+        failedConditions: ['max_dti'],
+        failedConditionDetails: [{ name: 'max_dti', source: 'unknown' }],
+        unreadFailures: [],
+      });
+    });
+
     it('returns null and does not throw when loan has no underwritingDecision', async () => {
       seedReview('r1');
       seedLoan('loan-r1'); // no underwritingDecision field — pre-#393 loan

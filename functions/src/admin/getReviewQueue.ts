@@ -38,11 +38,23 @@ interface ConditionCount {
   total: number;
 }
 
+interface FailedConditionDetail {
+  name: string;
+  // "read" | "assumed" | "unknown" — see summarizeUnderwriting for why "unknown"
+  // is a distinct state from "assumed" rather than the same bucket.
+  source: string;
+}
+
 interface UnderwritingSummary {
   decision: string | null;
   allPass: boolean | null;
   conditions: ConditionCount;
   failedConditions: string[];
+  failedConditionDetails: FailedConditionDetail[];
+  // Failed conditions the pipeline never actually read (source === "assumed",
+  // post-#458/#462) — a provider outage or skipped stage, not a credit signal.
+  // Excludes legacy loans with no `source` field at all (see summarizeUnderwriting).
+  unreadFailures: string[];
 }
 
 interface ReviewQueueRow {
@@ -107,15 +119,32 @@ function summarizeUnderwriting(loan: Record<string, unknown> | null): Underwriti
     ? (uw['conditions'] as Record<string, unknown>[])
     : [];
   const passed = conditions.filter((c) => c['pass'] === true).length;
-  const failedConditions = conditions
-    .filter((c) => c['pass'] !== true)
-    .map((c) => (typeof c['name'] === 'string' ? (c['name'] as string) : 'unknown'));
+  const failed = conditions.filter((c) => c['pass'] !== true);
+  const failedConditions = failed.map((c) =>
+    typeof c['name'] === 'string' ? (c['name'] as string) : 'unknown'
+  );
+
+  // `source` was added by #458/#459 and is only "read"/"assumed" going forward.
+  // Loans written before that PR have no `source` key at all — that is silence,
+  // not an outage signal, so it gets its own "unknown" state rather than being
+  // folded into "assumed". Collapsing it into "assumed" would tell ops a legacy
+  // loan was escalated by a provider outage when the pipeline simply predates
+  // provenance tracking, which is a fabricated claim about data it never had.
+  const failedConditionDetails: FailedConditionDetail[] = failed.map((c) => ({
+    name: typeof c['name'] === 'string' ? (c['name'] as string) : 'unknown',
+    source: typeof c['source'] === 'string' ? (c['source'] as string) : 'unknown',
+  }));
+  const unreadFailures = failedConditionDetails
+    .filter((c) => c.source === 'assumed')
+    .map((c) => c.name);
 
   return {
     decision: typeof uw['decision'] === 'string' ? (uw['decision'] as string) : null,
     allPass: typeof uw['allPass'] === 'boolean' ? (uw['allPass'] as boolean) : null,
     conditions: { passed, total: conditions.length },
     failedConditions,
+    failedConditionDetails,
+    unreadFailures,
   };
 }
 
