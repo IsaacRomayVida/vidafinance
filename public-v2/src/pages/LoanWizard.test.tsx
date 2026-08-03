@@ -107,27 +107,29 @@ function advance(): boolean {
   return true;
 }
 
-/** Step 1 (amount) → step 2 (term) → step 3 (the quote breakdown). */
+/**
+ * Step 1 (amount) → step 2 (the quote breakdown).
+ *
+ * There is no term step any more (#423): it offered a single option, so it was
+ * a full page tap for no decision. Step 2 is now the first screen that renders
+ * a server-priced figure, which is what every assertion below actually needs.
+ */
 async function goToQuote() {
   await waitFor(() => expect(forwardButtons().length).toBeGreaterThan(0));
   advance();
   await waitFor(() => expect(screen.getAllByText(/paso 2|step 2/i).length).toBeGreaterThan(0));
-  advance();
-  await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
 }
 
-/** Step 1 → step 4, the final review card. */
+/** Step 1 → step 3, the final review card. */
 async function goToReview() {
   await goToQuote();
+  // Wait for the forward control to be ENABLED, not merely present. Step 2's
+  // Continue is gated on `pricingReady`, and with the term step gone there is
+  // no intermediate screen absorbing the time the config promise takes to
+  // resolve — so clicking the instant step 2 renders is a no-op.
+  await waitFor(() => expect(forwardButtons().some((b) => !b.disabled)).toBe(true));
   advance();
-  await waitFor(() => expect(screen.getAllByText(/paso 4|step 4/i).length).toBeGreaterThan(0));
-}
-
-/** Step 1 → step 2, the first step that displays a server-priced figure. */
-async function goToTermStep() {
-  await waitFor(() => expect(forwardButtons().length).toBeGreaterThan(0));
-  advance();
-  await waitFor(() => expect(screen.getAllByText(/paso 2|step 2/i).length).toBeGreaterThan(0));
+  await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
 }
 
 beforeEach(() => {
@@ -139,7 +141,7 @@ describe('LoanWizard — pricing unavailable', () => {
     getLoanConfigMock.mockRejectedValue(new Error('unavailable'));
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
 
     expect(await screen.findByTestId('pricing-error-banner')).toBeInTheDocument();
     // The eligibility card is a dead end with no retry, and it means "you do not
@@ -152,16 +154,18 @@ describe('LoanWizard — pricing unavailable', () => {
     getLoanConfigMock.mockRejectedValue(new Error('unavailable'));
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
     await screen.findByTestId('pricing-error-banner');
 
     // The regression this file exists for: `loanConfig?.feeRate ?? 0` rendered
     // "$0" as the biweekly deduction here, and "$0" / "0%" further on.
     expect(screen.queryByText(/^\$0$/)).toBeNull();
     expect(screen.queryByText(/^0\s*%/)).toBeNull();
-    // The term options are themselves server-supplied, so an unpriced step 2
-    // offers no choices at all rather than an empty list, which would read as
-    // "no terms are available to you" — a statement about the borrower.
+    // The term is server-supplied too, so it goes blank with the prices rather
+    // than standing alone as a confident "30 días" beside four unavailable
+    // figures. It used to initialise to a hardcoded 30, which was invisible
+    // while the term had its own step and is not now that it sits in the quote
+    // card (#423).
     expect(screen.queryAllByText(/\d+ días|\d+ days/i)).toHaveLength(0);
   });
 
@@ -171,9 +175,9 @@ describe('LoanWizard — pricing unavailable', () => {
     getLoanConfigMock.mockReturnValue(new Promise(() => {}));
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
 
-    expect(await screen.findByTestId('price-shimmer')).toBeInTheDocument();
+    expect((await screen.findAllByTestId('price-shimmer')).length).toBeGreaterThan(0);
     expect(screen.queryByTestId('pricing-error-banner')).toBeNull();
     expect(screen.queryByText(/^\$0$/)).toBeNull();
     expect(advance()).toBe(false);
@@ -183,12 +187,15 @@ describe('LoanWizard — pricing unavailable', () => {
     getLoanConfigMock.mockRejectedValue(new Error('unavailable'));
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
     await screen.findByTestId('pricing-error-banner');
 
     // A borrower must never reach terms-and-confirm on a quote we could not
     // compute, so the forward control on a priced step is disabled outright.
     expect(advance()).toBe(false);
+    // Still on the quote step, never past it: the confirm screen is where a
+    // borrower accepts terms, and they must not reach it on a quote we could
+    // not compute.
     expect(screen.queryAllByText(/paso 3|step 3/i)).toHaveLength(0);
   });
 
@@ -207,7 +214,7 @@ describe('LoanWizard — pricing unavailable', () => {
     getLoanConfigMock.mockRejectedValue(new Error('unavailable'));
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
     const banner = await screen.findByTestId('pricing-error-banner');
 
     const markup = banner.outerHTML;
@@ -229,7 +236,7 @@ describe('LoanWizard — pricing unavailable', () => {
     getLoanConfigMock.mockRejectedValue(new Error('unavailable'));
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
     const banner = await screen.findByTestId('pricing-error-banner');
 
     expect(banner.textContent ?? '').toMatch(/no se te ha cobrado|not been charged/i);
@@ -244,7 +251,7 @@ describe('LoanWizard — pricing unavailable', () => {
     getLoanConfigMock.mockResolvedValue({ data: { allowedTermDays: [30] } });
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
 
     expect(await screen.findByTestId('pricing-error-banner')).toBeInTheDocument();
     expect(screen.queryByText(/^\$0$/)).toBeNull();
@@ -256,7 +263,7 @@ describe('LoanWizard — pricing unavailable', () => {
       .mockResolvedValueOnce(READY_CONFIG);
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
     const banner = await screen.findByTestId('pricing-error-banner');
 
     fireEvent.click(within(banner).getByRole('button', { name: /reintentar|try again/i }));
@@ -304,16 +311,11 @@ describe('LoanWizard — repayment schedule comes from the server', () => {
     render(<LoanWizard />);
 
     // Step 2 — the term option describes how the loan is collected.
-    await goToTermStep();
-    const termText = screenText();
-    expect(termText).toMatch(/1 descuento vía nómina|1 payroll deduction/i);
-    // The old lie: 30 / 15 = 2 periods of ceil(1300 / 2) = $650 each.
-    expect(termText).not.toMatch(/\$650/);
-    expect(termText).not.toMatch(/2 quincenas|2 pay periods|quincenal|biweekly/i);
-
-    // Step 3 — the quote breakdown states the same single deduction.
-    advance();
-    await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
+    await goToQuote();
+    // The "1 descuento vía nómina" assertion lived on the term-selection step,
+    // which #423 deleted — it offered one option, so it was a page tap for no
+    // decision. The property it guarded is unchanged and is asserted below on
+    // the quote card, which is where a borrower now reads it.
     const quoteText = screenText();
     // A single-installment schedule states the one charge in words rather than
     // repeating the total under a second label (#439).
@@ -365,11 +367,11 @@ describe('LoanWizard — repayment schedule comes from the server', () => {
 
     render(<LoanWizard />);
 
-    await goToTermStep();
-    expect(screenText()).toMatch(/2 descuentos vía nómina|2 payroll deductions/i);
-
-    advance();
-    await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
+    await goToQuote();
+    // Asserted on the quote card rather than on the term tile that used to
+    // announce the period count: the tile's step is gone (#423), the property
+    // — the screen renders the server's split and invents none of its own — is
+    // not.
     expect(screenText()).toMatch(/\$650 × 2/);
   });
 
@@ -381,7 +383,7 @@ describe('LoanWizard — repayment schedule comes from the server', () => {
     });
 
     render(<LoanWizard />);
-    await goToTermStep();
+    await goToQuote();
 
     expect(await screen.findByTestId('pricing-error-banner')).toBeInTheDocument();
     expect(screen.queryByText(/^\$0$/)).toBeNull();
@@ -471,12 +473,12 @@ describe('LoanWizard — the deduction date comes from the server', () => {
 /**
  * The CAT is a regulated disclosure, not a line item of the quote — and it has
  * to be the same disclosure on every card that carries it. Step 3 rendered it
- * as a standalone block with the CONDUSEF reference; the step-4 review card
+ * as a standalone block with the CONDUSEF reference; the step-3 review card
  * rendered it as a bare row inside the price breakdown, with no note and no
  * reference. Same figure, same flow, two treatments.
  */
 describe('LoanWizard — the CAT disclosure is the same on every card', () => {
-  it('renders the full disclosure, not a bare row, on the step-4 review card', async () => {
+  it('renders the full disclosure, not a bare row, on the step-3 review card', async () => {
     getLoanConfigMock.mockResolvedValue(READY_CONFIG);
 
     render(<LoanWizard />);
@@ -538,7 +540,7 @@ describe('LoanWizard — disclosure text is never in the low-contrast tertiary',
     }
   });
 
-  it('keeps the same disclosure treatment on the step-4 review card', async () => {
+  it('keeps the same disclosure treatment on the step-3 review card', async () => {
     getLoanConfigMock.mockResolvedValue(READY_CONFIG);
 
     render(<LoanWizard />);
@@ -603,13 +605,10 @@ describe('LoanWizard — disclosure text is never in the low-contrast tertiary',
       ).toEqual([]);
     };
 
-    await goToTermStep();
-    noTertiary('step 2');
+    await goToQuote();
+    noTertiary('step 2 — quote');
+    await waitFor(() => expect(forwardButtons().some((b) => !b.disabled)).toBe(true));
     advance();
     await waitFor(() => expect(screen.getAllByText(/paso 3|step 3/i).length).toBeGreaterThan(0));
-    noTertiary('step 3');
-    advance();
-    await waitFor(() => expect(screen.getAllByText(/paso 4|step 4/i).length).toBeGreaterThan(0));
-    noTertiary('step 4');
   });
 });
