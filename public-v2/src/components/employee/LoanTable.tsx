@@ -74,7 +74,7 @@ export function LoanTable({ loans, repaymentsByLoan, loading, onOpenModal, onPay
                     <td className="money">${fmt(loan.repaymentAmount || loan.total || 0)}</td>
                     <td>
                       <span className={`badge badge-${loan.status}`}>
-                        {t(`status_${loan.status}`)}
+                        {t(`status_${loan.status}`, loan.status)}
                       </span>
                       {hasPending && (
                         <span className="badge badge-pending" style={{ marginLeft: 4, fontSize: 10 }}>
