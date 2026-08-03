@@ -276,19 +276,36 @@ jobs:
   # deploys one-by-one (a function silently missing from one or the other
   # currently breaks or no-ops the deploy, undetected until after merge).
   #
-  # RESIDUAL RISK: this does NOT catch trigger-type changes (HTTPS ->
-  # event-trigger etc.) — the actual root cause of the onContactCreated
-  # failure that motivated #376. Detecting that requires diffing against
-  # the live deployed function via the Firebase API, which needs
-  # staging-scoped CI credentials. That is the "fuller option" in #376
-  # and is explicitly parked ("no CI changes until ratified" — Albert,
-  # 2026-08-02) pending an IAM decision from Isaac.
+  # Trigger-type changes (HTTPS -> event-trigger etc.) — the actual root
+  # cause of the onContactCreated failure — are covered by the warn-only
+  # step at the end of this job, which diffs trigger kinds resolved from
+  # SOURCE at the merge-base against HEAD.
+  #
+  # An earlier note here claimed that catching trigger-type changes
+  # "requires diffing against the live deployed function via the Firebase
+  # API". That conflated two different questions. Asking "what is
+  # deployed right now?" does need the API and staging-scoped
+  # credentials. Asking "does this PR change a trigger kind?" is pure
+  # static comparison of two revisions and needs neither.
+  #
+  # RESIDUAL RISK, restated accurately: only the second question is
+  # answered here. Drift between the repo and what is actually deployed
+  # is still invisible, and that is still the "fuller option" in #376 —
+  # explicitly parked ("no CI changes until ratified" — Albert,
+  # 2026-08-02) pending an IAM decision from Isaac. Consequently this
+  # does NOT retroactively flag onContactCreated, whose change is already
+  # in the base revision; that one still needs an operator
+  # delete-then-recreate.
   # ─────────────────────────────────────────────────────────────────────
   deploy-readiness:
     name: "Deploy Readiness Check (build + export drift, no credentials) — #376"
     runs-on: ubuntu-latest
     steps:
+      # Full history: the trigger-kind step below diffs against the merge-base
+      # with main, which the default depth-1 checkout cannot resolve.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v5
         with:
@@ -355,6 +372,92 @@ jobs:
             `OK: ${deployed.size} deployed functions match index.ts exports ` +
             `(${KNOWN_UNDEPLOYED.size} dev-only export(s) excluded).`
           );
+          NODE
+
+      # Closes the residual risk described above. Firebase cannot converge a
+      # change of trigger TYPE in place — that is what actually broke
+      # onContactCreated. The step above compares export NAMES, and the name
+      # never changed, so it saw nothing.
+      #
+      # This compares trigger kinds resolved from SOURCE at the merge-base and
+      # at HEAD. No Firebase API, no credentials, no network — so it does not
+      # depend on the staging-IAM decision that remains parked, for the same
+      # reason this whole job was admitted.
+      #
+      # It therefore catches a trigger-kind change AT THE PR THAT INTRODUCES
+      # IT. It does NOT flag onContactCreated today: that change is already in
+      # the base revision, so a base-vs-head diff correctly sees no change. The
+      # already-deployed onContactCreated still needs an operator
+      # delete-then-recreate — this only stops the next one.
+      #
+      # WARN-ONLY, deliberately: #376 asks for non-blocking until confidence is
+      # built. Note the export-drift step above DOES hard-fail; the two
+      # behaviours are intentionally different. Do not "tidy" them into one.
+      - name: Warn on trigger-type changes (non-blocking)
+        run: |
+          node <<'NODE'
+          const { execFileSync } = require('child_process');
+          const fs = require('fs');
+          const { buildTriggerMap, diffTriggerMaps, formatTriggerDiff } =
+            require('./functions/lib/deploy/triggerMap.js');
+
+          function baseSha() {
+            try {
+              return execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], {
+                encoding: 'utf8',
+              }).trim();
+            } catch {
+              return null;
+            }
+          }
+
+          const base = baseSha();
+          if (!base) {
+            console.log('No merge-base with origin/main resolvable — skipping.');
+            process.exit(0);
+          }
+
+          const headRead = (p) => {
+            try { return fs.readFileSync(p, 'utf8'); } catch { return null; }
+          };
+          const baseRead = (p) => {
+            try {
+              return execFileSync('git', ['show', `${base}:${p}`], {
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore'],
+              });
+            } catch { return null; }
+          };
+
+          const diff = diffTriggerMaps(buildTriggerMap(baseRead), buildTriggerMap(headRead));
+          const report = formatTriggerDiff(diff);
+
+          if (!report) {
+            console.log(`OK: no trigger-type changes vs ${base.slice(0, 8)}.`);
+            if (diff.added.length) {
+              console.log('New functions (deploy normally): ' +
+                diff.added.map((a) => `${a.name} (${a.kind})`).join(', '));
+            }
+            process.exit(0);
+          }
+
+          console.log(report);
+          for (const c of diff.changed) {
+            console.log(
+              `::warning file=functions/src/index.ts::${c.name} changed trigger type ` +
+              `${c.from} -> ${c.to}. Firebase cannot converge this in place — delete the ` +
+              `function before deploying, or the deploy will fail silently (#376).`
+            );
+          }
+          if (process.env.GITHUB_STEP_SUMMARY) {
+            fs.appendFileSync(
+              process.env.GITHUB_STEP_SUMMARY,
+              `### ⚠️ Trigger-type change detected (#376)\n\n${report}\n`
+            );
+          }
+          // Warn-only by design. Do not change to a non-zero exit without
+          // ratifying it on #376 first.
+          process.exit(0);
           NODE
 
   health-check:
