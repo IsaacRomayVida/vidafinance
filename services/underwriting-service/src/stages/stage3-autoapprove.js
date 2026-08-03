@@ -25,23 +25,17 @@
 
 // ADR-005 Finding 5: the cutoff used to be derived — `APPROVAL_THRESHOLD`
 // (default 0.65), read as `pDefault < (1 - threshold)` — so raising something
-// named "approval threshold" *loosened* credit. It is now declared directly.
-// Value is commercial and UNCHANGED: 1 - 0.65 = 0.35, same as today.
-const DEFAULT_MAX_PDEFAULT = 0.35;
-
-function maxPDefault() {
-  if (process.env.MAX_PDEFAULT != null) {
-    return parseFloat(process.env.MAX_PDEFAULT);
-  }
-  // Legacy fallback: APPROVAL_THRESHOLD may already be set in a deployed
-  // environment. A live env var that silently stops being read is a silent
-  // credit-policy change, so it is still honoured — as `1 - threshold`, its
-  // old meaning — until every environment is migrated to MAX_PDEFAULT.
-  if (process.env.APPROVAL_THRESHOLD != null) {
-    return 1 - parseFloat(process.env.APPROVAL_THRESHOLD);
-  }
-  return DEFAULT_MAX_PDEFAULT;
-}
+// named "approval threshold" *loosened* credit. It is now declared directly
+// as MAX_PDEFAULT, and it is server-side configurable through the SAME seam
+// ADR-002 established for the loan fee rate and Finding 7's competitor list:
+// a compile-time seed (config/maxPDefaultCutoff.js's `getSeedMaxPDefault`),
+// used until an admin config document exists, and a read path
+// (`getMaxPDefault`) that throws — rather than silently falling back to the
+// seed — when that document exists but cannot be trusted. Value is
+// commercial and UNCHANGED today: 1 - 0.65 = 0.35, same as before this file
+// existed, whether the value comes from the seed or an unconfigured
+// deployment.
+const { getMaxPDefault, getSeedMaxPDefault } = require("../config/maxPDefaultCutoff");
 
 /**
  * Provenance for a condition's value: "read" if the upstream block that
@@ -69,7 +63,13 @@ function provenanceOf(block) {
 // at that slot is later replaced (ADR-005 C4 governs which ten conditions
 // gate — not this file). If a condition is retired, retire its id with it
 // rather than recycling the number.
-function evaluateAutoApprove(applicant, allResults) {
+//
+// `maxPDefaultCutoff` is resolved by the caller (`runAutoApproveGate`, via
+// `getMaxPDefault()`) so this function stays synchronous and testable
+// without a Firestore mock in every call site. Callers that omit it — every
+// existing direct test of this function — get the compile-time seed, which
+// is exactly today's shipped value, so omitting it changes no behaviour.
+function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedMaxPDefault()) {
   const conditions = [];
   const employerData = allResults.employerB?.data || {};
   const stage0Data = allResults.stage0?.data || {};
@@ -225,13 +225,12 @@ function evaluateAutoApprove(applicant, allResults) {
   const mlScore = stage2Data.mlScore;
   const mlSource = provenanceOf(mlScore);
   const pDefault = mlScore?.default_probability || mlScore?.probability || (1 - (mlScore?.underwritingScore || 0.5));
-  const cutoff = maxPDefault();
   conditions.push({
     id: 8,
     name: "ml_default_prob",
-    pass: mlSource === "read" && pDefault < cutoff,
+    pass: mlSource === "read" && pDefault < maxPDefaultCutoff,
     value: pDefault,
-    required: `< ${cutoff}`,
+    required: `< ${maxPDefaultCutoff}`,
     source: mlSource,
   });
 
@@ -269,7 +268,13 @@ async function runAutoApproveGate(applicant, allResults, { logger } = {}) {
 
   log.info({ stage: "stage3", rfc: applicant.rfc }, "Evaluating auto-approve gate");
 
-  const conditions = evaluateAutoApprove(applicant, allResults);
+  // Not caught here: `getMaxPDefault()` throwing (config doc unreadable or
+  // untrustworthy) must fail this whole stage, not fall back to the seed.
+  // decision-engine.js's try/catch around this call turns that into a Stage 5
+  // (manual review) escalation — the same fail-closed shape as every other
+  // condition below, extended to the cutoff itself.
+  const maxPDefaultCutoff = await getMaxPDefault();
+  const conditions = evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff);
   const allPass = conditions.every(c => c.pass);
   const failedConditions = conditions.filter(c => !c.pass);
 
