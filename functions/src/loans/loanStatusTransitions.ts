@@ -47,6 +47,39 @@ export function isLoanApprovalTransition(beforeStatus: unknown, afterStatus: unk
   );
 }
 
+// The mirror image of LOAN_APPROVAL_SOURCE_STATUSES: the statuses a loan can be
+// DECLINED from while the borrower's credit is still merely held rather than
+// spent. `requestLoan` decrements `availableCredit` for every status it creates
+// except 'rejected' (`holdCredit = initialStatus !== 'rejected'`), so both of
+// these carry a live hold that a decline has to give back.
+//
+// Deliberately the SAME two statuses as the approval set, and for the same
+// reason: `pending` is the auto-approve path and `under_review` is the manual
+// path that submitReviewDecision writes — the only one that occurs under
+// today's ML_MODE. The rejection side of onLoanStatusChange used to hardcode
+// `pending` alone while #488 widened only the approval side, so the one
+// rejection transition production actually produces
+// (`under_review -> rejected`) released nothing and the borrower's credit line
+// shrank by the requested amount on every decline.
+//
+// Deliberately NOT extended past approval. A loan at `approved` has already
+// fired onLoanApproved and may have a real SPEI transfer queued against it;
+// `DISBURSEMENT_INITIATED_STATUSES` onwards the money is out the door. Handing
+// credit back on those would let a borrower re-borrow against funds they were
+// actually paid.
+export const LOAN_REJECTION_SOURCE_STATUSES: readonly string[] = [
+  LOAN_STATUS.PENDING,
+  LOAN_STATUS.UNDER_REVIEW,
+];
+
+export function isCreditReleasingRejection(beforeStatus: unknown, afterStatus: unknown): boolean {
+  return (
+    typeof beforeStatus === 'string' &&
+    LOAN_REJECTION_SOURCE_STATUSES.includes(beforeStatus) &&
+    afterStatus === LOAN_STATUS.REJECTED
+  );
+}
+
 // Loan statuses reached only once a disbursement attempt has actually started
 // — the SPEI transfer is queued, sent, or the loan otherwise left pre-approval
 // limbo. Ops/admin corrections within this set are legitimate (e.g. nudging a

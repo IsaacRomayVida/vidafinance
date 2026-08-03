@@ -3,6 +3,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 import { auditLog } from '../utils/auditLog';
 import { isCreditRestoringRepayment } from './loanStatus';
+import { isCreditReleasingRejection } from './loanStatusTransitions';
 
 // NOT DEPLOYED — the live onLoanStatusChange is the copy inline in index.ts
 // (exported from there; see deploy.yml's FUNCTIONS list). Kept as a reference
@@ -30,7 +31,10 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
     } catch (_) { /* non-critical */ }
   }
 
-  if (beforeData['status'] === 'pending' && afterData['status'] === 'rejected') {
+  // Shared predicate, not a hardcoded 'pending' — `under_review -> rejected`
+  // (submitReviewDecision) is the only rejection production produces and it
+  // also carries a live credit hold. See isCreditReleasingRejection.
+  if (isCreditReleasingRejection(beforeData['status'], afterData['status'])) {
     await db.collection('employees').doc(afterData['employeeId'] as string).update({
       availableCredit: FieldValue.increment(afterData['amount'] as number),
     });
@@ -40,7 +44,7 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
         actorUid: afterData['employerId'] as string,
         actorRole: 'employer',
         targetId: loanId,
-        before: { status: 'pending' },
+        before: { status: beforeData['status'] },
         after: { status: 'rejected' },
       });
     } catch (_) { /* non-critical */ }

@@ -42,6 +42,15 @@ const mockLogger = { warn: jest.fn(), info: jest.fn(), error: jest.fn() };
 jest.mock('firebase-functions', () => ({ logger: mockLogger }));
 jest.mock('firebase-functions/v2', () => ({ logger: mockLogger }));
 
+// Approval is also where the employer_admin custom claim is minted (see the
+// grant block in index.ts's approveEmployer). Without this mock the handler
+// reaches a real `admin.auth()` on an uninitialised app and the approve path
+// throws before it gets anywhere near the assertions below.
+const mockSetCustomUserClaims = jest.fn().mockResolvedValue(undefined);
+jest.mock('firebase-admin', () => ({
+  auth: jest.fn(() => ({ setCustomUserClaims: mockSetCustomUserClaims })),
+}));
+
 const mockFieldValue = {
   increment: jest.fn((n: number) => ({ _increment: n })),
   serverTimestamp: jest.fn(() => ({ _serverTimestamp: true })),

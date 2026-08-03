@@ -31,6 +31,7 @@ import { calculateNextPayrollDate, type PayFrequency } from './loans/calculateNe
 import { resolvePayFrequency, type PayFrequencySource } from './loans/resolvePayFrequency';
 import {
   isLoanApprovalTransition,
+  isCreditReleasingRejection,
   DISBURSEMENT_INITIATED_STATUSES,
   PRE_DISBURSEMENT_STATUSES,
 } from './loans/loanStatusTransitions';
@@ -1108,6 +1109,41 @@ export const approveEmployer = onCall(
           logger.warn('ML scoring unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
+        // Grant the employer_admin claim. THIS is the approval gate for it:
+        // onEmployerDocCreated deliberately withholds the claim at self-signup
+        // (firestore.rules pins a self-created employer to
+        // 'pending_verification', and granting on creation would be
+        // self-service privilege escalation), so an employer becomes an
+        // employer_admin here and nowhere else on the normal path.
+        //
+        // Without this the deployed handler activated the employer, emailed
+        // them an approval notice, and left them with no role claim at all —
+        // every withAuth(['employer_admin']) callable (ensureEmployerCode,
+        // submitEmployerDocs, submitPayrollDeductionSetup,
+        // updateEmployerCurpConfig) plus processPayroll answered
+        // permission-denied, and no client calls the setEmployerClaims
+        // fallback, so there was no in-product remedy. The grant existed only
+        // in functions/src/employers/approveEmployer.ts, which index.ts does
+        // not export and which is therefore not deployed.
+        //
+        // Placed AFTER the ML block on purpose: an ML rejection returns early
+        // above with status 'rejected_ml', and that employer must not walk away
+        // holding the claim.
+        //
+        // Audit first, mint second, and let an audit failure propagate — the
+        // same ordering onEmployerDocCreated and setEmployerClaims already
+        // hold. An employer_admin grant nobody can attribute is worse than no
+        // grant at all.
+        await auditLog(db, {
+          action: 'employer.claimGrantedOnApproval',
+          actorUid: auth.uid,
+          actorRole: auth.role,
+          actorEmail: auth.email ?? null,
+          targetId: employerUid,
+          after: { role: 'employer_admin' },
+        });
+        await admin.auth().setCustomUserClaims(employerUid, { role: 'employer_admin' });
+
         try {
           await fetch(process.env['SOFTCREDITO_ADAPTER_URL'] + '/internal/register-employer', {
             method: 'POST',
@@ -1407,6 +1443,35 @@ export const submitReviewDecision = onCall(
             throw new HttpsError('failed-precondition', 'Review is already escalated');
         } else if (!DECIDABLE_REVIEW_STATUSES.includes(reviewStatus)) {
           throw new HttpsError('failed-precondition', 'Review has already been resolved');
+        }
+
+        // Same rewind guard updateLoanStatus carries (#488), applied to the
+        // OTHER callable that writes loans/{loanId}.status. It was missing here.
+        //
+        // `request_info` and `escalated` reviews stay decidable indefinitely by
+        // design (#407/#513), but the loan they point at does not stand still:
+        // ops can approve the loan itself through updateLoanStatus, onLoanApproved
+        // queues the real SoftCrédito transfer, and the stale review is still in
+        // the queue. Deciding it then rewrote a funded loan's status from the
+        // console — 'rejected' takes it out of DEDUCTIBLE_STATUSES, so
+        // processPayroll silently stops collecting on money that has already been
+        // paid out; 'approved' reproduces the approval trigger diff on a loan that
+        // has already disbursed, which is exactly the SPEI replay #488 exists to
+        // refuse.
+        //
+        // Checked BEFORE the review_queue write below so a refusal leaves the
+        // review exactly as it was and still decidable, rather than half-applied.
+        // Only approve/reject are gated — request_info and escalate never touch
+        // the loan, and blocking them would recreate the #407 dead end.
+        if (review['loanId'] && (decision === 'approved' || decision === 'rejected')) {
+          const loanSnap = await db.collection('loans').doc(review['loanId'] as string).get();
+          const loanStatus = loanSnap.exists ? (loanSnap.data()!['status'] as string) : null;
+          if (loanStatus && DISBURSEMENT_INITIATED_STATUSES.includes(loanStatus)) {
+            throw new HttpsError(
+              'failed-precondition',
+              `Loan is already '${loanStatus}' — disbursement has started, so this review can no longer change it`
+            );
+          }
         }
 
         const now = FieldValue.serverTimestamp();
@@ -2000,7 +2065,12 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
     await notifyLoanEvent('loan_approved', { employeePhone: afterData['employeePhone'], employeeEmail: afterData['employeeEmail'], employeeName: afterData['employeeName'], loanAmount: afterData['amount'] }).catch(() => {});
   }
 
-  if (beforeData['status'] === 'pending' && afterData['status'] === 'rejected') {
+  // Gated on the shared predicate, NOT on a hardcoded `pending`. #488 widened
+  // the approval branch above to accept `under_review` because that is the only
+  // approval production produces; this branch kept `pending` and so released
+  // credit on a transition that no longer happens. See
+  // isCreditReleasingRejection for why the set stops at approval.
+  if (isCreditReleasingRejection(beforeData['status'], afterData['status'])) {
     await db.collection('employees').doc(afterData['employeeId'] as string).update({
       availableCredit: FieldValue.increment(afterData['amount'] as number),
     });
@@ -2010,7 +2080,7 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
         actorUid: afterData['employerId'] as string,
         actorRole: 'employer',
         targetId: loanId,
-        before: { status: 'pending' },
+        before: { status: beforeData['status'] },
         after: { status: 'rejected' },
       });
     } catch (_) { /* non-critical */ }
