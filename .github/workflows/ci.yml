@@ -125,7 +125,7 @@ jobs:
       # a call_decision_engine that does not exist, on a worker that is not on
       # the live decision path — no producer feeds its queue and it is never
       # started) was RETIRED, not fixed. See
-      # outputs/ADR-004-underwriting-worker-not-the-decision-path.md.
+      # docs/adr/ADR-004-underwriting-worker-not-the-decision-path.md.
       #
       # Do not force this green by adding continue-on-error or re-introducing
       # --deselect. Red here means something actually regressed.

@@ -2,7 +2,7 @@
 Unit tests for the underwriting worker's helper functions and local model.
 
 `workers/underwriting_worker.py` is not on the live decision path — see
-outputs/ADR-004-underwriting-worker-not-the-decision-path.md — so these tests
+docs/adr/ADR-004-underwriting-worker-not-the-decision-path.md — so these tests
 cover only the pure helpers and the local scoring model, not job processing.
 
 To run against live services, set:
