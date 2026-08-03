@@ -148,6 +148,21 @@ service cloud.firestore {
       // drifted from its own contract. Corrections go through an audited
       // status transition, never a delete. (#385)
       allow delete: if false;
+
+      // Stage 3 auto-approve condition breakdown (E5c): the applicant's actual
+      // bureau score, LTI, RiskSeal fraud score, ML default probability, etc,
+      // each alongside the exact bound it was tested against. This is a
+      // subcollection rather than a field on the loan doc above SPECIFICALLY
+      // so it does not inherit that doc's `isOwner`/`isEmployerAdminOf` read
+      // access — the borrower and the employer admin must not be able to read
+      // their own regulated bureau data or the internal fraud/model scores and
+      // thresholds off a plain client read. Ops-only, same pattern as
+      // `audit_log` below. Written only via the Admin SDK, in the same
+      // transaction as the loan document.
+      match /underwritingDetail/{docId} {
+        allow read: if isOps();
+        allow write: if false;
+      }
     }
 
     // =============================================

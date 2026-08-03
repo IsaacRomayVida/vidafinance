@@ -683,7 +683,7 @@ export const requestLoan = onCall(
         // Persist the Stage 3 auto-approve condition breakdown so ops can see WHY
         // a loan was approved/denied, not just the coarse decision. Fail-soft: if
         // underwriting is down or the pipeline never reached Stage 3 (e.g. an
-        // earlier-stage rejection), omit the field entirely — never block loan
+        // earlier-stage rejection), omit the record entirely — never block loan
         // creation over missing explainability data.
         //
         // `uwResult` is the /underwrite HTTP response, NOT the raw
@@ -697,13 +697,29 @@ export const requestLoan = onCall(
         //
         // The nested read is a defensive fallback only, for a service old
         // enough to predate the lean slice. Both are populated today.
+        //
+        // Each condition carries the applicant's ACTUAL bureau score, LTI,
+        // RiskSeal fraud score and ML default probability alongside the bound it
+        // was tested against (stage3-autoapprove.js) — regulated/borrower-
+        // sensitive values, not a bare pass/fail flag, and exactly the numbers a
+        // fraud applicant would want in order to learn where each gate sits.
+        // This must NOT go on the `loans/{loanId}` document itself: that
+        // document is readable by the loan's own borrower and by the employer's
+        // admin (firestore.rules `isOwner`/`isEmployerAdminOf`), so writing it
+        // there would hand every applicant their own bureau/fraud/model scores
+        // and the exact thresholds over a plain client read. It is written to a
+        // subcollection instead so it stays attached to the loan record without
+        // inheriting the loan document's read rule, gated `isOps()`-only in
+        // firestore.rules — the same ops-only pattern already used for
+        // `audit_log`.
         const uwStages = uwResult?.['stages'] as Record<string, unknown> | undefined;
         const stage3 = uwStages?.['stage3'] as Record<string, unknown> | undefined;
         const stage3Data = stage3?.['data'] as Record<string, unknown> | undefined;
         const uwConditions = uwResult?.['conditions'] ?? stage3Data?.['conditions'];
         const uwAllPass = uwResult?.['allPass'] ?? stage3Data?.['allPass'];
+        let underwritingDetail: Record<string, unknown> | null = null;
         if (Array.isArray(uwConditions) && uwConditions.length > 0) {
-          decisionExtra['underwritingDecision'] = {
+          underwritingDetail = {
             decision: uwDecision,
             reason: (uwResult?.['reason'] as string) ?? null,
             allPass: (uwAllPass as boolean) ?? null,
@@ -877,6 +893,17 @@ export const requestLoan = onCall(
             createdAt: FieldValue.serverTimestamp(),
             acceptedAt: FieldValue.serverTimestamp(),
           });
+
+          // Same transaction as the loan write above: a decision can never be
+          // persisted without its breakdown, or vice versa. See the comment at
+          // `underwritingDetail`'s construction for why this is a subcollection
+          // rather than a field on the loan doc.
+          if (underwritingDetail) {
+            tx.set(
+              db.collection('loans').doc(loanId).collection('underwritingDetail').doc('detail'),
+              underwritingDetail
+            );
+          }
         });
 
         try {

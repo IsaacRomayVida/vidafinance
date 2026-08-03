@@ -184,6 +184,67 @@ describe('loans collection', () => {
   });
 });
 
+// ── loans/{loanId}/underwritingDetail subcollection (E5c) ─────────────────────
+// The Stage 3 auto-approve condition breakdown — each condition carries the
+// applicant's actual bureau score, LTI, RiskSeal fraud score and ML default
+// probability alongside the bound it was tested against. This is a
+// subcollection, deliberately NOT a field on the loan document above, so it
+// does not inherit that document's `isOwner`/`isEmployerAdminOf` read access —
+// the whole point is that the borrower and the employer admin who CAN read
+// `loans/{loanId}` must NOT be able to read this.
+
+async function seedUnderwritingDetail(loanId: string, data: Record<string, unknown> = {}) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `loans/${loanId}/underwritingDetail/detail`), {
+      decision: 'approved',
+      allPass: true,
+      conditions: [{ id: 3, name: 'bureau_score', pass: true, value: 650, required: '> 600', source: 'read' }],
+      ...data,
+    });
+  });
+}
+
+describe('loans/{loanId}/underwritingDetail subcollection', () => {
+  it(`the loan's own employee cannot read the underwriting breakdown`, async () => {
+    await seedLoan('loan1', 'employee1', 'employer1');
+    await seedUnderwritingDetail('loan1');
+
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'loans/loan1/underwritingDetail/detail')));
+  });
+
+  it(`the loan's employer admin cannot read the underwriting breakdown`, async () => {
+    await seedLoan('loan1', 'employee1', 'employer1');
+    await seedUnderwritingDetail('loan1');
+
+    const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertFails(getDoc(doc(ctx.firestore(), 'loans/loan1/underwritingDetail/detail')));
+  });
+
+  it('ops user can read the underwriting breakdown', async () => {
+    await seedLoan('loan1', 'employee1', 'employer1');
+    await seedUnderwritingDetail('loan1');
+
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'loans/loan1/underwritingDetail/detail')));
+  });
+
+  it('anonymous user is denied on the underwriting breakdown', async () => {
+    await seedLoan('loan1', 'employee1', 'employer1');
+    await seedUnderwritingDetail('loan1');
+
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), 'loans/loan1/underwritingDetail/detail')));
+  });
+
+  it('write is always denied from client SDK, even for ops', async () => {
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'loans/loan1/underwritingDetail/detail'), { decision: 'approved' })
+    );
+  });
+});
+
 // ── employers collection ──────────────────────────────────────────────────────
 
 describe('employers collection', () => {

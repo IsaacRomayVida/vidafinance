@@ -32,6 +32,11 @@ interface FakeDoc {
 
 let reviewQueueDocs: FakeDoc[] = [];
 let loanDocs: Record<string, Record<string, unknown>> = {};
+// `loans/{loanId}/underwritingDetail/detail` (E5c) — kept as its own store
+// since it is a subcollection, not a field on the loan doc (that split is
+// what lets firestore.rules gate it `isOps()`-only without opening the loan
+// doc itself to the same audience).
+let underwritingDetailDocs: Record<string, Record<string, unknown>> = {};
 
 interface QueryState {
   wheres: Array<{ field: string; op: string; value: unknown }>;
@@ -115,12 +120,28 @@ const mockDb = {
       };
     }
     if (name === 'loans') {
-      return { doc: jest.fn((id: string) => ({ id })) };
+      return {
+        doc: jest.fn((id: string) => ({
+          id,
+          collection: jest.fn((subName: string) => {
+            if (subName !== 'underwritingDetail') throw new Error(`Unexpected subcollection: ${subName}`);
+            return {
+              doc: jest.fn((subId: string) => ({ id: subId, _kind: 'underwritingDetail' as const, loanId: id })),
+            };
+          }),
+        })),
+      };
     }
     throw new Error(`Unexpected collection: ${name}`);
   }),
-  getAll: jest.fn(async (...refs: Array<{ id: string }>) =>
+  getAll: jest.fn(async (...refs: Array<{ id: string; _kind?: string; loanId?: string }>) =>
     refs.map((ref) => {
+      if (ref._kind === 'underwritingDetail') {
+        const data = underwritingDetailDocs[ref.loanId!];
+        return data
+          ? { id: ref.id, exists: true, data: () => data }
+          : { id: ref.id, exists: false, data: () => undefined };
+      }
       const data = loanDocs[ref.id];
       return data
         ? { id: ref.id, exists: true, data: () => data }
@@ -171,11 +192,19 @@ function seedLoan(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
+// `loans/{loanId}/underwritingDetail/detail` (E5c) — the ops-only-gated
+// breakdown. Separate from `seedLoan` on purpose: it lives in a different
+// Firestore location precisely so it is NOT a field on the loan doc.
+function seedUnderwritingDetail(loanId: string, data: Record<string, unknown>) {
+  underwritingDetailDocs[loanId] = data;
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockCheckRateLimit.mockResolvedValue(true);
   reviewQueueDocs = [];
   loanDocs = {};
+  underwritingDetailDocs = {};
   countShouldFail = false;
   ascQueryError = null;
 });
@@ -318,16 +347,15 @@ describe('getReviewQueue', () => {
   describe('underwriting breakdown summary', () => {
     it('returns counted passed/total plus failed condition names when breakdown exists', async () => {
       seedReview('r1');
-      seedLoan('loan-r1', {
-        underwritingDecision: {
-          decision: 'pending_review',
-          allPass: false,
-          conditions: [
-            { name: 'min_tenure', pass: true, value: 12, required: 6 },
-            { name: 'max_dti', pass: false, value: 0.55, required: 0.4 },
-            { name: 'bureau_score', pass: false, value: 380, required: 500 },
-          ],
-        },
+      seedLoan('loan-r1');
+      seedUnderwritingDetail('loan-r1', {
+        decision: 'pending_review',
+        allPass: false,
+        conditions: [
+          { name: 'min_tenure', pass: true, value: 12, required: 6 },
+          { name: 'max_dti', pass: false, value: 0.55, required: 0.4 },
+          { name: 'bureau_score', pass: false, value: 380, required: 500 },
+        ],
       });
       const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
       const row = (result.reviews as Array<Record<string, unknown>>)[0];
@@ -343,15 +371,14 @@ describe('getReviewQueue', () => {
     // escalates. Ops needs to tell that apart from a genuine credit failure.
     it('reports all-read failures with an empty unreadFailures roll-up', async () => {
       seedReview('r1');
-      seedLoan('loan-r1', {
-        underwritingDecision: {
-          decision: 'pending_review',
-          allPass: false,
-          conditions: [
-            { name: 'min_tenure', pass: true, value: 12, required: 6, source: 'read' },
-            { name: 'max_dti', pass: false, value: 0.55, required: 0.4, source: 'read' },
-          ],
-        },
+      seedLoan('loan-r1');
+      seedUnderwritingDetail('loan-r1', {
+        decision: 'pending_review',
+        allPass: false,
+        conditions: [
+          { name: 'min_tenure', pass: true, value: 12, required: 6, source: 'read' },
+          { name: 'max_dti', pass: false, value: 0.55, required: 0.4, source: 'read' },
+        ],
       });
       const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
       const row = (result.reviews as Array<Record<string, unknown>>)[0];
@@ -364,16 +391,15 @@ describe('getReviewQueue', () => {
 
     it('surfaces a bureau-outage shape: assumed failures land in unreadFailures', async () => {
       seedReview('r1');
-      seedLoan('loan-r1', {
-        underwritingDecision: {
-          decision: 'escalated',
-          allPass: false,
-          conditions: [
-            { name: 'min_tenure', pass: true, value: 12, required: 6, source: 'read' },
-            { name: 'bureau_score', pass: false, value: null, required: 500, source: 'assumed' },
-            { name: 'imss_tenure', pass: false, value: null, required: 6, source: 'assumed' },
-          ],
-        },
+      seedLoan('loan-r1');
+      seedUnderwritingDetail('loan-r1', {
+        decision: 'escalated',
+        allPass: false,
+        conditions: [
+          { name: 'min_tenure', pass: true, value: 12, required: 6, source: 'read' },
+          { name: 'bureau_score', pass: false, value: null, required: 500, source: 'assumed' },
+          { name: 'imss_tenure', pass: false, value: null, required: 6, source: 'assumed' },
+        ],
       });
       const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
       const row = (result.reviews as Array<Record<string, unknown>>)[0];
@@ -392,14 +418,13 @@ describe('getReviewQueue', () => {
     // unreadFailures, which is reserved for confirmed-assumed values.
     it('treats a legacy loan with no source field as unknown, not assumed', async () => {
       seedReview('r1');
-      seedLoan('loan-r1', {
-        underwritingDecision: {
-          decision: 'pending_review',
-          allPass: false,
-          conditions: [
-            { name: 'max_dti', pass: false, value: 0.55, required: 0.4 }, // no `source` key
-          ],
-        },
+      seedLoan('loan-r1');
+      seedUnderwritingDetail('loan-r1', {
+        decision: 'pending_review',
+        allPass: false,
+        conditions: [
+          { name: 'max_dti', pass: false, value: 0.55, required: 0.4 }, // no `source` key
+        ],
       });
       const result = (await fn({ auth: opsAuth, data: {} })) as Record<string, unknown>;
       const row = (result.reviews as Array<Record<string, unknown>>)[0];
