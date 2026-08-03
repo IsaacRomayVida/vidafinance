@@ -273,6 +273,72 @@ describe('employers collection', () => {
     await assertFails(updateDoc(doc(ctx.firestore(), 'employers/employer1'), { status: 'active' }));
   });
 
+  // ── audit AUDIT_EMPLOYER_PATH.md E2 / E6 — the fields real employer/employee
+  // surfaces actually write, all outside the update whitelist. E2's write moved
+  // to onEmployeeDocCreated (Admin SDK); E6a/b/c moved to callables
+  // (submitEmployerDocs / submitPayrollDeductionSetup / ensureEmployerCode).
+  // These assertions are the regression guard: if a client write to any of
+  // these fields is ever reintroduced, it must stay denied here, not silently
+  // pass because the whitelist was widened to paper over it.
+
+  describe('client writes the rules deny (E2/E6 regression guard)', () => {
+    it('E2: a newly-registered employee cannot increment employers/{id}.totalEmployees', async () => {
+      await seedEmployer('employer1', { totalEmployees: 0 });
+
+      // The caller is the new employee (Onboarding.tsx createEmployeeAccount),
+      // not the employer admin, and holds no employer_admin claim.
+      const ctx = testEnv.authenticatedContext('newEmployee1', { role: 'employee' });
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), 'employers/employer1'), { totalEmployees: 1 })
+      );
+    });
+
+    it('E6a: employer cannot self-update KYC document URLs (DocUploadBanner payload)', async () => {
+      await seedEmployer('employer1', { docRFC: null, docId: null, docAddress: null });
+
+      const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), 'employers/employer1'), {
+          docRFC: 'https://firebasestorage.googleapis.com/v0/b/x/o/rfc.pdf',
+          docId: 'https://firebasestorage.googleapis.com/v0/b/x/o/id.pdf',
+          docAddress: 'https://firebasestorage.googleapis.com/v0/b/x/o/addr.pdf',
+        })
+      );
+    });
+
+    it('E6b: employer cannot self-update Part B payroll setup (sampleCurps/partBStatus)', async () => {
+      await seedEmployer('employer1');
+
+      const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), 'employers/employer1'), {
+          sampleCurps: ['AAAA000000HDFAAA01', 'BBBB000000HDFBBB02', 'CCCC000000HDFCCC03'],
+          partBStatus: 'pending',
+        })
+      );
+    });
+
+    it('E6c: employer cannot self-backfill employerCode via update', async () => {
+      await seedEmployer('employer1');
+
+      const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), 'employers/employer1'), { employerCode: 'ABC123' })
+      );
+    });
+
+    // Control: proves the harness above is sound — a whitelisted field on the
+    // same document, from the same caller, in the same shape, still succeeds.
+    it('control: the whitelisted contactName write still succeeds for the same caller', async () => {
+      await seedEmployer('employer1');
+
+      const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+      await assertSucceeds(
+        updateDoc(doc(ctx.firestore(), 'employers/employer1'), { contactName: 'Jane Doe' })
+      );
+    });
+  });
+
   it('employer delete is always denied', async () => {
     await seedEmployer('employer1');
 
