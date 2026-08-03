@@ -42,7 +42,9 @@ class FraudPreScreen:
     device, and identity signals before running expensive ML models.
     """
 
-    def __init__(self, model: IsolationForest, feature_names: list[str], threshold: float = -0.10):
+    def __init__(
+        self, model: IsolationForest, feature_names: list[str], threshold: float = -0.10
+    ):
         self.model = model
         self.feature_names = feature_names
         self.threshold = threshold
@@ -128,6 +130,8 @@ class FraudPreScreen:
 
         logger.info(
             "Trained IsolationForest: n_estimators=%d, contamination=%.2f, threshold=%.4f",
-            n_estimators, contamination, threshold,
+            n_estimators,
+            contamination,
+            threshold,
         )
         return cls(model=model, feature_names=FEATURE_NAMES, threshold=threshold)

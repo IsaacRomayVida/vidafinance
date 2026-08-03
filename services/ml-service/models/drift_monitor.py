@@ -46,7 +46,9 @@ PSI_RETRAIN_THRESHOLD = 0.25
 DEFAULT_BINS = 10
 
 
-def compute_psi(expected: np.ndarray, actual: np.ndarray, bins: int = DEFAULT_BINS) -> float:
+def compute_psi(
+    expected: np.ndarray, actual: np.ndarray, bins: int = DEFAULT_BINS
+) -> float:
     """
     Compute Population Stability Index between two distributions.
 
@@ -75,7 +77,9 @@ def compute_psi(expected: np.ndarray, actual: np.ndarray, bins: int = DEFAULT_BI
     return float(psi)
 
 
-def compute_csi(baseline: dict, current_values: np.ndarray, bins: int = DEFAULT_BINS) -> dict:
+def compute_csi(
+    baseline: dict, current_values: np.ndarray, bins: int = DEFAULT_BINS
+) -> dict:
     """
     Compute Characteristic Stability Index for a single feature.
 
@@ -97,7 +101,9 @@ def compute_csi(baseline: dict, current_values: np.ndarray, bins: int = DEFAULT_
     baseline_pct = np.clip(baseline_pct, eps, None)
     current_pct = np.clip(current_pct, eps, None)
 
-    csi = float(np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct)))
+    csi = float(
+        np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
+    )
 
     return {
         "csi": round(csi, 6),
@@ -133,7 +139,9 @@ def save_baseline(baseline: dict, path: str | None = None):
     logger.info("Baseline saved to %s", path)
 
 
-def generate_baseline_from_data(X: np.ndarray, scores: np.ndarray, bins: int = DEFAULT_BINS) -> dict:
+def generate_baseline_from_data(
+    X: np.ndarray, scores: np.ndarray, bins: int = DEFAULT_BINS
+) -> dict:
     """
     Generate baseline distributions from training data.
 
@@ -150,7 +158,9 @@ def generate_baseline_from_data(X: np.ndarray, scores: np.ndarray, bins: int = D
 
     for i, name in enumerate(FEATURE_NAMES):
         col = X[:, i]
-        percentiles = {str(p): round(float(np.percentile(col, p)), 4) for p in percentile_keys}
+        percentiles = {
+            str(p): round(float(np.percentile(col, p)), 4) for p in percentile_keys
+        }
 
         hist_counts, hist_edges = np.histogram(col, bins=bins)
         features[name] = {
@@ -172,7 +182,9 @@ def generate_baseline_from_data(X: np.ndarray, scores: np.ndarray, bins: int = D
         "std": round(float(scores.std()), 4),
         "min": round(float(scores.min()), 4),
         "max": round(float(scores.max()), 4),
-        "percentiles": {str(p): round(float(np.percentile(scores, p)), 4) for p in percentile_keys},
+        "percentiles": {
+            str(p): round(float(np.percentile(scores, p)), 4) for p in percentile_keys
+        },
         "histogram": {
             "counts": score_hist_counts.tolist(),
             "bin_edges": [round(float(e), 6) for e in score_hist_edges],
@@ -228,10 +240,16 @@ def run_drift_check(
     baseline_score_counts = np.array(score_hist["counts"], dtype=float)
 
     eps = 1e-4
-    current_score_counts = np.histogram(current_scores, bins=baseline_score_edges)[0].astype(float)
-    baseline_pct = np.clip(baseline_score_counts / baseline_score_counts.sum(), eps, None)
+    current_score_counts = np.histogram(current_scores, bins=baseline_score_edges)[
+        0
+    ].astype(float)
+    baseline_pct = np.clip(
+        baseline_score_counts / baseline_score_counts.sum(), eps, None
+    )
     current_pct = np.clip(current_score_counts / current_score_counts.sum(), eps, None)
-    score_psi = float(np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct)))
+    score_psi = float(
+        np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
+    )
 
     # Per-feature CSI
     feature_csi = {}

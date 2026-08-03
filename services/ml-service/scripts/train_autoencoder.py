@@ -51,15 +51,17 @@ def generate_legitimate_samples(n: int, rng: np.random.Generator) -> list[dict]:
     """Generate synthetic legitimate session data matching MetaMap signals."""
     samples = []
     for _ in range(n):
-        samples.append({
-            "emulator_detected": 0.0,
-            "vpn_detected": float(rng.random() < 0.05),  # 5% use VPN legitimately
-            "rooted_device": float(rng.random() < 0.03),  # 3% rooted
-            "device_age_days": float(rng.integers(30, 2500)),
-            "ip_reputation_score": float(rng.uniform(60, 100)),  # good reputation
-            "session_duration_seconds": float(rng.uniform(120, 1800)),
-            "interaction_anomaly_score": float(rng.uniform(0, 25)),  # low anomaly
-        })
+        samples.append(
+            {
+                "emulator_detected": 0.0,
+                "vpn_detected": float(rng.random() < 0.05),  # 5% use VPN legitimately
+                "rooted_device": float(rng.random() < 0.03),  # 3% rooted
+                "device_age_days": float(rng.integers(30, 2500)),
+                "ip_reputation_score": float(rng.uniform(60, 100)),  # good reputation
+                "session_duration_seconds": float(rng.uniform(120, 1800)),
+                "interaction_anomaly_score": float(rng.uniform(0, 25)),  # low anomaly
+            }
+        )
     return samples
 
 
@@ -114,6 +116,7 @@ def load_firestore_shadow_logs() -> list[dict]:
     """
     try:
         from services.firestore_client import FirestoreClient
+
         fs = FirestoreClient()
         docs = fs._db.collection("metamap_shadow_log").stream()
         samples = []
@@ -194,11 +197,15 @@ def calibrate_threshold(
 
     logger.info(
         "Legit errors  — mean: %.6f, std: %.6f, max: %.6f",
-        np.mean(legit_errors), np.std(legit_errors), np.max(legit_errors),
+        np.mean(legit_errors),
+        np.std(legit_errors),
+        np.max(legit_errors),
     )
     logger.info(
         "Fraud errors  — mean: %.6f, std: %.6f, min: %.6f",
-        np.mean(fraud_errors), np.std(fraud_errors), np.min(fraud_errors),
+        np.mean(fraud_errors),
+        np.std(fraud_errors),
+        np.min(fraud_errors),
     )
 
     # Scan thresholds and pick best Youden's J
@@ -226,8 +233,12 @@ def calibrate_threshold(
     precision = tp / max(tp + fp, 1)
 
     logger.info("Calibrated threshold: %.6f", best_threshold)
-    logger.info("TPR (recall): %.2f%% | FPR: %.2f%% | Precision: %.2f%%",
-                tpr * 100, fpr * 100, precision * 100)
+    logger.info(
+        "TPR (recall): %.2f%% | FPR: %.2f%% | Precision: %.2f%%",
+        tpr * 100,
+        fpr * 100,
+        precision * 100,
+    )
 
     return best_threshold
 
@@ -237,13 +248,24 @@ def calibrate_threshold(
 
 def main():
     parser = argparse.ArgumentParser(description="Train MetaMap autoencoder")
-    parser.add_argument("--firestore", action="store_true",
-                        help="Load training data from metamap_shadow_log Firestore collection")
+    parser.add_argument(
+        "--firestore",
+        action="store_true",
+        help="Load training data from metamap_shadow_log Firestore collection",
+    )
     parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--n-legit", type=int, default=3000,
-                        help="Number of synthetic legitimate samples")
-    parser.add_argument("--n-fraud", type=int, default=500,
-                        help="Number of synthetic fraud samples for calibration")
+    parser.add_argument(
+        "--n-legit",
+        type=int,
+        default=3000,
+        help="Number of synthetic legitimate samples",
+    )
+    parser.add_argument(
+        "--n-fraud",
+        type=int,
+        default=500,
+        help="Number of synthetic fraud samples for calibration",
+    )
     args = parser.parse_args()
 
     # ── 1. Collect training data ─────────────────────────────────────────────
@@ -254,8 +276,16 @@ def main():
     if firestore_samples:
         # Separate labeled fraud from legitimate
         labeled_fraud = [s for s in firestore_samples if s.pop("is_fraud", False)]
-        legitimate = [s for s in firestore_samples if "is_fraud" not in s or not s.pop("is_fraud", False)]
-        logger.info("Firestore: %d legitimate, %d labeled fraud", len(legitimate), len(labeled_fraud))
+        legitimate = [
+            s
+            for s in firestore_samples
+            if "is_fraud" not in s or not s.pop("is_fraud", False)
+        ]
+        logger.info(
+            "Firestore: %d legitimate, %d labeled fraud",
+            len(legitimate),
+            len(labeled_fraud),
+        )
 
         # Supplement with synthetic if needed
         if len(legitimate) < 500:
@@ -276,8 +306,12 @@ def main():
     train_legit = legitimate[:split]
     val_legit = legitimate[split:]
 
-    logger.info("Training: %d legitimate | Validation: %d legit + %d fraud",
-                len(train_legit), len(val_legit), len(labeled_fraud))
+    logger.info(
+        "Training: %d legitimate | Validation: %d legit + %d fraud",
+        len(train_legit),
+        len(val_legit),
+        len(labeled_fraud),
+    )
 
     # ── 2. Train autoencoder ─────────────────────────────────────────────────
     model = train_autoencoder(train_legit, epochs=args.epochs)
@@ -301,14 +335,20 @@ def main():
     # Test on a known-fraud sample
     fraud_test = labeled_fraud[0]
     result = loaded.predict(fraud_test)
-    logger.info("Fraud test  — error: %.6f, is_anomaly: %s",
-                result["reconstruction_error"], result["is_anomaly"])
+    logger.info(
+        "Fraud test  — error: %.6f, is_anomaly: %s",
+        result["reconstruction_error"],
+        result["is_anomaly"],
+    )
 
     # Test on a known-legit sample
     legit_test = val_legit[0]
     result = loaded.predict(legit_test)
-    logger.info("Legit test  — error: %.6f, is_anomaly: %s",
-                result["reconstruction_error"], result["is_anomaly"])
+    logger.info(
+        "Legit test  — error: %.6f, is_anomaly: %s",
+        result["reconstruction_error"],
+        result["is_anomaly"],
+    )
 
 
 if __name__ == "__main__":

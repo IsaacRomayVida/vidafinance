@@ -22,8 +22,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # ── Unit tests for helper functions ──────────────────────────────────────────
 
+
 def test_encode_pay_freq():
     from workers.underwriting_worker import encode_pay_freq
+
     assert encode_pay_freq("weekly") == 4
     assert encode_pay_freq("biweekly") == 2
     assert encode_pay_freq("monthly") == 1
@@ -33,6 +35,7 @@ def test_encode_pay_freq():
 
 def test_encode_industry():
     from workers.underwriting_worker import encode_industry
+
     assert encode_industry("manufacturing") == 1
     assert encode_industry("Manufacturing") == 1
     assert encode_industry("technology") == 4
@@ -61,26 +64,37 @@ def test_build_model_features_emits_employer_industry_encoded():
 
 def test_get_rejection_reason_tenure():
     from workers.underwriting_worker import get_rejection_reason
-    reason = get_rejection_reason(0.30, {"employment_tenure_months": 2, "loan_to_salary_ratio": 0.10})
+
+    reason = get_rejection_reason(
+        0.30, {"employment_tenure_months": 2, "loan_to_salary_ratio": 0.10}
+    )
     assert "tenure" in reason.lower()
 
 
 def test_get_rejection_reason_high_ratio():
     from workers.underwriting_worker import get_rejection_reason
-    reason = get_rejection_reason(0.50, {"employment_tenure_months": 12, "loan_to_salary_ratio": 0.40})
+
+    reason = get_rejection_reason(
+        0.50, {"employment_tenure_months": 12, "loan_to_salary_ratio": 0.40}
+    )
     assert "salary" in reason.lower()
 
 
 def test_get_rejection_reason_low_score():
     from workers.underwriting_worker import get_rejection_reason
-    reason = get_rejection_reason(0.30, {"employment_tenure_months": 12, "loan_to_salary_ratio": 0.15})
+
+    reason = get_rejection_reason(
+        0.30, {"employment_tenure_months": 12, "loan_to_salary_ratio": 0.15}
+    )
     assert "credit risk" in reason.lower()
 
 
 # ── Model unit tests ──────────────────────────────────────────────────────────
 
+
 def test_model_loads():
     from models.underwriting_model import UnderwritingModel
+
     model = UnderwritingModel.load("models/underwriting_v1.joblib")
     assert model is not None
     assert len(model.weights) == 8
@@ -88,6 +102,7 @@ def test_model_loads():
 
 def test_model_predict_good_borrower():
     from models.underwriting_model import UnderwritingModel
+
     model = UnderwritingModel.load("models/underwriting_v1.joblib")
     features = {
         "employment_tenure_months": 24,
@@ -107,6 +122,7 @@ def test_model_predict_good_borrower():
 
 def test_model_predict_risky_borrower():
     from models.underwriting_model import UnderwritingModel
+
     model = UnderwritingModel.load("models/underwriting_v1.joblib")
     features = {
         "employment_tenure_months": 1,
@@ -125,6 +141,7 @@ def test_model_predict_risky_borrower():
 
 
 # ── Live integration test (skipped unless INTEGRATION_TEST=1) ─────────────────
+
 
 @pytest.mark.skipif(
     os.environ.get("INTEGRATION_TEST") != "1",
@@ -166,6 +183,7 @@ async def test_live_job_processing():
 
     # Wait up to 30s for the worker to process it
     from services.firestore_client import FirestoreClient
+
     firestore = FirestoreClient()
     deadline = asyncio.get_event_loop().time() + 30
 
@@ -173,7 +191,9 @@ async def test_live_job_processing():
         await asyncio.sleep(2)
         loan = firestore.get_loan(loan_id)
         if loan and loan.get("status") in ("approved", "rejected"):
-            print(f"Loan {loan_id} → {loan['status']} (score={loan.get('underwritingScore')})")
+            print(
+                f"Loan {loan_id} → {loan['status']} (score={loan.get('underwritingScore')})"
+            )
             assert loan.get("underwritingStage") is not None
             await conn.aclose()
             return

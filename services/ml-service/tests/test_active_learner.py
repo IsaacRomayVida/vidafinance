@@ -60,9 +60,7 @@ class TestHumanReviewRouter:
         assert instances.shape == (3, 10)
 
     def test_teach_updates_model(self, router):
-        # Get prediction before teaching
         features = np.array([[0.5, -0.5, 0, 0, 0, 0, 0, 0, 0, 0]])
-        before = router.should_route_to_human(features[0])
 
         # Teach with new data
         rng = np.random.RandomState(77)

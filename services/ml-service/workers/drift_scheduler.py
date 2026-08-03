@@ -20,13 +20,16 @@ import numpy as np
 
 logger = logging.getLogger("ml-service.drift-scheduler")
 
-DRIFT_CHECK_INTERVAL_HOURS = int(os.environ.get("DRIFT_CHECK_INTERVAL_HOURS", "168"))  # 7 days
+DRIFT_CHECK_INTERVAL_HOURS = int(
+    os.environ.get("DRIFT_CHECK_INTERVAL_HOURS", "168")
+)  # 7 days
 
 _executor = ThreadPoolExecutor(max_workers=1)
 
 
 def _get_firestore():
     from services.firestore_client import FirestoreClient
+
     return FirestoreClient()
 
 
@@ -44,7 +47,9 @@ def _fetch_recent_scores(firestore) -> list[dict]:
     return [doc.to_dict() for doc in docs]
 
 
-def _extract_features_and_scores(loans: list[dict]) -> tuple[np.ndarray, np.ndarray, list[str]]:
+def _extract_features_and_scores(
+    loans: list[dict],
+) -> tuple[np.ndarray, np.ndarray, list[str]]:
     """
     Extract feature matrix and scores from loan documents.
 
@@ -83,11 +88,16 @@ def _extract_features_and_scores(loans: list[dict]) -> tuple[np.ndarray, np.ndar
     if missing_names:
         logger.warning(
             "Dropping feature(s) never present in underwritingFeatures — cannot "
-            "be monitored for drift: %s", missing_names,
+            "be monitored for drift: %s",
+            missing_names,
         )
 
     if not rows:
-        return np.array([]).reshape(0, len(available_names)), np.array([]), available_names
+        return (
+            np.array([]).reshape(0, len(available_names)),
+            np.array([]),
+            available_names,
+        )
 
     features = np.array([[row[name] for name in available_names] for row in rows])
     return features, np.array(scores_list), available_names
@@ -109,28 +119,38 @@ def _run_drift_check_sync() -> dict | None:
 
     loans = _fetch_recent_scores(firestore)
     if len(loans) < 30:
-        logger.info("Only %d loans found — need at least 30 for drift check", len(loans))
+        logger.info(
+            "Only %d loans found — need at least 30 for drift check", len(loans)
+        )
         return None
 
     from models.drift_monitor import FEATURE_NAMES
 
     features, scores, available_features = _extract_features_and_scores(loans)
     if len(scores) < 30:
-        logger.info("Only %d scored loans — need at least 30 for drift check", len(scores))
+        logger.info(
+            "Only %d scored loans — need at least 30 for drift check", len(scores)
+        )
         return None
 
     baseline = load_baseline()
-    report = run_drift_check(features, scores, baseline, feature_names=available_features)
-    report["unmonitored_features"] = sorted(set(FEATURE_NAMES) - set(available_features))
+    report = run_drift_check(
+        features, scores, baseline, feature_names=available_features
+    )
+    report["unmonitored_features"] = sorted(
+        set(FEATURE_NAMES) - set(available_features)
+    )
 
     # Write to Firestore
     doc_id = datetime.now(timezone.utc).strftime("drift_%Y%m%d_%H%M%S")
     db = firestore._db
-    db.collection("model_monitoring").document(doc_id).set({
-        **report,
-        "type": "drift_check",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    db.collection("model_monitoring").document(doc_id).set(
+        {
+            **report,
+            "type": "drift_check",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
     logger.info(
         "Drift check complete: PSI=%.4f, alert=%s, written to model_monitoring/%s",
         report["score_psi"],

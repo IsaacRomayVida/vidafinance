@@ -61,10 +61,12 @@ class PseudoLabeler:
         """
         # Combine labeled and unlabeled data
         X_all = np.vstack([X_labeled, X_unlabeled])
-        y_all = np.concatenate([
-            y_labeled,
-            np.full(X_unlabeled.shape[0], -1),  # -1 = unlabeled
-        ])
+        y_all = np.concatenate(
+            [
+                y_labeled,
+                np.full(X_unlabeled.shape[0], -1),  # -1 = unlabeled
+            ]
+        )
 
         base_estimator = LogisticRegression(
             max_iter=1000,
@@ -81,7 +83,7 @@ class PseudoLabeler:
         self.model.fit(X_all, y_all)
 
         # Compute statistics
-        pseudo_labels = self.model.transduction_[len(y_labeled):]
+        pseudo_labels = self.model.transduction_[len(y_labeled) :]
         n_pseudo_labeled = int(np.sum(pseudo_labels >= 0))
         n_pseudo_positive = int(np.sum(pseudo_labels == 1))
         n_pseudo_negative = int(np.sum(pseudo_labels == 0))
@@ -98,7 +100,9 @@ class PseudoLabeler:
 
         logger.info(
             "Pseudo-labeling complete: %d/%d unlabeled samples assigned labels in %d iterations",
-            n_pseudo_labeled, len(X_unlabeled), self.model.n_iter_,
+            n_pseudo_labeled,
+            len(X_unlabeled),
+            self.model.n_iter_,
         )
         return summary
 
@@ -108,7 +112,9 @@ class PseudoLabeler:
             raise RuntimeError("Model not trained. Call fit() first.")
         return self.model.predict_proba(X)[:, 1]
 
-    def get_expanded_labels(self, y_original: np.ndarray, n_unlabeled: int) -> np.ndarray:
+    def get_expanded_labels(
+        self, y_original: np.ndarray, n_unlabeled: int
+    ) -> np.ndarray:
         """
         Return the full label array after pseudo-labeling.
 

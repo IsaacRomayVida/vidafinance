@@ -35,7 +35,7 @@ FEATURE_COLUMNS = [
 ]
 SCORE_COLUMN = "prediction_score"
 
-PSI_WARN_THRESHOLD = 0.10   # recalibrate Platt scaling
+PSI_WARN_THRESHOLD = 0.10  # recalibrate Platt scaling
 PSI_ALERT_THRESHOLD = 0.25  # full retrain
 
 
@@ -92,23 +92,27 @@ def run_drift_check(
         results["psi"]["score"] = round(psi_value, 4)
 
         if psi_value > PSI_ALERT_THRESHOLD:
-            results["alerts"].append({
-                "level": "critical",
-                "metric": "PSI",
-                "value": round(psi_value, 4),
-                "threshold": PSI_ALERT_THRESHOLD,
-                "action": "full_retrain",
-                "message": f"PSI={psi_value:.4f} > {PSI_ALERT_THRESHOLD} — full model retrain required",
-            })
+            results["alerts"].append(
+                {
+                    "level": "critical",
+                    "metric": "PSI",
+                    "value": round(psi_value, 4),
+                    "threshold": PSI_ALERT_THRESHOLD,
+                    "action": "full_retrain",
+                    "message": f"PSI={psi_value:.4f} > {PSI_ALERT_THRESHOLD} — full model retrain required",
+                }
+            )
         elif psi_value > PSI_WARN_THRESHOLD:
-            results["alerts"].append({
-                "level": "warning",
-                "metric": "PSI",
-                "value": round(psi_value, 4),
-                "threshold": PSI_WARN_THRESHOLD,
-                "action": "recalibrate_platt",
-                "message": f"PSI={psi_value:.4f} > {PSI_WARN_THRESHOLD} — recalibrate Platt scaling",
-            })
+            results["alerts"].append(
+                {
+                    "level": "warning",
+                    "metric": "PSI",
+                    "value": round(psi_value, 4),
+                    "threshold": PSI_WARN_THRESHOLD,
+                    "action": "recalibrate_platt",
+                    "message": f"PSI={psi_value:.4f} > {PSI_WARN_THRESHOLD} — recalibrate Platt scaling",
+                }
+            )
 
     # CSI on each input feature
     for col in FEATURE_COLUMNS:
@@ -117,30 +121,39 @@ def run_drift_check(
             results["csi"][col] = round(csi_value, 4)
 
             if csi_value > PSI_ALERT_THRESHOLD:
-                results["alerts"].append({
-                    "level": "critical",
-                    "metric": "CSI",
-                    "feature": col,
-                    "value": round(csi_value, 4),
-                    "threshold": PSI_ALERT_THRESHOLD,
-                    "message": f"CSI({col})={csi_value:.4f} — significant feature drift",
-                })
+                results["alerts"].append(
+                    {
+                        "level": "critical",
+                        "metric": "CSI",
+                        "feature": col,
+                        "value": round(csi_value, 4),
+                        "threshold": PSI_ALERT_THRESHOLD,
+                        "message": f"CSI({col})={csi_value:.4f} — significant feature drift",
+                    }
+                )
 
     # Evidently report: dataset-level verdict plus per-column drift detail
     try:
-        feature_cols = [c for c in FEATURE_COLUMNS
-                         if c in reference_df.columns and c in current_df.columns]
+        feature_cols = [
+            c
+            for c in FEATURE_COLUMNS
+            if c in reference_df.columns and c in current_df.columns
+        ]
         all_cols = feature_cols + (
-            [SCORE_COLUMN] if SCORE_COLUMN in reference_df.columns
-            and SCORE_COLUMN in current_df.columns else []
+            [SCORE_COLUMN]
+            if SCORE_COLUMN in reference_df.columns
+            and SCORE_COLUMN in current_df.columns
+            else []
         )
         ref_subset = reference_df[all_cols].copy()
         cur_subset = current_df[all_cols].copy()
 
-        report = Report(metrics=[
-            DatasetDriftMetric(),
-            *[ColumnDriftMetric(column_name=col) for col in all_cols],
-        ])
+        report = Report(
+            metrics=[
+                DatasetDriftMetric(),
+                *[ColumnDriftMetric(column_name=col) for col in all_cols],
+            ]
+        )
         report.run(reference_data=ref_subset, current_data=cur_subset)
         report_dict = report.as_dict()
         metrics = report_dict.get("metrics", [])
@@ -155,8 +168,12 @@ def run_drift_check(
         }
         results["evidently_drift"] = {
             "dataset_drift": dataset_result.get("dataset_drift", False),
-            "share_of_drifted_columns": dataset_result.get("share_of_drifted_columns", 0),
-            "number_of_drifted_columns": dataset_result.get("number_of_drifted_columns", 0),
+            "share_of_drifted_columns": dataset_result.get(
+                "share_of_drifted_columns", 0
+            ),
+            "number_of_drifted_columns": dataset_result.get(
+                "number_of_drifted_columns", 0
+            ),
             "columns": columns_drift,
         }
     except Exception as e:
@@ -169,7 +186,11 @@ def run_drift_check(
 def load_reference_data(firestore_db) -> Optional[pd.DataFrame]:
     """Load reference (training) score distribution from Firestore."""
     try:
-        doc = firestore_db.collection("ml_reference_data").document("underwriting_v1").get()
+        doc = (
+            firestore_db.collection("ml_reference_data")
+            .document("underwriting_v1")
+            .get()
+        )
         if doc.exists:
             data = doc.to_dict()
             return pd.DataFrame(data.get("records", []))
@@ -182,6 +203,7 @@ def load_current_data(firestore_db, days: int = 7) -> Optional[pd.DataFrame]:
     """Load recent scoring decisions from Firestore for drift comparison."""
     try:
         from datetime import timedelta
+
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         docs = (
             firestore_db.collection("underwriting_decisions")
@@ -213,24 +235,30 @@ async def run_weekly_drift_job(firestore_db, alert_callback=None):
 
     reference_df = load_reference_data(firestore_db)
     if reference_df is None or len(reference_df) < 30:
-        logger.info("Skipping drift check — insufficient reference data (%s rows)",
-                     len(reference_df) if reference_df is not None else 0)
+        logger.info(
+            "Skipping drift check — insufficient reference data (%s rows)",
+            len(reference_df) if reference_df is not None else 0,
+        )
         return {"skipped": True, "reason": "insufficient_reference_data"}
 
     current_df = load_current_data(firestore_db, days=7)
     if current_df is None or len(current_df) < 10:
-        logger.info("Skipping drift check — insufficient current data (%s rows)",
-                     len(current_df) if current_df is not None else 0)
+        logger.info(
+            "Skipping drift check — insufficient current data (%s rows)",
+            len(current_df) if current_df is not None else 0,
+        )
         return {"skipped": True, "reason": "insufficient_current_data"}
 
     results = run_drift_check(reference_df, current_df)
 
     # Store results in Firestore
     try:
-        firestore_db.collection("ml_drift_reports").add({
-            **results,
-            "createdAt": datetime.now(timezone.utc).isoformat(),
-        })
+        firestore_db.collection("ml_drift_reports").add(
+            {
+                **results,
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to store drift report: %s", e)
 
@@ -242,6 +270,9 @@ async def run_weekly_drift_job(firestore_db, alert_callback=None):
             except Exception as e:
                 logger.warning("Alert callback failed: %s", e)
 
-    logger.info("Drift check complete: PSI=%s, alerts=%d",
-                results.get("psi", {}), len(results.get("alerts", [])))
+    logger.info(
+        "Drift check complete: PSI=%s, alerts=%d",
+        results.get("psi", {}),
+        len(results.get("alerts", [])),
+    )
     return results

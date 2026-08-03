@@ -12,7 +12,9 @@ import os
 logger = logging.getLogger("drift_scheduler")
 
 # Default: 7 days in seconds
-DRIFT_CHECK_INTERVAL = int(os.environ.get("DRIFT_CHECK_INTERVAL_SECONDS", str(7 * 24 * 3600)))
+DRIFT_CHECK_INTERVAL = int(
+    os.environ.get("DRIFT_CHECK_INTERVAL_SECONDS", str(7 * 24 * 3600))
+)
 
 
 async def drift_scheduler(firestore_db, alert_callback=None):

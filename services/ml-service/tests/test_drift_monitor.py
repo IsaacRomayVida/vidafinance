@@ -32,8 +32,8 @@ from models.drift_monitor import (
     save_baseline,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def rng():
@@ -44,16 +44,18 @@ def rng():
 def synthetic_data(rng):
     """Generate synthetic feature matrix and scores."""
     n = 500
-    X = np.column_stack([
-        rng.exponential(scale=18, size=n).clip(0, 120),       # tenure
-        rng.lognormal(mean=9.7, sigma=0.5, size=n).clip(7000, 40000),  # salary
-        rng.choice([1, 2, 4], size=n).astype(float),          # pay_freq
-        rng.uniform(0.01, 0.5, size=n),                       # lts_ratio
-        rng.choice(range(9), size=n).astype(float),            # industry
-        rng.uniform(500, 5000, size=n),                        # principal
-        rng.uniform(300, 800, size=n),                         # bureau
-        rng.choice([0, 1], size=n).astype(float),              # has_bureau
-    ])
+    X = np.column_stack(
+        [
+            rng.exponential(scale=18, size=n).clip(0, 120),  # tenure
+            rng.lognormal(mean=9.7, sigma=0.5, size=n).clip(7000, 40000),  # salary
+            rng.choice([1, 2, 4], size=n).astype(float),  # pay_freq
+            rng.uniform(0.01, 0.5, size=n),  # lts_ratio
+            rng.choice(range(9), size=n).astype(float),  # industry
+            rng.uniform(500, 5000, size=n),  # principal
+            rng.uniform(300, 800, size=n),  # bureau
+            rng.choice([0, 1], size=n).astype(float),  # has_bureau
+        ]
+    )
     scores = rng.uniform(0, 1, size=n)
     return X, scores
 
@@ -65,6 +67,7 @@ def baseline(synthetic_data):
 
 
 # ── PSI tests ─────────────────────────────────────────────────────────────────
+
 
 def test_psi_identical_distributions():
     """PSI of a distribution compared to itself should be ~0."""
@@ -104,14 +107,15 @@ def test_psi_non_negative():
 
 # ── CSI tests ─────────────────────────────────────────────────────────────────
 
+
 def test_csi_identical_feature(baseline, synthetic_data):
     """CSI of a feature compared to its own baseline should be ~0."""
     X, _ = synthetic_data
     for i, name in enumerate(FEATURE_NAMES):
         csi_result = compute_csi(baseline["features"][name], X[:, i])
-        assert csi_result["csi"] < 0.05, (
-            f"CSI for {name} against own baseline should be ~0, got {csi_result['csi']}"
-        )
+        assert (
+            csi_result["csi"] < 0.05
+        ), f"CSI for {name} against own baseline should be ~0, got {csi_result['csi']}"
         assert "baseline_mean" in csi_result
         assert "current_mean" in csi_result
 
@@ -123,12 +127,13 @@ def test_csi_shifted_feature(baseline):
     # salary feature (index 1) — shift mean from ~18k to ~30k
     shifted = rng.lognormal(mean=10.3, sigma=0.3, size=500).clip(7000, 40000)
     csi_result = compute_csi(baseline["features"]["monthly_salary"], shifted)
-    assert csi_result["csi"] > 0.05, (
-        f"Shifted salary distribution should have CSI > 0.05, got {csi_result['csi']}"
-    )
+    assert (
+        csi_result["csi"] > 0.05
+    ), f"Shifted salary distribution should have CSI > 0.05, got {csi_result['csi']}"
 
 
 # ── Classification tests ─────────────────────────────────────────────────────
+
 
 def test_classify_drift_stable():
     assert classify_drift(0.05) == "stable"
@@ -149,6 +154,7 @@ def test_classify_drift_retrain():
 
 
 # ── Baseline save/load tests ─────────────────────────────────────────────────
+
 
 def test_baseline_roundtrip(baseline):
     """Baseline should survive save → load roundtrip."""
@@ -195,6 +201,7 @@ def test_baseline_file_exists():
 
 # ── Full drift check tests ───────────────────────────────────────────────────
 
+
 def test_run_drift_check_stable(baseline, synthetic_data):
     """Drift check against own training data should show stable."""
     X, scores = synthetic_data
@@ -216,16 +223,20 @@ def test_run_drift_check_with_shift(baseline):
     rng = np.random.default_rng(123)
     n = 500
     # Shift most features significantly
-    X_shifted = np.column_stack([
-        rng.exponential(scale=50, size=n).clip(0, 120),       # much higher tenure
-        rng.lognormal(mean=10.2, sigma=0.3, size=n).clip(7000, 40000),  # higher salary
-        np.full(n, 4.0),                                       # all weekly
-        rng.uniform(0.3, 0.8, size=n),                         # much higher ratios
-        np.full(n, 8.0),                                       # single industry
-        rng.uniform(3000, 5000, size=n),                        # higher principals
-        rng.uniform(600, 800, size=n),                          # higher bureau
-        np.ones(n),                                             # all have bureau
-    ])
+    X_shifted = np.column_stack(
+        [
+            rng.exponential(scale=50, size=n).clip(0, 120),  # much higher tenure
+            rng.lognormal(mean=10.2, sigma=0.3, size=n).clip(
+                7000, 40000
+            ),  # higher salary
+            np.full(n, 4.0),  # all weekly
+            rng.uniform(0.3, 0.8, size=n),  # much higher ratios
+            np.full(n, 8.0),  # single industry
+            rng.uniform(3000, 5000, size=n),  # higher principals
+            rng.uniform(600, 800, size=n),  # higher bureau
+            np.ones(n),  # all have bureau
+        ]
+    )
     scores_shifted = rng.uniform(0.7, 1.0, size=n)  # much higher scores
 
     report = run_drift_check(X_shifted, scores_shifted, baseline)
@@ -234,6 +245,7 @@ def test_run_drift_check_with_shift(baseline):
 
 
 # ── Baseline generation tests ────────────────────────────────────────────────
+
 
 def test_generate_baseline_structure(synthetic_data):
     """Generated baseline should have all required fields."""
@@ -251,9 +263,13 @@ def test_generate_baseline_structure(synthetic_data):
 
     for name in FEATURE_NAMES:
         feat = baseline["features"][name]
-        assert all(k in feat for k in ["mean", "std", "min", "max", "percentiles", "histogram"])
+        assert all(
+            k in feat for k in ["mean", "std", "min", "max", "percentiles", "histogram"]
+        )
         assert len(feat["histogram"]["counts"]) == 10
         assert len(feat["histogram"]["bin_edges"]) == 11
 
     score = baseline["score_distribution"]
-    assert all(k in score for k in ["mean", "std", "min", "max", "percentiles", "histogram"])
+    assert all(
+        k in score for k in ["mean", "std", "min", "max", "percentiles", "histogram"]
+    )

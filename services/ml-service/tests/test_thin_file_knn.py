@@ -4,19 +4,17 @@ Tests for the thin-file k-NN model (embedding + FAISS).
 These tests use synthetic embeddings to avoid requiring an OpenAI API key.
 """
 
-import json
-
 import numpy as np
 import pytest
 
 try:
     import faiss
+
     HAS_FAISS = True
 except ImportError:
     HAS_FAISS = False
 
 from models.thin_file_knn import ThinFileKNN, build_profile_text, EMBEDDING_DIM
-
 
 pytestmark = pytest.mark.skipif(not HAS_FAISS, reason="faiss-cpu not installed")
 
@@ -33,10 +31,12 @@ def synthetic_index():
         embedding = rng.randn(EMBEDDING_DIM).astype(np.float32)
         embedding /= np.linalg.norm(embedding)
         index.add(embedding.reshape(1, -1))
-        metadata.append({
-            "outcome": float(rng.binomial(1, 0.7)),
-            "loan_id": f"test_{i:03d}",
-        })
+        metadata.append(
+            {
+                "outcome": float(rng.binomial(1, 0.7)),
+                "loan_id": f"test_{i:03d}",
+            }
+        )
 
     return ThinFileKNN(index=index, metadata=metadata)
 
