@@ -700,6 +700,64 @@ export const requestLoan = onCall(
           };
         }
 
+        // ADR-008: employer-b (due diligence — services/underwriting-service
+        // /src/stages/employer-b.js) computes the employer's lending
+        // CAPACITY from its tier/score. Nothing previously wired that number
+        // into `maxActiveSlots`, the one field the transaction below actually
+        // enforces (ADR-005 Finding 2) — so a Tier 1 employer due diligence
+        // scored for 10 slots stayed capped at the riskTier-absent fallback
+        // of 3 forever. Persist it here.
+        //
+        // This is capacity plumbing on the loan-creation path, not a loan
+        // decision, so it runs in its own transaction/try-catch, entirely
+        // separate from the loan-creation transaction below: a failure here
+        // must never block the loan itself, matching the fail-soft
+        // convention `underwritingDecision` above and `recordInlineMlDenial`
+        // follow for the same reason.
+        //
+        // Ops override always wins over an automated re-score
+        // (updateEmployerTier's `approve_expansion` sets
+        // `maxActiveSlotsSource: 'ops_override'`): due diligence only writes
+        // `maxActiveSlots` when the stored source is not `'ops_override'`. A
+        // MISSING source is NOT an override, so due diligence may still
+        // write over a seeded/legacy value that predates this field.
+        const employerBResult = uwStages?.['employerB'] as Record<string, unknown> | undefined;
+        const dueDiligenceMaxSlots = employerBResult?.['maxActiveSlots'];
+        if (typeof dueDiligenceMaxSlots === 'number') {
+          try {
+            let auditBefore: Record<string, unknown> | null = null;
+            let auditAfter: Record<string, unknown> | null = null;
+            await db.runTransaction(async (tx) => {
+              const empSnap = await tx.get(employerRef);
+              const empData = empSnap.data() ?? {};
+              if (empData['maxActiveSlotsSource'] === 'ops_override') return;
+              auditBefore = {
+                maxActiveSlots: empData['maxActiveSlots'] ?? null,
+                maxActiveSlotsSource: empData['maxActiveSlotsSource'] ?? null,
+              };
+              auditAfter = { maxActiveSlots: dueDiligenceMaxSlots, maxActiveSlotsSource: 'due_diligence' };
+              tx.update(employerRef, auditAfter);
+            });
+            if (auditAfter) {
+              await auditLog(db, {
+                action: 'employer.due_diligence_cap',
+                actorUid: uid,
+                actorRole: 'employee',
+                targetId: emp['employerId'],
+                before: auditBefore,
+                after: auditAfter,
+              });
+            }
+          } catch (e: unknown) {
+            logger.warn('Failed to persist due-diligence maxActiveSlots', {
+              error: (e as Error).message,
+              employerId: emp['employerId'],
+              loanId,
+              service: 'functions',
+            });
+          }
+        }
+
         await db.runTransaction(async (tx) => {
           // Employer slot cap (ADR-005 Finding 2 / ADR-007): both reads that
           // decide whether this loan is allowed to exist — the employer's
@@ -1449,6 +1507,10 @@ export const updateEmployerTier = onCall(
           if (typeof newSlots !== 'number' || newSlots < 1)
             throw new HttpsError('invalid-argument', 'newSlots must be a positive number');
           update['maxActiveSlots'] = newSlots;
+          // ADR-008: an ops-approved expansion always outranks the next
+          // automated due-diligence re-score (requestLoan's ADR-008 block) —
+          // tag the source so that write knows to leave this value alone.
+          update['maxActiveSlotsSource'] = 'ops_override';
         } else if (action === 'upgrade_tier') {
           if (emp['riskTier'] !== 2)
             throw new HttpsError('failed-precondition', 'Only Tier 2 employers can be upgraded');
@@ -1465,7 +1527,11 @@ export const updateEmployerTier = onCall(
           actorUid: auth.uid,
           actorRole: auth.role,
           targetId: employerId,
-          before: { riskTier: emp['riskTier'], maxActiveSlots: emp['maxActiveSlots'] },
+          before: {
+            riskTier: emp['riskTier'],
+            maxActiveSlots: emp['maxActiveSlots'],
+            maxActiveSlotsSource: emp['maxActiveSlotsSource'] ?? null,
+          },
           after: update,
         });
 

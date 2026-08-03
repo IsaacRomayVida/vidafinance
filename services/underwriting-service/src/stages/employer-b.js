@@ -12,9 +12,16 @@
  * `runEmployerDueDiligence` wires the weighted engine and the ADR-007
  * tier/slot helpers (assignTier through expandTier2) together and persists
  * the outcome to `employers/{employerId}` in Firestore. Its top-level return
- * shape (`{pass, tier, score, activeSlots, signals, requiresApproval,
+ * shape (`{pass, tier, score, maxActiveSlots, signals, requiresApproval,
  * reason}`) is specified by __tests__/employer-b.test.js's
  * `runEmployerDueDiligence` describe block.
+ *
+ * `maxActiveSlots` is CAPACITY, not slots-in-use (ADR-008) — the number of
+ * concurrent loans this employer's employees are allowed to hold, computed
+ * from the due-diligence tier/score. It is a distinct concept from the
+ * slots-IN-USE count that `functions/src/index.ts`'s requestLoan transaction
+ * computes separately via an aggregate `count()` query; the two must never
+ * be wired into each other.
  */
 const { verifyEmployerIMSS } = require("../belvo-client");
 const { getSeedSlotGrowthConfig } = require("../config/lendingSlotGrowth");
@@ -252,23 +259,23 @@ async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) 
   const tier = assignTier(score);
   const pass = tier > 0;
 
-  const currentSlots = employer.activeSlots || 0;
+  const currentSlots = employer.maxActiveSlots || 0;
   const cleanCycles = employer.cleanPayrollCycles || 0;
   const isReturning = currentSlots > 0;
 
-  let activeSlots = 0;
+  let maxActiveSlots = 0;
   let requiresApproval = false;
   if (tier === 1) {
     if (isReturning) {
       const autoScale = autoScaleTier1(currentSlots, cleanCycles);
-      activeSlots = autoScale.newSlots;
+      maxActiveSlots = autoScale.newSlots;
       requiresApproval = autoScale.requiresManualReview;
     } else {
-      activeSlots = computeInitialSlots(1);
+      maxActiveSlots = computeInitialSlots(1);
     }
   } else if (tier === 2) {
     requiresApproval = true;
-    activeSlots = isReturning
+    maxActiveSlots = isReturning
       ? expandTier2(currentSlots, cleanCycles).newSlots
       : computeInitialSlots(2);
   }
@@ -281,24 +288,37 @@ async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) 
 
   if (employer.employerId) {
     const db = getFirestore();
-    await db
-      .collection("employers")
-      .doc(employer.employerId)
-      .update({
+    const ref = db.collection("employers").doc(employer.employerId);
+    // ADR-008: an ops-approved expansion (updateEmployerTier's
+    // `approve_expansion`, which tags `maxActiveSlotsSource: 'ops_override'`)
+    // outranks this automated re-score. Read the stored source inside a
+    // transaction and leave `maxActiveSlots` alone when ops owns it —
+    // otherwise this write silently reverts a human decision on the next
+    // due-diligence run. Everything else (score, tier, timestamps) is still
+    // refreshed. A MISSING source is NOT an override.
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const opsOwnsCap = (snap.data() || {}).maxActiveSlotsSource === "ops_override";
+      const update = {
         employerScore: score,
-        activeSlots,
         tier: pass ? tier : null,
         tierAssignedAt: FieldValue.serverTimestamp(),
         lastDueDiligenceAt: FieldValue.serverTimestamp(),
         dueDiligenceResult: { pass, tier, score },
-      });
+      };
+      if (!opsOwnsCap) {
+        update.maxActiveSlots = maxActiveSlots;
+        update.maxActiveSlotsSource = "due_diligence";
+      }
+      tx.update(ref, update);
+    });
   }
 
   return {
     pass,
     tier,
     score,
-    activeSlots,
+    maxActiveSlots,
     signals,
     requiresApproval,
     reason,
