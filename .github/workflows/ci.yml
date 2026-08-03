@@ -103,6 +103,30 @@ jobs:
       - name: Unit tests (softcredito-adapter) — 44/44 (internalAuth, bureauFallback, scToken), hard gate
         run: cd services/softcredito-adapter && npm test
 
+  # payment-server is the MONEY-IN surface: it receives CONEKTA card webhooks
+  # and SPEI transfer webhooks and moves real money. Like softcredito-adapter
+  # before #425, it had a real test suite risk (zero tests, in this case) and
+  # no CI job — a regression here can silently lose or double-credit customer
+  # payments. See the softcredito-adapter job above for the shape of the
+  # incident this pattern addresses.
+  payment-server:
+    name: "Payment Server Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: services/payment-server/package-lock.json
+
+      - name: Install payment-server dependencies
+        run: cd services/payment-server && npm ci
+
+      - name: Unit tests (payment-server) — internal auth, Conekta webhook signature, disbursement worker, hard gate
+        run: cd services/payment-server && npm test
+
   # See the softcredito-adapter job above for why this exists (#425).
   ml-service:
     name: "ML Service Tests"

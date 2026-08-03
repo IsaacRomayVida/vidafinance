@@ -1,0 +1,285 @@
+'use strict';
+
+const crypto = require('crypto');
+const { setBaseEnv, hmacSign } = require('./testEnv');
+setBaseEnv();
+
+const request = require('supertest');
+const { app } = require('../index');
+const admin = require('firebase-admin');
+const { Queue } = require('bullmq');
+
+const SECRET = process.env.CONEKTA_WEBHOOK_SECRET;
+
+beforeEach(() => {
+  admin.__reset();
+  Queue.__reset();
+});
+
+function post(rawBody, headers = {}) {
+  const req = request(app).post('/webhooks/conekta').set('Content-Type', 'application/json');
+  for (const [k, v] of Object.entries(headers)) req.set(k, v);
+  return req.send(rawBody);
+}
+
+function conektaEvent(type, object) {
+  return JSON.stringify({ type, data: { object } });
+}
+
+// ── Signature verification (HMAC branch) ────────────────────────────────
+describe('signature verification — HMAC secret', () => {
+  test('rejects a request with no signature header at all', async () => {
+    const body = conektaEvent('order.paid', { id: 'ord_1', amount: 10000, metadata: {}, charges: { data: [] } });
+    const res = await post(body);
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid signature' });
+  });
+
+  test('rejects a request with a wrong signature', async () => {
+    const body = conektaEvent('order.paid', { id: 'ord_1', amount: 10000, metadata: {}, charges: { data: [] } });
+    const res = await post(body, { digest: 'not-the-right-signature' });
+    expect(res.status).toBe(401);
+    // Rejected webhooks are recorded, not silently dropped.
+    const incidents = admin.__all('incident_log');
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0].data.error).toBe('invalid_signature');
+  });
+
+  test('accepts a request with a correctly computed signature', async () => {
+    const body = conektaEvent('order.payment_failed', { id: 'ord_2', metadata: { loanId: 'loan_1' }, payment_status: 'declined' });
+    const sig = hmacSign(SECRET, body);
+    const res = await post(body, { digest: sig });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ received: true });
+  });
+
+  test('also accepts the signature via the x-conekta-signature header', async () => {
+    const body = conektaEvent('order.payment_failed', { id: 'ord_3', metadata: { loanId: 'loan_1' }, payment_status: 'declined' });
+    const sig = hmacSign(SECRET, body);
+    const res = await post(body, { 'x-conekta-signature': sig });
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('signature verification — RSA public-key secret', () => {
+  let publicKeyPem, privateKey;
+
+  beforeAll(() => {
+    const { publicKey, privateKey: priv } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' });
+    privateKey = priv;
+  });
+
+  beforeEach(() => {
+    process.env.CONEKTA_WEBHOOK_SECRET = publicKeyPem;
+  });
+
+  afterAll(() => {
+    // Restore, so later describe blocks in this file still sign with the
+    // plain HMAC secret they were written against.
+    process.env.CONEKTA_WEBHOOK_SECRET = SECRET;
+  });
+
+  test('accepts a request signed with the matching private key', async () => {
+    const body = conektaEvent('order.payment_failed', { id: 'ord_4', metadata: { loanId: 'loan_1' }, payment_status: 'declined' });
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.update(body);
+    const sig = signer.sign(privateKey, 'base64');
+
+    const res = await post(body, { digest: sig });
+    expect(res.status).toBe(200);
+  });
+
+  test('rejects a request signed with a different (unrelated) private key', async () => {
+    const { privateKey: otherKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const body = conektaEvent('order.payment_failed', { id: 'ord_5', metadata: { loanId: 'loan_1' }, payment_status: 'declined' });
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.update(body);
+    const sig = signer.sign(otherKey, 'base64');
+
+    const res = await post(body, { digest: sig });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── order.paid ───────────────────────────────────────────────────────────
+describe('order.paid', () => {
+  test('happy path: marks the loan paid, records the repayment, credits the employee', async () => {
+    admin.__seed('loans', 'loan_1', { status: 'active', amount: 5000 });
+    admin.__seed('employees', 'emp_1', { availableCredit: 1000 });
+
+    const body = conektaEvent('order.paid', {
+      id: 'ord_10',
+      amount: 500000, // centavos
+      metadata: { loanId: 'loan_1', employeeId: 'emp_1' },
+      charges: { data: [{ id: 'ch_1' }] },
+    });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+
+    expect(res.status).toBe(200);
+    const loan = admin.__get('loans', 'loan_1');
+    expect(loan.status).toBe('paid');
+    expect(loan.paidAmount).toBe(5000);
+    expect(loan.repaymentRef).toBe('ch_1');
+
+    const employee = admin.__get('employees', 'emp_1');
+    expect(employee.availableCredit).toBe(1000 + 5000);
+
+    const repayments = admin.__all('repayments');
+    expect(repayments).toHaveLength(1);
+    expect(repayments[0].data).toMatchObject({ loanId: 'loan_1', employeeId: 'emp_1', amount: 5000, method: 'card' });
+
+    expect(Queue.allAdded).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ queue: 'vida-notifications', name: 'loan_paid' }),
+        expect.objectContaining({ queue: 'vida-pdfs', name: 'repayment_receipt' }),
+      ]),
+    );
+  });
+
+  test('malformed payload: missing loanId/employeeId metadata is a 500, and is recorded', async () => {
+    const body = conektaEvent('order.paid', {
+      id: 'ord_11',
+      amount: 500000,
+      metadata: {},
+      charges: { data: [{ id: 'ch_2' }] },
+    });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+
+    expect(res.status).toBe(500);
+    const incidents = admin.__all('incident_log');
+    expect(incidents.some((i) => i.data.error === 'Missing metadata')).toBe(true);
+  });
+
+  test('replaying the same order.paid webhook after the loan is already paid does not double-credit', async () => {
+    admin.__seed('loans', 'loan_2', { status: 'paid', amount: 5000 });
+    admin.__seed('employees', 'emp_2', { availableCredit: 1000 });
+
+    const body = conektaEvent('order.paid', {
+      id: 'ord_12',
+      amount: 500000,
+      metadata: { loanId: 'loan_2', employeeId: 'emp_2' },
+      charges: { data: [{ id: 'ch_3' }] },
+    });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+
+    expect(res.status).toBe(200);
+    // Guarded by `if (!doc.exists || doc.data().status === 'paid') return;`
+    // inside the transaction -- the employee credit must be untouched.
+    expect(admin.__get('employees', 'emp_2').availableCredit).toBe(1000);
+    expect(admin.__all('repayments')).toHaveLength(0);
+  });
+});
+
+// ── charge.paid ──────────────────────────────────────────────────────────
+describe('charge.paid', () => {
+  test('happy path: decrements remainingBalance and records a repayment', async () => {
+    admin.__seed('loans', 'loan_3', { status: 'active', amount: 3000, remainingBalance: 3000 });
+
+    const body = conektaEvent('charge.paid', {
+      id: 'ch_10',
+      amount: 100000, // 1000.00 MXN in centavos
+      metadata: { loanId: 'loan_3', employeeId: 'emp_3' },
+    });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+
+    expect(res.status).toBe(200);
+    const loan = admin.__get('loans', 'loan_3');
+    expect(loan.remainingBalance).toBe(2000);
+    // Partial payment: `updates` only touches remainingBalance, so the
+    // loan's existing status is left as-is (it is not reset or cleared).
+    expect(loan.status).toBe('active');
+    expect(admin.__all('repayments')).toHaveLength(1);
+  });
+
+  test('malformed payload: missing metadata is a 500 and is recorded', async () => {
+    const body = conektaEvent('charge.paid', { id: 'ch_11', amount: 100000, metadata: {} });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+
+    expect(res.status).toBe(500);
+    expect(admin.__all('incident_log').some((i) => i.data.error === 'Missing metadata on charge.paid')).toBe(true);
+  });
+
+  test('a fully-paid balance flips status to paid', async () => {
+    admin.__seed('loans', 'loan_4', { status: 'active', amount: 1000, remainingBalance: 1000 });
+    const body = conektaEvent('charge.paid', {
+      id: 'ch_12',
+      amount: 100000,
+      metadata: { loanId: 'loan_4', employeeId: 'emp_4' },
+    });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+    expect(res.status).toBe(200);
+    const loan = admin.__get('loans', 'loan_4');
+    expect(loan.remainingBalance).toBe(0);
+    expect(loan.status).toBe('paid');
+  });
+
+  // GAP, deliberately not fixed here (coverage task, not a bug-fix task):
+  // the idempotency guard on this handler is `status === 'paid'`, not "was
+  // this specific chargeId already applied". A replayed charge.paid webhook
+  // for a loan that is not YET fully paid decrements remainingBalance a
+  // second time and writes a second repayment row for the same charge. This
+  // test documents that as CURRENT behaviour, not desired behaviour -- see
+  // the report for the same finding written up as a bug for triage.
+  test('KNOWN GAP: replaying the same charge.paid webhook before the loan is fully paid double-decrements the balance', async () => {
+    admin.__seed('loans', 'loan_5', { status: 'active', amount: 5000, remainingBalance: 5000 });
+    const body = conektaEvent('charge.paid', {
+      id: 'ch_13',
+      amount: 100000, // 1000.00 MXN
+      metadata: { loanId: 'loan_5', employeeId: 'emp_5' },
+    });
+
+    const first = await post(body, { digest: hmacSign(SECRET, body) });
+    expect(first.status).toBe(200);
+    expect(admin.__get('loans', 'loan_5').remainingBalance).toBe(4000);
+
+    // Same webhook, replayed verbatim (e.g. Conekta retry, or a malicious
+    // replay) -- nothing in the handler recognizes chargeId ch_13 as already
+    // applied.
+    const second = await post(body, { digest: hmacSign(SECRET, body) });
+    expect(second.status).toBe(200);
+    expect(admin.__get('loans', 'loan_5').remainingBalance).toBe(3000); // double-decremented
+    expect(admin.__all('repayments')).toHaveLength(2); // two repayment rows for one real charge
+  });
+});
+
+// ── payment_failed / charge.payment_failure ─────────────────────────────
+describe('order.payment_failed', () => {
+  test('happy path: records a payment_failures row', async () => {
+    const body = conektaEvent('order.payment_failed', { id: 'ord_20', metadata: { loanId: 'loan_6' }, payment_status: 'declined' });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+    expect(res.status).toBe(200);
+    const failures = admin.__all('payment_failures');
+    expect(failures).toHaveLength(1);
+    expect(failures[0].data).toMatchObject({ loanId: 'loan_6', reason: 'declined' });
+  });
+
+  test('missing loanId in metadata: no row written, still 200 (received)', async () => {
+    const body = conektaEvent('order.payment_failed', { id: 'ord_21', metadata: {}, payment_status: 'declined' });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+    expect(res.status).toBe(200);
+    expect(admin.__all('payment_failures')).toHaveLength(0);
+  });
+});
+
+describe('charge.payment_failure', () => {
+  test('happy path: records a payment_failures row keyed by chargeId', async () => {
+    const body = conektaEvent('charge.payment_failure', {
+      id: 'ch_30',
+      metadata: { loanId: 'loan_7', employeeId: 'emp_7' },
+      failure_message: 'insufficient_funds',
+    });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+    expect(res.status).toBe(200);
+    const failures = admin.__all('payment_failures');
+    expect(failures[0].data).toMatchObject({ loanId: 'loan_7', employeeId: 'emp_7', conektaChargeId: 'ch_30', reason: 'insufficient_funds' });
+  });
+
+  test('malformed: missing metadata entirely still records with null loanId/employeeId', async () => {
+    const body = conektaEvent('charge.payment_failure', { id: 'ch_31', failure_message: 'card_declined' });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+    expect(res.status).toBe(200);
+    const failures = admin.__all('payment_failures');
+    expect(failures[0].data).toMatchObject({ loanId: null, employeeId: null, conektaChargeId: 'ch_31' });
+  });
+});

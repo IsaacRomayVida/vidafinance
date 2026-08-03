@@ -340,4 +340,8 @@ setInterval(async () => {
   } catch (_) {}
 }, 60_000);
 
-app.listen(process.env.PORT || 3001, () => console.log('vida-payment-server on', process.env.PORT || 3001));
+if (require.main === module) {
+  app.listen(process.env.PORT || 3001, () => console.log('vida-payment-server on', process.env.PORT || 3001));
+}
+
+module.exports = { app, disburseWorker };
