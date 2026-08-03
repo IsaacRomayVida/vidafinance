@@ -78,62 +78,110 @@ export const markLoanDisbursed = onCall(
             );
           }
 
-          // The borrower's own pay frequency decides when this is deducted. It
-          // used to be read from `loan.borrowerSnapshot`, which nothing writes
-          // (#431) — so this always fell through to 'monthly' and scheduled
-          // every borrower for month-end, a date that for a weekly- or
-          // biweekly-paid employee need not be a payday at all.
+          const employerId = loan['employerId'] as string;
+          const principalAmount = (loan['principalAmount'] as number | undefined) ?? (loan['amount'] as number);
+          const persistedDueDate = loan['dueDate'] as Timestamp | undefined;
           const borrowerSnapshot = loan['borrowerSnapshot'] as Record<string, unknown> | undefined;
           const borrowerUid =
             (loan['userId'] as string | undefined) ?? (loan['employeeId'] as string | undefined);
-          const { frequency: payFrequency, source: payFrequencySource } =
-            await resolvePayFrequency(borrowerUid, borrowerSnapshot);
-          const dueDate = calculateNextPayrollDate(payFrequency);
 
-          if (payFrequencySource === 'default_monthly') {
-            logger.warn('Disbursing with an assumed monthly pay frequency', {
-              loanId: input.loanId,
-              uid: borrowerUid,
-              service: 'functions',
-            });
+          // DISBURSEMENT NO LONGER DECIDES THE DUE DATE (#437).
+          //
+          // It used to: it recomputed the borrower's next payroll date here and
+          // overwrote `loan.dueDate` with it. That second answer came from a
+          // different rule than the one the borrower was quoted, signed and was
+          // disclosed a CAT against, and it could land EARLIER — same fee, less
+          // time, an understated CAT. Rebuilding the schedule alongside it
+          // (361b09c) made the loan internally consistent but could not undo a
+          // disclosure that had already been made.
+          //
+          // requestLoan now resolves a payroll-aligned date once, at creation,
+          // and freezes the cadence it used onto `borrowerSnapshot.payFrequency`.
+          // A loan carrying that field has a due date that is already the answer
+          // this function would compute, so there is nothing to realign and this
+          // path deliberately writes neither `dueDate` nor `repaymentSchedule`.
+          //
+          // Loans created BEFORE that change carry no persisted cadence, and
+          // they keep the old behaviour exactly — including the realignment.
+          // They are in flight: an ops user has approved them, the borrower has
+          // been told a collection date, and the SoftCrédito deduction is
+          // already registered. Silently switching a live loan onto the new rule
+          // would move a real borrower's collection date after the fact, which
+          // is a worse thing to do than let a known-imperfect path finish. The
+          // branch disappears on its own once the last pre-change loan settles.
+          const dueDateResolvedAtRequest =
+            typeof borrowerSnapshot?.['payFrequency'] === 'string' && persistedDueDate !== undefined;
+
+          const loanUpdate: Record<string, unknown> = {
+            status: 'disbursed',
+            stpTransactionId: input.stpTransactionId,
+            stpClaveRastreo: input.stpClaveRastreo,
+            disbursedAt: Timestamp.fromDate(new Date(input.disbursedAt)),
+            updatedAt: now,
+            statusHistory: FieldValue.arrayUnion({
+              from: 'approved',
+              to: 'disbursed',
+              at: now,
+              by: auth.uid,
+              reason: `STP disbursement confirmed. TxID: ${input.stpTransactionId}`,
+            }),
+          };
+
+          const auditMeta: Record<string, unknown> = {
+            entityType: 'loan',
+            stpTransactionId: input.stpTransactionId,
+            disbursedAmount: input.disbursedAmount,
+          };
+
+          let dueDate: Timestamp;
+
+          if (dueDateResolvedAtRequest) {
+            dueDate = persistedDueDate;
+          } else {
+            // ── Legacy path: loans created before the due date was resolved at
+            // request time. Unchanged behaviour, kept whole. ──────────────────
+            const { frequency: payFrequency, source: payFrequencySource } =
+              await resolvePayFrequency(borrowerUid, borrowerSnapshot);
+            dueDate = calculateNextPayrollDate(payFrequency);
+
+            if (payFrequencySource === 'default_monthly') {
+              logger.warn('Disbursing with an assumed monthly pay frequency', {
+                loanId: input.loanId,
+                uid: borrowerUid,
+                service: 'functions',
+              });
+            }
+
+            // Moving the due date without moving the schedule with it is the
+            // other half of the bug (#437): `repaymentSchedule` would keep
+            // pointing at the request-time date while `loan.dueDate` moved to
+            // the payroll-aligned one. Rebuilt from the same helper requestLoan
+            // uses (#424) so there is still one schedule, not two.
+            const total = (loan['total'] as number | undefined) ?? principalAmount;
+            const term = (loan['term'] as number | undefined) ?? DEFAULT_LOAN_TERM_DAYS;
+            const installments = buildLoanInstallments(total, dueDate.toDate(), term);
+
+            loanUpdate['dueDate'] = dueDate;
+            loanUpdate['repaymentSchedule'] = installments.map((i) => ({
+              number: i.number,
+              amount: i.amount,
+              dueDate: Timestamp.fromDate(i.dueDate),
+            }));
+
+            // Only recorded when a move actually happened. On the current path
+            // there is no realignment to audit, and logging a from === to entry
+            // would read as one.
+            auditMeta['dueDateRealigned'] = {
+              from: persistedDueDate ? persistedDueDate.toDate().toISOString() : null,
+              to: dueDate.toDate().toISOString(),
+              payFrequency,
+            };
           }
-
-          const employerId = loan['employerId'] as string;
-          const principalAmount = (loan['principalAmount'] as number | undefined) ?? (loan['amount'] as number);
-
-          // Moving the due date without moving the schedule with it is exactly
-          // the bug (#437): `repaymentSchedule` and the SoftCrédito deduction
-          // would keep pointing at the request-time date while `loan.dueDate`
-          // moved to the payroll-aligned one. Rebuilt from the same helper
-          // requestLoan used (#424) so there is still one schedule, not two.
-          const total = (loan['total'] as number | undefined) ?? principalAmount;
-          const term = (loan['term'] as number | undefined) ?? DEFAULT_LOAN_TERM_DAYS;
-          const oldDueDate = loan['dueDate'] as Timestamp | undefined;
-          const installments = buildLoanInstallments(total, dueDate.toDate(), term);
 
           const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
 
           await db.runTransaction(async (txn) => {
-            txn.update(loanRef, {
-              status: 'disbursed',
-              stpTransactionId: input.stpTransactionId,
-              stpClaveRastreo: input.stpClaveRastreo,
-              disbursedAt: Timestamp.fromDate(new Date(input.disbursedAt)),
-              dueDate,
-              repaymentSchedule: installments.map((i) => ({
-                number: i.number,
-                amount: i.amount,
-                dueDate: Timestamp.fromDate(i.dueDate),
-              })),
-              updatedAt: now,
-              statusHistory: FieldValue.arrayUnion({
-                from: 'approved',
-                to: 'disbursed',
-                at: now,
-                by: auth.uid,
-                reason: `STP disbursement confirmed. TxID: ${input.stpTransactionId}`,
-              }),
-            });
+            txn.update(loanRef, loanUpdate);
 
             txn.update(db.collection('employers').doc(employerId), {
               currentOutstandingBalance: FieldValue.increment(principalAmount),
@@ -151,18 +199,7 @@ export const markLoanDisbursed = onCall(
                   targetId: input.loanId,
                   before: { status: 'approved' },
                   after: { status: 'disbursed' },
-                  meta: {
-                    entityType: 'loan',
-                    stpTransactionId: input.stpTransactionId,
-                    disbursedAmount: input.disbursedAmount,
-                    // #437: the due date moved from the request-time quote to
-                    // the borrower's actual payroll date at disbursement.
-                    dueDateRealigned: {
-                      from: oldDueDate ? oldDueDate.toDate().toISOString() : null,
-                      to: dueDate.toDate().toISOString(),
-                      payFrequency,
-                    },
-                  },
+                  meta: auditMeta,
                 },
                 now
               )
@@ -170,20 +207,23 @@ export const markLoanDisbursed = onCall(
           });
 
           // #437 DELIBERATELY NOT DONE HERE: re-registering the payroll
-          // deduction at the new date. `onLoanApproved` already registered one
-          // at approval (`onLoanApproved.ts:139`), and the adapter exposes
-          // exactly one deduction route — POST /internal/register-deduction
-          // (a create) — with no cancel, update or replace. Calling it again
-          // would leave a SECOND live deduction at SoftCrédito on the old date
-          // and overwrite `softcreditoDeductionId`, losing the handle to the
-          // first. The borrower would be collected twice: strictly worse than
-          // the inconsistency this change fixes.
+          // deduction. `onLoanApproved` already registered one at approval
+          // (`onLoanApproved.ts:139`), and the adapter exposes exactly one
+          // deduction route — POST /internal/register-deduction (a create) —
+          // with no cancel, update or replace. Calling it again would leave a
+          // SECOND live deduction at SoftCrédito on the old date and overwrite
+          // `softcreditoDeductionId`, losing the handle to the first. The
+          // borrower would be collected twice: strictly worse than any
+          // inconsistency it would repair.
           //
-          // Realigning the deduction needs a cancel/replace capability from the
-          // vendor that does not exist yet. Until it does, the schedule and the
-          // audit trail below are the record of the move, and the registered
-          // deduction is knowingly still on the request-time date. Do not
-          // "complete" this by adding a second register call.
+          // On the current path this is no longer a compromise. The deduction
+          // was registered at approval against `loan.dueDate`, and that date is
+          // the final one, so there is nothing to correct. Only the legacy
+          // branch above still moves a date out from under a deduction that is
+          // already registered, and it is knowingly left on the request-time
+          // date there. Realigning it would need a cancel/replace capability
+          // from the vendor that does not exist. Do not "complete" this by
+          // adding a second register call.
 
           try {
           const redis = getRedis();

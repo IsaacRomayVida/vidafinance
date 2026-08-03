@@ -44,20 +44,36 @@ const approvedLoan = {
   },
 };
 
-// A loan carrying the fields requestLoan actually persists (#437): total, term,
-// the request-time dueDate, and a repaymentSchedule quoted against it. Disbursing
-// this must move all three together, not just `dueDate`.
+// A loan created AFTER #437: requestLoan resolved the due date once, against
+// the borrower's payroll cadence, and froze that cadence onto the loan. The
+// date is already payroll-aligned, so disbursement has nothing to correct.
+const resolvedDueDate = Timestamp.fromDate(new Date('2026-04-30T00:00:00.000Z'));
+const approvedLoanResolvedAtRequest = {
+  exists: true,
+  data: {
+    ...approvedLoan.data, // carries borrowerSnapshot: { payFrequency: 'monthly' }
+    total: 1300,
+    term: 30,
+    dueDate: resolvedDueDate,
+    payFrequencySource: 'employee_record',
+    repaymentSchedule: [{ number: 1, amount: 1300, dueDate: resolvedDueDate }],
+  },
+};
+
+// A loan created BEFORE #437: a flat request+30d due date and no persisted
+// cadence. These are in flight — approved, disclosed, deduction registered —
+// and keep the old realigning behaviour rather than having their collection
+// date changed under them by a deploy.
 const requestedDueDate = Timestamp.fromDate(new Date('2026-03-01T00:00:00.000Z'));
-const approvedLoanWithSchedule = {
+const legacyApprovedLoanWithSchedule = {
   exists: true,
   data: {
     ...approvedLoan.data,
+    borrowerSnapshot: undefined,
     total: 1300,
     term: 30,
     dueDate: requestedDueDate,
-    repaymentSchedule: [
-      { number: 1, amount: 1300, dueDate: requestedDueDate },
-    ],
+    repaymentSchedule: [{ number: 1, amount: 1300, dueDate: requestedDueDate }],
   },
 };
 
@@ -318,56 +334,64 @@ describe('markLoanDisbursed', () => {
     });
   });
 
-  // #437: disbursement used to overwrite loan.dueDate to the payroll-aligned
-  // date without touching repaymentSchedule, so a persisted loan disagreed
-  // with itself about when it was due, and the SoftCrédito deduction stayed
-  // registered against the stale request-time date.
+  // #437: the due date used to be decided twice — request+30d at creation, the
+  // borrower's next payroll date again here — from two different rules. The
+  // second could land EARLIER than the first, understating the CAT the borrower
+  // had already signed against. It is now resolved once, at creation, and this
+  // function must not touch it.
   describe('due date / schedule / deduction consistency (#437)', () => {
-    it('moves repaymentSchedule[0].dueDate to the same date as the new loan.dueDate', async () => {
-      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
+    it('returns the due date the loan already carries, byte-identical', async () => {
+      _mockStore.loans['loan-abc'] = approvedLoanResolvedAtRequest;
 
       const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
-      const update = await lastLoanTransactionUpdate();
 
-      const schedule = update['repaymentSchedule'] as Array<{ dueDate: { toMillis(): number } }>;
-      expect(schedule).toHaveLength(1);
-      expect(schedule[0]!.dueDate.toMillis()).toBe(new Date(result['dueDate'] as string).getTime());
-      // And it must actually have moved off the request-time date, not just be present.
-      expect(schedule[0]!.dueDate.toMillis()).not.toBe(requestedDueDate.toMillis());
+      expect(result['dueDate']).toBe(resolvedDueDate.toDate().toISOString());
     });
 
-    it('sums the rebuilt schedule to the loan total, same as requestLoan would quote', async () => {
-      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
+    it('does not write dueDate or repaymentSchedule at all', async () => {
+      _mockStore.loans['loan-abc'] = approvedLoanResolvedAtRequest;
 
       await fn({ auth: opsAuth, data: validInput });
       const update = await lastLoanTransactionUpdate();
 
-      const schedule = update['repaymentSchedule'] as Array<{ amount: number }>;
-      const sum = schedule.reduce((s, i) => s + i.amount, 0);
-      expect(sum).toBe(approvedLoanWithSchedule.data.total);
+      // Not "writes the same value back" — writes nothing. A re-derivation that
+      // happens to agree today is still a second rule that can drift tomorrow.
+      expect(update).not.toHaveProperty('dueDate');
+      expect(update).not.toHaveProperty('repaymentSchedule');
+      expect(update['status']).toBe('disbursed');
     });
 
-    it('records the due-date move (loan id, old date, new date, payFrequency) in the audit log', async () => {
-      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
+    it('records no due-date realignment in the audit log, because none happened', async () => {
+      _mockStore.loans['loan-abc'] = approvedLoanResolvedAtRequest;
 
-      const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
+      await fn({ auth: opsAuth, data: validInput });
 
       const entry = _mockStore.auditLog.find((e) => e['action'] === 'loan.disbursed') as
         | { targetId: string; meta: Record<string, unknown> }
         | undefined;
       expect(entry).toBeDefined();
       expect(entry!.targetId).toBe('loan-abc');
-      const realign = entry!.meta['dueDateRealigned'] as { from: string; to: string; payFrequency: string };
-      expect(realign.from).toBe(requestedDueDate.toDate().toISOString());
-      expect(realign.to).toBe(result['dueDate']);
-      expect(realign.payFrequency).toBe('monthly');
+      // A from === to entry would read as a move that did not occur.
+      expect(entry!.meta).not.toHaveProperty('dueDateRealigned');
+      expect(entry!.meta['stpTransactionId']).toBe('STP-001');
+    });
+
+    it('notifies the borrower of the date they were quoted, not a new one', async () => {
+      _mockStore.loans['loan-abc'] = approvedLoanResolvedAtRequest;
+
+      await fn({ auth: opsAuth, data: validInput });
+
+      expect(mockRedis.lpush).toHaveBeenCalledWith(
+        'jobs:notifications',
+        expect.stringContaining(`"dueDate":"${resolvedDueDate.toDate().toISOString()}"`)
+      );
     });
 
     it('never logs CURP, RFC or CLABE in the audit entry', async () => {
       _mockStore.loans['loan-abc'] = {
         exists: true,
         data: {
-          ...approvedLoanWithSchedule.data,
+          ...approvedLoanResolvedAtRequest.data,
           curp: 'AAAA000101HDFRRR01',
           rfc: 'AAAA000101AAA',
           clabe: '012180001234567895',
@@ -382,6 +406,52 @@ describe('markLoanDisbursed', () => {
       expect(serialized).not.toContain('012180001234567895');
     });
 
+    // Loans approved before #437 landed have no persisted cadence. Their
+    // collection date must not change because of a deploy, so they finish on
+    // the path they started on — realignment and all, schedule rebuilt with it
+    // (361b09c) so the document does not disagree with itself.
+    describe('loans created before the due date was resolved at request time', () => {
+      it('moves repaymentSchedule[0].dueDate to the same date as the new loan.dueDate', async () => {
+        _mockStore.loans['loan-abc'] = legacyApprovedLoanWithSchedule;
+
+        const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
+        const update = await lastLoanTransactionUpdate();
+
+        const schedule = update['repaymentSchedule'] as Array<{ dueDate: { toMillis(): number } }>;
+        expect(schedule).toHaveLength(1);
+        expect(schedule[0]!.dueDate.toMillis()).toBe(new Date(result['dueDate'] as string).getTime());
+        // And it must actually have moved off the request-time date, not just be present.
+        expect(schedule[0]!.dueDate.toMillis()).not.toBe(requestedDueDate.toMillis());
+      });
+
+      it('sums the rebuilt schedule to the loan total, same as requestLoan would quote', async () => {
+        _mockStore.loans['loan-abc'] = legacyApprovedLoanWithSchedule;
+
+        await fn({ auth: opsAuth, data: validInput });
+        const update = await lastLoanTransactionUpdate();
+
+        const schedule = update['repaymentSchedule'] as Array<{ amount: number }>;
+        const sum = schedule.reduce((s, i) => s + i.amount, 0);
+        expect(sum).toBe(legacyApprovedLoanWithSchedule.data.total);
+      });
+
+      it('records the due-date move (loan id, old date, new date, payFrequency) in the audit log', async () => {
+        _mockStore.loans['loan-abc'] = legacyApprovedLoanWithSchedule;
+
+        const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
+
+        const entry = _mockStore.auditLog.find((e) => e['action'] === 'loan.disbursed') as
+          | { targetId: string; meta: Record<string, unknown> }
+          | undefined;
+        expect(entry).toBeDefined();
+        expect(entry!.targetId).toBe('loan-abc');
+        const realign = entry!.meta['dueDateRealigned'] as { from: string; to: string; payFrequency: string };
+        expect(realign.from).toBe(requestedDueDate.toDate().toISOString());
+        expect(realign.to).toBe(result['dueDate']);
+        expect(realign.payFrequency).toBe('monthly');
+      });
+    });
+
     // Guard, not an omission. `onLoanApproved` already registered a deduction,
     // and the adapter only offers POST /deductions/register — a create, with no
     // cancel or replace. A second call would leave two live deductions at
@@ -391,7 +461,7 @@ describe('markLoanDisbursed', () => {
     it('never re-registers the deduction, even with the adapter configured (would double-collect)', async () => {
       process.env['SOFTCREDITO_ADAPTER_URL'] = 'http://softcredito-adapter.railway.internal:3002';
       process.env['INTERNAL_SECRET'] = 'secret';
-      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
+      _mockStore.loans['loan-abc'] = approvedLoanResolvedAtRequest;
 
       const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
 

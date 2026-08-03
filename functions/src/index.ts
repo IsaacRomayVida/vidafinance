@@ -281,20 +281,21 @@ export const validateCURP = onCall(
 // unchanged and is pinned by LoanWizard.test.tsx: a rate that failed to load
 // can never reach a quote or a submission.
 // The quote also has to say WHEN the money comes out, and that is per-borrower
-// rather than per-config: it is the borrower's next payroll date. It ships on
-// this payload rather than its own callable so it inherits the same single
-// loading/error state as the prices — a deduction date that failed to load must
-// disappear from the quote exactly like a fee that failed to load, never render
-// blank next to real figures (a blank date reads as "today").
+// rather than per-config: it is the first payday on or after the end of the
+// term. It ships on this payload rather than its own callable so it inherits
+// the same single loading/error state as the prices — a deduction date that
+// failed to load must disappear from the quote exactly like a fee that failed
+// to load, never render blank next to real figures (a blank date reads as
+// "today").
 //
-// `estimatedDeductionDate` is named for what it is. The booked date is computed
-// at disbursement (markLoanDisbursed), against the clock at that moment, and a
-// loan waits for human review in between — so if disbursement crosses the
-// payroll date predicted here, the real deduction falls in the NEXT cycle. This
-// is a good-faith prediction, not a commitment, and the UI must not state it as
-// one. `payFrequencySource` says how much to trust it: 'default_monthly' means
-// we could not read the borrower's cadence and assumed one (#431), which must
-// not be presented with the same confidence as a known date (#424).
+// `estimatedDeductionDate` is still named for what it is, though it is a much
+// better estimate since #437. It is now the same rule requestLoan will resolve
+// the binding date with, evaluated against the clock at quote time; the two
+// answers differ only if the borrower sits on the quote long enough to cross a
+// payday. Once the loan exists the date is fixed and disbursement no longer
+// moves it. `payFrequencySource` says how much to trust it: 'default_monthly'
+// means we could not read the borrower's cadence and assumed one (#431), which
+// must not be presented with the same confidence as a known date (#424).
 export interface LoanQuoteConfig extends LoanConfig {
   estimatedDeductionDate: string;
   payFrequency: PayFrequency;
@@ -308,7 +309,18 @@ export const getLoanConfig = onCall(
     const { frequency, source } = await resolvePayFrequency(auth.uid);
     return {
       ...config,
-      estimatedDeductionDate: calculateNextPayrollDate(frequency).toDate().toISOString(),
+      // Same rule requestLoan resolves the real due date with (#437), applied
+      // to the term this quote is for. Quoting `calculateNextPayrollDate(freq)`
+      // — the borrower's NEXT payday, days from now — would advertise a date
+      // roughly a month before the one the loan will actually carry, which is
+      // the "quoted a deduction date the system never uses" defect (#439) in a
+      // new coat. One rule, applied twice, is fine; two rules is what #437 is.
+      estimatedDeductionDate: calculateNextPayrollDate(
+        frequency,
+        new Date(Date.now() + config.defaultTermDays * 24 * 60 * 60 * 1000)
+      )
+        .toDate()
+        .toISOString(),
       payFrequency: frequency,
       payFrequencySource: source,
     };
@@ -381,7 +393,36 @@ export const requestLoan = onCall(
         const loanConfig = await getLoanConfigValues();
         const loanId = nanoid();
         const fee = Math.round(amount * loanConfig.feeRate);
-        const dueDate = Timestamp.fromDate(new Date(Date.now() + term * 24 * 60 * 60 * 1000));
+        // THE loan's due date, resolved once and never recomputed (#437).
+        //
+        // It used to be `now + term` here and the borrower's next payroll date
+        // again at disbursement (markLoanDisbursed.ts), from a different rule
+        // and against a different clock. The second answer could — and for a
+        // month-end borrower routinely did — land EARLIER than the first: same
+        // fee, fewer days, so the CAT the borrower signed against was
+        // understated. That is the one direction a CONDUSEF disclosure must
+        // never be wrong in.
+        //
+        // So the governing date is decided here, where the disclosure is made:
+        // the first real payday on or after `now + term`. It is payroll-aligned,
+        // so disbursement has nothing left to correct, and it is never earlier
+        // than the quoted term, so the disclosure below stays conservative.
+        const { frequency: payFrequency, source: payFrequencySource } =
+          await resolvePayFrequency(uid);
+        const dueDate = calculateNextPayrollDate(
+          payFrequency,
+          new Date(Date.now() + term * 24 * 60 * 60 * 1000)
+        );
+
+        if (payFrequencySource === 'default_monthly') {
+          // The cadence is now priced in at creation rather than guessed at
+          // disbursement, so an assumed one is worth saying out loud here.
+          logger.warn('Pricing a loan against an assumed monthly pay frequency', {
+            loanId,
+            uid,
+            service: 'functions',
+          });
+        }
 
         // The repayment schedule and the CAT in force at creation, persisted on
         // the loan for the same reason `feeRate` is (#389): the contract PDF and
@@ -390,6 +431,21 @@ export const requestLoan = onCall(
         // registration uses, so the quote, the contract and the deduction are
         // one schedule and not three (#424).
         const installments = buildLoanInstallments(amount + fee, dueDate.toDate(), term);
+
+        // The CAT is deliberately computed on the code-owned 30-day `term`, NOT
+        // on the real request→dueDate interval, and this change is priced
+        // exactly as before: same fee, same term, same published figure.
+        //
+        // That is now CONSERVATIVE by construction. `dueDate` is the first
+        // payday on or AFTER `now + term`, so the interval the borrower is
+        // actually given is >= the 30 days the disclosure assumes — between 30
+        // and roughly 30 + one pay cycle. A longer interval at the same fee
+        // means a LOWER true CAT than the one disclosed. The disclosure can
+        // therefore overstate the cost of credit but can no longer understate
+        // it, which is the asymmetry that matters.
+        //
+        // Pricing the fee pro-rata over the real interval instead would be a
+        // commercial decision, not a refactor, and is not made here.
         const catPercent = computeCatPercent(loanConfig.feeRate, term);
 
         // Try full underwriting pipeline first
@@ -603,6 +659,16 @@ export const requestLoan = onCall(
             term,
             status: initialStatus,
             dueDate,
+            // The cadence `dueDate` was resolved against, frozen onto the loan
+            // (#437). `resolvePayFrequency` reads this field first, so every
+            // later reader — disbursement above all — re-derives the SAME date
+            // instead of forming a second opinion from a borrower record that
+            // may have changed in between. `payFrequencySource` records how
+            // that cadence was arrived at; 'default_monthly' means it was
+            // assumed, and a date built on an assumption should be legible as
+            // one for the life of the loan (#431).
+            borrowerSnapshot: { payFrequency },
+            payFrequencySource,
             repaymentSchedule: installments.map((i) => ({
               number: i.number,
               amount: i.amount,
