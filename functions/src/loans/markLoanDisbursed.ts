@@ -8,6 +8,7 @@ import { withErrorHandling } from '../utils/errorHandler';
 import { getRedis } from '../utils/redis';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
+import { buildLoanInstallments, DEFAULT_LOAN_TERM_DAYS } from '../config/loanConfig';
 import { calculateNextPayrollDate } from './calculateNextPayrollDate';
 import { resolvePayFrequency } from './resolvePayFrequency';
 
@@ -100,6 +101,16 @@ export const markLoanDisbursed = onCall(
           const employerId = loan['employerId'] as string;
           const principalAmount = (loan['principalAmount'] as number | undefined) ?? (loan['amount'] as number);
 
+          // Moving the due date without moving the schedule with it is exactly
+          // the bug (#437): `repaymentSchedule` and the SoftCrédito deduction
+          // would keep pointing at the request-time date while `loan.dueDate`
+          // moved to the payroll-aligned one. Rebuilt from the same helper
+          // requestLoan used (#424) so there is still one schedule, not two.
+          const total = (loan['total'] as number | undefined) ?? principalAmount;
+          const term = (loan['term'] as number | undefined) ?? DEFAULT_LOAN_TERM_DAYS;
+          const oldDueDate = loan['dueDate'] as Timestamp | undefined;
+          const installments = buildLoanInstallments(total, dueDate.toDate(), term);
+
           const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
 
           await db.runTransaction(async (txn) => {
@@ -109,6 +120,11 @@ export const markLoanDisbursed = onCall(
               stpClaveRastreo: input.stpClaveRastreo,
               disbursedAt: Timestamp.fromDate(new Date(input.disbursedAt)),
               dueDate,
+              repaymentSchedule: installments.map((i) => ({
+                number: i.number,
+                amount: i.amount,
+                dueDate: Timestamp.fromDate(i.dueDate),
+              })),
               updatedAt: now,
               statusHistory: FieldValue.arrayUnion({
                 from: 'approved',
@@ -139,12 +155,35 @@ export const markLoanDisbursed = onCall(
                     entityType: 'loan',
                     stpTransactionId: input.stpTransactionId,
                     disbursedAmount: input.disbursedAmount,
+                    // #437: the due date moved from the request-time quote to
+                    // the borrower's actual payroll date at disbursement.
+                    dueDateRealigned: {
+                      from: oldDueDate ? oldDueDate.toDate().toISOString() : null,
+                      to: dueDate.toDate().toISOString(),
+                      payFrequency,
+                    },
                   },
                 },
                 now
               )
             );
           });
+
+          // #437 DELIBERATELY NOT DONE HERE: re-registering the payroll
+          // deduction at the new date. `onLoanApproved` already registered one
+          // at approval (`onLoanApproved.ts:139`), and the adapter exposes
+          // exactly one deduction route — POST /internal/register-deduction
+          // (a create) — with no cancel, update or replace. Calling it again
+          // would leave a SECOND live deduction at SoftCrédito on the old date
+          // and overwrite `softcreditoDeductionId`, losing the handle to the
+          // first. The borrower would be collected twice: strictly worse than
+          // the inconsistency this change fixes.
+          //
+          // Realigning the deduction needs a cancel/replace capability from the
+          // vendor that does not exist yet. Until it does, the schedule and the
+          // audit trail below are the record of the move, and the registered
+          // deduction is knowingly still on the request-time date. Do not
+          // "complete" this by adding a second register call.
 
           try {
           const redis = getRedis();

@@ -3,9 +3,12 @@ jest.mock('../../utils/rateLimiter', () => ({
 }));
 
 import { markLoanDisbursed } from '../markLoanDisbursed';
-import { _mockStore, mockDb } from '../../__mocks__/firebase-admin/firestore';
+import { _mockStore, mockDb, Timestamp } from '../../__mocks__/firebase-admin/firestore';
 import { mockRedis } from '../../__mocks__/utils/redis';
 import { checkRateLimit } from '../../utils/rateLimiter';
+import fetch from 'node-fetch';
+
+const mockFetch = fetch as unknown as jest.Mock;
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
 
@@ -41,6 +44,29 @@ const approvedLoan = {
   },
 };
 
+// A loan carrying the fields requestLoan actually persists (#437): total, term,
+// the request-time dueDate, and a repaymentSchedule quoted against it. Disbursing
+// this must move all three together, not just `dueDate`.
+const requestedDueDate = Timestamp.fromDate(new Date('2026-03-01T00:00:00.000Z'));
+const approvedLoanWithSchedule = {
+  exists: true,
+  data: {
+    ...approvedLoan.data,
+    total: 1300,
+    term: 30,
+    dueDate: requestedDueDate,
+    repaymentSchedule: [
+      { number: 1, amount: 1300, dueDate: requestedDueDate },
+    ],
+  },
+};
+
+async function lastLoanTransactionUpdate(): Promise<Record<string, unknown>> {
+  const results = mockDb.runTransaction.mock.results;
+  const txn = await results[results.length - 1]!.value;
+  return txn.update.mock.calls[0][1] as Record<string, unknown>;
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   _mockStore.loans = {};
@@ -48,7 +74,10 @@ beforeEach(() => {
   _mockStore.employees = {};
   _mockStore.auditLog = [];
   _mockStore.transactionCalls = [];
+  _mockStore.docUpdates = [];
   mockRedis.lpush.mockResolvedValue(1);
+  delete process.env['SOFTCREDITO_ADAPTER_URL'];
+  delete process.env['INTERNAL_SECRET'];
 });
 
 describe('markLoanDisbursed', () => {
@@ -286,6 +315,91 @@ describe('markLoanDisbursed', () => {
       await expect(fn({ auth: opsAuth, data: validInput })).rejects.toMatchObject({
         code: 'resource-exhausted',
       });
+    });
+  });
+
+  // #437: disbursement used to overwrite loan.dueDate to the payroll-aligned
+  // date without touching repaymentSchedule, so a persisted loan disagreed
+  // with itself about when it was due, and the SoftCrédito deduction stayed
+  // registered against the stale request-time date.
+  describe('due date / schedule / deduction consistency (#437)', () => {
+    it('moves repaymentSchedule[0].dueDate to the same date as the new loan.dueDate', async () => {
+      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
+
+      const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
+      const update = await lastLoanTransactionUpdate();
+
+      const schedule = update['repaymentSchedule'] as Array<{ dueDate: { toMillis(): number } }>;
+      expect(schedule).toHaveLength(1);
+      expect(schedule[0]!.dueDate.toMillis()).toBe(new Date(result['dueDate'] as string).getTime());
+      // And it must actually have moved off the request-time date, not just be present.
+      expect(schedule[0]!.dueDate.toMillis()).not.toBe(requestedDueDate.toMillis());
+    });
+
+    it('sums the rebuilt schedule to the loan total, same as requestLoan would quote', async () => {
+      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
+
+      await fn({ auth: opsAuth, data: validInput });
+      const update = await lastLoanTransactionUpdate();
+
+      const schedule = update['repaymentSchedule'] as Array<{ amount: number }>;
+      const sum = schedule.reduce((s, i) => s + i.amount, 0);
+      expect(sum).toBe(approvedLoanWithSchedule.data.total);
+    });
+
+    it('records the due-date move (loan id, old date, new date, payFrequency) in the audit log', async () => {
+      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
+
+      const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
+
+      const entry = _mockStore.auditLog.find((e) => e['action'] === 'loan.disbursed') as
+        | { targetId: string; meta: Record<string, unknown> }
+        | undefined;
+      expect(entry).toBeDefined();
+      expect(entry!.targetId).toBe('loan-abc');
+      const realign = entry!.meta['dueDateRealigned'] as { from: string; to: string; payFrequency: string };
+      expect(realign.from).toBe(requestedDueDate.toDate().toISOString());
+      expect(realign.to).toBe(result['dueDate']);
+      expect(realign.payFrequency).toBe('monthly');
+    });
+
+    it('never logs CURP, RFC or CLABE in the audit entry', async () => {
+      _mockStore.loans['loan-abc'] = {
+        exists: true,
+        data: {
+          ...approvedLoanWithSchedule.data,
+          curp: 'AAAA000101HDFRRR01',
+          rfc: 'AAAA000101AAA',
+          clabe: '012180001234567895',
+        },
+      };
+
+      await fn({ auth: opsAuth, data: validInput });
+
+      const serialized = JSON.stringify(_mockStore.auditLog);
+      expect(serialized).not.toContain('AAAA000101HDFRRR01');
+      expect(serialized).not.toContain('AAAA000101AAA');
+      expect(serialized).not.toContain('012180001234567895');
+    });
+
+    // Guard, not an omission. `onLoanApproved` already registered a deduction,
+    // and the adapter only offers POST /deductions/register — a create, with no
+    // cancel or replace. A second call would leave two live deductions at
+    // SoftCrédito and overwrite the id of the first, so the borrower would be
+    // collected twice. This test fails the moment someone "finishes" #437 by
+    // adding that call back without a vendor-side replace path.
+    it('never re-registers the deduction, even with the adapter configured (would double-collect)', async () => {
+      process.env['SOFTCREDITO_ADAPTER_URL'] = 'http://softcredito-adapter.railway.internal:3002';
+      process.env['INTERNAL_SECRET'] = 'secret';
+      _mockStore.loans['loan-abc'] = approvedLoanWithSchedule;
+
+      const result = (await fn({ auth: opsAuth, data: validInput })) as Record<string, unknown>;
+
+      expect(result['success']).toBe(true);
+      const registerCalls = mockFetch.mock.calls.filter(([url]) =>
+        String(url).endsWith('/internal/register-deduction')
+      );
+      expect(registerCalls).toHaveLength(0);
     });
   });
 });
