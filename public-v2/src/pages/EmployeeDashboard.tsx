@@ -32,11 +32,35 @@ export function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [paymentLoan, setPaymentLoan] = useState<Loan | null>(null);
   const [pageState, setPageState] = useState<'loading' | 'dashboard'>('loading');
-  const [dashboardError, setDashboardError] = useState('');
+  // Two independent reads can take this page down — the employee document and
+  // the loans listener — and each owns its OWN error string. They used to
+  // share one, which was safe only while the clear happened synchronously at
+  // the top of each effect. That clear is no longer allowed there
+  // (`react-hooks/set-state-in-effect`, a CI-blocking lint error), so it moved
+  // onto the success paths — and the employee read's success path is async.
+  // With a shared string that reordering is a race: the loans listener writes
+  // its error during the commit, then the employee read's microtask resolves
+  // and wipes it, leaving the borrower on a dashboard that silently failed to
+  // load their loans. Separate owners make that wipe impossible no matter
+  // which read settles first.
+  const [employeeError, setEmployeeError] = useState('');
+  const [loansError, setLoansError] = useState('');
   const [repaymentsError, setRepaymentsError] = useState('');
   const [retryToken, setRetryToken] = useState(0);
 
-  const retry = () => setRetryToken((n) => n + 1);
+  // Whichever blocking read failed takes the page down; the employee document
+  // gates everything else, so it wins when both are broken.
+  const dashboardError = employeeError || loansError;
+
+  // Cleared here, in the event handler, not in the effect bodies below (same
+  // lint rule). The success paths clear their own error too, so a failure that
+  // resolves on its own also clears without a click.
+  const retry = () => {
+    setEmployeeError('');
+    setLoansError('');
+    setRepaymentsError('');
+    setRetryToken((n) => n + 1);
+  };
 
   const hasActiveLoan = loans.some(l => IN_FLIGHT_STATUSES.includes(l.status));
   const statusCardLoan =
@@ -54,7 +78,6 @@ export function EmployeeDashboard() {
   // promise rejection (F7).
   useEffect(() => {
     if (!user || needsEmailVerification) return;
-    setDashboardError('');
     (async () => {
       try {
         const empDoc = await getDoc(doc(db, 'employees', user.uid));
@@ -64,8 +87,9 @@ export function EmployeeDashboard() {
         }
         setEmployee(empDoc.data() as EmployeeData);
         setPageState('dashboard');
+        setEmployeeError('');
       } catch (err) {
-        setDashboardError(friendlyError(err));
+        setEmployeeError(friendlyError(err));
       }
     })();
   }, [user, navigate, needsEmailVerification, retryToken]);
@@ -84,10 +108,11 @@ export function EmployeeDashboard() {
       (snap) => {
         setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
         setLoading(false);
+        setLoansError('');
       },
       (err) => {
         setLoading(false);
-        setDashboardError(friendlyError(err));
+        setLoansError(friendlyError(err));
       },
     );
     return unsub;
@@ -98,12 +123,12 @@ export function EmployeeDashboard() {
   // own non-blocking banner rather than taking the page down.
   useEffect(() => {
     if (!user || pageState !== 'dashboard') return;
-    setRepaymentsError('');
     const q = query(collection(db, 'repayments'), where('employeeId', '==', user.uid));
     const unsub = onSnapshot(
       q,
       (snap) => {
         setRepayments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Repayment)));
+        setRepaymentsError('');
       },
       (err) => setRepaymentsError(friendlyError(err)),
     );

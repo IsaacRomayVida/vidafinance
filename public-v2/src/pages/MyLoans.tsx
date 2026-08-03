@@ -76,14 +76,22 @@ export function MyLoans() {
   const [retryToken, setRetryToken] = useState(0);
   const [expandedLoanId, setExpandedLoanId] = useState<string | null>(null);
 
-  const retry = () => setRetryToken((n) => n + 1);
+  // Errors are cleared here, in the event handler, rather than in the effect
+  // bodies below: a synchronous setState inside an effect triggers a cascading
+  // re-render (`react-hooks/set-state-in-effect`, a CI-blocking lint error).
+  // Each listener's success callback clears its own error too, so a failure
+  // that resolves on its own also clears without a click.
+  const retry = () => {
+    setLoansError('');
+    setRepaymentsError('');
+    setRetryToken((n) => n + 1);
+  };
 
   // Real-time loans listener. Without an error callback here, a permission
   // error, a missing index or an offline client left `loading` stuck at
   // `true` forever — indistinguishable from "still loading" (F7).
   useEffect(() => {
     if (!user) return;
-    setLoansError('');
 
     const q = query(
       collection(db, 'loans'),
@@ -96,6 +104,7 @@ export function MyLoans() {
       (snap) => {
         setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
         setLoading(false);
+        setLoansError('');
       },
       (err) => {
         setLoading(false);
@@ -111,7 +120,6 @@ export function MyLoans() {
   // balance and "Total Repaid" figure, so it needs its own visible error.
   useEffect(() => {
     if (!user) return;
-    setRepaymentsError('');
 
     const q = query(
       collection(db, 'repayments'),
@@ -124,6 +132,7 @@ export function MyLoans() {
         setRepayments(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as Repayment)),
         );
+        setRepaymentsError('');
       },
       (err) => setRepaymentsError(friendlyError(err)),
     );

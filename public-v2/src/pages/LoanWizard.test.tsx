@@ -59,7 +59,8 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import '../i18n';
-import { LoanWizard, sliderFillPercent } from './LoanWizard';
+import { LoanWizard } from './LoanWizard';
+import { sliderFillPercent } from '../lib/loanSlider';
 
 /**
  * 1,000 principal at the real 30% rate ⇒ 300 fee, 1,300 total.

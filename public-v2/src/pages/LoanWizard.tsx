@@ -13,6 +13,7 @@ import {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../lib/firebase';
 import { friendlyError } from '../lib/errors';
+import { MIN_AMOUNT, sliderFillPercent } from '../lib/loanSlider';
 import { useAuth } from '../hooks/useAuth';
 
 const LOAN_PURPOSES = [
@@ -30,7 +31,6 @@ const LOAN_PURPOSES = [
 // rather than inline so the indicator, the step labels and the branches cannot
 // drift apart the way the old "de 4" copy did.
 const TOTAL_STEPS = 3;
-const MIN_AMOUNT = 500;
 const MAX_AMOUNT = 5000;
 const STEP = 100;
 const ACTIVE_STATUSES = ['pending', 'under_review', 'approved', 'disbursed', 'disbursement_queued'];
@@ -120,19 +120,6 @@ function allocateInstallments(
 function repaymentTermsFor(config: LoanConfig | null, termDays: number | null): RepaymentTerms | null {
   if (termDays === null) return null;
   return (config?.repayment ?? []).find((r) => r.termDays === termDays) ?? null;
-}
-
-/**
- * The amount slider's fill percentage. `cappedMax` collapses to MIN_AMOUNT
- * when availableCredit itself is below MIN_AMOUNT (`Math.max(effectiveMax,
- * MIN_AMOUNT)` at the call site) — the amount range is then a single point,
- * not a span, so the usual (amount - MIN) / (max - MIN) division is 0/0.
- * That single point IS the borrower's full available credit, so the fill
- * should read 100%, not NaN.
- */
-export function sliderFillPercent(amount: number, cappedMax: number): number {
-  if (cappedMax === MIN_AMOUNT) return 100;
-  return ((amount - MIN_AMOUNT) / (cappedMax - MIN_AMOUNT)) * 100;
 }
 
 interface EmployeeData {
