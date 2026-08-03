@@ -1,56 +1,70 @@
 "use strict";
 
 // ════════════════════════════════════════════════════════════════════
-// PENDING — THIS FEATURE DOES NOT EXIST. See #387.
+// RATIFIED AND EXECUTABLE — ADR-006 (2026-08-03). See #387.
 //
-// Every describe in this file is `describe.skip`. Nothing here is
-// checked, and nothing here has ever passed. All three functions
-// destructured below are `undefined` at require time:
-// `../stage3-autoapprove` exports `runAutoApproveGate` and
-// `evaluateAutoApprove` (stage3-autoapprove.js:185) and nothing else.
+// This file was 100% `describe.skip` from #457 until now: every policy
+// disagreement recorded below was real, and none of them were engineering's
+// to settle. ADR-006 closed them. What was left once it did was an
+// API-shape gap — this spec always destructured `runStage3`, `evaluateGate`,
+// `hasCompetitorLoans`, and `../stage3-autoapprove` never exported them —
+// which was never the open question. `evaluateGate`/`runStage3` are thin
+// adapters over `evaluateAutoApprove`, and `hasCompetitorLoans` is
+// re-exported from `config/competitorLenders.js` verbatim: there remains
+// exactly one place a condition's pass/fail is decided.
 //
-// This is not a rename. The shipped gate and the gate specified here
-// disagree on which conditions are checked and on the numbers behind
-// them:
+// Three disagreements below are now resolved, and one is not — read on:
 //
-//   - Competitor detection. The `hasCompetitorLoans` block below
-//     specifies keyword matching on the creditor name (KUESKI /
-//     MoneyMan / CREDITEA). Shipped, it is a numeric count the bureau
-//     already handed us (stage3-autoapprove.js:66) — no names, no
-//     matching.
-//   - Three of ten conditions differ. This spec checks
-//     dias_atraso_zero, cartera_vencida_false and xgboost_pdefault.
-//     The shipped gate checks no_active_defaults and age_range
-//     instead (stage3-autoapprove.js:104-119).
-//   - The P(default) cutoff disagrees. "fails condition 10: xgboost
-//     P(default) >= threshold" requires 0.20 to FAIL, and "pulls
-//     xgboostPDefault from challenger model" requires 0.08 to pass,
-//     so this spec puts the cutoff in (0.08, 0.20] — its own inline
-//     comment says 0.15. The shipped gate derives the cutoff from
-//     APPROVAL_THRESHOLD and lands on 0.35 (stage3-autoapprove.js:20,
-//     :98), which would approve the very applicant this spec requires
-//     us to escalate.
-//   - LTI units are RESOLVED (ADR-005 Finding 4, engineering shape,
-//     accepted): percentage wins end to end, matching the shipped
-//     producer (stage2-bureau.js's computeLTI) and the one green test
-//     (decision-engine.test.js) that already asserts a percentage. The
-//     fixtures below were rewritten from a fraction (0.25/0.26, and a
-//     bare `lti` number) to a percentage (25/26, in a `{ value }`
-//     object) to match. This is the one axis of this file that is no
-//     longer an open disagreement — everything else below still is.
+//   - Competitor detection: RATIFIED per ADR-006 §3. Named matching against
+//     the admin-editable KUESKI/MoneyMan/CREDITEA list, exactly as specced.
+//   - The condition set: RATIFIED per ADR-006 §2 — the gate goes from ten
+//     conditions to TWELVE. `no_active_defaults` (9) and `age_range` (10)
+//     stay LIVE (their retirement was drafted, then withdrawn as
+//     unratified — see ADR-006), and `dias_atraso_zero` /
+//     `cartera_vencida_false` are ADDED, not substituted. This spec
+//     originally numbered the new pair (plus xgboost/ml P(default)) as
+//     8/9/10. The implementation keeps `ml_default_prob` at id 8 — its
+//     assigned id since before this file existed — and takes 11/12 for the
+//     new pair, under an id-permanence rule: ids are persisted onto loan
+//     documents (`functions/src/index.ts:625-638`), so recycling one would
+//     silently rewrite the meaning of records already written. Every id
+//     asserted below has been renumbered to match (8→11 dias_atraso_zero,
+//     9→12 cartera_vencida_false, 10→8 the P(default) condition, renamed
+//     from `xgboost_pdefault` to the shipped `ml_default_prob` — see the
+//     next point for why "xgboost" was never accurate anyway). `age_range`
+//     keeps id 10 and `no_active_defaults` keeps id 9, unchanged, because
+//     ADR-006 kept both live.
+//   - The P(default) cutoff: RATIFIED at 0.15 per ADR-006 §1 — the number
+//     this spec always carried.
+//   - The model source is NOT ratified the way this file originally
+//     assumed, and this is the one place the spec and shipped policy stay
+//     in conflict: `runStage3`'s "pulls xgboostPDefault from challenger
+//     model" (below) requires reading `challenger: {..., shadow: true}`.
+//     ADR-001 §Decision.2 is explicit that shadow output is "logged, not
+//     obeyed", and ADR-005 Finding 5 / ADR-006's shipped implementation
+//     read the CHAMPION model only, precisely to avoid promoting a shadow
+//     model into a live gate by fixture accident. That test cannot be made
+//     to pass without either (a) violating the ratified champion-only rule,
+//     or (b) fabricating a second code path that reads the challenger,
+//     which would be a second, driftable place a condition is decided —
+//     exactly what this file exists to prevent. It is left `it.skip` with
+//     this explanation rather than deleted, weakened, or silently fixed;
+//     promoting the challenger is ADR-001's "separate ratified event," and
+//     none has happened.
 //
-// Which of those is right is a credit-policy question, not an
-// engineering one, so it is not being answered here. See
-// docs/adr/ADR-003-lending-slot-autoscale-not-implemented.md.
+// LTI units were already resolved before this pass (ADR-005 Finding 4,
+// engineering shape, shipped in #465): percentage wins end to end. No
+// change needed here.
 //
-// Unlike employer-b.test.js this suite does NOT contradict itself —
-// it is implementable exactly as written once the cutoff and the
-// condition set are ratified. #387's title says the spec
-// self-contradicts; that is true of employer-b and not of this file.
+// `ALL_PASS_PARAMS` and `STAGE2_RESULT` predate conditions 9 (no_active_
+// defaults) and 10 (age_range) and carried no `age` / `activeDefaults`
+// input, so neither fixture could pass a twelve-condition gate as written.
+// Both gained the missing fields below so each fixture means what its name
+// says — this is completion, not a loosened assertion.
 //
 // DO NOT make this green by weakening the assertions to match the
 // current source, and do not delete it: it is the only surviving
-// record of the intended ten-condition gate.
+// record of the intended auto-approve gate.
 // ════════════════════════════════════════════════════════════════════
 
 const {
@@ -72,6 +86,10 @@ const ALL_PASS_PARAMS = {
   diasAtraso: 0,
   carteraVencida: false,
   xgboostPDefault: 0.05,
+  // Added for ADR-006's twelve-condition gate (conditions 9 and 10) — this
+  // fixture predates both and could not otherwise mean "all pass".
+  age: 30,
+  activeDefaults: 0,
 };
 
 const STAGE2_RESULT = {
@@ -80,6 +98,9 @@ const STAGE2_RESULT = {
     diasAtraso: 0,
     carteraVencida: false,
     cuentasActivas: 2,
+    // Added alongside `age` below for ADR-006's condition 9 — see the note
+    // on ALL_PASS_PARAMS.
+    activeDefaults: 0,
   },
   employment: {
     tenureMonths: 12,
@@ -87,6 +108,8 @@ const STAGE2_RESULT = {
   // { value } percentage, matching the shape and units stage2-bureau.js's
   // computeLTI actually produces (ADR-005 Finding 4) — was a bare fraction.
   lti: { value: 20 },
+  // Added for ADR-006's condition 10 (age_range) — this fixture predates it.
+  age: 30,
   ml: {
     champion: { pDefault: 0.05, model: "woe_scorecard" },
     challenger: { pDefault: 0.08, model: "xgboost", shadow: true },
@@ -95,7 +118,7 @@ const STAGE2_RESULT = {
 
 // ── hasCompetitorLoans ──────────────────────────────────────────────────────
 
-describe.skip("hasCompetitorLoans", () => {
+describe("hasCompetitorLoans", () => {
   it("returns false for empty or null accounts", () => {
     expect(hasCompetitorLoans(null)).toBe(false);
     expect(hasCompetitorLoans([])).toBe(false);
@@ -130,13 +153,16 @@ describe.skip("hasCompetitorLoans", () => {
 
 // ── evaluateGate ────────────────────────────────────────────────────────────
 
-describe.skip("evaluateGate", () => {
-  it("approves when all 10 conditions pass", () => {
+describe("evaluateGate", () => {
+  it("approves when all 12 conditions pass", () => {
     const result = evaluateGate(ALL_PASS_PARAMS);
     expect(result.decision).toBe("approved");
     expect(result.allPass).toBe(true);
-    expect(result.conditionsPassed).toBe(10);
-    expect(result.conditionsTotal).toBe(10);
+    // 12, not 10 — ADR-006 §2 adds dias_atraso_zero and cartera_vencida_false
+    // (ids 11/12) while keeping no_active_defaults (9) and age_range (10)
+    // live; the gate went from ten conditions to twelve, not a substitution.
+    expect(result.conditionsPassed).toBe(12);
+    expect(result.conditionsTotal).toBe(12);
     expect(result.failures).toHaveLength(0);
     expect(result.escalateToStage).toBeNull();
   });
@@ -216,34 +242,47 @@ describe.skip("evaluateGate", () => {
     expect(failure.name).toBe("sector_safe");
   });
 
-  it("fails condition 8: diasAtraso > 0", () => {
+  // Renumbered 8 -> 11 (id permanence — see the file banner above): this
+  // spec originally numbered the added días-de-atraso condition 8, but the
+  // implementation's id 8 was already `ml_default_prob`'s before this file
+  // existed, so the addition takes the next free id instead.
+  it("fails condition 11: diasAtraso > 0", () => {
     const result = evaluateGate({ ...ALL_PASS_PARAMS, diasAtraso: 1 });
     expect(result.allPass).toBe(false);
-    const failure = result.failures.find(f => f.id === 8);
+    const failure = result.failures.find(f => f.id === 11);
     expect(failure).toBeDefined();
     expect(failure.name).toBe("dias_atraso_zero");
   });
 
-  it("fails condition 9: carteraVencida true", () => {
+  // Renumbered 9 -> 12 — same id-permanence reasoning as condition 11 above;
+  // id 9 stays `no_active_defaults`, which ADR-006 kept live.
+  it("fails condition 12: carteraVencida true", () => {
     const result = evaluateGate({ ...ALL_PASS_PARAMS, carteraVencida: true });
     expect(result.allPass).toBe(false);
-    const failure = result.failures.find(f => f.id === 9);
+    const failure = result.failures.find(f => f.id === 12);
     expect(failure).toBeDefined();
     expect(failure.name).toBe("cartera_vencida_false");
   });
 
-  it("fails condition 10: xgboost P(default) >= threshold", () => {
+  // Renumbered 10 -> 8, and renamed from `xgboost_pdefault` to the shipped
+  // `ml_default_prob`: id 8 was already assigned to this condition before
+  // this file existed (id permanence), and id 10 stays `age_range`, which
+  // ADR-006 kept live rather than retiring in favour of this one.
+  // "xgboost" was also never accurate as a name — ADR-005 Finding 5 already
+  // recommended a vendor-neutral name, since a model swap would otherwise
+  // falsify a borrower-facing denial-reason id.
+  it("fails condition 8: ML P(default) >= threshold", () => {
     const result = evaluateGate({ ...ALL_PASS_PARAMS, xgboostPDefault: 0.20 });
     expect(result.allPass).toBe(false);
-    const failure = result.failures.find(f => f.id === 10);
+    const failure = result.failures.find(f => f.id === 8);
     expect(failure).toBeDefined();
-    expect(failure.name).toBe("xgboost_pdefault");
+    expect(failure.name).toBe("ml_default_prob");
   });
 
-  it("fails condition 10: xgboost P(default) is null", () => {
+  it("fails condition 8: ML P(default) is null", () => {
     const result = evaluateGate({ ...ALL_PASS_PARAMS, xgboostPDefault: null });
     expect(result.allPass).toBe(false);
-    const failure = result.failures.find(f => f.id === 10);
+    const failure = result.failures.find(f => f.id === 8);
     expect(failure).toBeDefined();
   });
 
@@ -256,7 +295,7 @@ describe.skip("evaluateGate", () => {
     });
     expect(result.allPass).toBe(false);
     expect(result.failures.length).toBeGreaterThanOrEqual(3);
-    expect(result.conditionsPassed).toBeLessThan(10);
+    expect(result.conditionsPassed).toBeLessThan(12);
   });
 
   it("handles null values safely", () => {
@@ -271,16 +310,23 @@ describe.skip("evaluateGate", () => {
       diasAtraso: null,
       carteraVencida: null,
       xgboostPDefault: null,
+      age: null,
+      activeDefaults: null,
     });
     expect(result.allPass).toBe(false);
     // Only condition 5 (no_competitor_loans) passes with null cuentasActivas
-    expect(result.failures.length).toBe(9);
+    // — re-derived for twelve conditions: 12 total - 1 pass (condition 5,
+    // the sole documented exception to fail-closed, per stage3-autoapprove.js
+    // condition 5's comment) = 11 failures. The old assertion here was 9,
+    // correct for the old ten-condition gate (10 - 1); this is a fresh
+    // derivation off the new total, not "the old number plus 2".
+    expect(result.failures.length).toBe(11);
   });
 });
 
 // ── runStage3 ───────────────────────────────────────────────────────────────
 
-describe.skip("runStage3", () => {
+describe("runStage3", () => {
   it("approves when stage2 result + lookups all pass", () => {
     const result = runStage3({
       stage2Result: STAGE2_RESULT,
@@ -307,7 +353,16 @@ describe.skip("runStage3", () => {
     expect(result.escalateToStage).toBe(4);
   });
 
-  it("pulls xgboostPDefault from challenger model", () => {
+  // NOT ratified, and cannot be reconciled without either breaking the
+  // champion-only rule or forking condition 8's decision into a second code
+  // path — see the file banner's "model source" paragraph. ADR-001
+  // §Decision.2 ("logged, not obeyed") and ADR-005 Finding 5 / ADR-006's
+  // shipped implementation are unambiguous that a `shadow: true` model
+  // never gates a live decision; promoting it is "a separate ratified
+  // event, not a fixture choice" (Finding 5), and no such event has
+  // happened. Left skipped rather than deleted or weakened — this is the
+  // one open contradiction this pass could not close.
+  it.skip("pulls xgboostPDefault from challenger model — NOT RATIFIED, see banner", () => {
     const result = runStage3({
       stage2Result: STAGE2_RESULT,
       employerTier: 1,
@@ -315,9 +370,9 @@ describe.skip("runStage3", () => {
       sectorFlagged: false,
     });
     // xgboostPDefault = 0.08 from challenger, < 0.15 threshold
-    const cond10 = result.conditions.find(c => c.id === 10);
-    expect(cond10.value).toBe(0.08);
-    expect(cond10.pass).toBe(true);
+    const cond8 = result.conditions.find(c => c.id === 8);
+    expect(cond8.value).toBe(0.08);
+    expect(cond8.pass).toBe(true);
   });
 
   it("fails when employer tier is missing from stage2", () => {
