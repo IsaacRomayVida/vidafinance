@@ -124,13 +124,24 @@ describe("Decision Engine — MetaMap integration", () => {
       if (typeof url === "string" && url.includes("/bureau/query")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ bureau_score: 720, has_bureau_record: true, active_defaults: 0, competitor_loans: 0 }),
+          json: () =>
+            Promise.resolve({
+              bureau_score: 720,
+              has_bureau_record: true,
+              active_defaults: 0,
+              competitor_loans: 0,
+              // ADR-006 conditions 11/12 read these; a clean bureau file states
+              // them explicitly rather than leaving them unread and failing closed.
+              dias_atraso: 0,
+              cartera_vencida: false,
+            }),
         });
       }
       if (typeof url === "string" && url.includes("/score")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ underwritingScore: 0.82, probability: 0.18, default_probability: 0.18 }),
+          json: () =>
+            Promise.resolve({ underwritingScore: 0.82, probability: 0.12, default_probability: 0.12 }),
         });
       }
       return Promise.resolve({
@@ -169,13 +180,24 @@ describe("Decision Engine — MetaMap integration", () => {
       if (typeof url === "string" && url.includes("/bureau/query")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ bureau_score: 720, has_bureau_record: true, active_defaults: 0, competitor_loans: 0 }),
+          json: () =>
+            Promise.resolve({
+              bureau_score: 720,
+              has_bureau_record: true,
+              active_defaults: 0,
+              competitor_loans: 0,
+              // ADR-006 conditions 11/12 read these; a clean bureau file states
+              // them explicitly rather than leaving them unread and failing closed.
+              dias_atraso: 0,
+              cartera_vencida: false,
+            }),
         });
       }
       if (typeof url === "string" && url.includes("/score")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ underwritingScore: 0.82, probability: 0.18, default_probability: 0.18 }),
+          json: () =>
+            Promise.resolve({ underwritingScore: 0.82, probability: 0.12, default_probability: 0.12 }),
         });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ is_fraud: false, anomaly_score: 10 }) });
@@ -237,13 +259,24 @@ describe("Decision Engine — MetaMap integration", () => {
         if (typeof url === "string" && url.includes("/bureau/query")) {
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve({ bureau_score: 720, has_bureau_record: true, active_defaults: 0, competitor_loans: 0 }),
+            json: () =>
+            Promise.resolve({
+              bureau_score: 720,
+              has_bureau_record: true,
+              active_defaults: 0,
+              competitor_loans: 0,
+              // ADR-006 conditions 11/12 read these; a clean bureau file states
+              // them explicitly rather than leaving them unread and failing closed.
+              dias_atraso: 0,
+              cartera_vencida: false,
+            }),
           });
         }
         if (typeof url === "string" && url.includes("/score")) {
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve({ underwritingScore: 0.82, probability: 0.18, default_probability: 0.18 }),
+            json: () =>
+            Promise.resolve({ underwritingScore: 0.82, probability: 0.12, default_probability: 0.12 }),
           });
         }
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ is_fraud: false, anomaly_score: 10 }) });

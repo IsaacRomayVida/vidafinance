@@ -46,9 +46,24 @@ const ALL_DATA_PRESENT = {
   stage2: {
     data: {
       imss: { tenureMonths: 36 },
-      bureau: { score: 720, activeDefaults: 0, competitorLoans: 0 },
+      // `competitorLoansByName` is what condition 5 reads as of ADR-006 — the
+      // named-match signal derived in stage2-bureau.js — rather than the opaque
+      // SoftCrédito `competitorLoans` count, which stays on the fixture because
+      // the bureau block still carries it. `diasAtraso`/`carteraVencida` are the
+      // fields conditions 11 and 12 read; a clean applicant has 0 and false.
+      bureau: {
+        score: 720,
+        activeDefaults: 0,
+        competitorLoans: 0,
+        competitorLoansByName: 0,
+        diasAtraso: 0,
+        carteraVencida: false,
+      },
       lti: { value: 13.64 },
-      mlScore: { default_probability: 0.18, underwritingScore: 0.82 },
+      // 0.12, not the 0.18 this fixture carried before: ADR-006 ratified
+      // MAX_PDEFAULT at 0.15, so 0.18 is now a declining value and could no
+      // longer stand for "all data present and every condition passes".
+      mlScore: { default_probability: 0.12, underwritingScore: 0.82 },
     },
   },
 };
@@ -62,7 +77,7 @@ function conditionByName(conditions, name) {
 describe("evaluateAutoApprove — condition provenance (#458)", () => {
   it("marks every condition as read when all upstream data is present", () => {
     const conditions = evaluateAutoApprove(APPLICANT, ALL_DATA_PRESENT);
-    expect(conditions).toHaveLength(10);
+    expect(conditions).toHaveLength(12);
     for (const cond of conditions) {
       expect(cond.source).toBe("read");
     }
@@ -91,9 +106,18 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
       { id: 5, name: "no_competitor_loans", pass: true, value: 0, required: "0", source: "read" },
       { id: 6, name: "riskseal_score", pass: true, value: 72, required: "> 60", source: "read" },
       { id: 7, name: "sector_safe", pass: true, value: "bajo", required: "not alto", source: "read" },
-      { id: 8, name: "ml_default_prob", pass: true, value: 0.18, required: "< 0.35", source: "read" },
+      { id: 8, name: "ml_default_prob", pass: true, value: 0.12, required: "< 0.15", source: "read" },
       { id: 9, name: "no_active_defaults", pass: true, value: 0, required: "0", source: "read" },
       { id: 10, name: "age_range", pass: true, value: 35, required: "18-65", source: "read" },
+      { id: 11, name: "dias_atraso_zero", pass: true, value: 0, required: "0", source: "read" },
+      {
+        id: 12,
+        name: "cartera_vencida_false",
+        pass: true,
+        value: false,
+        required: "false",
+        source: "read",
+      },
     ]);
   });
 
@@ -320,6 +344,10 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
       "lti",
       "ml_default_prob",
       "no_active_defaults",
+      // ADR-006's two additions read the same wiped stage 2, so a total
+      // Stage 2 outage now fails seven conditions rather than five.
+      "dias_atraso_zero",
+      "cartera_vencida_false",
     ]);
     // Every one of them failed because its data was unread, not because the
     // applicant missed a bound — which is what ops has to be able to tell apart.
@@ -328,7 +356,7 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
     }
   });
 
-  it("fails 9 of 10 closed on all-null input, with no_competitor_loans the sole pass", () => {
+  it("fails 11 of 12 closed on all-null input, with no_competitor_loans the sole pass", () => {
     // ADR-005 Finding 8's acceptance criterion, translated from the skipped
     // spec's flat params (stage3-autoapprove.test.js:253-269) to this gate's
     // signature: nothing read, anywhere.
@@ -337,15 +365,16 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
     // tests a bound on a value that has to be obtained, so its absence is
     // ignorance; this one tests the absence of a finding in an account list,
     // and with no bureau block there is no account list to hold one. It is
-    // safe rather than merely convenient: bureau_score and no_active_defaults
-    // read the same missing block and both fail, and all ten must hold, so
-    // this pass can never be the margin between an outage and an approval.
+    // safe rather than merely convenient: bureau_score, no_active_defaults,
+    // dias_atraso_zero and cartera_vencida_false read the same missing block
+    // and all fail, and all twelve must hold, so this pass can never be the
+    // margin between an outage and an approval.
     const conditions = evaluateAutoApprove({}, {});
 
-    expect(conditions).toHaveLength(10);
+    expect(conditions).toHaveLength(12);
     const passed = conditions.filter((c) => c.pass);
     expect(passed.map((c) => c.name)).toEqual(["no_competitor_loans"]);
-    expect(conditions.filter((c) => !c.pass)).toHaveLength(9);
+    expect(conditions.filter((c) => !c.pass)).toHaveLength(11);
     for (const cond of conditions) {
       expect(cond.source).toBe("assumed");
     }
@@ -390,9 +419,9 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
 // its name. Denial reasons derived from these conditions reach borrowers and
 // have to stay referenceable across a rename (CONDUSEF).
 describe("evaluateAutoApprove — condition ids (ADR-005 Finding 6)", () => {
-  it("assigns every condition a unique id from 1 to 10, in order", () => {
+  it("assigns every condition a unique id from 1 to 12, in order", () => {
     const conditions = evaluateAutoApprove(APPLICANT, ALL_DATA_PRESENT);
-    expect(conditions.map((c) => c.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(conditions.map((c) => c.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 
   it("keeps ids pinned to today's names, so a future rename doesn't move them", () => {
@@ -409,12 +438,14 @@ describe("evaluateAutoApprove — condition ids (ADR-005 Finding 6)", () => {
       ml_default_prob: 8,
       no_active_defaults: 9,
       age_range: 10,
+      dias_atraso_zero: 11,
+      cartera_vencida_false: 12,
     });
   });
 
   it("keeps ids stable regardless of which conditions pass or fail", () => {
     const conditions = evaluateAutoApprove({}, {});
-    expect(conditions.map((c) => c.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(conditions.map((c) => c.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 });
 
@@ -435,17 +466,24 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
     };
   }
 
-  it("defaults to the seed cutoff of 0.35 when no cutoff is supplied — unchanged from the old derived APPROVAL_THRESHOLD behaviour", () => {
-    expect(SEED_MAX_PDEFAULT).toBe(0.35);
+  it("defaults to the seed cutoff of 0.15 when no cutoff is supplied — the value ADR-006 ratified, superseding 0.35", () => {
+    expect(SEED_MAX_PDEFAULT).toBe(0.15);
 
-    const passing = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.34))
+    const passing = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.14))
       .find((c) => c.name === "ml_default_prob");
-    const failing = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.35))
+    const failing = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.15))
       .find((c) => c.name === "ml_default_prob");
 
     expect(passing.pass).toBe(true);
-    expect(passing.required).toBe("< 0.35");
+    expect(passing.required).toBe("< 0.15");
     expect(failing.pass).toBe(false);
+
+    // The bound is strict (`<`), so the cutoff value itself declines. Pinned
+    // because ADR-006 halved the cutoff: an off-by-one at the boundary is a
+    // credit-policy error, not a rounding detail.
+    const atOldCutoff = evaluateAutoApprove(APPLICANT, dataWithPDefault(0.34))
+      .find((c) => c.name === "ml_default_prob");
+    expect(atOldCutoff.pass).toBe(false);
   });
 
   it("honours an explicit cutoff over the seed", () => {
@@ -487,11 +525,13 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
     const cond = evaluateAutoApprove(APPLICANT, withShadowChallenger)
       .find((c) => c.name === "ml_default_prob");
 
-    // 0.01 (the shadow challenger) would also pass at the seed cutoff, so
-    // this only proves the right thing if the VALUE is pinned to the
-    // champion's 0.18, not merely that `pass` came out true either way.
+    // Under ADR-006's 0.15 cutoff this assertion discriminates in a way it
+    // could not before: the champion's 0.18 DECLINES while the shadow
+    // challenger's 0.01 would pass. So `pass === false` is now itself proof
+    // the challenger was not read — previously both values cleared the 0.35
+    // seed and only the pinned `value` carried the argument.
     expect(cond.value).toBe(0.18);
-    expect(cond.pass).toBe(true);
+    expect(cond.pass).toBe(false);
   });
 });
 
@@ -505,19 +545,19 @@ describe("runAutoApproveGate — MAX_PDEFAULT config seam (ADR-005 Finding 5)", 
 
   const silentLogger = { info: () => {}, error: () => {}, warn: () => {} };
 
-  it("uses the seed (0.35) when the config document does not exist", async () => {
+  it("uses the seed (0.15) when the config document does not exist", async () => {
     mockMaxPDefaultConfigGet.mockResolvedValue({ exists: false });
 
     const dataAtSeedBoundary = {
       ...ALL_DATA_PRESENT,
       stage2: {
-        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { default_probability: 0.34 } },
+        data: { ...ALL_DATA_PRESENT.stage2.data, mlScore: { default_probability: 0.14 } },
       },
     };
 
     const result = await runAutoApproveGate(APPLICANT, dataAtSeedBoundary, { logger: silentLogger });
     const cond = result.data.conditions.find((c) => c.name === "ml_default_prob");
-    expect(cond.required).toBe("< 0.35");
+    expect(cond.required).toBe("< 0.15");
     expect(result.pass).toBe(true);
   });
 
@@ -585,7 +625,7 @@ describe("runAutoApproveGate — competitor loan routing (ADR-005 C5, ratified 2
       stage2: {
         data: {
           ...ALL_DATA_PRESENT.stage2.data,
-          bureau: { ...ALL_DATA_PRESENT.stage2.data.bureau, competitorLoans: 1 },
+          bureau: { ...ALL_DATA_PRESENT.stage2.data.bureau, competitorLoans: 1, competitorLoansByName: 1 },
         },
       },
     };
@@ -614,7 +654,7 @@ describe("runAutoApproveGate — competitor loan routing (ADR-005 C5, ratified 2
       stage2: {
         data: {
           ...ALL_DATA_PRESENT.stage2.data,
-          bureau: { ...ALL_DATA_PRESENT.stage2.data.bureau, score: 350, competitorLoans: 1 },
+          bureau: { ...ALL_DATA_PRESENT.stage2.data.bureau, score: 350, competitorLoans: 1, competitorLoansByName: 1 },
         },
       },
     };

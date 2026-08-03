@@ -64,7 +64,7 @@ function provenanceOf(block) {
 // borrowers, and under the CONDUSEF regime a reason has to stay referenceable
 // across a rename. Treat an id as permanent identity once assigned: never
 // renumber or reassign an id to a different condition, even if the condition
-// at that slot is later replaced (ADR-005 C4 governs which ten conditions
+// at that slot is later replaced (ADR-005 C4 governs which conditions
 // gate — not this file). If a condition is retired, retire its id with it
 // rather than recycling the number.
 //
@@ -194,18 +194,26 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
   //    that case rather than fabricating a count). Both are "we tried and
   //    don't know", not "we checked and found nothing", and both fail closed
   //    like every other condition that reads a value it could not obtain.
+  //
+  //    NOTE on `source`: when the bureau block is absent this condition
+  //    reports `source: "assumed"` and still passes. It is tempting to call
+  //    it "read" instead — "no account list means no competitor accounts
+  //    were found" — which would make the fail-closed invariant universal
+  //    with no exception to document. That is rejected deliberately: nothing
+  //    was read, and relabelling an absence as a measurement is precisely
+  //    the #458 failure this file exists to prevent. The exception stays
+  //    visible and narrow rather than being defined away.
   const bureauBlockAbsent = stage2Data.bureau == null;
   const competitorLoansByName = stage2Data.bureau?.competitorLoansByName;
-  const competitorSource = bureauBlockAbsent
-    ? "read"
-    : bureauSource === "read" && competitorLoansByName != null
+  const competitorSource =
+    !bureauBlockAbsent && bureauSource === "read" && competitorLoansByName != null
       ? "read"
       : "assumed";
   const competitorLoansValue = bureauBlockAbsent ? 0 : competitorLoansByName ?? 0;
   conditions.push({
     id: 5,
     name: "no_competitor_loans",
-    pass: competitorSource === "read" && competitorLoansValue === 0,
+    pass: bureauBlockAbsent || (competitorSource === "read" && competitorLoansValue === 0),
     value: competitorLoansValue,
     required: "0",
     source: competitorSource,
