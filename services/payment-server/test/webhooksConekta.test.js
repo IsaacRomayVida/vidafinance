@@ -214,14 +214,7 @@ describe('charge.paid', () => {
     expect(loan.status).toBe('paid');
   });
 
-  // GAP, deliberately not fixed here (coverage task, not a bug-fix task):
-  // the idempotency guard on this handler is `status === 'paid'`, not "was
-  // this specific chargeId already applied". A replayed charge.paid webhook
-  // for a loan that is not YET fully paid decrements remainingBalance a
-  // second time and writes a second repayment row for the same charge. This
-  // test documents that as CURRENT behaviour, not desired behaviour -- see
-  // the report for the same finding written up as a bug for triage.
-  test('KNOWN GAP: replaying the same charge.paid webhook before the loan is fully paid double-decrements the balance', async () => {
+  test('replaying the same charge.paid webhook on a partially-repaid loan is a no-op', async () => {
     admin.__seed('loans', 'loan_5', { status: 'active', amount: 5000, remainingBalance: 5000 });
     const body = conektaEvent('charge.paid', {
       id: 'ch_13',
@@ -233,13 +226,40 @@ describe('charge.paid', () => {
     expect(first.status).toBe(200);
     expect(admin.__get('loans', 'loan_5').remainingBalance).toBe(4000);
 
-    // Same webhook, replayed verbatim (e.g. Conekta retry, or a malicious
-    // replay) -- nothing in the handler recognizes chargeId ch_13 as already
-    // applied.
+    // Same webhook, replayed verbatim -- a Conekta retry, or a replay attack.
+    // The loan is still `active`, so the status guard cannot catch it; the
+    // repayment row keyed by chargeId does.
     const second = await post(body, { digest: hmacSign(SECRET, body) });
     expect(second.status).toBe(200);
-    expect(admin.__get('loans', 'loan_5').remainingBalance).toBe(3000); // double-decremented
-    expect(admin.__all('repayments')).toHaveLength(2); // two repayment rows for one real charge
+    expect(admin.__get('loans', 'loan_5').remainingBalance).toBe(4000);
+    expect(admin.__all('repayments')).toHaveLength(1);
+  });
+
+  test('two distinct charges against the same loan both apply', async () => {
+    admin.__seed('loans', 'loan_5b', { status: 'active', amount: 5000, remainingBalance: 5000 });
+    const mk = (id) => conektaEvent('charge.paid', {
+      id,
+      amount: 100000,
+      metadata: { loanId: 'loan_5b', employeeId: 'emp_5b' },
+    });
+
+    const a = mk('ch_14a');
+    const b = mk('ch_14b');
+    expect((await post(a, { digest: hmacSign(SECRET, a) })).status).toBe(200);
+    expect((await post(b, { digest: hmacSign(SECRET, b) })).status).toBe(200);
+
+    expect(admin.__get('loans', 'loan_5b').remainingBalance).toBe(3000);
+    expect(admin.__all('repayments')).toHaveLength(2);
+  });
+
+  test('missing charge id is a 500 and is recorded', async () => {
+    const body = conektaEvent('charge.paid', {
+      amount: 100000,
+      metadata: { loanId: 'loan_5c', employeeId: 'emp_5c' },
+    });
+    const res = await post(body, { digest: hmacSign(SECRET, body) });
+    expect(res.status).toBe(500);
+    expect(admin.__all('incident_log').some((i) => i.data.error === 'Missing charge id on charge.paid')).toBe(true);
   });
 });
 

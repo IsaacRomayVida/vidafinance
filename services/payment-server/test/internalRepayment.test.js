@@ -32,7 +32,7 @@ test('happy path: marks the loan paid, records the repayment, credits the employ
   const res = await postRepayment({ loanId: 'loan_1', employeeId: 'emp_1', amount: 2500, ref: 'SC-REF-1' });
 
   expect(res.status).toBe(200);
-  expect(res.body).toEqual({ success: true });
+  expect(res.body).toEqual({ success: true, status: 'applied' });
 
   const loan = admin.__get('loans', 'loan_1');
   expect(loan.status).toBe('paid');
@@ -63,31 +63,25 @@ test('defaults method to payroll_deduction when not supplied', async () => {
   expect(admin.__all('repayments')[0].data.method).toBe('payroll_deduction');
 });
 
-test('idempotent: replaying against an already-paid loan does not double-credit', async () => {
+test('idempotent: replaying against an already-paid loan does not double-credit or re-notify', async () => {
   admin.__seed('loans', 'loan_2', { status: 'paid', amount: 1000 });
   admin.__seed('employees', 'emp_2', { availableCredit: 300 });
 
   const res = await postRepayment({ loanId: 'loan_2', employeeId: 'emp_2', amount: 1000, ref: 'replay' });
 
   expect(res.status).toBe(200);
-  // Guarded by `if (!doc.exists || doc.data().status === 'paid') return;`
+  expect(res.body).toEqual({ success: true, status: 'already_paid' });
   expect(admin.__get('employees', 'emp_2').availableCredit).toBe(300);
   expect(admin.__all('repayments')).toHaveLength(0);
+  // The borrower was already told once. A replay must not tell them again.
+  expect(Queue.allAdded).toHaveLength(0);
 });
 
-// KNOWN GAP, documented rather than fixed (coverage task, see report): a
-// repayment call for a loanId that does not exist in Firestore still
-// responds `{ success: true }` and still enqueues a loan_paid notification,
-// because the early-return inside runTransaction is silent and the
-// notification enqueue happens unconditionally after the transaction, not
-// inside the "did we actually update anything" branch.
-test('KNOWN GAP: an unknown loanId still reports success and queues a notification', async () => {
+test('an unknown loanId is a 404, writes nothing, and queues no notification', async () => {
   const res = await postRepayment({ loanId: 'does-not-exist', employeeId: 'emp_9', amount: 100, ref: 'r' });
 
-  expect(res.status).toBe(200);
-  expect(res.body).toEqual({ success: true });
+  expect(res.status).toBe(404);
+  expect(res.body).toMatchObject({ error: 'Loan not found', loanId: 'does-not-exist' });
   expect(admin.__all('repayments')).toHaveLength(0);
-  expect(Queue.allAdded).toContainEqual(
-    expect.objectContaining({ queue: 'vida-notifications', name: 'loan_paid' }),
-  );
+  expect(Queue.allAdded).toHaveLength(0);
 });
