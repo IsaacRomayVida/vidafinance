@@ -9,7 +9,10 @@ const fs         = require("fs");
 const path       = require("path");
 const { alert5xx, alertQueueDepth, alertRedisLost } = require("../shared/alerting");
 const { register: metricsRegister, metricsMiddleware } = require("../shared/metrics");
+const createLogger = require("../shared/logger");
 require("dotenv").config();
+
+const log = createLogger("vida-pdf-generator");
 
 // Fail closed: requireInternal compares the request header against
 // process.env.INTERNAL_SECRET. If the variable is unset both sides are
@@ -282,7 +285,7 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
         });
         metamapDocumentId = result.documentId;
         contractStatus = 'awaiting_signature';
-        console.log(`[metamap] Loan ${loanId} submitted for signing, documentId=${metamapDocumentId}`);
+        log.info({ loanId, metamapDocumentId }, "Loan submitted for signing");
       }
     } catch (err) {
       console.error(`[metamap] Signing failed for loan ${loanId}:`, err.message);

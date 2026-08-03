@@ -30,7 +30,8 @@
   "dependencies": {
     "dotenv": "^16.0.0",
     "eslint": "^10.2.0",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "pino": "^10.3.1"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
