@@ -16,7 +16,7 @@ interface Loan {
   id: string;
   principalAmount?: number;
   amount?: number;
-  feeAmount?: number;
+  fee?: number;
   totalRepaymentAmount?: number;
   total?: number;
   status: string;
@@ -25,7 +25,7 @@ interface Loan {
   disbursedAt?: { seconds: number };
   dueDate?: { seconds: number };
   contractUrl?: string;
-  termDays?: number;
+  term?: number;
   currency?: string;
   loanPurpose?: string;
   [key: string]: unknown;
@@ -361,7 +361,7 @@ function LoanRow({
         </td>
         <td>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {['active', 'overdue'].includes(loan.status) && (
+            {['active', 'overdue', 'disbursed'].includes(loan.status) && (
               <PayButton loanId={loan.id} t={t} />
             )}
             {loan.contractUrl && (
@@ -426,7 +426,7 @@ function LoanRow({
                 <DetailItem
                   label={t('modal_fee', 'Fee')}
                   value={
-                    loan.feeAmount != null ? `$${fmt(loan.feeAmount)}` : '—'
+                    loan.fee != null ? `$${fmt(loan.fee)}` : '—'
                   }
                 />
                 <DetailItem
@@ -437,7 +437,7 @@ function LoanRow({
                 />
                 <DetailItem
                   label={t('dash_th_term', 'Term')}
-                  value={`${loan.termDays ?? 30} ${t('dash_days', 'days')}`}
+                  value={`${loan.term ?? 30} ${t('dash_days', 'days')}`}
                 />
                 <DetailItem
                   label={t('loans_requested', 'Requested')}

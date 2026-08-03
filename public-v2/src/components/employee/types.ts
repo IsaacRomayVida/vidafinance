@@ -25,6 +25,7 @@ export interface Loan {
   id: string;
   amount: number;
   termDays?: number;
+  term?: number;
   repaymentAmount?: number;
   total?: number;
   status: string;

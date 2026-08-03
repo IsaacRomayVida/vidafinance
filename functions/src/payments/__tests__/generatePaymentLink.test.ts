@@ -18,10 +18,12 @@ const employeeAuth = {
 
 const validInput = { loanId: 'loan-xyz' };
 
+// A repayable loan: funds have been sent ('active'), no payroll deduction has
+// landed yet, so there is no `remainingBalance` field on the document.
 const approvedLoan = {
   exists: true,
   data: {
-    status: 'approved',
+    status: 'active',
     userId: 'employee-uid',
     employeeId: 'employee-uid',
     employerId: 'employer-001',
@@ -116,7 +118,7 @@ describe('generatePaymentLink', () => {
       });
     });
 
-    it('throws failed-precondition when loan is not approved', async () => {
+    it('throws failed-precondition when loan is pending', async () => {
       _mockStore.loans['loan-xyz'] = {
         exists: true,
         data: { ...approvedLoan.data, status: 'pending' },
@@ -126,14 +128,60 @@ describe('generatePaymentLink', () => {
       });
     });
 
-    it('throws failed-precondition when loan is disbursed', async () => {
+    it('throws failed-precondition when loan is approved (pre-disbursement — nothing to repay yet)', async () => {
       _mockStore.loans['loan-xyz'] = {
         exists: true,
-        data: { ...approvedLoan.data, status: 'disbursed' },
+        data: { ...approvedLoan.data, status: 'approved' },
       };
       await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
         code: 'failed-precondition',
       });
+    });
+
+    it('throws failed-precondition when loan is already repaid', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, status: 'repaid' },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'failed-precondition',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('throws failed-precondition when loan is written off', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, status: 'written_off' },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'failed-precondition',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('succeeds when loan is disbursed (manual ops disbursement path)', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, status: 'disbursed' },
+      };
+      (fetch as jest.Mock).mockResolvedValue(
+        mockFetchResponse(true, { paymentUrl: 'https://oxxo.link', orderId: 'ord-001' })
+      );
+      const result = await fn({ auth: employeeAuth, data: validInput }) as Record<string, unknown>;
+      expect(result.paymentUrl).toBe('https://oxxo.link');
+    });
+
+    it('succeeds when loan is overdue', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, status: 'overdue' },
+      };
+      (fetch as jest.Mock).mockResolvedValue(
+        mockFetchResponse(true, { paymentUrl: 'https://oxxo.link', orderId: 'ord-001' })
+      );
+      const result = await fn({ auth: employeeAuth, data: validInput }) as Record<string, unknown>;
+      expect(result.paymentUrl).toBe('https://oxxo.link');
     });
 
     it('throws internal when PAYMENT_SERVER_URL is not configured', async () => {
@@ -194,7 +242,7 @@ describe('generatePaymentLink', () => {
       );
     });
 
-    it('charges loan.total (principal + fee), not the bare principal', async () => {
+    it('charges loan.total (principal + fee), not the bare principal, when no payroll deduction has landed', async () => {
       _mockStore.loans['loan-xyz'] = approvedLoan;
       (fetch as jest.Mock).mockResolvedValue(
         mockFetchResponse(true, { paymentUrl: 'https://oxxo.link', orderId: 'ord-001' })
@@ -203,6 +251,53 @@ describe('generatePaymentLink', () => {
 
       const body = JSON.parse((fetch as jest.Mock).mock.calls[0][1].body as string);
       expect(body.amount).toBe(2600);
+    });
+
+    it('charges loan.remainingBalance, not loan.total, once a partial payroll deduction has landed', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, remainingBalance: 1800 },
+      };
+      (fetch as jest.Mock).mockResolvedValue(
+        mockFetchResponse(true, { paymentUrl: 'https://oxxo.link', orderId: 'ord-001' })
+      );
+      await fn({ auth: employeeAuth, data: validInput });
+
+      const body = JSON.parse((fetch as jest.Mock).mock.calls[0][1].body as string);
+      expect(body.amount).toBe(1800);
+    });
+
+    it('throws internal when remainingBalance is present but zero, without falling back to total', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, remainingBalance: 0 },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'internal',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('throws internal when remainingBalance is present but negative, without falling back to total', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, remainingBalance: -100 },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'internal',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('throws internal when remainingBalance is present but NaN, without falling back to total', async () => {
+      _mockStore.loans['loan-xyz'] = {
+        exists: true,
+        data: { ...approvedLoan.data, remainingBalance: NaN },
+      };
+      await expect(fn({ auth: employeeAuth, data: validInput })).rejects.toMatchObject({
+        code: 'internal',
+      });
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it('throws internal when loan.total is missing', async () => {

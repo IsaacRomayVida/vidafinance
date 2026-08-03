@@ -70,7 +70,7 @@ export function LoanTable({ loans, repaymentsByLoan, loading, onOpenModal, onPay
                 return (
                   <tr key={loan.id}>
                     <td className="money" style={{ fontWeight: 500 }}>${fmt(loan.amount)}</td>
-                    <td>{loan.termDays ?? 30} {t('dash_days')}</td>
+                    <td>{loan.term ?? 30} {t('dash_days')}</td>
                     <td className="money">${fmt(loan.repaymentAmount || loan.total || 0)}</td>
                     <td>
                       <span className={`badge badge-${loan.status}`}>
@@ -96,7 +96,7 @@ export function LoanTable({ loans, repaymentsByLoan, loading, onOpenModal, onPay
                       {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString('es-MX') : '—'}
                     </td>
                     <td>
-                      {['active', 'overdue'].includes(loan.status) ? (
+                      {['active', 'overdue', 'disbursed'].includes(loan.status) ? (
                         <button
                           onClick={() => onPayLoan(loan)}
                           className="btn-sm btn-approve"

@@ -7,6 +7,14 @@ import { z } from 'zod';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { DISBURSED_STATUSES, LOAN_STATUS } from '../loans/loanStatus';
+
+// A loan is repayable from "funds sent" (`DISBURSED_STATUSES`: 'active' —
+// auto-disbursed, 'disbursed' — manually ops-confirmed) through 'overdue'.
+// Deliberately excludes `approved` (pre-disbursement — nothing to repay yet)
+// and every post-repayment/write-off status (`REPAID_STATUSES`,
+// 'in_collections', 'written_off') via allow-list, not a separate deny check.
+const REPAYABLE_STATUSES: readonly string[] = [...DISBURSED_STATUSES, LOAN_STATUS.OVERDUE];
 
 const GeneratePaymentLinkSchema = z.object({
   loanId: z.string().min(1),
@@ -65,10 +73,10 @@ export const generatePaymentLink = onCall(
             throw new HttpsError('permission-denied', 'Not your loan');
           }
 
-          if (loan['status'] !== 'approved') {
+          if (!REPAYABLE_STATUSES.includes(loan['status'] as string)) {
             throw new HttpsError(
               'failed-precondition',
-              'Loan must be approved to generate payment link'
+              'Loan is not eligible for repayment'
             );
           }
 
@@ -84,24 +92,46 @@ export const generatePaymentLink = onCall(
             (loan['borrowerSnapshot'] as Record<string, unknown> | undefined)?.['fullName'] ??
             (loan['employeeName'] as string | undefined) ??
             '';
-          // Charge what the borrower actually owes — principal + fee (`loan.total`,
-          // written once at requestLoan time, index.ts:~769) — never `loan.amount`
-          // (bare principal) or `loan.principalAmount` (a field nothing ever writes).
-          // A loan only reaches this function while `status === 'approved'`, a state
-          // the payroll-deduction pipeline (processPayroll.ts, gated to
-          // 'active'/'disbursed') never touches, so there is no partial-repayment
-          // balance to reconcile against here: `total` is the whole, current
-          // obligation. Fails closed on a corrupt/missing total (same convention as
-          // the fee-rate read in index.ts's getLoanConfigValues) rather than falling
-          // back to a smaller number and silently undercharging.
-          const total = loan['total'];
-          if (typeof total !== 'number' || !Number.isFinite(total) || total <= 0) {
-            throw new HttpsError(
-              'internal',
-              `Loan ${input.loanId} has no valid total to charge (total=${JSON.stringify(total)})`
-            );
+          // Charge what the borrower actually owes RIGHT NOW, never a stale
+          // whole-loan figure. This function is now reachable while a loan is
+          // 'active'/'disbursed'/'overdue' — statuses the payroll-deduction
+          // pipeline (processPayroll.ts) actively writes to, decrementing
+          // `remainingBalance` on every deduction. Charging `total` (principal
+          // + fee, written once at requestLoan time, index.ts:~769) once any
+          // deduction has landed would bill the borrower again for money
+          // already collected. `remainingBalance` is only ever absent before
+          // the first payroll deduction touches the loan, in which case the
+          // full `total` is still owed. Never `loan.amount` (bare principal —
+          // the defect that was already fixed once). Fails closed on a
+          // corrupt/missing/non-positive value for whichever field is in play
+          // rather than falling back to a smaller number and silently
+          // undercharging.
+          const rawRemainingBalance = loan['remainingBalance'];
+          const hasRemainingBalance = rawRemainingBalance !== undefined && rawRemainingBalance !== null;
+
+          let amount: number;
+          if (hasRemainingBalance) {
+            if (
+              typeof rawRemainingBalance !== 'number' ||
+              !Number.isFinite(rawRemainingBalance) ||
+              rawRemainingBalance <= 0
+            ) {
+              throw new HttpsError(
+                'internal',
+                `Loan ${input.loanId} has no valid remainingBalance to charge (remainingBalance=${JSON.stringify(rawRemainingBalance)})`
+              );
+            }
+            amount = rawRemainingBalance;
+          } else {
+            const total = loan['total'];
+            if (typeof total !== 'number' || !Number.isFinite(total) || total <= 0) {
+              throw new HttpsError(
+                'internal',
+                `Loan ${input.loanId} has no valid total to charge (total=${JSON.stringify(total)})`
+              );
+            }
+            amount = total;
           }
-          const amount = total;
           const concept = `Pago préstamo ${input.loanId}`;
 
           const response = await fetch(`${paymentServerUrl}/create-checkout`, {
