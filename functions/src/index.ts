@@ -960,6 +960,31 @@ export const getAdminDashboard = onCall(
 
 // ── getEmployerDashboard — employer only ─────────────────────────────────────
 
+// Same rule as REVIEW_DETAIL_EMPLOYER_FIELDS, applied to the employer's own view
+// of themselves. This handler returned `empDoc.data()` whole, so every dashboard
+// load put `apiKeyHash` — the payroll-integration credential — plus `bankClabe`,
+// `rfc`, `mlScore` and `llmAnalysis` into the browser.
+//
+// Neither consumer reads any of it: public-v2/src/pages/EmployerDashboard.tsx
+// and public/js/app.js both render the employer from their own `employers/{uid}`
+// document read and use only `stats` off this response. So the credential was
+// shipped for nothing. The listed fields are the ones the two dashboards' own
+// employer types declare — kept so a latent reader of this payload still works.
+const EMPLOYER_DASHBOARD_FIELDS = [
+  'companyName',
+  'name',
+  'email',
+  'employerCode',
+  'status',
+  'totalEmployees',
+  'docRFC',
+  'docId',
+  'docAddress',
+  'sampleCurps',
+  'partBStatus',
+  'curpConfig',
+] as const;
+
 export const getEmployerDashboard = onCall(
   { cors: true, enforceAppCheck: true },
   async (request) => {
@@ -988,7 +1013,7 @@ export const getEmployerDashboard = onCall(
       if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
 
       return {
-        employer: empDoc.data(),
+        employer: projectDoc(empDoc, EMPLOYER_DASHBOARD_FIELDS),
         loans: loans.docs.map((d) => ({ id: d.id, ...d.data() })),
         employeeCount: employees.size,
       };
@@ -1113,6 +1138,44 @@ interface ReviewDetailResult {
   auditHistory: Record<string, unknown>[];
 }
 
+// Exactly the fields ReviewDetail.tsx renders, and nothing else.
+//
+// This used to be `{ id, ...snap.data() }` for both documents, which shipped the
+// whole stored record to the browser on every ops page view. The employer
+// document is the sharp one: it carries `apiKeyHash` — the payroll-integration
+// credential — plus `bankClabe`, `rfc`, `email`, `mlScore` and `llmAnalysis`
+// (see the EMPLOYERS COLLECTION block in firestore.rules). The console renders
+// three of those fields. The employee document likewise carries bank details and
+// identity documents beyond the five the screen shows.
+//
+// Access control on the caller was never the gap — only ops/admin/super_admin
+// reach this handler. The gap is the response boundary: an XSS, a stolen
+// session, or a browser extension reading the callable's response walks the
+// whole book one review at a time and collects the employer credential surface
+// with it. Least privilege applies to what comes back, not just to who asks.
+//
+// Allowlist, not denylist, on purpose: a field added to the Firestore document
+// next quarter stays invisible here until someone names it deliberately. If a
+// screen needs another field, add it to this list — do NOT spread the document
+// back in.
+const REVIEW_DETAIL_EMPLOYEE_FIELDS = ['rfc', 'curp', 'email', 'phone', 'monthlySalary'] as const;
+const REVIEW_DETAIL_EMPLOYER_FIELDS = ['companyName', 'industry', 'riskTier'] as const;
+
+// Absent fields are omitted rather than nulled: the console already renders a
+// missing field as "—", and null would assert the value is known to be empty.
+function projectDoc(
+  snap: FirebaseFirestore.DocumentSnapshot | null,
+  fields: readonly string[]
+): Record<string, unknown> | null {
+  if (!snap?.exists) return null;
+  const data = snap.data()!;
+  const projected: Record<string, unknown> = { id: snap.id };
+  for (const field of fields) {
+    if (data[field] !== undefined) projected[field] = data[field];
+  }
+  return projected;
+}
+
 export const getReviewDetail = onCall(
   { cors: true, enforceAppCheck: true },
   withAuth<GetReviewDetailData, ReviewDetailResult>(
@@ -1160,8 +1223,8 @@ export const getReviewDetail = onCall(
           employerId ? db.collection('employers').doc(employerId).get() : Promise.resolve(null),
         ]);
 
-        const employee = employeeSnap?.exists ? { id: employeeSnap.id, ...employeeSnap.data()! } : null;
-        const employer = employerSnap?.exists ? { id: employerSnap.id, ...employerSnap.data()! } : null;
+        const employee = projectDoc(employeeSnap, REVIEW_DETAIL_EMPLOYEE_FIELDS);
+        const employer = projectDoc(employerSnap, REVIEW_DETAIL_EMPLOYER_FIELDS);
         const mlDecision = mlSnap && !mlSnap.empty
           ? { id: mlSnap.docs[0].id, ...mlSnap.docs[0].data() }
           : null;
