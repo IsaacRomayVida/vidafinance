@@ -12,8 +12,8 @@
  * `runEmployerDueDiligence` wires the weighted engine and the ADR-007
  * tier/slot helpers (assignTier through expandTier2) together and persists
  * the outcome to `employers/{employerId}` in Firestore. Its top-level return
- * shape (`{pass, tier, score, maxActiveSlots, signals, requiresApproval,
- * reason}`) is specified by __tests__/employer-b.test.js's
+ * shape (`{pass, tier, score, maxActiveSlots, slotGrowth, signals,
+ * requiresApproval, reason}`) is specified by __tests__/employer-b.test.js's
  * `runEmployerDueDiligence` describe block.
  *
  * `maxActiveSlots` is CAPACITY, not slots-in-use (ADR-008) — the number of
@@ -259,24 +259,78 @@ async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) 
   const tier = assignTier(score);
   const pass = tier > 0;
 
+  // ── ADR-007 slot ledger ───────────────────────────────────────────
+  // TWO distinct cycle counters, deliberately not one field (ADR-009):
+  //
+  //   `cleanPayrollCycles`            — LIFETIME clean cycles. Feeds
+  //     scorePayrollHistory (full weight at 6+) and expandTier2's Tier-1
+  //     upgrade clock (>= 10), both of which ADR-005 Finding 1 item 2
+  //     ratified as *lifetime* quantities. Monotonic; never reset.
+  //   `cleanPayrollCyclesSinceReview` — cycles ACCRUED since the last
+  //     due-diligence review. This is the quantity ADR-007's hybrid rule
+  //     actually operates on: "earns one growth increment per clean
+  //     payroll cycle SINCE its last due-diligence review", credited at
+  //     the review and forfeited beyond the 2-increment cap.
+  //
+  // Aliasing both onto the single `cleanPayrollCycles` field — which is
+  // what this function did before — makes the two ratified rules
+  // mutually unsatisfiable: forfeiting the Tier-1 accrual to zero would
+  // also zero the Tier-2 employer's lifetime upgrade clock, so no Tier-2
+  // employer could ever reach the 10 cycles that earn an upgrade review.
+  //
+  // NEITHER counter is written by anything in this repository today
+  // (measured, not assumed — see ADR-009 Q1). With the accrual counter
+  // pinned at 0, autoScaleTier1 credits 0 increments and PRESERVES the
+  // stored cap instead of growing it, which is what makes wiring this
+  // ledger into the live path provably exposure-neutral until Isaac
+  // settles Q1 and Q2.
   const currentSlots = employer.maxActiveSlots || 0;
-  const cleanCycles = employer.cleanPayrollCycles || 0;
-  const isReturning = currentSlots > 0;
+  const lifetimeCleanCycles = employer.cleanPayrollCycles || 0;
+  const cyclesSinceReview = employer.cleanPayrollCyclesSinceReview || 0;
+
+  // The tier this employer held at its LAST review, when known. A stored
+  // slot count is a position on ONE tier's ladder, not a portable number.
+  // Re-entering Tier 2 carrying a Tier-1 cap of 50 would hand a DOWNGRADED
+  // employer expandTier2's top band (10) rather than the initial band (3);
+  // re-entering Tier 1 carrying a Tier-2 cap of 3 would cut an UPGRADED
+  // employer below the 10 slots a fresh Tier 1 is granted. So a slot count
+  // earned on a different tier's ladder is treated as no ladder position
+  // at all, and the employer starts that tier fresh.
+  //
+  // An ABSENT prior tier still counts as returning: that is the state of
+  // every employer written before this field existed, and demoting them
+  // all to a fresh grant would move caps nobody chose. Same fail-direction
+  // reasoning as initialSlotsForEmployerTier in functions/src/index.ts.
+  const priorTier = typeof employer.tier === "number" ? employer.tier : null;
+  const isReturningOnTier = (ladder) =>
+    currentSlots > 0 && (priorTier === null || priorTier === ladder);
 
   let maxActiveSlots = 0;
   let requiresApproval = false;
+  // Populated only when ADR-007's hybrid growth actually ran, so a credit
+  // event (and the cycles it forfeited) is observable to the caller that
+  // persists and audit-logs it, rather than being silently folded into a
+  // single new number.
+  let slotGrowth = null;
   if (tier === 1) {
-    if (isReturning) {
-      const autoScale = autoScaleTier1(currentSlots, cleanCycles);
+    if (isReturningOnTier(1)) {
+      const autoScale = autoScaleTier1(currentSlots, cyclesSinceReview);
       maxActiveSlots = autoScale.newSlots;
       requiresApproval = autoScale.requiresManualReview;
+      slotGrowth = {
+        cyclesConsidered: cyclesSinceReview,
+        incrementsCredited: autoScale.incrementsCredited,
+        cyclesForfeited: autoScale.cyclesForfeited,
+        slotsBefore: currentSlots,
+        slotsAfter: autoScale.newSlots,
+      };
     } else {
       maxActiveSlots = computeInitialSlots(1);
     }
   } else if (tier === 2) {
     requiresApproval = true;
-    maxActiveSlots = isReturning
-      ? expandTier2(currentSlots, cleanCycles).newSlots
+    maxActiveSlots = isReturningOnTier(2)
+      ? expandTier2(currentSlots, lifetimeCleanCycles).newSlots
       : computeInitialSlots(2);
   }
 
@@ -319,6 +373,9 @@ async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) 
     tier,
     score,
     maxActiveSlots,
+    // null unless ADR-007 hybrid growth ran this review. See the ledger
+    // comment above; requestLoan persists and audit-logs this.
+    slotGrowth,
     signals,
     requiresApproval,
     reason,

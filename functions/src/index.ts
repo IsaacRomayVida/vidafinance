@@ -537,7 +537,40 @@ export const requestLoan = onCall(
               headers: { 'Content-Type': 'application/json', 'x-internal-secret': intSecret },
               body: JSON.stringify({
                 applicant: { curp: emp['curp'] || '', fullName: emp['fullName'] || emp['name'] || '', rfc: emp['rfc'] || '' },
-                employer: { rfc: employer['rfc'] || '', companyName: employer['companyName'] || '' },
+                employer: {
+                  rfc: employer['rfc'] || '',
+                  companyName: employer['companyName'] || '',
+                  // ADR-007 slot ledger. Measured before adding these: this
+                  // payload previously carried rfc + companyName ONLY, so
+                  // employer-b's `employer.maxActiveSlots` was always
+                  // undefined in production, `isReturning` was therefore
+                  // always false, and `autoScaleTier1` — the whole hybrid
+                  // growth rule ADR-007 ratified — was unreachable outside
+                  // its unit tests. Every Tier-1 employer was re-granted a
+                  // flat 10 on every single loan request, forever, and the
+                  // 15/100 payrollHistory weight scored 0 for everyone.
+                  //
+                  // Passing the stored ledger makes the rule reachable. It
+                  // does not by itself grant anyone a slot: nothing writes
+                  // `cleanPayrollCyclesSinceReview`, so it reads 0, so
+                  // autoScaleTier1 credits 0 increments and preserves the
+                  // stored cap. The observable change today is that a
+                  // Tier-1 cap stops being recomputed from scratch on every
+                  // request and starts being a ledger. See ADR-009 Q1/Q2.
+                  //
+                  // `employerId` is deliberately NOT sent: employer-b's own
+                  // Firestore write is keyed on it, and activating that
+                  // would make the underwriting service a second concurrent
+                  // writer of `maxActiveSlots` racing the block below.
+                  // requestLoan stays the single writer (#487).
+                  tier: typeof employer['tier'] === 'number' ? employer['tier'] : null,
+                  maxActiveSlots: typeof employer['maxActiveSlots'] === 'number' ? employer['maxActiveSlots'] : 0,
+                  cleanPayrollCycles: typeof employer['cleanPayrollCycles'] === 'number' ? employer['cleanPayrollCycles'] : 0,
+                  cleanPayrollCyclesSinceReview:
+                    typeof employer['cleanPayrollCyclesSinceReview'] === 'number'
+                      ? employer['cleanPayrollCyclesSinceReview']
+                      : 0,
+                },
                 loanAmount: amount,
               }),
               signal: AbortSignal.timeout(30000),
@@ -752,6 +785,15 @@ export const requestLoan = onCall(
         // write over a seeded/legacy value that predates this field.
         const employerBResult = uwStages?.['employerB'] as Record<string, unknown> | undefined;
         const dueDiligenceMaxSlots = employerBResult?.['maxActiveSlots'];
+        const dueDiligenceTier = employerBResult?.['tier'];
+        // ADR-007's hybrid growth detail for this review, when it ran:
+        // `{cyclesConsidered, incrementsCredited, cyclesForfeited,
+        // slotsBefore, slotsAfter}`. Null when the employer was granted a
+        // fresh tier-initial cap rather than an incremented one.
+        const dueDiligenceSlotGrowth = (employerBResult?.['slotGrowth'] ?? null) as Record<
+          string,
+          unknown
+        > | null;
         if (typeof dueDiligenceMaxSlots === 'number') {
           try {
             let auditBefore: Record<string, unknown> | null = null;
@@ -759,13 +801,38 @@ export const requestLoan = onCall(
             await db.runTransaction(async (tx) => {
               const empSnap = await tx.get(employerRef);
               const empData = empSnap.data() ?? {};
-              if (empData['maxActiveSlotsSource'] === 'ops_override') return;
-              auditBefore = {
-                maxActiveSlots: empData['maxActiveSlots'] ?? null,
-                maxActiveSlotsSource: empData['maxActiveSlotsSource'] ?? null,
-              };
-              auditAfter = { maxActiveSlots: dueDiligenceMaxSlots, maxActiveSlotsSource: 'due_diligence' };
-              tx.update(employerRef, auditAfter);
+
+              // ADR-007 named `tier` as one of the three ledger fields the
+              // employer document was missing. It is what tells the NEXT
+              // review which slot ladder this employer is standing on:
+              // employer-b re-enters Tier 1's auto-scale ladder or Tier 2's
+              // fixed bands based on it, and without it a downgraded
+              // employer would carry a Tier-1 slot count onto the Tier-2
+              // ladder. Distinct from `riskTier` (ML-assigned, ADR-005
+              // Finding 2) — see DATABASE.md, which now states the
+              // relationship between the two.
+              //
+              // Written whether or not ops owns the cap: `ops_override`
+              // means ops owns the NUMBER, not the score behind it. That is
+              // the same split employer-b.js's own transaction makes when it
+              // freezes `maxActiveSlots` but still refreshes score/tier.
+              const ledgerUpdate: Record<string, unknown> = {};
+              if (typeof dueDiligenceTier === 'number') ledgerUpdate['tier'] = dueDiligenceTier;
+
+              if (empData['maxActiveSlotsSource'] !== 'ops_override') {
+                auditBefore = {
+                  maxActiveSlots: empData['maxActiveSlots'] ?? null,
+                  maxActiveSlotsSource: empData['maxActiveSlotsSource'] ?? null,
+                };
+                const capUpdate = {
+                  maxActiveSlots: dueDiligenceMaxSlots,
+                  maxActiveSlotsSource: 'due_diligence',
+                };
+                auditAfter = capUpdate;
+                Object.assign(ledgerUpdate, capUpdate);
+              }
+
+              if (Object.keys(ledgerUpdate).length > 0) tx.update(employerRef, ledgerUpdate);
             });
             if (auditAfter) {
               await auditLog(db, {
@@ -775,6 +842,12 @@ export const requestLoan = onCall(
                 targetId: emp['employerId'],
                 before: auditBefore,
                 after: auditAfter,
+                // ADR-007 caps credit at 2 increments per review and
+                // FORFEITS the surplus. A forfeit that leaves no trace is
+                // indistinguishable from a cycle that was never earned, so
+                // the count is recorded here rather than only being returned
+                // and dropped.
+                meta: { slotGrowth: dueDiligenceSlotGrowth },
               });
             }
           } catch (e: unknown) {
