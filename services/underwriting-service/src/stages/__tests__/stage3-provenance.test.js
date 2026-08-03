@@ -40,7 +40,7 @@ const APPLICANT = {
 };
 
 const ALL_DATA_PRESENT = {
-  employerB: { data: { tier: 1 } },
+  employerB: { tier: 1 },
   stage0: { data: { riskseal: { score: 72 } } },
   stage1: { data: { age: 35, cnbv: { pass: true, riskLevel: "bajo" } } },
   stage2: {
@@ -100,10 +100,11 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
     // same pass results as before — no threshold or bound moved.
     //
     // One `required` string did move: employer_tier reads "1-2" rather than
-    // "<= 2", because the condition now states its lower bound instead of
-    // resting on employer-b never emitting tier 0. employer-b emits only 1, 2
-    // or 3, so no live decision changes — see the tier-0 case below for the
-    // reason the bound is written down anyway.
+    // "<= 2", because the condition now states its lower bound explicitly
+    // instead of resting on employer-b's branch layout to keep a rejected
+    // employer out of range. employer-b now emits tier 0 for a rejected
+    // employer (#387/#388), which fails this lower bound on its own — see
+    // the tier-0 case below.
     expect(evaluateAutoApprove(APPLICANT, ALL_DATA_PRESENT)).toEqual([
       { id: 1, name: "employer_tier", pass: true, value: 1, required: "1-2", source: "read" },
       { id: 2, name: "imss_tenure", pass: true, value: 36, required: "> 6 months", source: "read" },
@@ -128,15 +129,16 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
   });
 
   it("declines a tier-0 employer instead of approving it, without relying on employer-b's encoding", () => {
-    // ADR-005 Finding 3: the spec encodes a rejected employer as tier 0 while
-    // shipped code uses 3. Under a bare `<= 2` upper bound a spec-conformant 0
-    // is the *best* possible tier and clears condition 1 — a worker at a
-    // rejected employer walks the gate. Nothing in this repo produces a 0
-    // today, which is exactly why it is worth pinning: the safety of condition
-    // 1 should not be a property of employer-b's current branch layout.
+    // ADR-005 Finding 3: the spec encodes a rejected employer as tier 0, which
+    // employer-b now emits (#387/#388). Under a bare `<= 2` upper bound alone,
+    // tier 0 would be the *best* possible tier and clear condition 1 — a
+    // worker at a rejected employer walking the gate. The explicit lower
+    // bound (`>= 1`) is what actually stops that, which is exactly why it is
+    // worth pinning: the safety of condition 1 should not be a property of
+    // employer-b's current branch layout.
     const rejectedEmployer = {
       ...ALL_DATA_PRESENT,
-      employerB: { data: { ...ALL_DATA_PRESENT.employerB.data, tier: 0 } },
+      employerB: { ...ALL_DATA_PRESENT.employerB, tier: 0 },
     };
     const tierCondition = evaluateAutoApprove(APPLICANT, rejectedEmployer)
       .find((c) => c.name === "employer_tier");
@@ -224,7 +226,7 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
 
   it("marks riskseal_score and sector_safe unread when their blocks are absent or skipped", () => {
     const missingBlocks = {
-      employerB: { data: { tier: 1 } },
+      employerB: { tier: 1 },
       stage0: { data: {} }, // no riskseal key at all
       stage1: { data: { age: 35, cnbv: { pass: true, skipped: true } } },
       stage2: ALL_DATA_PRESENT.stage2,
@@ -302,13 +304,16 @@ describe("evaluateAutoApprove — condition provenance (#458)", () => {
     expect(employerTier.value).toBeNull();
   });
 
-  it("still reads a tier the pipeline did return, including a rejected tier 3", () => {
+  it("still reads a tier the pipeline did return, including an out-of-range tier 3", () => {
     // Removing the `||` chain must not change what a present tier means.
-    // Rejected employers stay encoded as 3 (employer-b.js:76) and fail on the
-    // bound, not on provenance.
+    // employer-b only ever emits 0, 1 or 2 (#387/#388); this pins that the
+    // upper bound itself — not just provenance — is what stops a
+    // hypothetical out-of-range tier from clearing condition 1, so the
+    // condition's safety does not rest on employer-b's current branch
+    // layout ever staying that way.
     const conditions = evaluateAutoApprove(APPLICANT, {
       ...ALL_DATA_PRESENT,
-      employerB: { data: { tier: 3 } },
+      employerB: { tier: 3 },
     });
 
     const employerTier = conditionByName(conditions, "employer_tier");

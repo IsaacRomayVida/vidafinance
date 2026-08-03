@@ -139,7 +139,9 @@ const RETIRED_CONDITION_IDS = Object.freeze({});
 
 function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedMaxPDefault()) {
   const conditions = [];
-  const employerData = allResults.employerB?.data || {};
+  // employer-b.js returns `tier` at the top level (not nested under `.data`)
+  // since #387/#388's weighted-scoring rewrite.
+  const employerData = allResults.employerB || {};
   const stage0Data = allResults.stage0?.data || {};
   const stage1Data = allResults.stage1?.data || {};
   const stage2Data = allResults.stage2?.data || {};
@@ -153,14 +155,12 @@ function evaluateAutoApprove(applicant, allResults, maxPDefaultCutoff = getSeedM
   // not stand in for a tier employer Part B never returned. The tier comes from
   // the pipeline or the condition fails closed.
   //
-  // Rejected employers stay encoded as tier 3 (employer-b.js:75), which fails
-  // the upper bound on its own. The `||` chain used to catch a falsy tier and
-  // land on the literal 3 by accident, and that accident is gone — so the
-  // bound is stated at both ends rather than left resting on today's encoding.
-  // employer-b only ever emits 1, 2 or 3, so `>= 1` changes no live decision;
-  // it means that if employer-b ever adopts the spec's tier 0 for rejected
-  // (ADR-005 Finding 3 says it should not), this condition declines instead of
-  // approving workers at a rejected employer. Fails closed in both directions.
+  // Rejected employers are now encoded as tier 0 (employer-b.js, #387/#388),
+  // which fails the lower bound on its own. The upper bound stays anyway: a
+  // condition whose safety depends on employer-b's current branch layout is
+  // one bad refactor away from an out-of-range tier walking the gate, so
+  // both ends are stated explicitly rather than left resting on today's
+  // encoding. Fails closed in both directions.
   const employerTierSource = employerData.tier != null ? "read" : "assumed";
   const employerTier = employerData.tier ?? null;
   conditions.push({
@@ -535,7 +535,7 @@ function toGateInputs({
 }) {
   const applicant = { employerTier, employmentTenureMonths: tenureMonths, age };
   const allResults = {
-    employerB: { data: { tier: employerTier } },
+    employerB: { tier: employerTier },
     stage0: { data: { riskseal: riskSealScore != null ? { score: riskSealScore } : undefined } },
     stage1: { data: { cnbv: sectorFlagged != null ? { pass: !sectorFlagged } : undefined, age } },
     stage2: {
