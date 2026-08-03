@@ -2,7 +2,7 @@
 BullMQ consumer for the 'vida-underwriting' queue.
 
 NOT currently on the live decision path (see #428,
-outputs/ADR-004-underwriting-worker-not-the-decision-path.md). Nothing in
+docs/adr/ADR-004-underwriting-worker-not-the-decision-path.md). Nothing in
 this repo enqueues jobs onto 'vida-underwriting', and this module's
 __main__ / start_worker() is never invoked in production: the ml-service
 Dockerfile only runs `uvicorn main:app`. The live, synchronous decision path
