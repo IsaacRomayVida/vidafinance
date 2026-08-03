@@ -4,6 +4,7 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Queue, Worker } = require('bullmq');
+const { applyCardRepayment } = require('./cardRepayment');
 const { alert5xx, alertDisbursementFailed, alertQueueDepth, alertRedisLost } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 require('dotenv').config();
@@ -77,6 +78,19 @@ const getQueue = name => new Queue(name, {
   defaultJobOptions: { removeOnComplete: { count: 1000 }, removeOnFail: { count: 5000 }, attempts: 5, backoff: { type: 'exponential', delay: 2000 } }
 });
 
+// Only a repayment that actually CLOSED the loan raises "your loan is paid"
+// and mints a receipt. The old order.paid path enqueued both unconditionally,
+// which was consistent only because that path also settled unconditionally --
+// now that a partial payment stays partial, telling the borrower they are done
+// would be a lie, and a Conekta retry must not mint a second receipt. Same
+// stance as POST /internal/repayment, which notifies only on 'applied'.
+async function announceRepayment(result, { loanId, employeeId, chargeId }) {
+  if (!result || !result.settled) return;
+  const amount = result.appliedAmount;
+  await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId, amount, method: 'card' });
+  await getQueue('vida-pdfs').add('repayment_receipt', { type: 'repayment_receipt', loanId, employeeId, amount, chargeId });
+}
+
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
   res.set('Content-Type', metricsRegister.contentType);
@@ -139,22 +153,38 @@ app.post('/webhooks/conekta', async (req, res) => {
     if (type === 'order.paid') {
       const { loanId, employeeId } = data.object.metadata || {};
       if (!loanId || !employeeId) throw new Error('Missing metadata');
-      const amount = data.object.amount / 100;
-      const chargeId = data.object.charges?.data?.[0]?.id;
+      const orderId = data.object.id;
+      const charges = data.object.charges?.data ?? [];
 
-      await db.runTransaction(async tx => {
-        const ref = db.collection('loans').doc(loanId);
-        const doc = await tx.get(ref);
-        if (!doc.exists || doc.data().status === 'paid') return;
-        tx.update(ref, { status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), paidAmount: amount, repaymentRef: chargeId });
-        tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: 'card', conektaOrderId: data.object.id, conektaChargeId: chargeId, status: 'completed', paidAt: admin.firestore.FieldValue.serverTimestamp() });
-        const empRef = db.collection('employees').doc(employeeId);
-        const emp = await tx.get(empRef);
-        if (emp.exists) tx.update(empRef, { availableCredit: admin.firestore.FieldValue.increment(doc.data().amount) });
-      });
+      // Apply per charge, keyed by charge id, because that is the only
+      // identifier this event shares with `charge.paid` -- see rule 2 in
+      // cardRepayment.js. The order total is used only when the order carries
+      // exactly one charge whose own amount is missing; with several charges
+      // there is no safe way to attribute it, and inventing one would
+      // double-count against the sibling `charge.paid` events.
+      const payments = charges
+        .filter((c) => c && c.id)
+        .map((c) => ({
+          chargeId: c.id,
+          amount: (typeof c.amount === 'number' ? c.amount : (charges.length === 1 ? data.object.amount : NaN)) / 100,
+        }));
 
-      await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId, amount, method: 'card' });
-      await getQueue('vida-pdfs').add('repayment_receipt', { type: 'repayment_receipt', loanId, employeeId, amount, chargeId });
+      if (payments.length === 0 || payments.some((p) => !Number.isFinite(p.amount))) {
+        // Fail closed. A paid order always carries its charge, so this is an
+        // anomaly; applying the money under an order-scoped key would race the
+        // `charge.paid` for the same payment and settle the loan twice. Leaving
+        // the debt intact is recoverable, forgiving it is not.
+        await db.collection('incident_log').add({
+          source: 'conekta-webhook',
+          error: 'order.paid with no attributable charge — not applied, needs manual reconciliation',
+          loanId,
+          conektaOrderId: orderId,
+          ts: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } else {
+        const result = await applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, payments });
+        await announceRepayment(result, { loanId, employeeId, chargeId: payments[payments.length - 1].chargeId });
+      }
     }
 
     if (type === 'order.payment_failed') {
@@ -169,27 +199,14 @@ app.post('/webhooks/conekta', async (req, res) => {
       const chargeId = data.object.id;
       if (!chargeId) throw new Error('Missing charge id on charge.paid');
 
-      await db.runTransaction(async tx => {
-        const ref = db.collection('loans').doc(loanId);
-        // The repayment row is keyed by the Conekta charge id, so a replayed
-        // webhook is a no-op. `status === 'paid'` is not enough on its own:
-        // a partial repayment leaves the loan active, and Conekta retries
-        // webhooks in normal operation, so the balance would be decremented
-        // once per delivery.
-        const repaymentRef = db.collection('repayments').doc(`conekta_${chargeId}`);
-        const [doc, alreadyApplied] = await Promise.all([tx.get(ref), tx.get(repaymentRef)]);
-        if (alreadyApplied.exists) return;
-        if (!doc.exists || doc.data().status === 'paid') return;
-        const loanData = doc.data();
-        const newBalance = (loanData.remainingBalance ?? loanData.amount) - amount;
-        const updates = { remainingBalance: newBalance };
-        if (newBalance <= 0) {
-          updates.status = 'paid';
-          updates.paidAt = admin.firestore.FieldValue.serverTimestamp();
-        }
-        tx.update(ref, updates);
-        tx.set(repaymentRef, { loanId, employeeId, amount, method: 'card', conektaChargeId: chargeId, status: 'completed', createdAt: admin.firestore.FieldValue.serverTimestamp() });
-      });
+      // Same routine, same `conekta_<chargeId>` key as the order.paid path, so
+      // the two events for one payment apply the money exactly once between
+      // them regardless of which lands first.
+      const result = await applyCardRepayment(
+        { db, admin },
+        { loanId, employeeId, orderId: data.object.order_id ?? null, payments: [{ chargeId, amount }] }
+      );
+      await announceRepayment(result, { loanId, employeeId, chargeId });
     }
 
     if (type === 'charge.payment_failure') {

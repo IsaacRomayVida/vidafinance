@@ -104,30 +104,41 @@ describe('signature verification — RSA public-key secret', () => {
 
 // ── order.paid ───────────────────────────────────────────────────────────
 describe('order.paid', () => {
-  test('happy path: marks the loan paid, records the repayment, credits the employee', async () => {
-    admin.__seed('loans', 'loan_1', { status: 'active', amount: 5000 });
+  test('happy path: paying the full obligation marks the loan paid, records the repayment, credits the employee', async () => {
+    // A realistic loan: 5000 principal + 500 fee = 5500 owed. The borrower's
+    // credit line was reduced by the PRINCIPAL at origination, so only the
+    // principal may come back -- not the 5500 they handed over.
+    admin.__seed('loans', 'loan_1', { status: 'active', amount: 5000, fee: 500, total: 5500, employeeId: 'emp_1', employerId: 'empr_1' });
     admin.__seed('employees', 'emp_1', { availableCredit: 1000 });
+    admin.__seed('employers', 'empr_1', { activeLoans: 3 });
 
     const body = conektaEvent('order.paid', {
       id: 'ord_10',
-      amount: 500000, // centavos
+      amount: 550000, // centavos
       metadata: { loanId: 'loan_1', employeeId: 'emp_1' },
-      charges: { data: [{ id: 'ch_1' }] },
+      charges: { data: [{ id: 'ch_1', amount: 550000 }] },
     });
     const res = await post(body, { digest: hmacSign(SECRET, body) });
 
     expect(res.status).toBe(200);
     const loan = admin.__get('loans', 'loan_1');
     expect(loan.status).toBe('paid');
-    expect(loan.paidAmount).toBe(5000);
+    expect(loan.paidAmount).toBe(5500);
+    expect(loan.remainingBalance).toBe(0);
     expect(loan.repaymentRef).toBe('ch_1');
 
     const employee = admin.__get('employees', 'emp_1');
     expect(employee.availableCredit).toBe(1000 + 5000);
 
+    // G4: the employer's origination slot is released on full card repayment.
+    expect(admin.__get('employers', 'empr_1').activeLoans).toBe(2);
+
     const repayments = admin.__all('repayments');
     expect(repayments).toHaveLength(1);
-    expect(repayments[0].data).toMatchObject({ loanId: 'loan_1', employeeId: 'emp_1', amount: 5000, method: 'card' });
+    // Keyed by charge id, so the sibling charge.paid for this same payment
+    // cannot apply the money a second time.
+    expect(repayments[0].id).toBe('conekta_ch_1');
+    expect(repayments[0].data).toMatchObject({ loanId: 'loan_1', employeeId: 'emp_1', amount: 5500, method: 'card' });
 
     expect(Queue.allAdded).toEqual(
       expect.arrayContaining([
@@ -151,23 +162,31 @@ describe('order.paid', () => {
     expect(incidents.some((i) => i.data.error === 'Missing metadata')).toBe(true);
   });
 
-  test('replaying the same order.paid webhook after the loan is already paid does not double-credit', async () => {
-    admin.__seed('loans', 'loan_2', { status: 'paid', amount: 5000 });
+  test('a charge landing on an already-settled loan moves no money and is recorded as unapplied', async () => {
+    admin.__seed('loans', 'loan_2', { status: 'paid', amount: 5000, total: 5500, employeeId: 'emp_2', employerId: 'empr_2' });
     admin.__seed('employees', 'emp_2', { availableCredit: 1000 });
+    admin.__seed('employers', 'empr_2', { activeLoans: 3 });
 
     const body = conektaEvent('order.paid', {
       id: 'ord_12',
       amount: 500000,
       metadata: { loanId: 'loan_2', employeeId: 'emp_2' },
-      charges: { data: [{ id: 'ch_3' }] },
+      charges: { data: [{ id: 'ch_3', amount: 500000 }] },
     });
     const res = await post(body, { digest: hmacSign(SECRET, body) });
 
     expect(res.status).toBe(200);
-    // Guarded by `if (!doc.exists || doc.data().status === 'paid') return;`
-    // inside the transaction -- the employee credit must be untouched.
+    // No credit restored a second time, and the slot is not released twice.
     expect(admin.__get('employees', 'emp_2').availableCredit).toBe(1000);
-    expect(admin.__all('repayments')).toHaveLength(0);
+    expect(admin.__get('employers', 'empr_2').activeLoans).toBe(3);
+
+    // The row IS written -- keyed by charge id, marked unapplied. It is money
+    // that arrived and could not be applied (overpayment, duplicate checkout,
+    // wrong loan), which is a reconciliation question for a human; dropping it
+    // silently would erase the only trace of it.
+    const repayments = admin.__all('repayments');
+    expect(repayments).toHaveLength(1);
+    expect(repayments[0].data).toMatchObject({ status: 'unapplied', unappliedReason: 'loan_already_settled' });
   });
 });
 
