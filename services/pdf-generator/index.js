@@ -351,8 +351,14 @@ app.post("/contracts/generate", requireInternal, async (req, res) => {
 });
 
 app.get('/metrics', async (req, res) => {
-  res.set('Content-Type', metricsRegister.contentType);
-  res.end(await metricsRegister.metrics());
+  try {
+    res.set('Content-Type', metricsRegister.contentType);
+    res.end(await metricsRegister.metrics());
+  } catch (err) {
+    // Express 4 does not catch a rejected promise from an async route handler --
+    // an unguarded await here would send no response at all instead of a 5xx.
+    res.status(500).end('metrics_unavailable');
+  }
 });
 
 app.get("/health", async (req, res) => {

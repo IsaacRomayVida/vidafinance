@@ -94,8 +94,14 @@ const requireInternal = (req, res, next) => {
 
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
-  res.set('Content-Type', metricsRegister.contentType);
-  res.end(await metricsRegister.metrics());
+  try {
+    res.set('Content-Type', metricsRegister.contentType);
+    res.end(await metricsRegister.metrics());
+  } catch (err) {
+    // Express 4 does not catch a rejected promise from an async route handler --
+    // an unguarded await here would send no response at all instead of a 5xx.
+    res.status(500).end('metrics_unavailable');
+  }
 });
 
 app.get('/health', async (req, res) => {
@@ -116,9 +122,15 @@ app.post('/webhooks/metamap', async (req, res) => {
 
   if (!valid) {
     console.warn('Invalid MetaMap webhook signature');
+    // Deliberately swallowed: this write records a rejection that has already
+    // been decided. Letting it reject the request too would replace a fast,
+    // logged 401 with a hang -- same defect class as the registry-service
+    // transaction fix (#524) and the payment-server webhook fix (#526).
     await db.collection('incident_log').add({
       source: 'metamap-webhook', error: 'invalid_signature',
       ts: admin.firestore.FieldValue.serverTimestamp(),
+    }).catch((err) => {
+      console.error('MetaMap webhook: incident_log write failed:', err.message);
     });
     return res.status(401).json({ error: 'Invalid signature' });
   }
