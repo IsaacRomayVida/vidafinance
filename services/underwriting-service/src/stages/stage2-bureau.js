@@ -9,6 +9,7 @@
  *   4. Champions model (WoE LR) + Challenger (XGBoost) via ML service
  */
 const { getIMSSEmployment, getAFORE } = require("../belvo-client");
+const { getCompetitorLenderNames, matchesCompetitorLender } = require("../config/competitorLenders");
 
 const ML_SERVICE_URL = () => process.env.ML_SERVICE_URL || "http://localhost:3005";
 const SOFTCREDITO_URL = () => process.env.SOFTCREDITO_ADAPTER_URL || "http://localhost:3004";
@@ -46,6 +47,23 @@ async function fetchMLScore(features) {
   });
   if (!res.ok) throw new Error(`ML score ${res.status}`);
   return res.json();
+}
+
+/**
+ * Normalises one bureau account's creditor-name field to a SINGLE name,
+ * `otorgante` — Buró de Crédito's own term for the field ("grantor"), not an
+ * integrator's rename. This is the adapter boundary ADR-005 Finding 7 says
+ * never settled: the never-executed spec matched `otorgante` OR
+ * `nombreOtorgante` because nobody picked one. Both spellings are tolerated
+ * on INPUT, since a real upstream payload may use either; exactly one is
+ * emitted on OUTPUT, so every downstream consumer — including
+ * matchesCompetitorLender below — reads a single field and never has to
+ * guess again.
+ */
+function normalizeBureauAccount(rawAccount) {
+  if (!rawAccount || typeof rawAccount !== "object") return rawAccount;
+  const { otorgante, nombreOtorgante, ...rest } = rawAccount;
+  return { ...rest, otorgante: otorgante || nombreOtorgante || null };
 }
 
 /**
@@ -171,11 +189,13 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
   try {
     bureauResult = await fetchBureauScore(applicant);
     costItems.push({ api: "softcredito", mxn: 8.0 });
+    const rawAccounts = bureauResult.cuentas || bureauResult.accounts || [];
     data.bureau = {
       score: bureauResult.bureau_score || bureauResult.score || 500,
       hasBureauRecord: bureauResult.has_bureau_record ?? true,
       activeDefaults: bureauResult.active_defaults || 0,
       competitorLoans: bureauResult.competitor_loans || 0,
+      accounts: (Array.isArray(rawAccounts) ? rawAccounts : []).map(normalizeBureauAccount),
       raw: bureauResult,
     };
   } catch (err) {
@@ -185,9 +205,47 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
       hasBureauRecord: false,
       activeDefaults: 0,
       competitorLoans: 0,
+      accounts: [],
       skipped: true,
       error: err.message,
     };
+  }
+
+  // 3b. Competitor-loan detection by creditor name — DERIVED, NOT GATING.
+  //
+  // ADR-005 Finding 7: `data.bureau.competitorLoans` above is an opaque
+  // count SoftCrédito hands back; nothing has ever matched a creditor NAME
+  // against a competitor list. This builds that capability —
+  // `competitorLoansByName` — so a future caller COULD compare it against
+  // the opaque count. It intentionally is not wired anywhere yet: whether a
+  // competitor loan blocks approval, and which lenders count, is credit
+  // policy reserved for Isaac (ADR-005 commercial C5), and
+  // stage3-autoapprove.js's `no_competitor_loans` condition still reads only
+  // the opaque count above, unchanged.
+  //
+  // Skipped entirely when the bureau block itself is `skipped` (failed
+  // fetch): with no accounts read, "zero competitor matches" would be
+  // fabricated, not observed — the same distinction stage3-autoapprove.js's
+  // condition 5 comment draws for the opaque count's error stub.
+  if (!data.bureau.skipped) {
+    if (data.bureau.accounts.length === 0) {
+      // No accounts to check is not "we don't know" — it is "there is
+      // nothing here that could match", same reasoning stage3-autoapprove.js
+      // condition 5 already applies to the opaque count on an empty report.
+      data.bureau.competitorLoansByName = 0;
+    } else {
+      try {
+        const competitorNames = await getCompetitorLenderNames();
+        data.bureau.competitorLoansByName = data.bureau.accounts.filter((acct) =>
+          matchesCompetitorLender(acct.otorgante, competitorNames)
+        ).length;
+      } catch (err) {
+        log.warn(
+          { stage: "stage2", err: err.message },
+          "Competitor-lender config unavailable — skipping name-based match"
+        );
+      }
+    }
   }
 
   // 4. LTI calculation
@@ -251,4 +309,10 @@ async function runBureauAndEmployment(applicant, priorResults, { logger } = {}) 
   };
 }
 
-module.exports = { runBureauAndEmployment, computeLTI, encodePayFrequency, PAY_PERIODS_PER_MONTH };
+module.exports = {
+  runBureauAndEmployment,
+  computeLTI,
+  encodePayFrequency,
+  PAY_PERIODS_PER_MONTH,
+  normalizeBureauAccount,
+};

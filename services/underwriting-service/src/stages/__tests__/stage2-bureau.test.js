@@ -8,12 +8,22 @@ jest.mock("../../belvo-client", () => ({
 
 jest.mock("node-fetch", () => jest.fn());
 
+const mockCompetitorConfigGet = jest.fn();
+jest.mock("firebase-admin", () => ({
+  firestore: () => ({
+    collection: () => ({
+      doc: () => ({ get: mockCompetitorConfigGet }),
+    }),
+  }),
+}));
+
 const { getIMSSEmployment, getAFORE } = require("../../belvo-client");
 const fetch = require("node-fetch");
 
 const {
   runBureauAndEmployment,
   computeLTI,
+  normalizeBureauAccount,
 } = require("../stage2-bureau");
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -51,7 +61,7 @@ function mockMLFetch(ok = true) {
   );
 }
 
-function mockBureauFetch(ok = true) {
+function mockBureauFetch(ok = true, bureauOverrides = {}) {
   // node-fetch is used for both bureau and ML calls in stage2
   // We mock a single implementation that serves both
   fetch.mockImplementation((url) => {
@@ -61,7 +71,13 @@ function mockBureauFetch(ok = true) {
       json: () =>
         Promise.resolve(
           url.includes("bureau")
-            ? { bureau_score: 650, has_bureau_record: true, active_defaults: 0, competitor_loans: 0 }
+            ? {
+                bureau_score: 650,
+                has_bureau_record: true,
+                active_defaults: 0,
+                competitor_loans: 0,
+                ...bureauOverrides,
+              }
             : { pDefault: 0.05, model: "woe_scorecard" }
         ),
     });
@@ -97,6 +113,7 @@ describe("runBureauAndEmployment", () => {
     getIMSSEmployment.mockResolvedValue(IMSS_ACTIVE);
     getAFORE.mockResolvedValue(AFORE_DATA);
     mockBureauFetch();
+    mockCompetitorConfigGet.mockResolvedValue({ exists: false }); // seed list
   });
 
   it("returns IMSS data on success", async () => {
@@ -225,5 +242,93 @@ describe("runBureauAndEmployment", () => {
     // of 100 apart — asserting that gap catches the exact bug the ADR warns
     // about: someone deduplicating the two into a single unit.
     expect(result.data.lti.ltiPercent).toBeCloseTo(body.loan_to_salary_ratio * 100);
+  });
+
+  // ── ADR-005 Finding 7 — creditor-name normalisation & derived matching ────
+
+  it("normalises bureau accounts to a single `otorgante` field on the adapter boundary", async () => {
+    mockBureauFetch(true, {
+      cuentas: [{ otorgante: "BANCOMER" }, { nombreOtorgante: "KUESKI PAY SA DE CV" }],
+    });
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.bureau.accounts).toEqual([
+      { otorgante: "BANCOMER" },
+      { otorgante: "KUESKI PAY SA DE CV" },
+    ]);
+  });
+
+  it("derives competitorLoansByName as 0 with no accounts, without reading config", async () => {
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.bureau.competitorLoansByName).toBe(0);
+    expect(mockCompetitorConfigGet).not.toHaveBeenCalled();
+  });
+
+  it("derives competitorLoansByName from the normalised accounts against the seed list", async () => {
+    mockBureauFetch(true, {
+      cuentas: [
+        { otorgante: "BANCOMER" },
+        { otorgante: "KUESKI PAY SA DE CV" },
+        { nombreOtorgante: "MoneyMan Mexico" },
+      ],
+    });
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.bureau.competitorLoansByName).toBe(2);
+  });
+
+  it("leaves competitorLoansByName unset (not fabricated) when config is unreadable", async () => {
+    mockBureauFetch(true, { cuentas: [{ otorgante: "KUESKI PAY" }] });
+    mockCompetitorConfigGet.mockRejectedValue(new Error("firestore down"));
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.bureau.competitorLoansByName).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ stage: "stage2" }),
+      expect.stringContaining("Competitor-lender config unavailable")
+    );
+  });
+
+  it("does not fabricate competitorLoansByName when the bureau call itself fails", async () => {
+    mockBureauFetch(false);
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.bureau.skipped).toBe(true);
+    expect(result.data.bureau.competitorLoansByName).toBeUndefined();
+    expect(mockCompetitorConfigGet).not.toHaveBeenCalled();
+  });
+
+  it("leaves the opaque competitorLoans count untouched by the derived name match", async () => {
+    mockBureauFetch(true, {
+      competitor_loans: 0,
+      cuentas: [{ otorgante: "KUESKI PAY SA DE CV" }],
+    });
+    const result = await runBureauAndEmployment(BASE_APPLICANT, {}, { logger });
+    expect(result.data.bureau.competitorLoans).toBe(0);
+    expect(result.data.bureau.competitorLoansByName).toBe(1);
+  });
+});
+
+// ── normalizeBureauAccount ────────────────────────────────────────────────
+
+describe("normalizeBureauAccount", () => {
+  it("passes through `otorgante` unchanged", () => {
+    expect(normalizeBureauAccount({ otorgante: "BANCOMER" })).toEqual({ otorgante: "BANCOMER" });
+  });
+
+  it("maps `nombreOtorgante` onto `otorgante` and drops the alternate spelling", () => {
+    const result = normalizeBureauAccount({ nombreOtorgante: "KUESKI PAY" });
+    expect(result).toEqual({ otorgante: "KUESKI PAY" });
+    expect(result.nombreOtorgante).toBeUndefined();
+  });
+
+  it("prefers `otorgante` when both spellings are present", () => {
+    const result = normalizeBureauAccount({ otorgante: "A", nombreOtorgante: "B" });
+    expect(result.otorgante).toBe("A");
+  });
+
+  it("emits otorgante: null when neither spelling is present, keeping other fields", () => {
+    const result = normalizeBureauAccount({ saldo: 1200 });
+    expect(result).toEqual({ saldo: 1200, otorgante: null });
+  });
+
+  it("passes through non-object input unchanged", () => {
+    expect(normalizeBureauAccount(null)).toBe(null);
   });
 });
