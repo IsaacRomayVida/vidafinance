@@ -18,6 +18,11 @@
  *  - E9: the loan was read OUTSIDE the transaction that wrote it, and dedup
  *    was per-batch rather than per-row, so an interrupted batch re-deducted
  *    every row on retry.
+ *  - E7: the fallback deduction was derived from `loan.monthlyPayment` and
+ *    `loan.payPeriodsPerMonth`, two fields nothing has ever written, so it
+ *    always collapsed to `ceil(loan.total / 2)` — the bi-weekly figure, billed
+ *    to every borrower at every cadence, ignoring the amortisation schedule
+ *    they actually signed.
  */
 export {};
 
@@ -223,12 +228,42 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/** `YYYY-MM-DD` as the local midnight `calculateNextPayrollDate` produces. */
+const localMidnight = (day: string): Date => {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y!, m! - 1, d!);
+};
+
+/** What a persisted installment actually looks like: a Firestore `Timestamp`,
+ *  i.e. an object whose only relevant surface is `toDate()`. */
+const installment = (day: string, amount: number, number = 1) => ({
+  number,
+  amount,
+  dueDate: { toDate: () => localMidnight(day) },
+});
+
+/**
+ * A loan as `requestLoan` writes it: $5,000 principal at the 30% fee, so
+ * `total` 6,500, repayable in the one bullet installment REPAYMENT_STRUCTURE
+ * defines, due inside the default pay period.
+ *
+ * `monthlyPayment` and `payPeriodsPerMonth` are seeded ON PURPOSE even though
+ * no production writer exists for either. They are the phantom fields E7 was
+ * about, and their values here (2000 / 2 → an expected 1000) differ from every
+ * schedule-derived figure below, so any test that still reads them gets a
+ * visibly wrong answer instead of an accidentally-right one.
+ */
 function seedLoan(id: string, over: Record<string, unknown> = {}) {
   mockStore.loans[id] = {
     employeeId: 'emp-1',
     employerId: EMPLOYER_UID,
     status: 'active',
+    amount: 5000,
+    fee: 1500,
+    total: 6500,
     remainingBalance: 6500,
+    borrowerSnapshot: { payFrequency: 'biweekly' },
+    repaymentSchedule: [installment('2026-07-10', 6500)],
     monthlyPayment: 2000,
     payPeriodsPerMonth: 2,
     ...over,
@@ -433,7 +468,8 @@ describe('E8 — a client-supplied deduction cannot exceed the obligation', () =
   });
 
   it('caps the fallback (no CSV amount) at the balance and never over-collects', async () => {
-    // monthlyPayment 2000 over 2 periods = 1000 expected, but only 400 is owed.
+    // The schedule says 6,500 is due this period, but 6,100 of it has already
+    // been collected, so only the 400 still outstanding may be taken.
     seedLoan('loan-1', { remainingBalance: 400 });
 
     const res = await processPayroll(employerRequest(payload([row()])));
@@ -557,5 +593,299 @@ describe('E9 — an interrupted batch does not re-deduct on retry', () => {
     expect(res).toMatchObject({ status: 'already_processed', processedCount: 7 });
     expect(mockStore.transactionCount).toBe(0);
     expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(6500);
+  });
+});
+
+// ─── E7 — the deduction is the contractual schedule, not a phantom average ───
+
+describe('E7 — the fallback deduction comes from the loan\'s repayment schedule', () => {
+  /** A window of `days` length ending on `end`, for readability below. */
+  const window = (start: string, end: string, rows: Array<Record<string, unknown>>) => ({
+    employerId: EMPLOYER_UID,
+    payPeriodStart: start,
+    payPeriodEnd: end,
+    rows,
+  });
+
+  it('does not bill a weekly-paid borrower the bi-weekly figure every week', async () => {
+    // THE defect, in money. $5,000 at the 30% fee → total 6,500, contractually
+    // repayable in one installment on 2026-07-27. The old code derived
+    // ceil(total / 2) = 3,250 and took it from EVERY paycheck: three weekly
+    // batches would have collected 6,500 by the second week and closed the loan
+    // a month early, having taken 3,250 out of paychecks that owed nothing yet.
+    seedLoan('loan-1', {
+      borrowerSnapshot: { payFrequency: 'weekly' },
+      repaymentSchedule: [installment('2026-07-27', 6500)],
+    });
+
+    const weeks: Array<[string, string]> = [
+      ['2026-07-06', '2026-07-12'],
+      ['2026-07-13', '2026-07-19'],
+      ['2026-07-20', '2026-07-26'],
+    ];
+    const collected: number[] = [];
+    for (const [start, end] of weeks) {
+      const res = await processPayroll(employerRequest(window(start, end, [row()])));
+      collected.push(res.results![0]!.deductionAmount);
+      expect(res.results?.[0]).toMatchObject({
+        status: 'skipped',
+        error: 'no_installment_due_this_period',
+      });
+    }
+
+    // Nothing was due in any of those weeks, so nothing was taken.
+    expect(collected).toEqual([0, 0, 0]);
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(6500);
+
+    // The week the installment actually falls due collects it, once, in full.
+    const due = await processPayroll(employerRequest(window('2026-07-27', '2026-08-02', [row()])));
+    expect(due.results?.[0]).toMatchObject({ status: 'deducted', deductionAmount: 6500, newBalance: 0 });
+  });
+
+  it('collects only the installments whose due date falls in the window', async () => {
+    // A three-installment schedule. The window covers the second one alone.
+    seedLoan('loan-1', {
+      repaymentSchedule: [
+        installment('2026-06-15', 2167, 1),
+        installment('2026-07-15', 2167, 2),
+        installment('2026-08-15', 2166, 3),
+      ],
+      // The first installment has already been paid, so it must not be
+      // re-collected as arrears.
+      remainingBalance: 6500 - 2167,
+    });
+
+    const res = await processPayroll(
+      employerRequest(window('2026-07-01', '2026-07-15', [row()])),
+    );
+
+    expect(res.results?.[0]).toMatchObject({
+      status: 'deducted',
+      deductionAmount: 2167,
+      newBalance: 2166,
+    });
+  });
+
+  it('does not reach forward for an installment that has not come due', async () => {
+    seedLoan('loan-1', {
+      repaymentSchedule: [
+        installment('2026-07-15', 2167, 1),
+        installment('2026-08-15', 4333, 2),
+      ],
+    });
+
+    // Window closes the day before the first installment is due.
+    const res = await processPayroll(
+      employerRequest(window('2026-07-01', '2026-07-14', [row()])),
+    );
+
+    expect(res.results?.[0]).toMatchObject({ status: 'skipped', deductionAmount: 0 });
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(6500);
+  });
+
+  it('includes an installment due exactly on the last day of the window', async () => {
+    // Off-by-one on the boundary is a whole installment either way.
+    seedLoan('loan-1', { repaymentSchedule: [installment('2026-07-15', 6500)] });
+
+    const res = await processPayroll(
+      employerRequest(window('2026-07-01', '2026-07-15', [row()])),
+    );
+
+    expect(res.results?.[0]).toMatchObject({ status: 'deducted', deductionAmount: 6500 });
+  });
+
+  it('catches up an installment that fell due before this window instead of dropping it', async () => {
+    // `overdue` is a deductible status, so an installment whose date has passed
+    // is the ordinary case, not an exotic one. A strict [start, end] band would
+    // never contain it again and the channel would collect nothing on this loan
+    // for the rest of its life.
+    seedLoan('loan-1', {
+      status: 'overdue',
+      repaymentSchedule: [installment('2026-05-30', 6500)],
+    });
+
+    const res = await processPayroll(
+      employerRequest(window('2026-07-01', '2026-07-15', [row()])),
+    );
+
+    expect(res.results?.[0]).toMatchObject({ status: 'deducted', deductionAmount: 6500, newBalance: 0 });
+  });
+
+  it('nets off repayments that arrived by another channel', async () => {
+    // The borrower paid 2,000 by card. The schedule still says 6,500 is due,
+    // but only 4,500 is still owed and only 4,500 may be withheld.
+    seedLoan('loan-1', {
+      repaymentSchedule: [installment('2026-07-10', 6500)],
+      remainingBalance: 4500,
+    });
+
+    const res = await processPayroll(employerRequest(payload([row()])));
+
+    expect(res.results?.[0]).toMatchObject({ status: 'deducted', deductionAmount: 4500, newBalance: 0 });
+  });
+
+  it('never collects more than the contract across the whole schedule', async () => {
+    seedLoan('loan-1', {
+      repaymentSchedule: [
+        installment('2026-07-10', 3250, 1),
+        installment('2026-08-10', 3250, 2),
+      ],
+    });
+
+    const first = await processPayroll(employerRequest(window('2026-07-01', '2026-07-15', [row()])));
+    const second = await processPayroll(employerRequest(window('2026-08-01', '2026-08-15', [row()])));
+    // A third batch after the schedule is exhausted must take nothing.
+    const third = await processPayroll(employerRequest(window('2026-09-01', '2026-09-15', [row()])));
+
+    const total = [first, second, third].reduce((s, r) => s + r.results![0]!.deductionAmount, 0);
+    expect(total).toBe(6500);
+    expect(third.results?.[0]?.status).toBe('skipped');
+    expect(mockStore.loans['loan-1']?.['status']).toBe('repaid');
+  });
+
+  // ── The divisor ───────────────────────────────────────────────────────────
+
+  it('cannot produce an unbounded deduction from a zero divisor', async () => {
+    // `Number(loan.payPeriodsPerMonth ?? 2)` did not catch 0, and
+    // `Math.ceil(6500 / 0)` is Infinity, which `Math.min(Infinity, balance)`
+    // turns into "collect the entire loan from one paycheck". There is no
+    // division left to guard — the amount is read off the schedule — so the
+    // assertion is that these fields have no influence at all.
+    seedLoan('loan-1', {
+      monthlyPayment: 6500,
+      payPeriodsPerMonth: 0,
+      repaymentSchedule: [installment('2026-07-10', 1000)],
+    });
+
+    const res = await processPayroll(employerRequest(payload([row()])));
+
+    expect(res.results?.[0]?.deductionAmount).toBe(1000);
+    expect(Number.isFinite(res.results![0]!.deductionAmount)).toBe(true);
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(5500);
+    expect(mockStore.loans['loan-1']?.['status']).toBe('active');
+  });
+
+  it('ignores the phantom fields even when they carry plausible values', async () => {
+    seedLoan('loan-1', {
+      monthlyPayment: 2000,
+      payPeriodsPerMonth: 2,        // the old code's answer: 1000
+      repaymentSchedule: [installment('2026-07-10', 1625)],
+    });
+
+    const res = await processPayroll(employerRequest(payload([row()])));
+
+    expect(res.results?.[0]?.deductionAmount).toBe(1625);
+  });
+
+  // ── Loans with no usable schedule ─────────────────────────────────────────
+
+  it('fails a row whose loan carries no repayment schedule rather than guessing', async () => {
+    // Loans predating #424 have none. The figure the old code invented for them
+    // was exactly the over-collection this error exists to prevent.
+    seedLoan('loan-1', { repaymentSchedule: undefined });
+
+    const res = await processPayroll(employerRequest(payload([row()])));
+
+    expect(res.results?.[0]).toMatchObject({
+      status: 'error',
+      deductionAmount: 0,
+      error: 'loan_missing_repayment_schedule',
+    });
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(6500);
+    expect(mockStore.payrollDeductions).toEqual({});
+    expect(mockNotifications).toEqual([]);
+  });
+
+  it.each([
+    ['an empty schedule', []],
+    ['a non-array schedule', { number: 1, amount: 6500 }],
+    ['an unreadable due date', [{ number: 1, amount: 6500, dueDate: 'not-a-date' }]],
+    ['a missing due date', [{ number: 1, amount: 6500 }]],
+    ['a non-numeric amount', [{ number: 1, amount: 'mucho', dueDate: { toDate: () => new Date(2026, 6, 10) } }]],
+    ['a negative amount', [{ number: 1, amount: -100, dueDate: { toDate: () => new Date(2026, 6, 10) } }]],
+  ])('fails closed on %s', async (_label, repaymentSchedule) => {
+    seedLoan('loan-1', { repaymentSchedule });
+
+    const res = await processPayroll(employerRequest(payload([row()])));
+
+    expect(res.results?.[0]).toMatchObject({ status: 'error', error: 'loan_missing_repayment_schedule' });
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(6500);
+  });
+
+  it('fails closed when only ONE installment of several is unreadable', async () => {
+    // Half a schedule is not a smaller schedule — its sum is the basis for how
+    // much the borrower has already paid, so a dropped entry mis-states the
+    // arrears in both directions.
+    seedLoan('loan-1', {
+      repaymentSchedule: [
+        installment('2026-07-10', 3250, 1),
+        { number: 2, amount: 3250, dueDate: undefined },
+      ],
+    });
+
+    const res = await processPayroll(employerRequest(payload([row()])));
+
+    expect(res.results?.[0]).toMatchObject({ status: 'error', error: 'loan_missing_repayment_schedule' });
+  });
+
+  it('still lets the employer collect on a schedule-less loan with an explicit amount', async () => {
+    // The missing schedule blocks the SERVER from inventing a figure; it does
+    // not strand the loan. An employer-supplied amount is still bounded by the
+    // obligation check E8 added.
+    seedLoan('loan-1', { repaymentSchedule: undefined });
+
+    const res = await processPayroll(employerRequest(payload([row({ deductionAmount: 1000 })])));
+
+    expect(res.results?.[0]).toMatchObject({ status: 'deducted', deductionAmount: 1000 });
+  });
+
+  // ── Persisted date shapes ─────────────────────────────────────────────────
+
+  it.each([
+    ['a Firestore Timestamp', { toDate: () => localMidnight('2026-07-10') }],
+    ['a plain Date', localMidnight('2026-07-10')],
+    ['an ISO string', new Date(2026, 6, 10, 12).toISOString()],
+  ])('reads an installment due date stored as %s', async (_label, dueDate) => {
+    seedLoan('loan-1', { repaymentSchedule: [{ number: 1, amount: 6500, dueDate }] });
+
+    const res = await processPayroll(employerRequest(payload([row()])));
+
+    expect(res.results?.[0]).toMatchObject({ status: 'deducted', deductionAmount: 6500 });
+  });
+
+  // ── The window itself ─────────────────────────────────────────────────────
+
+  it('rejects a pay period that is not a calendar date', async () => {
+    // The window is load-bearing now: a free-text end date sorts above every
+    // real due date and would pull the whole schedule into one paycheck.
+    seedLoan('loan-1');
+
+    await expect(
+      processPayroll(employerRequest(window('2026-07-01', 'whenever', [row()]))),
+    ).rejects.toThrow();
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(6500);
+  });
+
+  it('rejects a window that ends before it starts', async () => {
+    seedLoan('loan-1');
+
+    await expect(
+      processPayroll(employerRequest(window('2026-07-15', '2026-07-01', [row()]))),
+    ).rejects.toThrow();
+    expect(mockStore.payrollBatches).toEqual({});
+  });
+
+  it('keeps the schedule-derived amount at cents', async () => {
+    seedLoan('loan-1', {
+      repaymentSchedule: [installment('2026-07-10', 2166.665)],
+      remainingBalance: 6499.99,
+    });
+
+    const res = await processPayroll(employerRequest(payload([row()])));
+
+    // 6499.99 outstanding against a 2166.665 schedule: 2166.665 - 0 collected,
+    // rounded to the centavo.
+    expect(res.results?.[0]?.deductionAmount).toBe(2166.67);
+    expect(res.results?.[0]?.newBalance).toBe(4333.32);
   });
 });

@@ -17,11 +17,27 @@ const DeductionRowSchema = z.object({
   deductionAmount: z.number().nonnegative().optional(),
 });
 
+/**
+ * The pay-period window is load-bearing as of the schedule-derived deduction
+ * below — `payPeriodEnd` decides which contractual installments have come due —
+ * so it can no longer be an unvalidated `z.string()`. The comparison against a
+ * persisted due date is a lexicographic one on `YYYY-MM-DD`, which is
+ * chronological for that shape and meaningless for any other: a free-text end
+ * date would sort above every real due date and pull the entire schedule
+ * forward into one paycheck. The employer UI submits `<input type="date">`
+ * values (`public-v2/src/pages/PayrollUpload.tsx`), which are already exactly
+ * this shape, so nothing a real caller sends is newly rejected.
+ */
+const CalendarDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected a YYYY-MM-DD date');
+
 const ProcessPayrollSchema = z.object({
   employerId: z.string().min(1),
-  payPeriodStart: z.string(), // YYYY-MM-DD
-  payPeriodEnd: z.string(),   // YYYY-MM-DD
+  payPeriodStart: CalendarDaySchema,
+  payPeriodEnd: CalendarDaySchema,
   rows: z.array(DeductionRowSchema).min(1).max(10000),
+}).refine((v) => v.payPeriodStart <= v.payPeriodEnd, {
+  message: 'payPeriodStart must not be after payPeriodEnd',
+  path: ['payPeriodEnd'],
 });
 
 // ─── Row outcomes ─────────────────────────────────────────────────────────────
@@ -60,15 +76,120 @@ function roundToCents(amount: number): number {
 /** Half a centavo — below this, a difference is float noise, not money. */
 const CENT_EPSILON = 0.005;
 
-// ─── Helper: resolve expected deduction for a loan in this pay period ──────
+// ─── The contractual repayment schedule ──────────────────────────────────────
 
-function calcExpectedDeduction(
+/** One installment as persisted on the loan, after coercion. */
+type ScheduledInstallment = { amount: number; dueDate: Date };
+
+/**
+ * A persisted installment due date, whatever shape it arrives in.
+ *
+ * `requestLoan` and `markLoanDisbursed` both write a Firestore `Timestamp`, but
+ * this value has crossed an export/import boundary in some environments and the
+ * consequence of mis-reading one is monetary, so the plain `Date` and ISO-string
+ * forms are accepted too. Anything else is `null`, which fails the whole
+ * schedule closed rather than dropping one installment out of it.
+ */
+function toDueDate(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (value !== null && typeof value === 'object' && typeof (value as { toDate?: unknown }).toDate === 'function') {
+    const converted = (value as { toDate(): unknown }).toDate();
+    return converted instanceof Date && !Number.isNaN(converted.getTime()) ? converted : null;
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
+/**
+ * The calendar day an instant falls on, as `YYYY-MM-DD`.
+ *
+ * Local getters on purpose: every installment date is produced by
+ * `calculateNextPayrollDate`, which builds LOCAL midnights, and the employer's
+ * pay-period window is a local calendar window too. Reading one back in UTC
+ * would shift a midnight-local due date onto the previous or next day for any
+ * deployment not running in UTC and move a whole installment across the window
+ * boundary.
+ */
+function calendarDay(instant: Date): string {
+  const month = String(instant.getMonth() + 1).padStart(2, '0');
+  const day = String(instant.getDate()).padStart(2, '0');
+  return `${instant.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * `loan.repaymentSchedule` as installments, or `null` if the loan does not
+ * carry a usable one.
+ *
+ * All-or-nothing by design. A schedule with one unreadable entry cannot be
+ * partially trusted: the sum of what is readable is the basis for "how much has
+ * the borrower already paid", so silently skipping an entry both understates
+ * the obligation and mis-states the arrears. The caller turns `null` into an
+ * explicit row error.
+ */
+function parseRepaymentSchedule(raw: unknown): ScheduledInstallment[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+
+  const installments: ScheduledInstallment[] = [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== 'object') return null;
+    const amount = Number((entry as Record<string, unknown>)['amount']);
+    const dueDate = toDueDate((entry as Record<string, unknown>)['dueDate']);
+    if (!Number.isFinite(amount) || amount < 0 || dueDate === null) return null;
+    installments.push({ amount, dueDate });
+  }
+  return installments;
+}
+
+/**
+ * How much of the loan the borrower has contractually been asked for by the
+ * close of this pay period, net of everything already collected.
+ *
+ * This replaces a figure derived from `loan.monthlyPayment` and
+ * `loan.payPeriodsPerMonth` — two fields NOTHING in the repository has ever
+ * written. The expression therefore always collapsed to `ceil(loan.total / 2)`,
+ * so a $5,000 loan at the 30% fee (total $6,500) took $3,250 out of a single
+ * paycheck for every borrower, whatever their real cadence: a weekly-paid
+ * employee was billed the bi-weekly figure every week, roughly double the
+ * contractual rate, and a monthly-paid one had half the entire obligation taken
+ * at once. `repaymentSchedule[]` is the amortisation the borrower was quoted,
+ * signed and was disclosed a CAT against, built by `buildLoanInstallments`
+ * against a due date resolved from that borrower's own `payFrequency` — it is
+ * the only figure in the loan document that reflects their actual cadence.
+ *
+ * The window is closed at the top (`dueDate <= payPeriodEnd`) but deliberately
+ * NOT at the bottom. A strict `[payPeriodStart, payPeriodEnd]` band drops
+ * arrears permanently: an installment whose due date passed before this batch's
+ * window — the ordinary shape of an `overdue` loan, which
+ * `DEDUCTIBLE_STATUSES` explicitly includes — would never fall inside any
+ * later window either, so the deduction channel would collect nothing on it
+ * forever. Netting off what has already been collected gives the same answer as
+ * an in-window sum for a loan in good standing, and catches up a missed
+ * installment instead of writing it off.
+ *
+ * Already-collected is derived from the balance, not from prior
+ * `payrollDeductions`: repayments also arrive by card
+ * (`functions/src/payments/`), and money is money. It can never exceed the
+ * schedule, so this cannot ask for more than the borrower agreed to in total.
+ */
+function scheduledDeductionForPeriod(
+  schedule: ScheduledInstallment[],
   remainingBalance: number,
-  monthlyPayment: number,
-  payPeriodsPerMonth: number,
+  payPeriodEnd: string,
 ): number {
-  const perPeriod = Math.ceil(monthlyPayment / payPeriodsPerMonth);
-  return Math.min(perPeriod, remainingBalance);
+  const scheduledTotal = schedule.reduce((sum, i) => sum + i.amount, 0);
+  const dueThroughPeriodEnd = schedule
+    .filter((i) => calendarDay(i.dueDate) <= payPeriodEnd)
+    .reduce((sum, i) => sum + i.amount, 0);
+
+  const alreadyCollected = Math.max(0, scheduledTotal - remainingBalance);
+  const outstandingAndDue = dueThroughPeriodEnd - alreadyCollected;
+
+  return roundToCents(Math.min(Math.max(0, outstandingAndDue), Math.max(0, remainingBalance)));
 }
 
 /**
@@ -234,14 +355,38 @@ export const processPayroll = onCall(
           const remainingBalance = roundToCents(
             Number(loan['remainingBalance'] ?? loan['total'] ?? 0),
           );
-          const monthlyPayment = Number(loan['monthlyPayment'] ?? loan['total'] ?? 0);
-          const payPeriodsPerMonth = Number(loan['payPeriodsPerMonth'] ?? 2); // default bi-weekly
-
-          const requestedAmount = row.deductionAmount ?? calcExpectedDeduction(
-            remainingBalance,
-            monthlyPayment,
-            payPeriodsPerMonth,
-          );
+          // No amount on the CSV row: fall back to what this borrower's own
+          // repayment schedule says is due by the close of this pay period.
+          let requestedAmount: number;
+          let derivedFromSchedule = false;
+          if (row.deductionAmount !== undefined) {
+            requestedAmount = row.deductionAmount;
+          } else {
+            derivedFromSchedule = true;
+            const schedule = parseRepaymentSchedule(loan['repaymentSchedule']);
+            if (schedule === null) {
+              // Loans created before #424 carry no schedule (and
+              // markLoanDisbursed deliberately leaves the pre-#437 path's
+              // alone). There is no safe amount to invent for them: the figure
+              // this branch used to produce, `ceil(total / 2)`, is precisely
+              // the over-collection this row error exists to prevent. The
+              // employer can still collect by putting an explicit
+              // `deductionAmount` on the row, which is bounded by the
+              // obligation check below.
+              return {
+                employeeId: row.employeeId,
+                status: 'error',
+                loanId,
+                deductionAmount: 0,
+                error: 'loan_missing_repayment_schedule',
+              };
+            }
+            requestedAmount = scheduledDeductionForPeriod(
+              schedule,
+              remainingBalance,
+              input.payPeriodEnd,
+            );
+          }
 
           // The obligation is the ceiling, and the obligation is server-side.
           // `row.deductionAmount` comes straight off the uploaded CSV: an
@@ -264,12 +409,19 @@ export const processPayroll = onCall(
 
           const deductionAmount = roundToCents(Math.min(requestedAmount, remainingBalance));
           if (deductionAmount <= 0) {
+            // Zero off the schedule with a balance still outstanding is not
+            // "nothing owed" — it is "the borrower's next installment is not
+            // due until after this pay period". Saying so is the whole point of
+            // billing the schedule instead of a fixed per-period figure, and an
+            // employer reading the results table has to be able to tell the two
+            // apart.
+            const nothingDueYet = derivedFromSchedule && remainingBalance > 0;
             return {
               employeeId: row.employeeId,
               status: 'skipped',
               loanId,
               deductionAmount: 0,
-              error: 'nothing_to_deduct',
+              error: nothingDueYet ? 'no_installment_due_this_period' : 'nothing_to_deduct',
             };
           }
 
