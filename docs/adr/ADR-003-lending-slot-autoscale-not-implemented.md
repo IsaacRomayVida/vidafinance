@@ -1,6 +1,6 @@
 # ADR-003 — Lending-slot auto-scaling stays unimplemented; CI gate goes hard around it
 
-- **Status:** ACCEPTED
+- **Status:** SUPERSEDED by ADR-007
 - **Date:** 2026-08-02
 - **Decider:** Funpay CTO
 - **Authority:** Isaac, 2026-08-02: "get it done now, stop asking me."
