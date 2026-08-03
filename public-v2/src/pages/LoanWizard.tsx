@@ -198,8 +198,14 @@ function PriceValue({
   const { t } = useTranslation();
   if (value === null) {
     if (status === 'loading') return <PriceShimmer width={shimmerWidth} />;
+    // --t2, not --t3 (#443). This is the reserved state: the one string that
+    // stands in for a figure the borrower came here to read. --t3 (#93aaa9) is
+    // 2.45:1 on --bg and 2.29:1 on --bg2 — under AA's 4.5:1 for body text and
+    // under even the 3:1 floor that applies to non-text UI. A reserved state
+    // nobody can read is indistinguishable from an empty slot, which is the
+    // exact failure this component exists to prevent.
     return (
-      <span data-testid="price-unavailable" style={{ color: 'var(--t3)', ...style }}>
+      <span data-testid="price-unavailable" style={{ color: 'var(--t2)', ...style }}>
         {t('wiz_price_unavailable')}
       </span>
     );
@@ -247,11 +253,19 @@ function PriceValue({
  * already drifted: the step-3 card rendered it as this block while the step-4
  * summary rendered it as an inline row, so the same disclosure had two
  * treatments in one flow. One definition means the next change reaches both.
+ *
+ * Its text is --t2, never --t3 (#443). The rule Design and I settled on is
+ * categorical rather than positional: --t3 may not carry a regulated
+ * disclosure, a reserved state or a confidence qualifier, on any page, in any
+ * file. It stays what it is good for — decorative chrome. Scoping the rule by
+ * file would not have survived the next screen someone builds; scoping it by
+ * what the text IS does.
  */
 function CatDisclosure({ cat, status }: { cat: string | null; status: ConfigStatus }) {
   const { t } = useTranslation();
   return (
     <div
+      data-testid="cat-disclosure"
       style={{
         background: 'var(--bg2)',
         borderRadius: 12,
@@ -268,7 +282,7 @@ function CatDisclosure({ cat, status }: { cat: string | null; status: ConfigStat
           marginBottom: 6,
         }}
       >
-        <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_cat_label')}</span>
+        <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_cat_label')}</span>
         <span className="cat-highlight">
           <PriceValue
             value={cat}
@@ -279,7 +293,7 @@ function CatDisclosure({ cat, status }: { cat: string | null; status: ConfigStat
           />
         </span>
       </div>
-      <p style={{ fontSize: 11, color: 'var(--t3)', margin: 0, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 11, color: 'var(--t2)', margin: 0, lineHeight: 1.5 }}>
         {t('modal_cat_note')}{' '}
         <a
           href="https://www.condusef.gob.mx"
@@ -1446,7 +1460,7 @@ export function LoanWizard() {
               {deductionDateText !== null && deductionCadenceAssumed && (
                 <p
                   data-testid="deduction-cadence-assumed"
-                  style={{ fontSize: 11, color: 'var(--t3)', margin: '2px 0 0', lineHeight: 1.5 }}
+                  style={{ fontSize: 11, color: 'var(--t2)', margin: '2px 0 0', lineHeight: 1.5 }}
                 >
                   {t('wiz_deduction_date_note')}
                 </p>
@@ -1661,7 +1675,8 @@ export function LoanWizard() {
               </div>
               {deductionDateText !== null && deductionCadenceAssumed && (
                 <p
-                  style={{ fontSize: 11, color: 'var(--t3)', margin: '2px 0 0', lineHeight: 1.5 }}
+                  data-testid="deduction-cadence-assumed"
+                  style={{ fontSize: 11, color: 'var(--t2)', margin: '2px 0 0', lineHeight: 1.5 }}
                 >
                   {t('wiz_deduction_date_note')}
                 </p>
