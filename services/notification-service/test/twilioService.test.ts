@@ -1,7 +1,7 @@
 import { setBaseEnv } from './testEnv';
 setBaseEnv();
 
-import { TwilioService } from '../src/services/twilioService';
+import { TwilioService, InvalidPhoneNumberError } from '../src/services/twilioService';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const twilioMock = require('twilio');
@@ -68,15 +68,55 @@ describe('TwilioService.sendSMS', () => {
 });
 
 describe('TwilioService — malformed phone input', () => {
-  // DEFECT: normalizePhone does not validate digit count beyond the 10/12
-  // special cases -- an empty or garbage phone string is sent to Twilio
-  // as-is (e.g. "+") instead of being rejected before the network call.
-  test('DEFECT: an empty phone string normalizes to just "+" and is still sent to Twilio', async () => {
+  // FIXED: normalizePhone now validates digit count beyond the 10/12 special
+  // cases. An empty or garbage phone string is rejected with a distinct
+  // InvalidPhoneNumberError before any network call is made, instead of being
+  // sent to Twilio as a malformed value (e.g. "+").
+  test('FIXED: an empty phone string is rejected before any Twilio call is made', async () => {
     const svc = new TwilioService();
-    await svc.sendSMS('', 'reminder');
 
-    expect(twilioMock.__messagesCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ to: '+' }),
-    );
+    await expect(svc.sendSMS('', 'reminder')).rejects.toThrow(InvalidPhoneNumberError);
+    expect(twilioMock.__messagesCreate).not.toHaveBeenCalled();
+  });
+
+  test('FIXED: a garbage (non-numeric) phone string is rejected before any Twilio call is made', async () => {
+    const svc = new TwilioService();
+
+    await expect(svc.sendWhatsApp('not-a-phone', 'hola')).rejects.toThrow(InvalidPhoneNumberError);
+    expect(twilioMock.__messagesCreate).not.toHaveBeenCalled();
+  });
+
+  test('FIXED: a too-short number is rejected instead of being silently prefixed with +', async () => {
+    const svc = new TwilioService();
+
+    await expect(svc.sendSMS('12345', 'reminder')).rejects.toThrow(/not a valid Mexican phone number/);
+    expect(twilioMock.__messagesCreate).not.toHaveBeenCalled();
+  });
+
+  test('FIXED: a 12-digit number that does not carry the 52 country code is rejected', async () => {
+    const svc = new TwilioService();
+
+    await expect(svc.sendSMS('551234567890', 'reminder')).rejects.toThrow(InvalidPhoneNumberError);
+    expect(twilioMock.__messagesCreate).not.toHaveBeenCalled();
+  });
+
+  test('a rejected number is distinguishable from a provider delivery failure', async () => {
+    const svc = new TwilioService();
+    let rejectedError: unknown;
+    try {
+      await svc.sendSMS('', 'reminder');
+    } catch (err) {
+      rejectedError = err;
+    }
+    expect(rejectedError).toBeInstanceOf(InvalidPhoneNumberError);
+
+    twilioMock.__messagesCreate.mockRejectedValueOnce(new Error('Twilio 21211: invalid to number'));
+    let deliveryError: unknown;
+    try {
+      await svc.sendSMS('5512345678', 'reminder');
+    } catch (err) {
+      deliveryError = err;
+    }
+    expect(deliveryError).not.toBeInstanceOf(InvalidPhoneNumberError);
   });
 });

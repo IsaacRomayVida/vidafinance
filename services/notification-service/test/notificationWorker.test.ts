@@ -53,14 +53,14 @@ describe('notificationWorker — phone-based job types', () => {
     mockGetUser.mockResolvedValue({ phone: '5587654321', email: 'a@b.com' });
     await notificationWorker.processor(job({ type: 'loan_approved', userId: 'user_1', amount: 500 }));
 
-    expect(mockGetUser).toHaveBeenCalledWith('user_1');
+    expect(mockGetUser).toHaveBeenCalledWith('user_1', ['phone']);
     expect(mockSendWhatsApp).toHaveBeenCalledWith('5587654321', expect.stringMatching(/APROBADO/));
   });
 
   test('loan_approved falls back to employeeId (legacy producers) when userId is absent', async () => {
     mockGetUser.mockResolvedValue({ phone: '5511112222', email: 'a@b.com' });
     await notificationWorker.processor(job({ type: 'loan_approved', employeeId: 'emp_1', amount: 500 }));
-    expect(mockGetUser).toHaveBeenCalledWith('emp_1');
+    expect(mockGetUser).toHaveBeenCalledWith('emp_1', ['phone']);
   });
 
   test('loan_rejected includes the rejection reason when present', async () => {

@@ -1,5 +1,15 @@
 import twilio from 'twilio';
 
+// Distinct from a provider (Twilio) delivery failure -- this is thrown before
+// any network call is made, so callers can tell "we never had a sendable
+// number" from "Twilio rejected the send".
+export class InvalidPhoneNumberError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidPhoneNumberError';
+  }
+}
+
 export class TwilioService {
   private client = twilio(
     process.env.TWILIO_ACCOUNT_SID,
@@ -27,6 +37,8 @@ export class TwilioService {
     if (digits.length === 12 && digits.startsWith('52')) return `+${digits}`;
     // 10-digit Mexican number — prepend +52
     if (digits.length === 10) return `+52${digits}`;
-    return `+${digits}`;
+    throw new InvalidPhoneNumberError(
+      `"${p}" is not a valid Mexican phone number (expected 10 digits, or 12 digits with the 52 country code); got ${digits.length} digit(s)`,
+    );
   }
 }
