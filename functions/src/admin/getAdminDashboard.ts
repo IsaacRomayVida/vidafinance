@@ -5,6 +5,7 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { DISBURSED_STATUSES, REPAID_STATUSES } from '../loans/loanStatus';
 
 export const getAdminDashboard = onCall(
   { enforceAppCheck: true },
@@ -26,11 +27,14 @@ export const getAdminDashboard = onCall(
       today.setHours(0, 0, 0, 0);
 
       const [allActiveLoans, todayDisbursements, overdueLoans, employersSnap] = await Promise.all([
-        db.collection('loans').where('status', '==', 'disbursed').get(),
+        // Both live disbursement spellings — 'active' (automatic SoftCrédito
+        // path) and 'disbursed' (manual ops-confirmed path) — must be counted,
+        // or the automatic-path half of the portfolio silently disappears.
+        db.collection('loans').where('status', 'in', DISBURSED_STATUSES).get(),
         db
           .collection('loans')
           .where('disbursedAt', '>=', Timestamp.fromDate(today))
-          .where('status', 'in', ['disbursed', 'repaid'])
+          .where('status', 'in', [...DISBURSED_STATUSES, ...REPAID_STATUSES])
           .get(),
         db.collection('loans').where('status', '==', 'overdue').get(),
         db.collection('employers').where('status', '==', 'approved').get(),

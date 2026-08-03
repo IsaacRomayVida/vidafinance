@@ -8,28 +8,39 @@ import { withErrorHandling } from '../utils/errorHandler';
 import { validateInput } from '../utils/validateInput';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
+import { LOAN_STATUS } from './loanStatus';
 
+// NOT DEPLOYED — not exported from index.ts / not in deploy.yml's FUNCTIONS
+// list. The live `updateLoanStatus` callable is the one inline in index.ts,
+// which is deliberately permissive (any status string, gated only by the
+// DISBURSEMENT_INITIATED_STATUSES/PRE_DISBURSEMENT_STATUSES rewind guard in
+// loanStatusTransitions.ts — see the P0-B comment on onLoanApproved) because
+// ops needs to set the handful of ops-only terminal statuses
+// (in_collections, written_off, cancelled) that no automated pipeline writes.
+// This stricter, enum-validated variant is kept as the reference for a
+// planned consolidation, and its enum/transition table are pinned to the
+// canonical vocabulary in `./loanStatus` so the two do not drift again.
 const UpdateLoanStatusSchema = z.object({
   loanId: z.string().min(1),
   newStatus: z.enum([
-    'approved',
-    'disbursed',
-    'repaid',
-    'overdue',
-    'in_collections',
-    'written_off',
-    'cancelled',
+    LOAN_STATUS.APPROVED,
+    LOAN_STATUS.DISBURSED,
+    LOAN_STATUS.REPAID,
+    LOAN_STATUS.OVERDUE,
+    LOAN_STATUS.IN_COLLECTIONS,
+    LOAN_STATUS.WRITTEN_OFF,
+    LOAN_STATUS.CANCELLED,
   ]),
   reason: z.string().min(10).max(500, 'Reason required (10-500 chars)'),
   notes: z.string().max(1000).optional(),
 });
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  pending: ['cancelled'],
-  approved: ['cancelled', 'disbursed'],
-  disbursed: ['repaid', 'overdue'],
-  overdue: ['in_collections', 'repaid', 'written_off'],
-  in_collections: ['repaid', 'written_off'],
+  [LOAN_STATUS.PENDING]: [LOAN_STATUS.CANCELLED],
+  [LOAN_STATUS.APPROVED]: [LOAN_STATUS.CANCELLED, LOAN_STATUS.DISBURSED],
+  [LOAN_STATUS.DISBURSED]: [LOAN_STATUS.REPAID, LOAN_STATUS.OVERDUE],
+  [LOAN_STATUS.OVERDUE]: [LOAN_STATUS.IN_COLLECTIONS, LOAN_STATUS.REPAID, LOAN_STATUS.WRITTEN_OFF],
+  [LOAN_STATUS.IN_COLLECTIONS]: [LOAN_STATUS.REPAID, LOAN_STATUS.WRITTEN_OFF],
 };
 
 export const updateLoanStatus = onCall(

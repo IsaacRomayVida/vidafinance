@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { OUTSTANDING_STATUSES } from '../loans/loanStatus';
 
 export const getEmployeeDashboard = onCall(
   { enforceAppCheck: true },
@@ -49,9 +50,7 @@ export const getEmployeeDashboard = onCall(
           .get();
 
         const loans = userLoans.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
-        const activeLoans = loans.filter((l) =>
-          ['pending', 'approved', 'disbursed', 'active'].includes(l['status'] as string)
-        );
+        const activeLoans = loans.filter((l) => OUTSTANDING_STATUSES.includes(l['status'] as string));
 
         return {
           employee: {
@@ -70,9 +69,7 @@ export const getEmployeeDashboard = onCall(
 
       const emp = employeeDoc.data()!;
       const loans = loansSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
-      const activeLoans = loans.filter((l) =>
-        ['pending', 'approved', 'active', 'disbursement_queued'].includes(l['status'] as string)
-      );
+      const activeLoans = loans.filter((l) => OUTSTANDING_STATUSES.includes(l['status'] as string));
 
       return {
         employee: {

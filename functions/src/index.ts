@@ -34,6 +34,12 @@ import {
   DISBURSEMENT_INITIATED_STATUSES,
   PRE_DISBURSEMENT_STATUSES,
 } from './loans/loanStatusTransitions';
+import {
+  ALL_LOAN_STATUSES,
+  isCreditRestoringRepayment,
+  isDisbursedStatus,
+  isRepaidStatus,
+} from './loans/loanStatus';
 import { allowTestBypass } from './utils/environment';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
 
@@ -910,6 +916,19 @@ export const updateLoanStatus = onCall(
       const { loanId, status, note } = request.data as UpdateLoanStatusData;
 
       if (!loanId || !status) throw new HttpsError('invalid-argument', 'loanId and status are required');
+      // Closes the vocabulary-drift entry point: this callable used to accept
+      // any string, so ops (or a runbook typo) could write a spelling like
+      // 'paid' that no report reader recognizes as repaid. Validating against
+      // the single canonical vocabulary (functions/src/loans/loanStatus.ts)
+      // makes that class of drift impossible going forward without narrowing
+      // which of the real, live statuses ops can set — every one of them is
+      // still allowed.
+      if (!(ALL_LOAN_STATUSES as readonly string[]).includes(status)) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Unknown loan status '${status}'. Must be one of: ${ALL_LOAN_STATUSES.join(', ')}`
+        );
+      }
 
       const uid = request.auth!.uid;
       const token = request.auth!.token;
@@ -1742,7 +1761,19 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
     await notifyLoanEvent('loan_rejected', { employeePhone: afterData['employeePhone'], employeeEmail: afterData['employeeEmail'], employeeName: afterData['employeeName'], loanAmount: afterData['amount'] }).catch(() => {});
   }
 
-  if (beforeData['status'] === 'approved' && afterData['status'] === 'paid') {
+  // Was gated on `beforeData.status === 'approved' && afterData.status === 'paid'`
+  // — a transition no write path has ever produced. The real repayment path
+  // (processPayroll.ts) moves a loan straight from 'active'/'disbursed' to
+  // 'repaid' once its balance hits zero, so this never fired: the employer's
+  // active-loan slot was never released and the employee's available credit
+  // was never restored on repayment.
+  //
+  // Gated on the canonical 'repaid' only, NOT on every repaid spelling:
+  // payment-server writes 'paid' and increments availableCredit itself in the
+  // same transaction (order.paid, POST /internal/repayment). Firing here on
+  // 'paid' as well would restore the credit twice and let the borrower
+  // re-borrow against money they never repaid. See isCreditRestoringRepayment.
+  if (isCreditRestoringRepayment(beforeData['status'], afterData['status'])) {
     await db.collection('employers').doc(afterData['employerId'] as string).update({
       activeLoans: FieldValue.increment(-1),
     });
@@ -1755,8 +1786,8 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
         actorUid: afterData['employeeId'] as string,
         actorRole: 'employee',
         targetId: loanId,
-        before: { status: 'approved' },
-        after: { status: 'paid' },
+        before: { status: beforeData['status'] },
+        after: { status: afterData['status'] },
       });
     } catch (_) { /* non-critical */ }
   }
@@ -2135,13 +2166,17 @@ export const weeklyPortfolioSnapshot = onSchedule(
     const snap = await db.collection('loans').get();
     const loans = snap.docs.map((d) => d.data());
 
-    const cnt = (s: string) => loans.filter((l) => l['status'] === s).length;
-    const sum = (s: string) =>
-      loans.filter((l) => l['status'] === s).reduce((a, l) => a + ((l['amount'] as number) || 0), 0);
+    // 'active' AND 'disbursed' are both live "funds sent" spellings (two
+    // separate disbursement pipelines), and 'repaid' — not 'paid', which no
+    // write path has ever produced — is the only spelling a full repayment
+    // is ever written with. Counting 'paid' here always counted zero.
+    const cnt = (pred: (s: string) => boolean) => loans.filter((l) => pred(l['status'] as string)).length;
+    const sum = (pred: (s: string) => boolean) =>
+      loans.filter((l) => pred(l['status'] as string)).reduce((a, l) => a + ((l['amount'] as number) || 0), 0);
 
-    const active = cnt('active');
-    const overdue = cnt('overdue');
-    const paid = cnt('paid');
+    const active = cnt(isDisbursedStatus);
+    const overdue = cnt((s) => s === 'overdue');
+    const paid = cnt(isRepaidStatus);
     const total = active + overdue + paid;
     const date = new Date().toISOString().split('T')[0];
 
@@ -2150,8 +2185,8 @@ export const weeklyPortfolioSnapshot = onSchedule(
       totalActive: active,
       totalOverdue: overdue,
       totalPaid: paid,
-      totalDisbursedMXN: sum('active') + sum('overdue') + sum('paid'),
-      totalOutstandingMXN: sum('active') + sum('overdue'),
+      totalDisbursedMXN: sum(isDisbursedStatus) + sum((s) => s === 'overdue') + sum(isRepaidStatus),
+      totalOutstandingMXN: sum(isDisbursedStatus) + sum((s) => s === 'overdue'),
       overdueRate: total > 0 ? overdue / total : 0,
       snapshotAt: FieldValue.serverTimestamp(),
     });
