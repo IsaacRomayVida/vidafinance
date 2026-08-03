@@ -11,6 +11,7 @@ const SERVER_TIMESTAMP = '__serverTimestamp__';
 
 let collections = new Map(); // name -> Map(id -> data)
 let autoId = 0;
+let failingAdds = new Map(); // collection name -> error message to throw on add()
 
 function col(name) {
   if (!collections.has(name)) collections.set(name, new Map());
@@ -55,6 +56,11 @@ function collection(name) {
       return docRef(name, id || `auto_${++autoId}`);
     },
     async add(data) {
+      // Fault injection: lets a test exercise the routes while Firestore is
+      // unreachable. Every route below writes to `incident_log` on its
+      // failure paths, so without this the outage case -- the one where
+      // responding at all matters most -- is untestable.
+      if (failingAdds.has(name)) throw new Error(failingAdds.get(name));
       const id = `auto_${++autoId}`;
       col(name).set(id, applyFieldValues({}, data));
       return docRef(name, id);
@@ -108,6 +114,12 @@ const admin = {
   __reset() {
     collections = new Map();
     autoId = 0;
+    failingAdds = new Map();
+  },
+  // Arm `collection(name).add()` to reject, simulating Firestore being
+  // unreachable for that collection.
+  __failAdds(collName, message = 'Firestore unavailable') {
+    failingAdds.set(collName, message);
   },
   __seed(collName, id, data) {
     col(collName).set(id, { ...data });
