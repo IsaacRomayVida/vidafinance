@@ -507,7 +507,9 @@ table tr:last-child td{border-bottom:none}
 .doc-link{display:inline-block;padding:3px 10px;font-size:12px;font-weight:600;color:var(--brand);background:var(--bg2);border-radius:6px;text-decoration:none;border:1px solid rgba(25,68,69,.12);transition:all .2s;margin-right:4px}
 .doc-link:hover{background:var(--brand);color:#fff}
 .cat-highlight{color:var(--gold);font-weight:700}
-.cat-note{font-size:11px;color:var(--t3);margin-top:8px}
+/* Regulated disclosure, so --t2 and never --t3 (#443): --t3 is 2.45:1 on --bg,
+   below AA for body text and below even the 3:1 non-text floor. */
+.cat-note{font-size:11px;color:var(--t2);margin-top:8px}
 .cat-note a{color:var(--brand)}
 .health-strip{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0;margin-bottom:12px}
 .health-pill{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}

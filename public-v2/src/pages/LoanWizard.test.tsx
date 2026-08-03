@@ -500,3 +500,82 @@ describe('LoanWizard — the CAT disclosure is the same on every card', () => {
     expect(screen.getAllByRole('link', { name: /condusef/i }).length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * --t3 may not carry a regulated disclosure, a reserved state, or a confidence
+ * qualifier (#443).
+ *
+ * The rule is categorical, not positional, and that is the point. --t3
+ * (#93aaa9) measures 2.45:1 on --bg and 2.29:1 on --bg2 — under AA's 4.5:1 for
+ * body text, and under even the 3:1 floor that applies to non-text UI. A
+ * file-scoped or node-scoped rule would have to be re-derived for every new
+ * screen; a rule about what the text IS travels with the content.
+ *
+ * These assert the ABSENCE of --t3 rather than the presence of --t2, for the
+ * same reason the banner test asserts "none of the four status pairs" rather
+ * than "not red": the defect has already recurred through more than one token,
+ * so the guardrail has to be the rule and not the instance.
+ */
+describe('LoanWizard — disclosure text is never in the low-contrast tertiary', () => {
+  /** Every element in the subtree whose inline style names --t3, root included. */
+  const t3Nodes = (root: HTMLElement) =>
+    [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))].filter((el) =>
+      (el.getAttribute('style') ?? '').includes('--t3')
+    );
+
+  it('renders the CAT disclosure — label and note — above the tertiary', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    const blocks = screen.getAllByTestId('cat-disclosure');
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const block of blocks) {
+      expect(t3Nodes(block)).toHaveLength(0);
+      // The note is the part that explains what the four-digit figure means.
+      expect(within(block).getByRole('link', { name: /condusef/i })).toBeInTheDocument();
+    }
+  });
+
+  it('keeps the same disclosure treatment on the step-4 review card', async () => {
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+    await goToReview();
+
+    const blocks = screen.getAllByTestId('cat-disclosure');
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const block of blocks) expect(t3Nodes(block)).toHaveLength(0);
+  });
+
+  it('renders the reserved "no disponible" state above the tertiary', async () => {
+    // Prices are readable; only the date is not. One reserved slot, one
+    // definition — PriceValue is the single place this state is styled.
+    getLoanConfigMock.mockResolvedValue({
+      data: { ...READY_CONFIG.data, estimatedDeductionDate: 'not-a-date' },
+    });
+
+    render(<LoanWizard />);
+    await goToQuote();
+
+    const reserved = screen.getAllByTestId('price-unavailable');
+    expect(reserved.length).toBeGreaterThan(0);
+    for (const slot of reserved) expect(t3Nodes(slot)).toHaveLength(0);
+  });
+
+  it('renders the cadence qualifier above the tertiary, on both cards', async () => {
+    getLoanConfigMock.mockResolvedValue({
+      data: { ...READY_CONFIG.data, payFrequencySource: 'default_monthly' },
+    });
+
+    render(<LoanWizard />);
+    await goToReview();
+
+    // Step 4 carried the same paragraph without the testid, so it was outside
+    // every existing assertion about this qualifier.
+    const notes = screen.getAllByTestId('deduction-cadence-assumed');
+    expect(notes.length).toBeGreaterThan(0);
+    for (const note of notes) expect(t3Nodes(note)).toHaveLength(0);
+  });
+});
