@@ -192,17 +192,17 @@ export function LoanModal({
           </div>
 
           <div className="form-group" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
-            <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_term')}</span>
+            <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_term')}</span>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--t1)' }}>{t('modal_term_30')} · {t('modal_rate')}</span>
           </div>
 
           <div style={{ borderTop: '1px solid rgba(25,68,69,0.06)', borderBottom: '1px solid rgba(25,68,69,0.06)', padding: '20px 0', marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_loan_amount')}</span>
+              <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_loan_amount')}</span>
               <span className="money" style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>${fmt(amount)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_fee')}</span>
+              <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_fee')}</span>
               <span className="money" style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>${fmt(fee)}</span>
             </div>
             <div style={{ height: 1, background: 'rgba(25,68,69,0.06)', margin: '4px 0' }} />
@@ -211,11 +211,11 @@ export function LoanModal({
               <span className="money" style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>${fmt(total)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_due_date')}</span>
+              <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_due_date')}</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>{dueDate.toLocaleDateString('es-MX')}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span style={{ fontSize: 13, color: 'var(--t3)' }}>{t('modal_cat_label')}</span>
+              <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_cat_label')}</span>
               <span className="cat-highlight">{cat}{t('modal_cat_annual')}</span>
             </div>
             <p className="cat-note">

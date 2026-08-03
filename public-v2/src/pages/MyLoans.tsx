@@ -333,7 +333,7 @@ function LoanRow({
       >
         <td style={{ fontWeight: 500 }}>
           ${fmt(loanPrincipal(loan))}
-          <span style={{ fontSize: 11, color: 'var(--t3)', marginLeft: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--t2)', marginLeft: 4 }}>
             MXN
           </span>
         </td>
@@ -562,7 +562,7 @@ function DetailItem({
           fontWeight: 700,
           textTransform: 'uppercase' as const,
           letterSpacing: 2,
-          color: 'var(--t3)',
+          color: 'var(--t2)',
           marginBottom: 4,
         }}
       >
