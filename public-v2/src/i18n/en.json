@@ -940,6 +940,7 @@
   "payroll_status_skipped": "Skipped",
   "payroll_status_error": "Error",
   "payroll_status_already_processed": "Already processed",
+  "payroll_status_unknown": "Unknown",
   "payroll_upload_another": "Upload another file",
   "a11y_close": "Close",
   "a11y_open_menu": "Open menu",

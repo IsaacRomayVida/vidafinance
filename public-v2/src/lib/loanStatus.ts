@@ -29,16 +29,32 @@ export const DISBURSED_STATUSES: readonly string[] = [LOAN_STATUS.ACTIVE, LOAN_S
 export const REPAID_STATUSES: readonly string[] = [LOAN_STATUS.REPAID, ...LEGACY_REPAID_ALIASES];
 
 /**
- * The full set of statuses that belong on the employer deduction report: a
- * loan only has a deduction once funds have gone out (DISBURSED_STATUSES),
- * for as long as it's still being collected (OVERDUE), through full
- * repayment (REPAID_STATUSES, including dead aliases so a hand-written
- * legacy document doesn't silently vanish from the report). Loans that
- * haven't disbursed yet have no deduction to show.
+ * The statuses a payroll deduction may legitimately land against: funds have
+ * gone out and the debt is still owed, however badly it is going. Mirrors
+ * DEDUCTIBLE_STATUSES in functions/src/loans/loanStatus.ts, which is what
+ * processPayroll's loan lookup queries on.
+ *
+ * These two lists MUST agree. They didn't: this report billed the employer for
+ * `overdue` loans while processPayroll's lookup hardcoded ['active',
+ * 'disbursed'], so the employer withheld the money from the paycheck and the
+ * server recorded nothing against the debt.
  */
-export const DEDUCTION_REPORT_STATUSES: readonly string[] = [
+export const DEDUCTIBLE_STATUSES: readonly string[] = [
   ...DISBURSED_STATUSES,
   LOAN_STATUS.OVERDUE,
+  LOAN_STATUS.IN_COLLECTIONS,
+];
+
+/**
+ * The full set of statuses that belong on the employer deduction report: every
+ * loan a deduction can still land against (DEDUCTIBLE_STATUSES), plus the ones
+ * already paid off so the period history doesn't lose them (REPAID_STATUSES,
+ * including dead aliases so a hand-written legacy document doesn't silently
+ * vanish from the report). Loans that haven't disbursed yet have no deduction
+ * to show. Firestore's `in` operator caps at 30 values; this is well under.
+ */
+export const DEDUCTION_REPORT_STATUSES: readonly string[] = [
+  ...DEDUCTIBLE_STATUSES,
   ...REPAID_STATUSES,
 ];
 
@@ -66,5 +82,5 @@ export function isRepaidStatus(status: unknown): boolean {
 
 /** Still being actively deducted: disbursed and not yet fully repaid. */
 export function isActiveDeductionStatus(status: unknown): boolean {
-  return typeof status === 'string' && (DISBURSED_STATUSES.includes(status) || status === LOAN_STATUS.OVERDUE);
+  return typeof status === 'string' && DEDUCTIBLE_STATUSES.includes(status);
 }
