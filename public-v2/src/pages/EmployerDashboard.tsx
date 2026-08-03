@@ -9,6 +9,7 @@ import { classifyError, friendlyError } from '../lib/errors';
 import { useAuth } from '../hooks/useAuth';
 import { signOut } from 'firebase/auth';
 import { SkeletonRows } from '../components/ui/SkeletonLine';
+import { ErrorBanner } from '../components/ui/ErrorBanner';
 
 interface Loan {
   id: string;
@@ -41,13 +42,16 @@ interface EmployerData {
   curpConfig?: CurpConfig;
 }
 
+// Mirrors EmployerDashboardStats in
+// functions/src/employers/computeEmployerDashboardStats.ts — the server always
+// returns every field (zeroed, not omitted), so none of these are optional.
 interface DashStats {
-  totalEmployees?: number;
-  activeLoans?: number;
-  overdueCount?: number;
-  totalDisbursed?: number;
-  adoptionRate?: string;
-  outstandingBalance?: number;
+  totalEmployees: number;
+  activeLoans: number;
+  overdueCount: number;
+  totalDisbursed: number;
+  outstandingBalance: number;
+  adoptionRate: string;
 }
 
 type TabKey = 'all' | 'pending' | 'approved' | 'active' | 'paid' | 'rejected';
@@ -643,7 +647,12 @@ export function EmployerDashboard() {
   useEffect(() => { navigateRef.current = navigate; }, [navigate]);
 
   const [employer, setEmployer] = useState<EmployerData | null>(null);
-  const [stats, setStats] = useState<DashStats>({});
+  // null means "not loaded" — either still loading or the read failed. Never
+  // defaulted to {} on failure: a stats read failure must surface as an
+  // error, not as a plausible-looking wrong number (E4, AUDIT_EMPLOYER_PATH.md).
+  const [stats, setStats] = useState<DashStats | null>(null);
+  const [statsError, setStatsError] = useState('');
+  const [statsRetryToken, setStatsRetryToken] = useState(0);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [loading, setLoading] = useState(true);
@@ -679,14 +688,20 @@ export function EmployerDashboard() {
         return;
       }
 
-      // Fetch stats from Cloud Function
+      // Fetch stats from Cloud Function. A failure here does not block the
+      // rest of the dashboard — the loans listener below is independent and
+      // still useful — but it must not be papered over with a recomputed
+      // number either, so it gets its own error state instead of a fallback.
       try {
         const functions = getFunctions();
         const getEmployerDashboard = httpsCallable<unknown, { stats: DashStats }>(functions, 'getEmployerDashboard');
         const result = await getEmployerDashboard({});
-        if (!cancelled) setStats(result.data.stats || {});
-      } catch {
-        // fallback - stats will be computed from loans
+        if (!cancelled) {
+          setStats(result.data.stats);
+          setStatsError('');
+        }
+      } catch (err) {
+        if (!cancelled) setStatsError(friendlyError(err));
       }
 
       if (!cancelled) {
@@ -696,7 +711,7 @@ export function EmployerDashboard() {
     })();
 
     return () => { cancelled = true; };
-  }, [user, needsEmailVerification]);
+  }, [user, needsEmailVerification, statsRetryToken]);
 
   // Real-time loans listener
   useEffect(() => {
@@ -770,11 +785,12 @@ export function EmployerDashboard() {
     );
   }
 
-  // Compute stats from loans if Cloud Function didn't return them
   const pendingCount = loans.filter((l) => l.status === 'pending').length;
-  const activeCount = stats.activeLoans ?? loans.filter((l) => l.status === 'approved' || l.status === 'active').length;
-  const totalDisbursed = stats.totalDisbursed ?? loans.filter((l) => l.status !== 'rejected' && l.status !== 'pending').reduce((s, l) => s + l.amount, 0);
-  const totalEmployees = stats.totalEmployees ?? employer?.totalEmployees ?? 0;
+
+  const retryStats = () => {
+    setStatsError('');
+    setStatsRetryToken((n) => n + 1);
+  };
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'all', label: t('dash_tab_all') },
@@ -834,56 +850,78 @@ export function EmployerDashboard() {
       {/* Content */}
       <div className="dash-content">
         {/* ── Premium Employer Stats ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 40 }}>
-          {[
-            {
-              label: t('dash_total_employees'),
-              value: String(totalEmployees),
-              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a8d5d0" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
-              accent: 'rgba(168,213,208,0.1)',
-            },
-            {
-              label: t('dash_active_loans'),
-              value: String(activeCount),
-              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
-              accent: 'rgba(36,122,110,0.06)',
-            },
-            {
-              label: t('dash_pending_requests'),
-              value: String(pendingCount),
-              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
-              accent: 'rgba(162,134,87,0.06)',
-            },
-            {
-              label: t('dash_total_disbursed'),
-              value: '$' + fmt(totalDisbursed),
-              sub: 'MXN',
-              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
-              accent: 'rgba(25,68,69,0.04)',
-            },
-          ].map((stat, i) => (
-            <div key={i} style={{
-              background: '#fff', borderRadius: 20, padding: '24px 24px 20px',
-              border: '1px solid rgba(25,68,69,0.04)',
-              transition: 'all 0.3s cubic-bezier(0.22,1,0.36,1)',
-              position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 12, background: stat.accent,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+        {statsError ? (
+          <div style={{ marginBottom: 40 }}>
+            <ErrorBanner message={`${t('dash_stats_error')} ${statsError}`} />
+            <button onClick={retryStats} className="btn-primary" style={{ width: 'auto', padding: '8px 20px', marginTop: 12 }}>
+              {t('dash_retry')}
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 40 }}>
+            {[
+              {
+                label: t('dash_total_employees'),
+                value: stats ? String(stats.totalEmployees) : '—',
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a8d5d0" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
+                accent: 'rgba(168,213,208,0.1)',
+              },
+              {
+                label: t('dash_active_loans'),
+                value: stats ? String(stats.activeLoans) : '—',
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
+                accent: 'rgba(36,122,110,0.06)',
+              },
+              {
+                label: t('dash_pending_requests'),
+                value: String(pendingCount),
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
+                accent: 'rgba(162,134,87,0.06)',
+              },
+              {
+                label: t('dash_overdue_count'),
+                value: stats ? String(stats.overdueCount) : '—',
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c1121f" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>,
+                accent: 'rgba(193,18,31,0.06)',
+              },
+              {
+                label: t('dash_total_disbursed'),
+                value: stats ? '$' + fmt(stats.totalDisbursed) : '—',
+                sub: 'MXN',
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
+                accent: 'rgba(25,68,69,0.04)',
+              },
+              {
+                label: t('dash_outstanding_balance'),
+                value: stats ? '$' + fmt(stats.outstandingBalance) : '—',
+                sub: 'MXN',
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
+                accent: 'rgba(162,134,87,0.06)',
+              },
+            ].map((stat, i) => (
+              <div key={i} style={{
+                background: '#fff', borderRadius: 20, padding: '24px 24px 20px',
+                border: '1px solid rgba(25,68,69,0.04)',
+                transition: 'all 0.3s cubic-bezier(0.22,1,0.36,1)',
+                position: 'relative', overflow: 'hidden',
               }}>
-                {stat.icon}
+                <div style={{
+                  width: 40, height: 40, borderRadius: 12, background: stat.accent,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+                }}>
+                  {stat.icon}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const, color: 'var(--gold)', marginBottom: 8 }}>
+                  {stat.label}
+                </div>
+                <div style={{ fontFamily: 'var(--df)', fontSize: 36, color: 'var(--t1)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+                  {stat.value}
+                </div>
+                {stat.sub && <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>{stat.sub}</div>}
               </div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const, color: 'var(--gold)', marginBottom: 8 }}>
-                {stat.label}
-              </div>
-              <div style={{ fontFamily: 'var(--df)', fontSize: 36, color: 'var(--t1)', letterSpacing: '-0.03em', lineHeight: 1 }}>
-                {stat.value}
-              </div>
-              {stat.sub && <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>{stat.sub}</div>}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Payroll + CURP config moved below loans */}
 
