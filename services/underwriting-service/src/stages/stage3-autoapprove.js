@@ -15,6 +15,12 @@
  *  10. Age 18-65 (already validated in Stage 1, re-checked here)
  *
  * 55% approved here. Cost: $21-47 MXN total pipeline.
+ *
+ * Every condition fails closed on data the pipeline never read (#458). A
+ * condition passes only when its `source` is "read" AND its bound holds; an
+ * "assumed" value can no longer clear a condition, so a provider outage
+ * escalates to human review instead of quietly auto-approving. The single
+ * documented exception is `no_competitor_loans` — see condition 5.
  */
 
 const APPROVAL_THRESHOLD = () => parseFloat(process.env.APPROVAL_THRESHOLD || "0.65");
@@ -26,7 +32,12 @@ const APPROVAL_THRESHOLD = () => parseFloat(process.env.APPROVAL_THRESHOLD || "0
  * whole-stage failure) or it ran and gave up (stage2-bureau.js:183-189 and
  * the IMSS/AFORE/ML blocks). Modelled on `payFrequencySource` (#433): a
  * value the pipeline never read must not be shown with the same confidence
- * as one it did (#458). Purely observational — does not feed `pass`.
+ * as one it did (#458).
+ *
+ * #459 made this visible; it now decides. Every condition below reads
+ * `pass: <source> === "read" && <bound>`, so a value the pipeline never read
+ * cannot clear a bound — the gate refuses rather than approves blind
+ * (decision-engine.js:66-72, ADR-005 Findings 3 and 8).
  */
 function provenanceOf(block) {
   return block && block.skipped !== true ? "read" : "assumed";
@@ -34,112 +45,173 @@ function provenanceOf(block) {
 
 function evaluateAutoApprove(applicant, allResults) {
   const conditions = [];
-  const employerBBlock = allResults.employerB?.data;
-  const employerData = employerBBlock || {};
+  const employerData = allResults.employerB?.data || {};
   const stage0Data = allResults.stage0?.data || {};
   const stage1Data = allResults.stage1?.data || {};
   const stage2Data = allResults.stage2?.data || {};
 
   // 1. Employer tier >= 1
-  const employerTier = employerData.tier || applicant.employerTier || 3;
+  //
+  // No `||` fallback chain (ADR-005 Finding 3). `||` cannot tell an absent tier
+  // from a zero one, and `applicant.employerTier` is caller-supplied — the same
+  // "trust the caller's shaping" pattern decision-engine.js:62-64 already
+  // rejects for the principal. A stale `employerTier: 1` on the applicant must
+  // not stand in for a tier employer Part B never returned. The tier comes from
+  // the pipeline or the condition fails closed.
+  //
+  // Rejected employers stay encoded as tier 3 (employer-b.js:76), which fails
+  // `<= 2` on its own. That encoding is now load-bearing: the `||` chain used
+  // to catch a falsy tier and land on the literal 3 by accident, and that
+  // accident is gone. If employer-b ever adopts the spec's tier 0 for rejected
+  // (ADR-005 Finding 3 says it should not), this condition needs a `>= 1` lower
+  // bound in the same change or it will approve workers at rejected employers.
+  const employerTierSource = employerData.tier != null ? "read" : "assumed";
+  const employerTier = employerData.tier ?? null;
   conditions.push({
     name: "employer_tier",
-    pass: employerTier <= 2,
+    pass: employerTierSource === "read" && employerTier <= 2,
     value: employerTier,
     required: "<= 2",
-    source: employerBBlock?.tier != null ? "read" : "assumed",
+    source: employerTierSource,
   });
 
   // 2. IMSS tenure > 6 months
+  const imssSource = provenanceOf(stage2Data.imss);
   const tenure = stage2Data.imss?.tenureMonths || applicant.employmentTenureMonths || 0;
   conditions.push({
     name: "imss_tenure",
-    pass: tenure > 6,
+    pass: imssSource === "read" && tenure > 6,
     value: tenure,
     required: "> 6 months",
-    source: provenanceOf(stage2Data.imss),
+    source: imssSource,
   });
 
   // 3. Bureau score > 600
+  const bureauSource = provenanceOf(stage2Data.bureau);
   const bureauScore = stage2Data.bureau?.score || 500;
   conditions.push({
     name: "bureau_score",
-    pass: bureauScore > 600,
+    pass: bureauSource === "read" && bureauScore > 600,
     value: bureauScore,
     required: "> 600",
-    source: provenanceOf(stage2Data.bureau),
+    source: bureauSource,
   });
 
   // 4. LTI <= 25%
+  //
+  // The fallback is 0 and `0 <= 25` always passes — the exact hazard
+  // decision-engine.js:67-73 names for a missing principal. A stage 2 that
+  // never produced an LTI now fails here instead of clearing affordability.
+  const ltiSource = provenanceOf(stage2Data.lti);
   const lti = stage2Data.lti?.value || 0;
   conditions.push({
     name: "lti",
-    pass: lti <= 25,
+    pass: ltiSource === "read" && lti <= 25,
     value: lti,
     required: "<= 25%",
-    source: provenanceOf(stage2Data.lti),
+    source: ltiSource,
   });
 
-  // 5. No competitor loans
+  // 5. No competitor loans — the one condition allowed to pass on a value the
+  //    pipeline did not read, and only in one shape.
+  //
+  //    Every other condition tests a bound on a value we have to *obtain* — a
+  //    score, a tenure, a tier — so absence of that value is ignorance and must
+  //    fail closed. This one tests the absence of a finding in the applicant's
+  //    account list. With no bureau block at all there is no account list
+  //    either, and "no competitor accounts were found" is then literally true
+  //    rather than assumed. It is safe to let that pass, not merely convenient:
+  //    bureau_score and no_active_defaults read the same missing block and both
+  //    now fail closed, and all ten conditions must hold, so a missing bureau
+  //    can never be the margin between an outage and an approval. Failing this
+  //    one as well would only restate a single root cause a third time in
+  //    `failedConditions`. ADR-005 Finding 8 fixes exactly this as the
+  //    acceptance criterion: all-null input yields 9 failures out of 10, with
+  //    this the sole legitimate pass.
+  //
+  //    What must NOT pass is the bureau *error stub* (stage2-bureau.js:183-189),
+  //    which fabricates `competitorLoans: 0` after a failed call. There a bureau
+  //    file exists and we know we failed to read it, so the zero is invented
+  //    rather than observed — unread, and it fails closed like the rest.
+  const bureauBlockAbsent = stage2Data.bureau == null;
   const competitorLoans = stage2Data.bureau?.competitorLoans || 0;
   conditions.push({
     name: "no_competitor_loans",
-    pass: competitorLoans === 0,
+    pass: (bureauSource === "read" || bureauBlockAbsent) && competitorLoans === 0,
     value: competitorLoans,
     required: "0",
-    source: provenanceOf(stage2Data.bureau),
+    source: bureauSource,
   });
 
   // 6. RiskSeal > 60
+  //
+  // The `?? 100` fallback made a fraud score nobody fetched read as a perfect
+  // one. The value is left as-is so the failure line shows what the gate was
+  // working from, but an unread score can no longer clear the bound.
+  const risksealSource = provenanceOf(stage0Data.riskseal);
   const risksealScore = stage0Data.riskseal?.score ?? 100;
   conditions.push({
     name: "riskseal_score",
-    pass: risksealScore > 60,
+    pass: risksealSource === "read" && risksealScore > 60,
     value: risksealScore,
     required: "> 60",
-    source: provenanceOf(stage0Data.riskseal),
+    source: risksealSource,
   });
 
   // 7. Sector safe
+  //
+  // `pass !== false` treats "never looked up" as "not high risk". A sector the
+  // pipeline never resolved (no Firestore handle or no sectorCode — see
+  // stage1-identity.js:96-103, which returns `{pass: true, skipped: true}`) is
+  // an unknown sector, not a safe one.
+  const sectorSource = provenanceOf(stage1Data.cnbv);
   const sectorSafe = stage1Data.cnbv?.pass !== false;
   conditions.push({
     name: "sector_safe",
-    pass: sectorSafe,
+    pass: sectorSource === "read" && sectorSafe,
     value: stage1Data.cnbv?.riskLevel || "unknown",
     required: "not alto",
-    source: provenanceOf(stage1Data.cnbv),
+    source: sectorSource,
   });
 
   // 8. ML P(default) < threshold
+  //
+  // The explicit `!mlScore?.skipped` guard this condition already carried is
+  // what `source === "read"` now says for all ten — it is the same test.
   const mlScore = stage2Data.mlScore;
+  const mlSource = provenanceOf(mlScore);
   const pDefault = mlScore?.default_probability || mlScore?.probability || (1 - (mlScore?.underwritingScore || 0.5));
   const threshold = APPROVAL_THRESHOLD();
   conditions.push({
     name: "ml_default_prob",
-    pass: !mlScore?.skipped && pDefault < (1 - threshold),
+    pass: mlSource === "read" && pDefault < (1 - threshold),
     value: pDefault,
     required: `< ${1 - threshold}`,
-    source: provenanceOf(mlScore),
+    source: mlSource,
   });
 
   // 9. No active defaults
+  //
+  // Same block, same stub: a failed bureau call leaves `activeDefaults: 0`
+  // behind. Zero defaults found on a report nobody read is not zero defaults.
   const activeDefaults = stage2Data.bureau?.activeDefaults || 0;
   conditions.push({
     name: "no_active_defaults",
-    pass: activeDefaults === 0,
+    pass: bureauSource === "read" && activeDefaults === 0,
     value: activeDefaults,
     required: "0",
-    source: provenanceOf(stage2Data.bureau),
+    source: bureauSource,
   });
 
   // 10. Age 18-65
+  const ageSource = stage1Data.age != null ? "read" : "assumed";
   const age = stage1Data.age || applicant.age;
   conditions.push({
     name: "age_range",
-    pass: age >= 18 && age <= 65,
+    pass: ageSource === "read" && age >= 18 && age <= 65,
     value: age,
     required: "18-65",
-    source: stage1Data.age != null ? "read" : "assumed",
+    source: ageSource,
   });
 
   return conditions;
@@ -166,6 +238,18 @@ async function runAutoApproveGate(applicant, allResults, { logger } = {}) {
       cost: [],
     };
   }
+
+  // An escalation caused by data the pipeline never read is an outage, not a
+  // credit judgement, and ops has to be able to size the two separately —
+  // otherwise a provider going down looks like a sudden drop in applicant
+  // quality. `source` already carries the distinction, so nothing new is
+  // stored; it is only named in the log line that every escalation path below
+  // shares.
+  const unreadFailures = failedConditions.filter(c => c.source === "assumed").map(c => c.name);
+  log.info(
+    { stage: "stage3", rfc: applicant.rfc, failedConditions: failedConditions.map(c => c.name), unreadFailures },
+    "Auto-approve gate failed"
+  );
 
   // Determine escalation: Stage 4 or Stage 5
   const bureauScore = allResults.stage2?.data?.bureau?.score || 500;

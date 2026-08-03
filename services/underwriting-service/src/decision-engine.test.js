@@ -125,13 +125,57 @@ describe("Decision Engine — MetaMap integration", () => {
       });
     });
 
+    // A Firestore handle has to be supplied for the CNBV sector lookup to run
+    // at all (stage1-identity.js:97 — without `db` the result is
+    // `{pass: true, skipped: true}`). `checkCNBVSector` is already mocked above
+    // to return `bajo`; it was simply never being called. Since #458 an
+    // auto-approval requires the sector to have actually been read, so a
+    // fixture that wants an approval has to let the lookup happen. The mock
+    // ignores the handle, so an empty object is enough.
+    const result = await runPipeline(
+      { applicant: APPLICANT, employer: EMPLOYER },
+      { logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() }, db: {} }
+    );
+
+    expect(result.decision).toBe("approved");
+    expect(metamapClient.checkBehavioralRisk).toHaveBeenCalled();
+    // Every condition the gate cleared was cleared on data it actually read.
+    for (const cond of result.stages.stage3.data.conditions) {
+      expect(cond.source).toBe("read");
+    }
+  });
+
+  it("escalates the same applicant when the CNBV sector was never looked up (#458)", async () => {
+    // Identical to the case above but with no Firestore handle, so stage 1
+    // returns `{pass: true, skipped: true}` for CNBV. That shape used to clear
+    // condition 7 — `pass !== false` — and this applicant was auto-approved
+    // with a sector nobody had resolved. It now escalates to a human.
+    const fetch = require("node-fetch");
+    fetch.mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/bureau/query")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ bureau_score: 720, has_bureau_record: true, active_defaults: 0, competitor_loans: 0 }),
+        });
+      }
+      if (typeof url === "string" && url.includes("/score")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ underwritingScore: 0.82, probability: 0.18, default_probability: 0.18 }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ is_fraud: false, anomaly_score: 10 }) });
+    });
+
     const result = await runPipeline(
       { applicant: APPLICANT, employer: EMPLOYER },
       { logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } }
     );
 
-    expect(result.decision).toBe("approved");
-    expect(metamapClient.checkBehavioralRisk).toHaveBeenCalled();
+    expect(result.decision).not.toBe("approved");
+    const failed = result.stages.stage3.data.failedConditions;
+    expect(failed.map((c) => c.name)).toEqual(["sector_safe"]);
+    expect(failed[0].source).toBe("assumed");
   });
 
   it("rejects when MetaMap behavioral signals detect very high risk", async () => {
