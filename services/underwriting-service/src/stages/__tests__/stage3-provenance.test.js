@@ -13,7 +13,7 @@
  * opposite: a condition whose value was never read cannot clear its bound.
  * The single exception is `no_competitor_loans` — see its own case below.
  */
-const { evaluateAutoApprove } = require("../stage3-autoapprove");
+const { evaluateAutoApprove, runAutoApproveGate } = require("../stage3-autoapprove");
 
 const APPLICANT = {
   rfc: "GARA900101ABC",
@@ -461,5 +461,68 @@ describe("ml_default_prob condition — MAX_PDEFAULT (ADR-005 Finding 5)", () =>
       .find((c) => c.name === "ml_default_prob");
     expect(cond.pass).toBe(false);
     expect(cond.required).toBe("< 0.15");
+  });
+});
+
+// ADR-005 C5 — ratified by founder (Isaac), 2026-08-03: a competitor loan
+// does not hard-decline an applicant. It blocks auto-approval only, exactly
+// like every other failed Stage 3 condition — a failing `no_competitor_loans`
+// sets `escalateToStage` to a review stage (4 or 5) the same as any other
+// failure would, and `runAutoApproveGate` never returns a decline itself.
+// `decision-engine.js` only rejects on Stage 3's behalf when `escalateToStage`
+// is neither 4 nor 5 — a branch this function never takes, since every
+// non-passing path below ends by setting one of the two. Which lenders count
+// toward `competitorLoans` remains open (ADR-005 C5, second half) and is
+// untouched here.
+describe("runAutoApproveGate — competitor loan routing (ADR-005 C5, ratified 2026-08-03)", () => {
+  const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+  it("does not decline on a competitor-loan-only failure; it escalates to further review instead", async () => {
+    const competitorLoanOnly = {
+      ...ALL_DATA_PRESENT,
+      stage2: {
+        data: {
+          ...ALL_DATA_PRESENT.stage2.data,
+          bureau: { ...ALL_DATA_PRESENT.stage2.data.bureau, competitorLoans: 1 },
+        },
+      },
+    };
+
+    const result = await runAutoApproveGate(APPLICANT, competitorLoanOnly, { logger });
+
+    expect(result.pass).toBe(false);
+    expect(result.data.failedConditions.map((c) => c.name)).toEqual(["no_competitor_loans"]);
+
+    // The invariant C5 ratifies: no direct decline. escalateToStage is
+    // always a review stage, never null/undefined, when the gate fails.
+    expect([4, 5]).toContain(result.escalateToStage);
+    expect(result.reason).not.toMatch(/DECLIN|REJECT/i);
+
+    // Pinned to today's routing shape: a clean applicant (no active
+    // defaults, healthy bureau score, principal under the Stage 4 trigger)
+    // whose sole failure is the competitor-loan condition falls to the
+    // gate's default branch — Stage 4, full KYC — not a decline.
+    expect(result.escalateToStage).toBe(4);
+    expect(result.reason).toBe("AUTO_APPROVE_FAILED");
+  });
+
+  it("still escalates rather than declines when a competitor loan combines with a low bureau score", async () => {
+    const competitorLoanAndLowScore = {
+      ...ALL_DATA_PRESENT,
+      stage2: {
+        data: {
+          ...ALL_DATA_PRESENT.stage2.data,
+          bureau: { ...ALL_DATA_PRESENT.stage2.data.bureau, score: 350, competitorLoans: 1 },
+        },
+      },
+    };
+
+    const result = await runAutoApproveGate(APPLICANT, competitorLoanAndLowScore, { logger });
+
+    expect(result.pass).toBe(false);
+    // bureauScore < 400 routes to Stage 5 regardless of which conditions
+    // failed to get there — still an escalation, never a decline.
+    expect(result.escalateToStage).toBe(5);
+    expect(result.reason).toBe("MANUAL_REVIEW_REQUIRED");
   });
 });
