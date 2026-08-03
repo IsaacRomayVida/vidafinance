@@ -143,12 +143,23 @@ export function isKnownLoanStatus(status: unknown): status is LoanStatus {
 }
 
 /**
- * True the moment a loan first becomes fully repaid — i.e. `after` is a repaid
- * spelling and `before` was not. Used to gate the once-per-loan side effects
- * (releasing the employer's active-loan slot, restoring the employee's
- * available credit) that must fire exactly once on the real repayment
- * transition, not on the dead `approved -> 'paid'` comparison this replaces.
+ * The subset of repayment transitions whose counter side effects are NOT
+ * already applied by the writer itself.
+ *
+ * `services/payment-server` writes `status: 'paid'` and, in the same
+ * transaction, increments the employee's `availableCredit` by the loan amount
+ * (`order.paid` and `POST /internal/repayment`). A trigger that also restored
+ * credit on the `'paid'` spelling would restore it twice, letting the borrower
+ * re-borrow against money they never repaid. So the trigger owns only the
+ * canonical `'repaid'` transition — the payroll path (processPayroll.ts),
+ * which restores nothing itself.
+ *
+ * Known residual, pre-existing and unchanged by this split: a card or
+ * payroll-sync repayment settles as `'paid'`, so the employer's active-loan
+ * slot is still not released on those paths. The real fix is to make this
+ * trigger the single owner of both counters and strip the increments out of
+ * payment-server — one behaviour change per PR, and that one moves money.
  */
-export function isLoanRepaymentTransition(beforeStatus: unknown, afterStatus: unknown): boolean {
-  return !isRepaidStatus(beforeStatus) && isRepaidStatus(afterStatus);
+export function isCreditRestoringRepayment(beforeStatus: unknown, afterStatus: unknown): boolean {
+  return beforeStatus !== LOAN_STATUS.REPAID && afterStatus === LOAN_STATUS.REPAID;
 }

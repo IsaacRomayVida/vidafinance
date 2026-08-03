@@ -62,16 +62,15 @@ describe('onLoanStatusChange repayment counters', () => {
     expect(updatesFor('employees', 'employee-1').length).toBe(1);
   });
 
-  // This is the exact transition the dead code used to require. It has never
-  // happened in production (no write path sets 'paid'), but the fix must not
-  // depend on the literal spelling 'approved' -> 'paid' — it must fire on
-  // whatever the real transition into a repaid status is.
-  it('does NOT fire on the old approved -> paid comparison alone without exercising the real path', async () => {
-    // 'paid' is a legacy alias for repaid, so this transition DOES count as a
-    // repayment under the fixed logic — proving the fix is broader than the
-    // dead literal check it replaced, not narrower.
-    await handler(buildEvent('approved', 'paid'));
-    expect(updatesFor('employers', 'employer-1').length).toBe(1);
+  // The 'paid' spelling belongs to services/payment-server, which increments
+  // the employee's availableCredit itself inside the same transaction that
+  // writes the status (order.paid, POST /internal/repayment). If this trigger
+  // also fired on 'paid', the credit would be restored twice and the borrower
+  // could re-borrow against money they never repaid.
+  it('does NOT fire on -> paid, which payment-server already counters itself', async () => {
+    await handler(buildEvent('active', 'paid'));
+    expect(updatesFor('employers', 'employer-1').length).toBe(0);
+    expect(updatesFor('employees', 'employee-1').length).toBe(0);
   });
 
   it('does not run the repayment counter update on pending -> approved (a different, unrelated transition)', async () => {

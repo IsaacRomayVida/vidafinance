@@ -9,7 +9,7 @@ import {
   isDisbursedStatus,
   isDefaultStatus,
   isKnownLoanStatus,
-  isLoanRepaymentTransition,
+  isCreditRestoringRepayment,
 } from '../loanStatus';
 
 describe('loanStatus — canonical vocabulary', () => {
@@ -56,14 +56,16 @@ describe('loanStatus — canonical vocabulary', () => {
     for (const s of REPAID_STATUSES) expect(POST_DISBURSEMENT_STATUSES).toContain(s);
   });
 
-  describe('isLoanRepaymentTransition', () => {
+  // The trigger owns the canonical 'repaid' transition only. 'paid' is
+  // payment-server's spelling, and it restores the employee's availableCredit
+  // itself in the same transaction — counting it here too would double-credit.
+  describe('isCreditRestoringRepayment', () => {
     it.each([
       ['active', 'repaid'],
       ['disbursed', 'repaid'],
       ['overdue', 'repaid'],
-      ['active', 'paid'], // legacy alias reached via a hand-written status
     ])('fires when moving from %s to %s', (before, after) => {
-      expect(isLoanRepaymentTransition(before, after)).toBe(true);
+      expect(isCreditRestoringRepayment(before, after)).toBe(true);
     });
 
     it.each([
@@ -71,9 +73,10 @@ describe('loanStatus — canonical vocabulary', () => {
       ['approved', 'active'],
       ['active', 'overdue'],
       ['repaid', 'repaid'], // already repaid — must not re-fire
-      ['paid', 'repaid'], // already repaid under a legacy alias — must not re-fire
+      ['active', 'paid'], // payment-server's path; it counters this itself
+      ['approved', 'paid'], // the dead literal the old gate required
     ])('does not fire when moving from %s to %s', (before, after) => {
-      expect(isLoanRepaymentTransition(before, after)).toBe(false);
+      expect(isCreditRestoringRepayment(before, after)).toBe(false);
     });
   });
 });

@@ -2,7 +2,7 @@ import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 import { auditLog } from '../utils/auditLog';
-import { isLoanRepaymentTransition } from './loanStatus';
+import { isCreditRestoringRepayment } from './loanStatus';
 
 // NOT DEPLOYED — the live onLoanStatusChange is the copy inline in index.ts
 // (exported from there; see deploy.yml's FUNCTIONS list). Kept as a reference
@@ -46,7 +46,10 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
     } catch (_) { /* non-critical */ }
   }
 
-  if (isLoanRepaymentTransition(beforeData['status'], afterData['status'])) {
+  // Canonical 'repaid' only -- payment-server writes 'paid' and restores the
+  // employee's availableCredit itself, so firing on that spelling too would
+  // credit it twice. See isCreditRestoringRepayment in ./loanStatus.
+  if (isCreditRestoringRepayment(beforeData['status'], afterData['status'])) {
     await db.collection('employers').doc(afterData['employerId'] as string).update({
       activeLoans: FieldValue.increment(-1),
     });

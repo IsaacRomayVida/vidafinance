@@ -36,7 +36,7 @@ import {
 } from './loans/loanStatusTransitions';
 import {
   ALL_LOAN_STATUSES,
-  isLoanRepaymentTransition,
+  isCreditRestoringRepayment,
   isDisbursedStatus,
   isRepaidStatus,
 } from './loans/loanStatus';
@@ -1766,9 +1766,14 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
   // (processPayroll.ts) moves a loan straight from 'active'/'disbursed' to
   // 'repaid' once its balance hits zero, so this never fired: the employer's
   // active-loan slot was never released and the employee's available credit
-  // was never restored on repayment. isLoanRepaymentTransition() matches the
-  // actual transition (any non-repaid status -> a repaid spelling) instead.
-  if (isLoanRepaymentTransition(beforeData['status'], afterData['status'])) {
+  // was never restored on repayment.
+  //
+  // Gated on the canonical 'repaid' only, NOT on every repaid spelling:
+  // payment-server writes 'paid' and increments availableCredit itself in the
+  // same transaction (order.paid, POST /internal/repayment). Firing here on
+  // 'paid' as well would restore the credit twice and let the borrower
+  // re-borrow against money they never repaid. See isCreditRestoringRepayment.
+  if (isCreditRestoringRepayment(beforeData['status'], afterData['status'])) {
     await db.collection('employers').doc(afterData['employerId'] as string).update({
       activeLoans: FieldValue.increment(-1),
     });
