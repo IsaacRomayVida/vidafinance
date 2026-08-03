@@ -1719,6 +1719,207 @@ export const updateEmployerCurpConfig = onCall(
   )
 );
 
+// ── submitEmployerDocs — employer KYC document URLs (E6a) ─────────────────────
+// firestore.rules' employer-update whitelist never included docRFC/docId/
+// docAddress, so DocUploadBanner's client write (EmployerDashboard.tsx) was
+// denied and swallowed by an empty catch — verification could never complete.
+// The files are already uploaded to Storage under the caller's own uid
+// (storage.rules enforces that); this callable just records the resulting
+// download URLs against the caller's own employer document.
+
+interface SubmitEmployerDocsData {
+  docRFC: string;
+  docId: string;
+  docAddress: string;
+}
+
+function isOwnDocUrl(uid: string, url: unknown): url is string {
+  return typeof url === 'string' && url.length > 0 && url.length <= 2000
+    && url.includes(`employer_docs%2F${uid}%2F`);
+}
+
+export const submitEmployerDocs = onCall(
+  { cors: true, enforceAppCheck: true },
+  withAuth<SubmitEmployerDocsData, { success: boolean }>(
+    ['employer_admin'],
+    async (data, auth) =>
+      withErrorHandling({ functionName: 'submitEmployerDocs', uid: auth.uid }, async () => {
+        try {
+          const allowed = await checkRateLimit(`rl:submitEmployerDocs:${auth.uid}`, 20, 60);
+          if (!allowed) {
+            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+          }
+        } catch (e: unknown) {
+          if (e instanceof HttpsError) throw e;
+          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+        }
+
+        const uid = auth.uid;
+        const { docRFC, docId, docAddress } = data;
+        for (const [field, url] of Object.entries({ docRFC, docId, docAddress })) {
+          if (!isOwnDocUrl(uid, url)) {
+            throw new HttpsError('invalid-argument', `${field} must be a Storage URL for this employer's own upload path`);
+          }
+        }
+
+        const empDoc = await db.collection('employers').doc(uid).get();
+        if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
+
+        await db.collection('employers').doc(uid).update({
+          docRFC,
+          docId,
+          docAddress,
+          docsSubmittedAt: FieldValue.serverTimestamp(),
+        });
+
+        try {
+          await auditLog(db, {
+            action: 'employer.submitDocs',
+            actorUid: uid,
+            actorRole: auth.role,
+            targetId: uid,
+          });
+        } catch (_) { /* non-critical */ }
+
+        return { success: true };
+      })
+  )
+);
+
+// ── submitPayrollDeductionSetup — Part B CURP sample (E6b) ────────────────────
+// Same denial shape as E6a: sampleCurps/partBStatus are not on the employer-
+// update whitelist, so PayrollDeductionCard's write (EmployerDashboard.tsx)
+// was denied and ops never received the CURP sample needed to wire up the
+// employer's payroll deduction feed.
+
+interface SubmitPayrollDeductionSetupData {
+  curps: string[];
+}
+
+const PARTB_CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/;
+
+export const submitPayrollDeductionSetup = onCall(
+  { cors: true, enforceAppCheck: true },
+  withAuth<SubmitPayrollDeductionSetupData, { success: boolean }>(
+    ['employer_admin'],
+    async (data, auth) =>
+      withErrorHandling({ functionName: 'submitPayrollDeductionSetup', uid: auth.uid }, async () => {
+        try {
+          const allowed = await checkRateLimit(`rl:submitPayrollDeductionSetup:${auth.uid}`, 20, 60);
+          if (!allowed) {
+            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+          }
+        } catch (e: unknown) {
+          if (e instanceof HttpsError) throw e;
+          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+        }
+
+        const curps = Array.isArray(data.curps) ? data.curps.map((c) => String(c).toUpperCase()) : [];
+        if (curps.length !== 3 || curps.some((c) => !PARTB_CURP_REGEX.test(c))) {
+          throw new HttpsError('invalid-argument', 'Exactly 3 valid CURPs are required');
+        }
+        if (new Set(curps).size !== curps.length) {
+          throw new HttpsError('invalid-argument', 'CURPs must be unique');
+        }
+
+        const uid = auth.uid;
+        const empDoc = await db.collection('employers').doc(uid).get();
+        if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
+
+        await db.collection('employers').doc(uid).update({
+          sampleCurps: curps,
+          partBStatus: 'pending',
+        });
+
+        try {
+          await auditLog(db, {
+            action: 'employer.submitPayrollDeductionSetup',
+            actorUid: uid,
+            actorRole: auth.role,
+            targetId: uid,
+          });
+        } catch (_) { /* non-critical */ }
+
+        return { success: true };
+      })
+  )
+);
+
+// ── ensureEmployerCode — server-minted, collision-safe join code (E6c) ────────
+// EmployeeRoster.tsx's backfill (`setDoc(empRef, { employerCode }, { merge:
+// true })`) hit the same update whitelist denial, and was otherwise unguarded
+// (no try/catch around it) — an employer whose doc lacked employerCode could
+// never obtain one. Minted here with a uniqueness reservation doc so two
+// employers can never receive the same code (the client generator this
+// replaces had no collision check at all — see audit finding E17).
+
+const EMPLOYER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const EMPLOYER_CODE_LENGTH = 6;
+const EMPLOYER_CODE_MAX_ATTEMPTS = 10;
+
+function generateEmployerCodeCandidate(): string {
+  let code = '';
+  for (let i = 0; i < EMPLOYER_CODE_LENGTH; i++) {
+    code += EMPLOYER_CODE_ALPHABET.charAt(Math.floor(Math.random() * EMPLOYER_CODE_ALPHABET.length));
+  }
+  return code;
+}
+
+export const ensureEmployerCode = onCall(
+  { cors: true, enforceAppCheck: true },
+  withAuth<unknown, { employerCode: string }>(
+    ['employer_admin'],
+    async (_data, auth) =>
+      withErrorHandling({ functionName: 'ensureEmployerCode', uid: auth.uid }, async () => {
+        try {
+          const allowed = await checkRateLimit(`rl:ensureEmployerCode:${auth.uid}`, 10, 60);
+          if (!allowed) {
+            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
+          }
+        } catch (e: unknown) {
+          if (e instanceof HttpsError) throw e;
+          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
+        }
+
+        const uid = auth.uid;
+        const empRef = db.collection('employers').doc(uid);
+        const empSnap = await empRef.get();
+        if (!empSnap.exists) throw new HttpsError('not-found', 'Employer not found');
+
+        const existing = empSnap.data()?.['employerCode'];
+        if (typeof existing === 'string' && existing.length > 0) {
+          return { employerCode: existing };
+        }
+
+        for (let attempt = 0; attempt < EMPLOYER_CODE_MAX_ATTEMPTS; attempt++) {
+          const candidate = generateEmployerCodeCandidate();
+          const reservationRef = db.collection('employerCodes').doc(candidate);
+          const claimed = await db.runTransaction(async (tx) => {
+            const reservationSnap = await tx.get(reservationRef);
+            if (reservationSnap.exists) return false;
+            tx.create(reservationRef, { employerId: uid, createdAt: FieldValue.serverTimestamp() });
+            tx.update(empRef, { employerCode: candidate });
+            return true;
+          });
+          if (claimed) {
+            try {
+              await auditLog(db, {
+                action: 'employer.codeMinted',
+                actorUid: uid,
+                actorRole: auth.role,
+                targetId: uid,
+                after: { employerCode: candidate },
+              });
+            } catch (_) { /* non-critical */ }
+            return { employerCode: candidate };
+          }
+        }
+
+        throw new HttpsError('resource-exhausted', 'Could not mint a unique employer code, please retry');
+      })
+  )
+);
+
 // ── Firestore document triggers ──────────────────────────────────────────────
 
 export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (event) => {
@@ -2027,6 +2228,29 @@ export const onEmployeeDocCreated = onDocumentCreated('employees/{uid}', async (
       error: (err as Error).message,
       service: 'functions',
     });
+  }
+
+  // totalEmployees is a derived headcount, not a client-writable field (E2):
+  // Onboarding.tsx used to increment it directly on the employer doc, which
+  // firestore.rules denies (the new employee holds no employer_admin claim
+  // and the field is not on the update whitelist), stranding the wizard on a
+  // raw permission-denied error. Maintained here instead, the same pattern
+  // as `activeLoans` in onLoanStatusChange below.
+  const employerId = data['employerId'];
+  if (typeof employerId === 'string' && employerId.length > 0) {
+    try {
+      await db.collection('employers').doc(employerId).update({
+        totalEmployees: FieldValue.increment(1),
+      });
+      logger.info('Incremented employer totalEmployees', { uid, employerId, service: 'functions' });
+    } catch (err) {
+      logger.error('Failed to increment employer totalEmployees', {
+        uid,
+        employerId,
+        error: (err as Error).message,
+        service: 'functions',
+      });
+    }
   }
   return null;
 });

@@ -460,6 +460,7 @@ jobs:
             approveEmployer getPortfolioReport getAdminDashboard getEmployerDashboard
             submitReviewDecision getReviewDetail getReviewQueue updateEmployerTier setEmployerClaims
             updateEmployerCurpConfig getContractDownloadUrl setAdminClaim revokeAdminClaim
+            submitEmployerDocs submitPayrollDeductionSetup ensureEmployerCode
             proposeLoanConfigChange approveLoanConfigChange
             sendVerificationEmail sendEmployeeInvite lookupInvite acceptInvite
             lookupEmployerByCode

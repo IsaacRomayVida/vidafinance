@@ -8,8 +8,6 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'fire
 import {
   doc,
   setDoc,
-  updateDoc,
-  increment,
   serverTimestamp,
 } from 'firebase/firestore';
 import { safeSetItem } from '../lib/safeStorage';
@@ -568,9 +566,11 @@ export function Onboarding() {
         ...(metamapVerificationId ? { kycStartedAt: serverTimestamp() } : {}),
         createdAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, 'employers', memData.employerId), {
-        totalEmployees: increment(1),
-      });
+      // totalEmployees is a derived headcount now maintained server-side by
+      // onEmployeeDocCreated — firestore.rules denies this client update (the
+      // new employee holds no employer_admin claim), so writing it here used
+      // to strand the wizard on a raw permission-denied error before the
+      // invite-linking step below ever ran.
       // Link auth.uid to the pre-existing roster employee doc when the user
       // arrived via an invite. Non-fatal: employees/{uid} was already written.
       if (inviteToken && inviteId) {

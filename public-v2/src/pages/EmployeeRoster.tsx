@@ -1,20 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { doc, getDoc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 
 /* ── helpers ─────────────────────────────────────────────── */
-
-function generateEmployerCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
 
 function fmtDate(ts?: { seconds: number }): string {
   if (!ts) return '—';
@@ -166,20 +157,28 @@ export function EmployeeRoster() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const empRef = doc(db, 'employers', user.uid);
-      const empDoc = await getDoc(empRef);
-      if (empDoc.exists()) {
+      try {
+        const empRef = doc(db, 'employers', user.uid);
+        const empDoc = await getDoc(empRef);
+        if (!empDoc.exists()) return;
         const data = empDoc.data();
         if (data.employerCode) {
           setEmployerCode(data.employerCode);
-        } else {
-          const code = generateEmployerCode();
-          await setDoc(empRef, { employerCode: code }, { merge: true });
-          setEmployerCode(code);
+          return;
         }
+        // Backfilling employerCode is a privileged write (firestore.rules'
+        // employer-update whitelist denies it, and the client generator had
+        // no uniqueness check against other employers' codes) — minted
+        // server-side instead. See ensureEmployerCode in functions/src/index.ts.
+        const functions = getFunctions();
+        const ensureCode = httpsCallable<unknown, { employerCode: string }>(functions, 'ensureEmployerCode');
+        const { data: result } = await ensureCode({});
+        setEmployerCode(result.employerCode);
+      } catch {
+        setToast({ kind: 'error', msg: t('roster_toast_code_error', 'No se pudo generar el código de invitación') });
       }
     })();
-  }, [user]);
+  }, [user, t]);
 
   /* ── real-time employees ─────────────────────────────── */
   useEffect(() => {

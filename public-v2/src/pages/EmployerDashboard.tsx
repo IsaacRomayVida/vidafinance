@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db, storage } from '../lib/firebase';
@@ -77,6 +77,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [allDone, setAllDone] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const uploadCount = Object.keys(uploads).length;
@@ -113,19 +114,26 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
   useEffect(() => {
     if (uploadCount < 3) return;
     (async () => {
+      setSubmitError('');
       try {
-        await updateDoc(doc(db, 'employers', uid), {
+        const functions = getFunctions();
+        const submitDocs = httpsCallable<
+          { docRFC: string; docId: string; docAddress: string },
+          { success: boolean }
+        >(functions, 'submitEmployerDocs');
+        await submitDocs({
           docRFC: uploads['rfc'],
           docId: uploads['id_oficial'],
           docAddress: uploads['comprobante'],
         });
         setAllDone(true);
         setTimeout(onComplete, 3000);
-      } catch {
-        // Firestore update failed
+      } catch (err) {
+        const code = classifyError(err);
+        setSubmitError(code === 'generic' ? t('onb_e_step4_error') : friendlyError(err));
       }
     })();
-  }, [uploadCount, uploads, uid, onComplete]);
+  }, [uploadCount, uploads, uid, onComplete, t]);
 
   if (allDone) {
     return (
@@ -260,6 +268,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
           );
         })}
       </div>
+      {submitError && <div style={{ fontSize: 13, color: 'var(--danger)', marginTop: 16 }}>{submitError}</div>}
     </div>
   );
 }
@@ -267,7 +276,7 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
 
 const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/;
 
-function PayrollDeductionCard({ uid, employer, onSubmitted }: { uid: string; employer: EmployerData; onSubmitted: () => void }) {
+function PayrollDeductionCard({ employer, onSubmitted }: { employer: EmployerData; onSubmitted: () => void }) {
   const { t } = useTranslation();
   const [curps, setCurps] = useState<[string, string, string]>(['', '', '']);
   const [errors, setErrors] = useState<[string, string, string]>(['', '', '']);
@@ -333,10 +342,12 @@ function PayrollDeductionCard({ uid, employer, onSubmitted }: { uid: string; emp
     setSubmitting(true);
     setSubmitError('');
     try {
-      await updateDoc(doc(db, 'employers', uid), {
-        sampleCurps: curps,
-        partBStatus: 'pending',
-      });
+      const functions = getFunctions();
+      const submitSetup = httpsCallable<{ curps: string[] }, { success: boolean }>(
+        functions,
+        'submitPayrollDeductionSetup'
+      );
+      await submitSetup({ curps });
       setSubmitted(true);
       onSubmitted();
     } catch {
@@ -986,7 +997,6 @@ export function EmployerDashboard() {
         {/* Payroll Deduction Setup (Part B) — below loans for cleaner dashboard */}
         {employer?.partBStatus !== 'completed' && (
           <PayrollDeductionCard
-            uid={user!.uid}
             employer={employer!}
             onSubmitted={() => setEmployer(prev => prev ? { ...prev, partBStatus: 'pending' } : prev)}
           />
