@@ -1,8 +1,26 @@
 # VIDA Finance v1.7 Launch Checklist
 
+> # ⛔ SUPERSEDED — DO NOT SIGN OFF FROM THIS FILE
+>
+> **Replaced by [`LAUNCH_CHECKLIST_v1.8.md`](./LAUNCH_CHECKLIST_v1.8.md) on 2026-08-03.**
+>
+> The ticks below are dated 2026-03-21 and are **known to have been false**. On 2026-08-02 an audit
+> found eight defects in this same tree, two of them P0: every loan request was rejected with
+> `Plazo inválido`, and borrowers were quoted an 8% fee then charged 30%
+> (`outputs/CRITICAL_DEFECTS.md`). This file nonetheless ticks "loan wizard functional" and
+> "All tests pass".
+>
+> Those defects are now fixed — but do not read a green box here as evidence of that. **No box in
+> this file carries evidence or a measurement date, so no box in this file can be re-checked.**
+> That is why it is retired rather than updated: v1.8 changes the format so every claim names the
+> command that proves it, and claims the repo cannot prove are listed unticked against a named
+> owner instead of being assumed.
+>
+> Kept for history only.
+
 > **Last updated:** 2026-03-21
 > **Release tag:** `v1.7.0`
-> **Status:** All items verified
+> **Status:** ⛔ superseded — ticks below are unevidenced and were partly false
 
 Every item must be checked before production deploy. No exceptions.
 
