@@ -160,6 +160,32 @@ see the engineering report accompanying this PR.
   flagged, not closed. If Isaac later says carry-forward was intended, `autoScaleTier1`'s
   `cyclesForfeited` field is exactly the place that behavior would change.
 
+> ## Subsequent developments (superseded-in-part; original Consequences left above for the record)
+>
+> Both gaps this ADR's Consequences section named as open, above, have since closed. This
+> ADR's own text was accurate on 2026-08-03, the day it was written and ratified — nothing
+> below rewrites it; it records what changed after.
+>
+> - **`runEmployerDueDiligence` now calls these helpers.** #486 (2026-08-03, "underwriting:
+>   wire weighted scoring engine into runEmployerDueDiligence (#387) (#486)") wired
+>   `assignTier`, `computeInitialSlots`, `autoScaleTier1`, and `expandTier2` into
+>   `runEmployerDueDiligence`'s live Firestore-integrated path. The claim above — "it does
+>   not yet call these helpers" — is no longer true as of that PR.
+> - **The weighted scoring engine is no longer `describe.skip`.** #483 (2026-08-03,
+>   "underwriting: implement employer-b weighted scoring helpers (#387/#388 scoring half)
+>   (#483)") implemented `WEIGHTS` and the seven scoring signals
+>   (`scoreSATAge` … `scorePayrollHistory`) and un-skipped their `describe` blocks; #486
+>   then wired the resulting score into `runEmployerDueDiligence` in place of the ad-hoc
+>   `let score = 50` accumulator the Consequences section above still describes.
+> - As of #487 (`be6ea27`, 2026-08-03 — see [[ADR-008-due-diligence-capacity-wired-to-enforced-cap]]),
+>   the capacity these helpers compute is also persisted to the field
+>   `requestLoan`'s enforcement transaction actually reads, closing the remaining piece of
+>   ADR-005 Finding 2 this ADR's Consequences section still lists as open.
+> - Measured on this branch: `services/underwriting-service` — 19 suites, 346 passed, 1
+>   skipped, 0 failed. The one remaining skip is unrelated to this ADR — an
+>   unratified-shadow-model fixture in `stage3-autoapprove.test.js`, left skipped per
+>   ADR-001 §Decision.2.
+
 ## Alternatives rejected
 
 - **Adopt ADR-005's Option A (flat +1 increment per evaluation) without checking with
