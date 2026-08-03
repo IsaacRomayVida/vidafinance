@@ -7,6 +7,12 @@
 // These tests assert on the KEY SET, not on a snapshot: a snapshot would happily
 // go green again the day someone spreads the document back in and re-blesses the
 // output. The exclusions must fail loudly.
+
+// This file has no top-level `import`, so without an explicit export TypeScript
+// treats it as a global script and every `const` here collides with the identically
+// named `const` in the sibling suites. Keep this.
+export {};
+
 jest.mock('firebase-admin/app', () => ({ initializeApp: jest.fn() }));
 
 jest.mock('firebase-functions/v2/https', () => ({
