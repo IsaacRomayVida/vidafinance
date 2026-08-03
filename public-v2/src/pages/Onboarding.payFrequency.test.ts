@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PAY_FREQUENCIES } from './Onboarding';
+import { PAY_FREQUENCIES } from '../lib/payFrequencies';
 
 // Mirrors the PayFrequency union in
 // functions/src/loans/calculateNextPayrollDate.ts — the set of cadences that
