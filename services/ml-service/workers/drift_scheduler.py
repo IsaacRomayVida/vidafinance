@@ -11,7 +11,6 @@ Schedule: every 7 days (configurable via DRIFT_CHECK_INTERVAL_HOURS env var).
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -45,34 +44,53 @@ def _fetch_recent_scores(firestore) -> list[dict]:
     return [doc.to_dict() for doc in docs]
 
 
-def _extract_features_and_scores(loans: list[dict]) -> tuple[np.ndarray, np.ndarray]:
-    """Extract feature matrix and scores from loan documents."""
+def _extract_features_and_scores(loans: list[dict]) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """
+    Extract feature matrix and scores from loan documents.
+
+    Returns (features, scores, available_feature_names). A feature that is
+    missing from every loan's `underwritingFeatures` is dropped from
+    `available_feature_names` rather than defaulted to 0.0 — a monitor that
+    was never given a value for a feature cannot vouch for its stability, and
+    defaulting it in would report a constant 0.0 column as "stable" (#463).
+    """
     from models.drift_monitor import FEATURE_NAMES
 
-    features_list = []
+    rows = []
     scores_list = []
+    present_counts = {name: 0 for name in FEATURE_NAMES}
 
     for loan in loans:
-        snapshot = loan.get("borrowerSnapshot", {})
         uw_features = loan.get("underwritingFeatures", {})
         score = loan.get("underwritingScore")
 
         if score is None:
             continue
 
-        # Reconstruct feature vector from stored data
-        row = []
+        row = {}
         for name in FEATURE_NAMES:
-            val = uw_features.get(name, 0.0)
-            row.append(float(val))
+            if name in uw_features:
+                present_counts[name] += 1
+                row[name] = float(uw_features[name])
+            else:
+                row[name] = 0.0
 
-        features_list.append(row)
+        rows.append(row)
         scores_list.append(float(score))
 
-    if not features_list:
-        return np.array([]).reshape(0, len(FEATURE_NAMES)), np.array([])
+    available_names = [name for name in FEATURE_NAMES if present_counts[name] > 0]
+    missing_names = [name for name in FEATURE_NAMES if present_counts[name] == 0]
+    if missing_names:
+        logger.warning(
+            "Dropping feature(s) never present in underwritingFeatures — cannot "
+            "be monitored for drift: %s", missing_names,
+        )
 
-    return np.array(features_list), np.array(scores_list)
+    if not rows:
+        return np.array([]).reshape(0, len(available_names)), np.array([]), available_names
+
+    features = np.array([[row[name] for name in available_names] for row in rows])
+    return features, np.array(scores_list), available_names
 
 
 def _run_drift_check_sync() -> dict | None:
@@ -94,13 +112,16 @@ def _run_drift_check_sync() -> dict | None:
         logger.info("Only %d loans found — need at least 30 for drift check", len(loans))
         return None
 
-    features, scores = _extract_features_and_scores(loans)
+    from models.drift_monitor import FEATURE_NAMES
+
+    features, scores, available_features = _extract_features_and_scores(loans)
     if len(scores) < 30:
         logger.info("Only %d scored loans — need at least 30 for drift check", len(scores))
         return None
 
     baseline = load_baseline()
-    report = run_drift_check(features, scores, baseline)
+    report = run_drift_check(features, scores, baseline, feature_names=available_features)
+    report["unmonitored_features"] = sorted(set(FEATURE_NAMES) - set(available_features))
 
     # Write to Firestore
     doc_id = datetime.now(timezone.utc).strftime("drift_%Y%m%d_%H%M%S")

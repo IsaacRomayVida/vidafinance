@@ -40,6 +40,25 @@ def test_encode_industry():
     assert encode_industry("") == 0
 
 
+def test_build_model_features_emits_employer_industry_encoded():
+    """
+    Regression guard for #463: build_model_features computed industry_code
+    via encode_industry() but dropped it from the returned dict. The feature
+    is declared in models.underwriting_model.UnderwritingModel.FEATURE_ORDER
+    and monitored by models.drift_monitor.FEATURE_NAMES — if this stops being
+    emitted, drift monitoring on it silently defaults to a fake "stable" 0.0
+    column instead of catching the regression.
+    """
+    from workers.underwriting_worker import build_model_features, encode_industry
+
+    borrower = {"employerIndustry": "technology", "employmentTenureMonths": 24}
+    features = build_model_features(borrower, principal=2000, monthly_salary=20000)
+
+    assert "employer_industry_encoded" in features
+    assert features["employer_industry_encoded"] == encode_industry("technology")
+    assert features["employer_industry_encoded"] == 4.0
+
+
 def test_get_rejection_reason_tenure():
     from workers.underwriting_worker import get_rejection_reason
     reason = get_rejection_reason(0.30, {"employment_tenure_months": 2, "loan_to_salary_ratio": 0.10})
