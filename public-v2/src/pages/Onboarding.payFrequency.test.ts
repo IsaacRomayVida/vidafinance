@@ -1,23 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { PAY_FREQUENCIES } from '../lib/payFrequencies';
 
-// Mirrors the PayFrequency union in
+// Mirrors PAY_FREQUENCY_VALUES in
 // functions/src/loans/calculateNextPayrollDate.ts — the set of cadences that
-// calculateNextPayrollDate has a real branch for. Anything outside this list
-// falls through to its `default` case and is silently priced as 'monthly'.
+// calculateNextPayrollDate has a real branch for. public-v2 and functions are
+// separate TypeScript projects with no shared package, so this list can't
+// import that one; this test is what keeps the two in agreement instead.
 //
 // This is the regression guard for #435: 'semimonthly' was a value
 // calculateNextPayrollDate already understood, but no onboarding tile could
 // ever produce it, so the branch sat unreachable while borrowers were quoted
 // dates from the wrong cadence instead. If PAY_FREQUENCIES ever grows a value
 // this list doesn't contain, that same class of bug is back.
+//
+// The comparison below is a set-equality check, not the one-directional
+// `toContain` it used to be. A one-directional check only catches PAY_
+// FREQUENCIES offering something calculateNextPayrollDate can't compute — it
+// says nothing if PAY_FREQUENCIES is missing a cadence calculateNextPayrollDate
+// already handles, which is the exact asymmetry #435 identified in
+// resolvePayFrequency's old VALID_FREQUENCIES array (dropping a real member
+// compiled clean because only the "no garbage in" direction was ever checked).
 const FREQUENCIES_CALCULATE_NEXT_PAYROLL_DATE_HANDLES = ['weekly', 'biweekly', 'semimonthly', 'monthly'];
 
 describe('onboarding pay frequency options', () => {
-  it('offers only cadences calculateNextPayrollDate can compute a real date for', () => {
-    for (const freq of PAY_FREQUENCIES) {
-      expect(FREQUENCIES_CALCULATE_NEXT_PAYROLL_DATE_HANDLES).toContain(freq);
-    }
+  it('matches, in both directions, the cadences calculateNextPayrollDate can compute a real date for', () => {
+    expect([...PAY_FREQUENCIES].sort()).toEqual(
+      [...FREQUENCIES_CALCULATE_NEXT_PAYROLL_DATE_HANDLES].sort()
+    );
   });
 
   it('includes semimonthly, so the "Quincenal" tile stores the correct cadence', () => {

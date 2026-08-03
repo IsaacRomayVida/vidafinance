@@ -2,6 +2,37 @@ import { Timestamp } from 'firebase-admin/firestore';
 
 export type PayFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
 
+/**
+ * Builds a `PayFrequency[]` that TypeScript checks for completeness, not just
+ * validity. A plain array typed `readonly PayFrequency[]` rejects a value
+ * outside the union but not a union member missing from the array — dropping
+ * 'monthly' from such a list compiles clean, which is exactly the asymmetry
+ * #435 identified in the old `VALID_FREQUENCIES` declaration. The `[PayFrequency]
+ * extends [U[number]]` constraint below fails the call at compile time unless
+ * every member of the union is present in `values`.
+ */
+function completePayFrequencyList<U extends readonly PayFrequency[]>(
+  ...values: U & ([PayFrequency] extends [U[number]] ? unknown : never)
+): U {
+  return values;
+}
+
+/**
+ * The canonical, compile-time-complete set of pay frequencies (#435). This is
+ * the single declaration `resolvePayFrequency.ts` and `approveEmployer.ts`
+ * derive from rather than restate. `public-v2` is a separate TypeScript
+ * project with no shared package between it and `functions`, so its own
+ * `PAY_FREQUENCIES` (public-v2/src/lib/payFrequencies.ts) stays a second,
+ * independent declaration — kept in agreement with this one by
+ * Onboarding.payFrequency.test.ts rather than by import.
+ */
+export const PAY_FREQUENCY_VALUES = completePayFrequencyList(
+  'weekly',
+  'biweekly',
+  'semimonthly',
+  'monthly'
+);
+
 const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 const addDays = (d: Date, days: number): Date => {
