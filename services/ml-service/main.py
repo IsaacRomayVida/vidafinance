@@ -3,10 +3,12 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Header, Request, Response
+from fastapi import FastAPI, HTTPException, Header, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import Counter, Histogram, make_asgi_app
-import os, json, time
+import os
+import json
+import time
 import redis as Redis
 from dotenv import load_dotenv
 
@@ -17,7 +19,10 @@ load_dotenv()
 from internal_auth import load_internal_secret, secret_matches
 from scoring import employer_score, employee_score, fraud_score
 from services.firestore_client import FirestoreClient
-from monitoring.alerts import alert_5xx, alert_redis_lost, alert_model_fallback, alert_rate_limit
+from monitoring.alerts import (
+    alert_5xx,
+    alert_redis_lost,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ml-service")
@@ -64,11 +69,18 @@ fallback_total = Counter(
 # Initialize Firebase if credentials are available
 _fb_app = None
 _fs_db = None
-_fb_raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64") or os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+_fb_raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64") or os.environ.get(
+    "FIREBASE_SERVICE_ACCOUNT"
+)
 if _fb_raw:
     try:
         import base64
-        sa = json.loads(base64.b64decode(_fb_raw) if os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64") else _fb_raw)
+
+        sa = json.loads(
+            base64.b64decode(_fb_raw)
+            if os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
+            else _fb_raw
+        )
         cred = credentials.Certificate(sa)
         _fb_app = firebase_admin.initialize_app(cred)
         _fs_db = firestore.client()
@@ -82,10 +94,13 @@ _drift_task: asyncio.Task | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _worker_task, _drift_task
-    has_firebase = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
+    has_firebase = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get(
+        "FIREBASE_SERVICE_ACCOUNT_B64"
+    )
     if os.environ.get("REDIS_URL") and has_firebase:
         try:
             from workers.underwriting_worker import start_worker
+
             _worker_task = asyncio.create_task(start_worker())
             logger.info("Underwriting worker task started")
         except Exception as e:
@@ -100,6 +115,7 @@ async def lifespan(app: FastAPI):
         try:
             from monitoring.scheduler import drift_scheduler
             from monitoring.alerts import send_drift_alert
+
             _drift_task = asyncio.create_task(drift_scheduler(_fs_db, send_drift_alert))
             logger.info("Drift monitoring scheduler started")
         except Exception as e:
@@ -137,6 +153,7 @@ class AlertMiddleware(BaseHTTPMiddleware):
             await alert_5xx(response.status_code, request.url.path)
         return response
 
+
 app.add_middleware(AlertMiddleware)
 
 app.mount("/metrics", make_asgi_app())
@@ -144,6 +161,7 @@ app.mount("/metrics", make_asgi_app())
 
 # ── Redis connection monitoring ────────────────────────────────────────
 _redis_was_connected = True
+
 
 async def _check_redis_connection():
     global _redis_was_connected
@@ -244,9 +262,9 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
                         {
                             "role": "user",
                             "content": (
-                                f'Analyze employer risk. Company:{payload.get("companyName","?")} '
-                                f'Size:{payload.get("companySize","?")} Industry:{payload.get("industry","?")} '
-                                f'Payroll:{payload.get("payrollSystem","?")} Years:{payload.get("yearsActive","?")}\n'
+                                f'Analyze employer risk. Company:{payload.get("companyName", "?")} '
+                                f'Size:{payload.get("companySize", "?")} Industry:{payload.get("industry", "?")} '
+                                f'Payroll:{payload.get("payrollSystem", "?")} Years:{payload.get("yearsActive", "?")}\n'
                                 'Respond: {"risk_tier":1|2|3,"red_flags":[],"green_flags":[],'
                                 '"escalate_to_human":true|false,"summary":"1 sentence"}'
                             ),
@@ -257,14 +275,20 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
             except anthropic.AuthenticationError as e:
                 # Disable for the process so a bad key doesn't spam logs per request.
                 _LLM_ENABLED = False
-                fallback_total.labels(endpoint=endpoint, reason="anthropic_auth_failed").inc()
+                fallback_total.labels(
+                    endpoint=endpoint, reason="anthropic_auth_failed"
+                ).inc()
                 logger.warning(
                     "Anthropic authentication failed; disabling LLM enrichment for this process: %s",
                     e,
                 )
             except Exception as e:
-                fallback_total.labels(endpoint=endpoint, reason="anthropic_unavailable").inc()
-                logger.warning("LLM enrichment failed, falling back to rule-based: %s", e)
+                fallback_total.labels(
+                    endpoint=endpoint, reason="anthropic_unavailable"
+                ).inc()
+                logger.warning(
+                    "LLM enrichment failed, falling back to rule-based: %s", e
+                )
         final = {
             **result,
             "llm_analysis": llm,
@@ -280,7 +304,9 @@ async def score_emp(payload: dict, x_internal_secret: str = Header(None)):
         outcome = _RISK_TIER_OUTCOME.get(final.get("risk_tier"), "success")
         return final
     finally:
-        prediction_latency_seconds.labels(endpoint=endpoint).observe(time.time() - _start)
+        prediction_latency_seconds.labels(endpoint=endpoint).observe(
+            time.time() - _start
+        )
         predictions_total.labels(endpoint=endpoint, outcome=outcome).inc()
 
 
@@ -322,7 +348,9 @@ async def score_employee(payload: dict, x_internal_secret: str = Header(None)):
         outcome = "success"
         return final
     finally:
-        prediction_latency_seconds.labels(endpoint=endpoint).observe(time.time() - _start)
+        prediction_latency_seconds.labels(endpoint=endpoint).observe(
+            time.time() - _start
+        )
         predictions_total.labels(endpoint=endpoint, outcome=outcome).inc()
 
 
@@ -364,6 +392,7 @@ async def drift(payload: dict = None, x_internal_secret: str = Header(None)):
         return {"error": "Firestore not configured", "drift_detected": False}
     from monitoring.drift import run_weekly_drift_job
     from monitoring.alerts import send_drift_alert
+
     result = await run_weekly_drift_job(_fs_db, send_drift_alert)
     return {
         "drift_detected": bool(result.get("alerts")),
@@ -407,9 +436,7 @@ _DECISION_OUTCOME = {"approved": "approve", "rejected": "decline"}
 
 
 @app.post("/score")
-async def score_loan_direct(
-    payload: dict, x_internal_secret: str = Header(None)
-):
+async def score_loan_direct(payload: dict, x_internal_secret: str = Header(None)):
     """
     Direct synchronous scoring endpoint.
     Runs both champion (WoE scorecard) and challenger (XGBoost) models.
@@ -433,8 +460,12 @@ async def score_loan_direct(
 
         features = build_model_features(borrower, principal, monthly_salary)
 
-        champion_path = _os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
-        challenger_path = _os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
+        champion_path = _os.environ.get(
+            "CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib"
+        )
+        challenger_path = _os.environ.get(
+            "CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib"
+        )
         try:
             router = ModelRouter.load(champion_path, challenger_path)
         except Exception:
@@ -448,6 +479,7 @@ async def score_loan_direct(
 
         # VID3-712 — ML_MODE override
         from ml_mode import apply_ml_mode_override
+
         decision = apply_ml_mode_override(decision)
 
         outcome = _DECISION_OUTCOME.get(decision, "review")
@@ -461,7 +493,7 @@ async def score_loan_direct(
             "shapTop5": result["shap_top5"],
         }
     finally:
-        prediction_latency_seconds.labels(endpoint=endpoint).observe(time.time() - _start)
+        prediction_latency_seconds.labels(endpoint=endpoint).observe(
+            time.time() - _start
+        )
         predictions_total.labels(endpoint=endpoint, outcome=outcome).inc()
-
-

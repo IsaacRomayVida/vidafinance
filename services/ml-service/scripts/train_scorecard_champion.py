@@ -39,10 +39,14 @@ def generate_synthetic_data(n: int, rng: np.random.Generator) -> pd.DataFrame:
     # Bureau / credit features
     df["scDiasAtraso"] = rng.exponential(scale=15, size=n).clip(0, 180).astype(float)
     df["cdcScore"] = rng.normal(loc=600, scale=100, size=n).clip(300, 850).astype(float)
-    df["carteraVencida"] = rng.exponential(scale=5000, size=n).clip(0, 100000).astype(float)
+    df["carteraVencida"] = (
+        rng.exponential(scale=5000, size=n).clip(0, 100000).astype(float)
+    )
 
     # Employment / payroll
-    df["imss_tenure_months"] = rng.exponential(scale=24, size=n).clip(0, 180).astype(float)
+    df["imss_tenure_months"] = (
+        rng.exponential(scale=24, size=n).clip(0, 180).astype(float)
+    )
     df["monthly_salary"] = rng.lognormal(mean=9.7, sigma=0.5, size=n).clip(7000, 60000)
 
     # Loan characteristics
@@ -50,9 +54,15 @@ def generate_synthetic_data(n: int, rng: np.random.Generator) -> pd.DataFrame:
     df["lti"] = (principal / df["monthly_salary"]).clip(0.01, 1.0)
 
     # Risk scores
-    df["riskSeal_score"] = rng.normal(loc=50, scale=20, size=n).clip(0, 100).astype(float)
-    df["employer_tier"] = rng.choice([1, 2, 3, 4, 5], size=n, p=[0.1, 0.2, 0.4, 0.2, 0.1]).astype(float)
-    df["sector_risk"] = rng.choice([1, 2, 3, 4, 5], size=n, p=[0.15, 0.25, 0.30, 0.20, 0.10]).astype(float)
+    df["riskSeal_score"] = (
+        rng.normal(loc=50, scale=20, size=n).clip(0, 100).astype(float)
+    )
+    df["employer_tier"] = rng.choice(
+        [1, 2, 3, 4, 5], size=n, p=[0.1, 0.2, 0.4, 0.2, 0.1]
+    ).astype(float)
+    df["sector_risk"] = rng.choice(
+        [1, 2, 3, 4, 5], size=n, p=[0.15, 0.25, 0.30, 0.20, 0.10]
+    ).astype(float)
     df["afore_regularity"] = rng.beta(a=5, b=2, size=n).clip(0, 1)
 
     # Target: use strong non-linear thresholds so each feature
@@ -61,7 +71,9 @@ def generate_synthetic_data(n: int, rng: np.random.Generator) -> pd.DataFrame:
 
     # scDiasAtraso: 0 days = great, >30 = bad
     score += 0.15 * (df["scDiasAtraso"] < 5).astype(float)
-    score += 0.08 * ((df["scDiasAtraso"] >= 5) & (df["scDiasAtraso"] < 30)).astype(float)
+    score += 0.08 * ((df["scDiasAtraso"] >= 5) & (df["scDiasAtraso"] < 30)).astype(
+        float
+    )
     score -= 0.10 * (df["scDiasAtraso"] > 60).astype(float)
 
     # cdcScore: >700 = great, <450 = bad
@@ -112,7 +124,9 @@ def generate_synthetic_data(n: int, rng: np.random.Generator) -> pd.DataFrame:
     return df
 
 
-def compute_woe_bins(df: pd.DataFrame, feature: str, target: str, n_bins: int = 5) -> tuple[list[dict], float]:
+def compute_woe_bins(
+    df: pd.DataFrame, feature: str, target: str, n_bins: int = 5
+) -> tuple[list[dict], float]:
     """
     Compute WoE bins and IV for a single feature.
 
@@ -151,12 +165,14 @@ def compute_woe_bins(df: pd.DataFrame, feature: str, target: str, n_bins: int = 
         iv = float((good_pct - bad_pct) * woe)
         iv_total += iv
 
-        bins_list.append({
-            "range": [float(bin_interval.left), float(bin_interval.right)],
-            "woe": woe,
-            "iv": iv,
-            "count": len(group),
-        })
+        bins_list.append(
+            {
+                "range": [float(bin_interval.left), float(bin_interval.right)],
+                "woe": woe,
+                "iv": iv,
+                "count": len(group),
+            }
+        )
 
     return bins_list, iv_total
 
@@ -215,7 +231,9 @@ def train_and_save(output_path: str):
     )
 
     # Train logistic regression
-    lr = LogisticRegression(C=1.0, max_iter=1000, random_state=SEED, class_weight="balanced")
+    lr = LogisticRegression(
+        C=1.0, max_iter=1000, random_state=SEED, class_weight="balanced"
+    )
     lr.fit(X_train, y_train)
 
     # Evaluate
@@ -242,5 +260,7 @@ def train_and_save(output_path: str):
 
 
 if __name__ == "__main__":
-    out = os.path.join(os.path.dirname(__file__), "..", "models", "scorecard_champion_v2.joblib")
+    out = os.path.join(
+        os.path.dirname(__file__), "..", "models", "scorecard_champion_v2.joblib"
+    )
     train_and_save(os.path.abspath(out))

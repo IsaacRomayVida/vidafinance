@@ -140,9 +140,7 @@ async def send_pagerduty_alert(
                 "https://events.pagerduty.com/v2/enqueue", json=payload
             )
             if resp.status_code not in (200, 202):
-                logger.warning(
-                    "PagerDuty returned %d: %s", resp.status_code, resp.text
-                )
+                logger.warning("PagerDuty returned %d: %s", resp.status_code, resp.text)
     except Exception as e:
         logger.warning("PagerDuty alert failed: %s", e)
 

@@ -33,13 +33,12 @@ def main():
     X, _y = generate_synthetic_dataset(N, rng)
 
     # Load trained model and score all samples
-    model_path = os.path.join(os.path.dirname(__file__), "..", "models", "underwriting_v1.joblib")
+    model_path = os.path.join(
+        os.path.dirname(__file__), "..", "models", "underwriting_v1.joblib"
+    )
     model = UnderwritingModel.load(os.path.abspath(model_path))
 
-    scores = np.array([
-        model.predict_proba(dict(zip(FEATURE_NAMES, row)))
-        for row in X
-    ])
+    scores = np.array([model.predict_proba(dict(zip(FEATURE_NAMES, row))) for row in X])
 
     print(f"Scored {len(scores)} samples")
     print(f"Score distribution: mean={scores.mean():.4f}, std={scores.std():.4f}")

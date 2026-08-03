@@ -58,7 +58,7 @@ class TestPseudoLabeler:
         labels = labeler.get_expanded_labels(y_labeled, len(unlabeled_data))
         assert len(labels) == len(y_labeled) + len(unlabeled_data)
         # Original labels should be preserved
-        np.testing.assert_array_equal(labels[:len(y_labeled)], y_labeled)
+        np.testing.assert_array_equal(labels[: len(y_labeled)], y_labeled)
 
     def test_save_and_load(self, labeled_data, unlabeled_data, tmp_path):
         X_labeled, y_labeled = labeled_data
@@ -80,7 +80,11 @@ class TestPseudoLabeler:
         labeler_low = PseudoLabeler()
         labeler_high = PseudoLabeler()
 
-        summary_low = labeler_low.fit(X_labeled, y_labeled, unlabeled_data, threshold=0.60)
-        summary_high = labeler_high.fit(X_labeled, y_labeled, unlabeled_data, threshold=0.99)
+        summary_low = labeler_low.fit(
+            X_labeled, y_labeled, unlabeled_data, threshold=0.60
+        )
+        summary_high = labeler_high.fit(
+            X_labeled, y_labeled, unlabeled_data, threshold=0.99
+        )
 
         assert summary_high["n_pseudo_labeled"] <= summary_low["n_pseudo_labeled"]

@@ -10,7 +10,6 @@ internal data only.
 import os
 import httpx
 
-
 SOFTCREDITO_URL = os.environ.get(
     "SOFTCREDITO_ADAPTER_URL",
     "http://vida-softcredito.railway.internal:3004",

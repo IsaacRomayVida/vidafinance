@@ -19,7 +19,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-import joblib
 
 from models.underwriting_model import UnderwritingModel
 
@@ -37,8 +36,12 @@ def generate_synthetic_dataset(n: int, rng: np.random.Generator):
     Label = 1 (repaid) based on credit rules + noise.
     """
     # Feature distributions matching VIDA's borrower population
-    tenure = rng.exponential(scale=18, size=n).clip(0, 120).astype(float)  # mode ~0, mean ~18 mo
-    salary = rng.lognormal(mean=9.7, sigma=0.5, size=n).clip(7_000, 40_000)  # ~15k median
+    tenure = (
+        rng.exponential(scale=18, size=n).clip(0, 120).astype(float)
+    )  # mode ~0, mean ~18 mo
+    salary = rng.lognormal(mean=9.7, sigma=0.5, size=n).clip(
+        7_000, 40_000
+    )  # ~15k median
     pay_freq = rng.choice([1, 2, 4], size=n, p=[0.3, 0.5, 0.2]).astype(float)
     industry = rng.choice(range(9), size=n).astype(float)
     principal = rng.uniform(500, 5_000, size=n)
@@ -46,19 +49,27 @@ def generate_synthetic_dataset(n: int, rng: np.random.Generator):
     bureau_score = rng.uniform(300, 800, size=n)
     has_bureau = rng.choice([0, 1], size=n, p=[0.45, 0.55]).astype(float)
 
-    X = np.column_stack([
-        tenure, salary, pay_freq, lts_ratio, industry,
-        principal, bureau_score, has_bureau,
-    ])
+    X = np.column_stack(
+        [
+            tenure,
+            salary,
+            pay_freq,
+            lts_ratio,
+            industry,
+            principal,
+            bureau_score,
+            has_bureau,
+        ]
+    )
 
     # Repayment score — weighted sum of good features (all normalized to 0–1)
     score = (
-        0.30 * np.clip(tenure / 36, 0, 1)         # 3 yrs is best
-        + 0.20 * np.clip(salary / 25_000, 0, 1)   # 25k+ is best
+        0.30 * np.clip(tenure / 36, 0, 1)  # 3 yrs is best
+        + 0.20 * np.clip(salary / 25_000, 0, 1)  # 25k+ is best
         + 0.20 * np.clip(bureau_score / 800, 0, 1)
         + 0.15 * (1 - np.clip(lts_ratio / 0.30, 0, 1))  # low ratio is safe
         + 0.05 * has_bureau
-        + 0.10 * (pay_freq / 4)                   # weekly deduction is most reliable
+        + 0.10 * (pay_freq / 4)  # weekly deduction is most reliable
     )
     # Hard rules
     score[tenure < 3] = 0.0
@@ -101,5 +112,7 @@ def train_and_save(output_path: str):
 
 
 if __name__ == "__main__":
-    out = os.path.join(os.path.dirname(__file__), "..", "models", "underwriting_v1.joblib")
+    out = os.path.join(
+        os.path.dirname(__file__), "..", "models", "underwriting_v1.joblib"
+    )
     train_and_save(os.path.abspath(out))

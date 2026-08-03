@@ -27,31 +27,37 @@ logger = logging.getLogger("train_isolation_forest")
 def generate_legitimate_data(n: int = 5000, seed: int = 42) -> np.ndarray:
     """Generate synthetic legitimate application data."""
     rng = np.random.RandomState(seed)
-    return np.column_stack([
-        rng.poisson(0.5, n).astype(float),             # requests_last_hour (low)
-        rng.uniform(0.05, 0.30, n),                     # amount_to_salary_ratio (reasonable)
-        rng.uniform(30, 3650, n),                        # device_age_days (old devices)
-        rng.uniform(60, 100, n),                         # ip_reputation_score (good)
-        rng.uniform(60, 1200, n),                        # session_duration_seconds (normal)
-        rng.uniform(0, 20, n),                           # interaction_anomaly_score (low)
-        rng.poisson(1.5, n).astype(float),              # bureau_inquiries_last_30d (few)
-        rng.choice([1, 2], n, p=[0.85, 0.15]).astype(float),  # distinct_ips_last_24h (1-2)
-    ])
+    return np.column_stack(
+        [
+            rng.poisson(0.5, n).astype(float),  # requests_last_hour (low)
+            rng.uniform(0.05, 0.30, n),  # amount_to_salary_ratio (reasonable)
+            rng.uniform(30, 3650, n),  # device_age_days (old devices)
+            rng.uniform(60, 100, n),  # ip_reputation_score (good)
+            rng.uniform(60, 1200, n),  # session_duration_seconds (normal)
+            rng.uniform(0, 20, n),  # interaction_anomaly_score (low)
+            rng.poisson(1.5, n).astype(float),  # bureau_inquiries_last_30d (few)
+            rng.choice([1, 2], n, p=[0.85, 0.15]).astype(
+                float
+            ),  # distinct_ips_last_24h (1-2)
+        ]
+    )
 
 
 def generate_fraud_data(n: int = 300, seed: int = 99) -> np.ndarray:
     """Generate synthetic fraudulent application data."""
     rng = np.random.RandomState(seed)
-    return np.column_stack([
-        rng.poisson(8, n).astype(float),                # requests_last_hour (high velocity)
-        rng.uniform(0.35, 0.95, n),                     # amount_to_salary_ratio (excessive)
-        rng.uniform(0, 15, n),                           # device_age_days (new/disposable)
-        rng.uniform(0, 35, n),                           # ip_reputation_score (bad)
-        rng.uniform(5, 45, n),                           # session_duration_seconds (very fast)
-        rng.uniform(55, 100, n),                         # interaction_anomaly_score (high)
-        rng.poisson(8, n).astype(float),                # bureau_inquiries_last_30d (many)
-        rng.choice([3, 4, 5, 6], n).astype(float),     # distinct_ips_last_24h (many)
-    ])
+    return np.column_stack(
+        [
+            rng.poisson(8, n).astype(float),  # requests_last_hour (high velocity)
+            rng.uniform(0.35, 0.95, n),  # amount_to_salary_ratio (excessive)
+            rng.uniform(0, 15, n),  # device_age_days (new/disposable)
+            rng.uniform(0, 35, n),  # ip_reputation_score (bad)
+            rng.uniform(5, 45, n),  # session_duration_seconds (very fast)
+            rng.uniform(55, 100, n),  # interaction_anomaly_score (high)
+            rng.poisson(8, n).astype(float),  # bureau_inquiries_last_30d (many)
+            rng.choice([3, 4, 5, 6], n).astype(float),  # distinct_ips_last_24h (many)
+        ]
+    )
 
 
 def main():
@@ -61,7 +67,9 @@ def main():
     # Generate data
     X_legit = generate_legitimate_data(5000)
     X_fraud = generate_fraud_data(300)
-    logger.info("Generated %d legitimate + %d fraud samples", len(X_legit), len(X_fraud))
+    logger.info(
+        "Generated %d legitimate + %d fraud samples", len(X_legit), len(X_fraud)
+    )
 
     # Train on legitimate data only (unsupervised)
     model = FraudPreScreen.train(X_legit, contamination=0.05, n_estimators=200)
@@ -70,16 +78,14 @@ def main():
     X_all = np.vstack([X_legit, X_fraud])
     y_true = np.concatenate([np.zeros(len(X_legit)), np.ones(len(X_fraud))])
 
-    predictions = model.predict_batch([
-        dict(zip(FEATURE_NAMES, row)) for row in X_all
-    ])
+    predictions = model.predict_batch([dict(zip(FEATURE_NAMES, row)) for row in X_all])
     y_pred = np.array([1 if p["is_fraud"] else 0 for p in predictions])
 
     precision = precision_score(y_true, y_pred)
     recall = recall_score(y_true, y_pred)
     f1 = f1_score(y_true, y_pred)
     fraud_flagged = y_pred.sum()
-    legit_flagged = y_pred[:len(X_legit)].sum()
+    legit_flagged = y_pred[: len(X_legit)].sum()
 
     logger.info("--- Evaluation ---")
     logger.info("Precision: %.4f", precision)
@@ -91,7 +97,8 @@ def main():
     # Save model
     output_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "models", "isolation_forest_v1.joblib",
+        "models",
+        "isolation_forest_v1.joblib",
     )
     model.save(output_path)
     logger.info("Model saved to %s", output_path)

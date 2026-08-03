@@ -72,11 +72,13 @@ class ModelRouter:
             shap_top5 = []
 
         # Record for rolling comparison
-        self.history.append(PredictionRecord(
-            timestamp=time.time(),
-            champion_score=champion_score,
-            challenger_score=challenger_score,
-        ))
+        self.history.append(
+            PredictionRecord(
+                timestamp=time.time(),
+                champion_score=champion_score,
+                challenger_score=challenger_score,
+            )
+        )
 
         return {
             "decision": decision,
@@ -87,7 +89,9 @@ class ModelRouter:
             "shap_top5": shap_top5,
         }
 
-    def record_outcome(self, champion_score: float, challenger_score: float, actual: float):
+    def record_outcome(
+        self, champion_score: float, challenger_score: float, actual: float
+    ):
         """Record a resolved loan outcome for Gini tracking."""
         for record in reversed(self.history):
             if (
@@ -107,7 +111,8 @@ class ModelRouter:
         """
         cutoff = time.time() - ROLLING_WINDOW_SECONDS
         resolved = [
-            r for r in self.history
+            r
+            for r in self.history
             if r.actual_outcome is not None and r.timestamp >= cutoff
         ]
 

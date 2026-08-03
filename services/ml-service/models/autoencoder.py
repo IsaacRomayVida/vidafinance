@@ -16,7 +16,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-
 FEATURE_NAMES = [
     "emulator_detected",
     "vpn_detected",
@@ -78,7 +77,9 @@ def normalize_features(raw: dict) -> np.ndarray:
     return np.array(values, dtype=np.float32)
 
 
-def compute_reconstruction_error(model: MetaMapAutoencoder, features: np.ndarray) -> float:
+def compute_reconstruction_error(
+    model: MetaMapAutoencoder, features: np.ndarray
+) -> float:
     """Compute MSE reconstruction error for a single sample."""
     model.eval()
     with torch.no_grad():

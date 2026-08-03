@@ -53,8 +53,8 @@
       "eslint --fix --max-warnings 0"
     ],
     "services/ml-service/**/*.py": [
-      "python -m black --check",
-      "python -m flake8"
+      "python3 -m black --check",
+      "python3 -m flake8"
     ]
   }
 }

@@ -38,10 +38,18 @@ logger = logging.getLogger("underwriting_worker")
 
 QUEUE_NAME = "vida-underwriting"
 APPROVAL_THRESHOLD = float(os.environ.get("APPROVAL_THRESHOLD", "0.65"))
-CHAMPION_PATH = os.environ.get("CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib")
-CHALLENGER_PATH = os.environ.get("CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib")
-ISOLATION_FOREST_PATH = os.environ.get("ISOLATION_FOREST_PATH", "models/isolation_forest_v1.joblib")
-ACTIVE_LEARNER_PATH = os.environ.get("ACTIVE_LEARNER_PATH", "models/active_learner_v1.joblib")
+CHAMPION_PATH = os.environ.get(
+    "CHAMPION_MODEL_PATH", "models/scorecard_champion_v2.joblib"
+)
+CHALLENGER_PATH = os.environ.get(
+    "CHALLENGER_MODEL_PATH", "models/xgb_challenger_v2.joblib"
+)
+ISOLATION_FOREST_PATH = os.environ.get(
+    "ISOLATION_FOREST_PATH", "models/isolation_forest_v1.joblib"
+)
+ACTIVE_LEARNER_PATH = os.environ.get(
+    "ACTIVE_LEARNER_PATH", "models/active_learner_v1.joblib"
+)
 
 # Initialised lazily so the module can be imported without creds present
 _router: Optional[ModelRouter] = None
@@ -71,7 +79,10 @@ def get_fraud_prescreen() -> Optional[FraudPreScreen]:
             _fraud_prescreen = FraudPreScreen.load(ISOLATION_FOREST_PATH)
             logger.info("Loaded fraud pre-screen: %s", _fraud_prescreen.version)
         except FileNotFoundError:
-            logger.warning("Isolation Forest model not found at %s — skipping Stage 0", ISOLATION_FOREST_PATH)
+            logger.warning(
+                "Isolation Forest model not found at %s — skipping Stage 0",
+                ISOLATION_FOREST_PATH,
+            )
     return _fraud_prescreen
 
 
@@ -83,7 +94,10 @@ def get_human_review_router() -> Optional[HumanReviewRouter]:
             _human_review_router = HumanReviewRouter.load(ACTIVE_LEARNER_PATH)
             logger.info("Loaded active learner: %s", _human_review_router.version)
         except FileNotFoundError:
-            logger.warning("Active learner model not found at %s — skipping Stage 5 routing", ACTIVE_LEARNER_PATH)
+            logger.warning(
+                "Active learner model not found at %s — skipping Stage 5 routing",
+                ACTIVE_LEARNER_PATH,
+            )
     return _human_review_router
 
 
@@ -95,6 +109,7 @@ def get_firestore() -> FirestoreClient:
 
 
 # ── Encoding helpers ──────────────────────────────────────────────────────────
+
 
 def encode_pay_freq(freq: str) -> int:
     return {"weekly": 4, "biweekly": 2, "monthly": 1}.get((freq or "").lower(), 1)
@@ -124,7 +139,9 @@ def get_rejection_reason(score: float, features: dict) -> str:
     return "Does not meet current lending criteria"
 
 
-def build_fraud_prescreen_features(borrower: dict, principal: float, monthly_salary: float) -> dict:
+def build_fraud_prescreen_features(
+    borrower: dict, principal: float, monthly_salary: float
+) -> dict:
     """Build feature dict for the Stage 0 Isolation Forest pre-screen."""
     return {
         "requests_last_hour": float(borrower.get("requestsLastHour", 0)),
@@ -138,7 +155,12 @@ def build_fraud_prescreen_features(borrower: dict, principal: float, monthly_sal
     }
 
 
-def build_model_features(borrower: dict, principal: float, monthly_salary: float, bureau: Optional[dict] = None) -> dict:
+def build_model_features(
+    borrower: dict,
+    principal: float,
+    monthly_salary: float,
+    bureau: Optional[dict] = None,
+) -> dict:
     """Build the feature dict used by both champion and challenger models."""
     lti = principal / max(monthly_salary, 1)
     tenure = float(borrower.get("employmentTenureMonths", 0))
@@ -174,6 +196,7 @@ def build_model_features(borrower: dict, principal: float, monthly_salary: float
 
 
 # ── Core job processor ────────────────────────────────────────────────────────
+
 
 async def process_underwrite_loan(job, job_token=None):
     """
@@ -215,15 +238,20 @@ async def process_underwrite_loan(job, job_token=None):
     prescreen = get_fraud_prescreen()
     if prescreen is not None:
         try:
-            fraud_features = build_fraud_prescreen_features(borrower, principal, monthly_salary)
+            fraud_features = build_fraud_prescreen_features(
+                borrower, principal, monthly_salary
+            )
             fraud_prescreen_result = prescreen.predict(fraud_features)
             if fraud_prescreen_result["is_fraud"]:
                 logger.warning(
                     "[underwriting] Stage 0 FRAUD flag for loan %s (score=%.4f)",
-                    loan_id, fraud_prescreen_result["anomaly_score"],
+                    loan_id,
+                    fraud_prescreen_result["anomaly_score"],
                 )
         except Exception as e:
-            logger.warning("[underwriting] Stage 0 pre-screen failed for loan %s: %s", loan_id, e)
+            logger.warning(
+                "[underwriting] Stage 0 pre-screen failed for loan %s: %s", loan_id, e
+            )
 
     # ── 1. Optional bureau enrichment (graceful degradation) ─────────────────
     bureau = None
@@ -236,7 +264,8 @@ async def process_underwrite_loan(job, job_token=None):
     except Exception as e:
         logger.warning(
             "[underwriting] Bureau lookup failed for loan %s (%s) — using defaults",
-            loan_id, e,
+            loan_id,
+            e,
         )
         if "429" in str(e) or "rate limit" in str(e).lower():
             await alert_rate_limit("SoftCredito")
@@ -261,7 +290,11 @@ async def process_underwrite_loan(job, job_token=None):
             f"(n={challenger_alert['sample_size']})"
         )
 
-    rejection_reason = None if decision == "approved" else get_rejection_reason(champion_score, features)
+    rejection_reason = (
+        None
+        if decision == "approved"
+        else get_rejection_reason(champion_score, features)
+    )
 
     # ── 4. Hard business rule overrides ──────────────────────────────────────
     if features["employment_tenure_months"] < 3:
@@ -269,18 +302,26 @@ async def process_underwrite_loan(job, job_token=None):
         rejection_reason = "Minimum 3 months employment tenure required"
 
     # Stage 0 override: reject if Isolation Forest flagged as fraud
-    if fraud_prescreen_result and fraud_prescreen_result["is_fraud"] and decision != "rejected":
+    if (
+        fraud_prescreen_result
+        and fraud_prescreen_result["is_fraud"]
+        and decision != "rejected"
+    ):
         decision = "rejected"
         rejection_reason = "Flagged by Stage 0 fraud pre-screen"
 
     # ── 4.5 ML_MODE override (VID3-712) ──────────────────────────────────────
     from ml_mode import apply_ml_mode_override, get_ml_mode
+
     _original_decision = decision
     decision = apply_ml_mode_override(decision)
     if decision != _original_decision:
         logger.info(
             "[underwriting] ML_MODE=%s overrode decision: %s → %s (loan %s)",
-            get_ml_mode(), _original_decision, decision, loan_id,
+            get_ml_mode(),
+            _original_decision,
+            decision,
+            loan_id,
         )
         rejection_reason = None  # not a rejection, just routed for review
 
@@ -290,14 +331,25 @@ async def process_underwrite_loan(job, job_token=None):
     if human_review_router is not None and decision == "approved":
         try:
             import numpy as _np
-            feature_vector = _np.array([
-                features.get(f, 0.0) for f in [
-                    "scDiasAtraso", "cdcScore", "carteraVencida",
-                    "imss_tenure_months", "lti", "riskSeal_score",
-                    "employer_tier", "sector_risk", "afore_regularity",
-                    "monthly_salary",
-                ]
-            ], dtype=_np.float64)
+
+            feature_vector = _np.array(
+                [
+                    features.get(f, 0.0)
+                    for f in [
+                        "scDiasAtraso",
+                        "cdcScore",
+                        "carteraVencida",
+                        "imss_tenure_months",
+                        "lti",
+                        "riskSeal_score",
+                        "employer_tier",
+                        "sector_risk",
+                        "afore_regularity",
+                        "monthly_salary",
+                    ]
+                ],
+                dtype=_np.float64,
+            )
             review_result = human_review_router.should_route_to_human(feature_vector)
             route_to_human = review_result["route_to_human"]
             if route_to_human:
@@ -305,14 +357,21 @@ async def process_underwrite_loan(job, job_token=None):
                 rejection_reason = None
                 logger.info(
                     "[underwriting] Loan %s routed to human review (uncertainty=%.4f)",
-                    loan_id, review_result["uncertainty"],
+                    loan_id,
+                    review_result["uncertainty"],
                 )
         except Exception as e:
-            logger.warning("[underwriting] Stage 5 routing failed for loan %s: %s", loan_id, e)
+            logger.warning(
+                "[underwriting] Stage 5 routing failed for loan %s: %s", loan_id, e
+            )
 
     logger.info(
         "[underwriting] Loan %s → %s (champion=%.3f, challenger=%.3f, threshold=%.2f)",
-        loan_id, decision, champion_score, challenger_score, APPROVAL_THRESHOLD,
+        loan_id,
+        decision,
+        champion_score,
+        challenger_score,
+        APPROVAL_THRESHOLD,
     )
 
     # ── 5. Write decision to Firestore (blocking SDK → run in executor) ───────
@@ -331,13 +390,15 @@ async def process_underwrite_loan(job, job_token=None):
         "fraudPrescreen": fraud_prescreen_result,
         "routedToHumanReview": route_to_human,
         "updatedAt": now_iso,
-        "statusHistory": firestore.array_union({
-            "from": "pending",
-            "to": decision,
-            "at": now_iso,
-            "by": "system",
-            "reason": f"Champion {result['champion_model']}: score={champion_score:.3f}",
-        }),
+        "statusHistory": firestore.array_union(
+            {
+                "from": "pending",
+                "to": decision,
+                "at": now_iso,
+                "by": "system",
+                "reason": f"Champion {result['champion_model']}: score={champion_score:.3f}",
+            }
+        ),
     }
 
     loop = asyncio.get_event_loop()
@@ -355,30 +416,36 @@ async def process_underwrite_loan(job, job_token=None):
     redis = AsyncRedis.from_url(
         os.environ["REDIS_URL"],
         decode_responses=True,
-        ssl_cert_reqs=None if os.environ.get("REDIS_URL", "").startswith("rediss://") else None,
+        ssl_cert_reqs=(
+            None if os.environ.get("REDIS_URL", "").startswith("rediss://") else None
+        ),
     )
     try:
         if decision == "approved":
             await redis.lpush(
                 "jobs:disbursements",
-                json.dumps({
-                    "type": "disburse_loan",
-                    "loanId": loan_id,
-                    "userId": data.get("userId"),
-                    "amount": principal,
-                }),
+                json.dumps(
+                    {
+                        "type": "disburse_loan",
+                        "loanId": loan_id,
+                        "userId": data.get("userId"),
+                        "amount": principal,
+                    }
+                ),
             )
 
         await redis.lpush(
             "jobs:notifications",
-            json.dumps({
-                "type": f"loan_{decision}",
-                "userId": data.get("userId"),
-                "loanId": loan_id,
-                "score": champion_score,
-                "challengerScore": challenger_score,
-                "rejectionReason": rejection_reason,
-            }),
+            json.dumps(
+                {
+                    "type": f"loan_{decision}",
+                    "userId": data.get("userId"),
+                    "loanId": loan_id,
+                    "score": champion_score,
+                    "challengerScore": challenger_score,
+                    "rejectionReason": rejection_reason,
+                }
+            ),
         )
     finally:
         await redis.aclose()
@@ -393,6 +460,7 @@ async def process_underwrite_loan(job, job_token=None):
 
 
 # ── Worker entry point ────────────────────────────────────────────────────────
+
 
 async def start_worker():
     redis_url = os.environ["REDIS_URL"]

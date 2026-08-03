@@ -66,9 +66,12 @@ def _get_anomaly_detector():
     if _anomaly_detector is None:
         import os
         from models.autoencoder import AnomalyDetector
+
         model_path = os.environ.get(
             "AUTOENCODER_MODEL_PATH",
-            os.path.join(os.path.dirname(__file__), "models", "autoencoder_v2_metamap.pt"),
+            os.path.join(
+                os.path.dirname(__file__), "models", "autoencoder_v2_metamap.pt"
+            ),
         )
         _anomaly_detector = AnomalyDetector.load(model_path)
     return _anomaly_detector

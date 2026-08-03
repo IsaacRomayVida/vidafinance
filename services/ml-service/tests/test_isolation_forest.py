@@ -13,16 +13,18 @@ def trained_model():
     """Train a small Isolation Forest for testing."""
     rng = np.random.RandomState(42)
     # Generate 500 legitimate samples
-    X = np.column_stack([
-        rng.poisson(0.5, 500).astype(float),
-        rng.uniform(0.05, 0.30, 500),
-        rng.uniform(30, 3650, 500),
-        rng.uniform(60, 100, 500),
-        rng.uniform(60, 1200, 500),
-        rng.uniform(0, 20, 500),
-        rng.poisson(1.5, 500).astype(float),
-        rng.choice([1, 2], 500, p=[0.85, 0.15]).astype(float),
-    ])
+    X = np.column_stack(
+        [
+            rng.poisson(0.5, 500).astype(float),
+            rng.uniform(0.05, 0.30, 500),
+            rng.uniform(30, 3650, 500),
+            rng.uniform(60, 100, 500),
+            rng.uniform(60, 1200, 500),
+            rng.uniform(0, 20, 500),
+            rng.poisson(1.5, 500).astype(float),
+            rng.choice([1, 2], 500, p=[0.85, 0.15]).astype(float),
+        ]
+    )
     return FraudPreScreen.train(X, contamination=0.05, n_estimators=50)
 
 
