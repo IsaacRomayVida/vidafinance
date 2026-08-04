@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../../__mocks__/txReadAfterWrite';
 // #389 — two-person change control on the loan fee rate.
 //
 // One field here reprices every future loan and lands on a CONDUSEF-regulated
@@ -83,7 +84,7 @@ const mockDb = {
         store.set(ref._path, { exists: true, data: { ...(existing?.data ?? {}), ...data } });
       },
     };
-    return fn(txn);
+    return fn(mockGuardReadAfterWrite(txn));
   },
 };
 

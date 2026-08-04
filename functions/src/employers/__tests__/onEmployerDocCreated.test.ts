@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../../__mocks__/txReadAfterWrite';
 // Marked as a module (`export {}`) so its top-level `const`/`class` declarations
 // stay file-scoped. Without this a .test.ts with no top-level import/export is a
 // global script, and two such files declaring the same name (`mockLogger`,
@@ -179,7 +180,7 @@ function buildMockDb({ auditWriteFails = false, mintFails = false } = {}) {
         employers.set(ref.id, { ...(employers.get(ref.id) ?? {}), ...data });
       },
     };
-    return fn(tx);
+    return fn(mockGuardReadAfterWrite(tx));
   });
 
   return { collection, runTransaction, auditWrites, reservations, employers };

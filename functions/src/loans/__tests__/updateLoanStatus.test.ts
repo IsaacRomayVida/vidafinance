@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../../__mocks__/txReadAfterWrite';
 // Pins the behaviour of the LIVE `updateLoanStatus` callable — the one inline
 // in `index.ts` (exported from there and listed in deploy.yml's FUNCTIONS).
 //
@@ -173,7 +174,7 @@ function ulsBuildMockDb(seed: Record<string, Record<string, Record<string, unkno
           writes.push({ collection: collection!, id: id!, op: 'tx.update', data });
         }),
       };
-      return fn(tx);
+      return fn(mockGuardReadAfterWrite(tx));
     }),
     _store: store,
     _writes: writes,

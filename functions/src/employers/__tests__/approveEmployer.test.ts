@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../../__mocks__/txReadAfterWrite';
 /**
  * Unit tests for approveEmployer Cloud Function
  * Target coverage: ≥90%
@@ -8,7 +9,7 @@
 const mockTransactionUpdate = jest.fn();
 const mockTransactionSet = jest.fn();
 const mockRunTransaction = jest.fn().mockImplementation(async (fn: (txn: unknown) => Promise<void>) => {
-  await fn({ update: mockTransactionUpdate, set: mockTransactionSet });
+  await fn(mockGuardReadAfterWrite({ update: mockTransactionUpdate, set: mockTransactionSet }));
 });
 
 const mockEmployerDocGet = jest.fn();
@@ -193,7 +194,7 @@ describe('approveEmployer', () => {
     jest.clearAllMocks();
     // Reset transaction mock
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<void>) => {
-      await fn({ update: mockTransactionUpdate, set: mockTransactionSet });
+      await fn(mockGuardReadAfterWrite({ update: mockTransactionUpdate, set: mockTransactionSet }));
     });
     // Default: no employer code collision
     mockWhereGet.mockResolvedValue({ empty: true });

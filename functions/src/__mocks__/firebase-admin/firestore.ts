@@ -1,3 +1,5 @@
+import { guardReadAfterWrite } from '../txReadAfterWrite';
+
 export const FieldValue = {
   increment: jest.fn((n: number) => ({ _increment: n })),
   serverTimestamp: jest.fn(() => ({ _serverTimestamp: true })),
@@ -47,6 +49,18 @@ export const _mockStore: {
 const AUDIT_COLLECTION = 'audit_log';
 
 const makeTxn = () => ({
+  // Reads the same store the plain doc refs below read, so a transactional
+  // read is modelled rather than merely tolerated — and so guardReadAfterWrite
+  // has a real read to refuse once a write has been staged.
+  get: jest.fn(async (ref: unknown) => {
+    const { _collection, id } = (ref ?? {}) as { _collection?: string; id?: string };
+    const store = _mockStore[_collection as keyof typeof _mockStore] as
+      | Record<string, { exists: boolean; data?: Record<string, unknown> }>
+      | undefined;
+    const entry = _collection && id ? store?.[id] : undefined;
+    if (!entry) return { exists: false, data: () => null };
+    return { exists: entry.exists, data: () => entry.data ?? null };
+  }),
   update: jest.fn((_ref: unknown, _data: unknown) => {
     _mockStore.transactionCalls.push('update');
   }),
@@ -95,7 +109,9 @@ const mockDb = {
   collection: jest.fn((name: string) => makeCollectionRef(name)),
   runTransaction: jest.fn(async (fn: (txn: ReturnType<typeof makeTxn>) => Promise<void>) => {
     const txn = makeTxn();
-    await fn(txn);
+    // The body sees the guarded facade; callers still get the raw txn back so
+    // existing assertions against `txn.update.mock.calls` keep working.
+    await fn(guardReadAfterWrite(txn));
     return txn;
   }),
 };

@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../../__mocks__/txReadAfterWrite';
 // ── Mocks (hoisted) ───────────────────────────────────────────────────────────
 
 import { createHash } from 'crypto';
@@ -31,7 +32,7 @@ const mockTxnGet = jest.fn(async (ref: { get: () => unknown }) => ref.get());
 const mockRunTransaction = jest
   .fn()
   .mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) =>
-    fn({ get: mockTxnGet, update: mockTxnUpdate })
+    fn(mockGuardReadAfterWrite({ get: mockTxnGet, update: mockTxnUpdate }))
   );
 
 const mockCollection = jest.fn((name: string) => {
@@ -121,7 +122,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockTxnGet.mockImplementation(async (ref: { get: () => unknown }) => ref.get());
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) =>
-    fn({ get: mockTxnGet, update: mockTxnUpdate })
+    fn(mockGuardReadAfterWrite({ get: mockTxnGet, update: mockTxnUpdate }))
   );
   mockInviteDocGet.mockResolvedValue(makePendingInvite());
   mockEmployeeDocGet.mockResolvedValue({

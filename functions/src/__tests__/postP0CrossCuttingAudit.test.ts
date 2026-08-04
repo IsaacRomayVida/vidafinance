@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../__mocks__/txReadAfterWrite';
 // Cross-cutting regression coverage for two defects that only become visible
 // when the commits between 361b09c and ded61c1 are read as ONE change set.
 // Both are the #516 shape: the code that was fixed is not the code that runs.
@@ -165,7 +166,7 @@ function buildMockDb(seed: Record<string, Record<string, Record<string, unknown>
           pending.push({ key: ref._key, collection: collection!, id: ref.id, data });
         }),
       };
-      const result = await fn(tx);
+      const result = await fn(mockGuardReadAfterWrite(tx));
       for (const p of pending) {
         const prev = store.get(p.key)?.data ?? {};
         store.set(p.key, { data: { ...prev, ...p.data } });

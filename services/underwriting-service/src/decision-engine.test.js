@@ -102,6 +102,10 @@ jest.mock("firebase-admin", () => ({
 // `firebase-admin/firestore`'s `getFirestore()` — a distinct module from the
 // `firebase-admin` mock above (which only backs the config seams). Defaults
 // to a healthy transaction; the outage test below overrides it per-case.
+//
+// Guarded so this stand-in refuses a read taken after a write, as the real SDK
+// does — see test-support/txReadAfterWrite.js.
+const { guardReadAfterWrite: mockGuardReadAfterWrite } = require("./test-support/txReadAfterWrite");
 let mockEmployerBRunTransaction = jest.fn(async (fn) =>
   fn({ get: jest.fn().mockResolvedValue({ data: () => ({}) }), update: jest.fn() })
 );
@@ -121,7 +125,12 @@ beforeEach(() => {
   mockMetamapCalls = [];
   mockMetamapResult = { pass: true, mocked: true, verificationId: "mock-mm" };
   mockEmployerBRunTransaction = jest.fn(async (fn) =>
-    fn({ get: jest.fn().mockResolvedValue({ data: () => ({}) }), update: jest.fn() })
+    fn(
+      mockGuardReadAfterWrite({
+        get: jest.fn().mockResolvedValue({ data: () => ({}) }),
+        update: jest.fn(),
+      })
+    )
   );
 
   metamapClient.createVerification.mockImplementation((...args) => {

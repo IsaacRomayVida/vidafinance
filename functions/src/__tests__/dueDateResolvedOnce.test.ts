@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../__mocks__/txReadAfterWrite';
 // #437 — a loan has ONE due date, decided once, at creation.
 //
 // It used to have two. `requestLoan` wrote `now + 30 days`; the borrower was
@@ -221,7 +222,7 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
           update: record('txn.update'),
           set: record('txn.set'),
         };
-        await fn(txn);
+        await fn(mockGuardReadAfterWrite(txn));
         return txn;
       }
     ),

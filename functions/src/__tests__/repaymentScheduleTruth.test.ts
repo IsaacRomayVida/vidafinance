@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../__mocks__/txReadAfterWrite';
 // #424 — the repayment schedule a borrower is QUOTED must be the repayment the
 // system actually EXECUTES.
 //
@@ -263,7 +264,7 @@ function buildMockDb() {
             })
           ),
         };
-        return fn(txn);
+        return fn(mockGuardReadAfterWrite(txn));
       }
     ),
     _writes: writes,
