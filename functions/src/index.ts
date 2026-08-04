@@ -270,15 +270,35 @@ export const validateCURP = onCall(
       };
     }
 
+    // FAIL CLOSED. This endpoint answers one question — "is this a real CURP,
+    // and does it belong to this person" — and every failure path below used to
+    // answer it `valid: true` with a `fullName` copied straight out of the
+    // caller's own `expectedName`. An adapter that is unconfigured, unreachable,
+    // or rejecting us for a missing/rotated `INTERNAL_SECRET` therefore did not
+    // degrade identity validation, it switched it off: any string matching
+    // CURP_REGEX came back validated, under whatever name the caller asked for.
+    // That is the same shape as the webhook verifiers in #534 — a check that
+    // passes precisely when its dependency or its secret is absent — applied to
+    // the identity gate of a regulated consumer lender.
+    //
+    // An outage now costs the caller an `unavailable` they can retry, never a
+    // fabricated identity. Verified before changing: nothing calls this
+    // callable today (Onboarding.tsx's `validateCURPRemote` is commented out —
+    // CURP is extracted from the INE via MetaMap), so no live flow changes
+    // behaviour. If it is ever re-enabled, the client must treat `unavailable`
+    // as "try again", NOT as a rejection of the applicant.
     const adapterUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
-    if (!adapterUrl) {
-      // Graceful fallback: accept CURP by format if adapter not configured
-      logger.warn('CURP adapter not configured, accepting by format', { curp: curp.toUpperCase() });
-      return {
-        valid: true,
-        fullName: expectedName || undefined,
-        gender: curp.toUpperCase()[10] === 'H' ? 'M' : 'F',
-      };
+    const adapterSecret = process.env['INTERNAL_SECRET'] ?? '';
+    if (!adapterUrl || !adapterSecret) {
+      logger.error('CURP adapter not configured — refusing to validate', {
+        hasUrl: !!adapterUrl,
+        hasSecret: !!adapterSecret,
+        service: 'functions',
+      });
+      throw new HttpsError(
+        'unavailable',
+        'La validación de identidad no está disponible en este momento. Intenta de nuevo.'
+      );
     }
 
     try {
@@ -286,7 +306,7 @@ export const validateCURP = onCall(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-internal-secret': process.env['INTERNAL_SECRET'] ?? '',
+          'x-internal-secret': adapterSecret,
         },
         body: JSON.stringify({
           curp: curp.toUpperCase(),
@@ -297,12 +317,17 @@ export const validateCURP = onCall(
 
       if (!resp.ok) {
         const body = await resp.text().catch(() => '');
-        logger.warn('CURP adapter error, accepting by format', { status: resp.status, body: body.slice(0, 100) });
-        return {
-          valid: true,
-          fullName: expectedName || undefined,
-          gender: curp.toUpperCase()[10] === 'H' ? 'M' : 'F',
-        };
+        // Logged, never returned: the adapter's error body is an upstream
+        // response about an identity document (#533).
+        logger.error('CURP adapter error — refusing to validate', {
+          status: resp.status,
+          body: body.slice(0, 100),
+          service: 'functions',
+        });
+        throw new HttpsError(
+          'unavailable',
+          'La validación de identidad no está disponible en este momento. Intenta de nuevo.'
+        );
       }
 
       const result = await resp.json() as Record<string, unknown>;
@@ -315,12 +340,17 @@ export const validateCURP = onCall(
         matchesExpectedName: typeof result['matchesExpectedName'] === 'boolean' ? result['matchesExpectedName'] : undefined,
       };
     } catch (e: unknown) {
-      logger.warn('CURP validation service unavailable, accepting by format', { error: (e as Error).message });
-      return {
-        valid: true,
-        fullName: expectedName || undefined,
-        gender: curp.toUpperCase()[10] === 'H' ? 'M' : 'F',
-      };
+      // The `unavailable` thrown above lands here too — rethrow it unchanged
+      // rather than re-wrapping it, and never fall through to a `valid: true`.
+      if (e instanceof HttpsError) throw e;
+      logger.error('CURP validation service unavailable — refusing to validate', {
+        error: (e as Error).message,
+        service: 'functions',
+      });
+      throw new HttpsError(
+        'unavailable',
+        'La validación de identidad no está disponible en este momento. Intenta de nuevo.'
+      );
     }
   }
 );

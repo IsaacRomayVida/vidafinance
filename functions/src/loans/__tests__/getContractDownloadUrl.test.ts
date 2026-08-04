@@ -140,6 +140,64 @@ describe('getContractDownloadUrl', () => {
       const result = (await fn({ auth: opsAuth, data: { loanId } })) as Record<string, unknown>;
       expect(result.url).toBeDefined();
     });
+
+    // The employer branch compares `loan.employerId` against the caller's
+    // `employerId` CLAIM, and both are routinely absent: nothing in this repo
+    // mints an employerId claim (every setCustomUserClaims call site writes
+    // `{ role }` only), and a loan document can reach this handler without an
+    // employerId. `undefined === undefined` was true, so any employer_admin —
+    // including one belonging to a completely unrelated company — was handed a
+    // 15-minute signed URL to that borrower's contract PDF.
+    describe('employer_admin with no employerId claim (the production claim shape)', () => {
+      const claimlessEmployerAdmin = {
+        uid: 'employer-123',
+        token: { role: 'employer_admin', email: 'ea@test.com' },
+      };
+
+      it('denies when the loan document has no employerId', async () => {
+        _mockStore.loans[loanId] = {
+          exists: true,
+          data: { status: 'disbursed', employeeId: 'emp-owner' },
+        };
+        _mockStorage.files = [{ name: `loans/${loanId}/contrato_20260101.pdf` }];
+        await expect(
+          fn({ auth: claimlessEmployerAdmin, data: { loanId } })
+        ).rejects.toMatchObject({ code: 'permission-denied' });
+      });
+
+      it('denies when the loan document carries an empty employerId', async () => {
+        _mockStore.loans[loanId] = {
+          exists: true,
+          data: { status: 'disbursed', employeeId: 'emp-owner', employerId: '' },
+        };
+        _mockStorage.files = [{ name: `loans/${loanId}/contrato_20260101.pdf` }];
+        await expect(
+          fn({ auth: claimlessEmployerAdmin, data: { loanId } })
+        ).rejects.toMatchObject({ code: 'permission-denied' });
+      });
+
+      it('denies an unrelated employer_admin a normal loan they do not own', async () => {
+        _mockStore.loans[loanId] = loanDoc;
+        _mockStorage.files = [{ name: `loans/${loanId}/contrato_20260101.pdf` }];
+        await expect(
+          fn({
+            auth: { uid: 'ea-unrelated', token: { role: 'employer_admin', email: 'u@test.com' } },
+            data: { loanId },
+          })
+        ).rejects.toMatchObject({ code: 'permission-denied' });
+      });
+    });
+
+    it('denies an ordinary employee a loan whose employerId is missing', async () => {
+      _mockStore.loans[loanId] = {
+        exists: true,
+        data: { status: 'disbursed', employeeId: 'emp-owner' },
+      };
+      _mockStorage.files = [{ name: `loans/${loanId}/contrato_20260101.pdf` }];
+      await expect(
+        fn({ auth: otherEmployeeAuth, data: { loanId } })
+      ).rejects.toMatchObject({ code: 'permission-denied' });
+    });
   });
 
   describe('business logic', () => {
