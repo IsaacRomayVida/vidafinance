@@ -84,11 +84,24 @@ export function isCreditReleasingRejection(beforeStatus: unknown, afterStatus: u
 // — the SPEI transfer is queued, sent, or the loan otherwise left pre-approval
 // limbo. Ops/admin corrections within this set are legitimate (e.g. nudging a
 // stuck `disbursement_failed` loan back to `disbursement_queued` for a manual
-// retry), but rewinding one of these back to a pre-disbursement status is
-// exactly the two-call replay (set 'pending', then set 'approved') that
-// reproduces the approval trigger diff and re-fires a real transfer — SPEI has
-// no idempotency key of its own, so refusing the rewind in updateLoanStatus is
-// the only guard on that path.
+// retry), but moving OUT of this set is not: rewinding to a pre-disbursement
+// status is the two-call replay (set 'pending', then set 'approved') that
+// reproduces the approval trigger diff and re-fires a real transfer, and SPEI
+// has no idempotency key of its own.
+//
+// updateLoanStatus therefore refuses EVERY exit from this set, not only the
+// ones landing in PRE_DISBURSEMENT_STATUSES. It used to check just the latter,
+// which left 'rejected', 'rejected_ml' and 'cancelled' — canonical statuses in
+// NEITHER set — usable as a sideways step that took a funded loan out of the
+// guard's idea of "post-disbursement" and let the next call rewind it freely.
+//
+// This is NOT the only guard on the disbursement side: onLoanApproved also
+// claims `disbursement_queue/{loanId}` transactionally (and refuses on an
+// existing `disbursedAt`), so a replayed approval cannot reach the adapter
+// twice. The credit-release side has no such second guard — a laundered
+// `pending -> rejected` fires isCreditReleasingRejection and hands back
+// availableCredit on money that really went out — which is why the
+// callable-level refusal has to be the complete one.
 //
 // Both sets are now defined once, in `./loanStatus`, and simply re-exported
 // above — they used to be hand-duplicated here with a bare 'paid' entry that

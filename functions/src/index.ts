@@ -33,7 +33,6 @@ import {
   isLoanApprovalTransition,
   isCreditReleasingRejection,
   DISBURSEMENT_INITIATED_STATUSES,
-  PRE_DISBURSEMENT_STATUSES,
 } from './loans/loanStatusTransitions';
 import {
   ALL_LOAN_STATUSES,
@@ -1088,16 +1087,39 @@ export const updateLoanStatus = onCall(
         }
       } else if (
         DISBURSEMENT_INITIATED_STATUSES.includes(loan['status'] as string) &&
-        PRE_DISBURSEMENT_STATUSES.includes(status)
+        !DISBURSEMENT_INITIATED_STATUSES.includes(status)
       ) {
-        // Ops/admin correction paths within DISBURSEMENT_INITIATED_STATUSES stay
-        // open (e.g. disbursement_failed → disbursement_queued to retry) — only
-        // rewinding back to pending/under_review/approved is blocked, since that
-        // is the transition that lets the onLoanApproved trigger fire again on a
-        // loan that has already had a real SPEI transfer queued or sent (P0-B).
+        // Once disbursement has started, a loan may only be moved WITHIN
+        // DISBURSEMENT_INITIATED_STATUSES. Ops correction paths inside that set
+        // stay open (disbursement_failed → disbursement_queued to retry,
+        // overdue → in_collections → written_off/repaid); every exit out of it
+        // is refused.
+        //
+        // This used to be gated on the destination being in
+        // PRE_DISBURSEMENT_STATUSES, i.e. it only blocked
+        // post → pending/under_review/approved. But three canonical statuses —
+        // 'rejected', 'rejected_ml' and 'cancelled' — are in NEITHER set, so
+        // they were reachable from a funded loan and became a laundering route
+        // straight around the guard:
+        //
+        //   1. disbursed → cancelled   (allowed: 'cancelled' ∉ PRE_DISBURSEMENT)
+        //   2. cancelled → pending     (allowed: 'cancelled' ∉ DISBURSEMENT_INITIATED)
+        //   3. pending   → rejected    → isCreditReleasingRejection fires and
+        //      onLoanStatusChange hands the borrower their availableCredit back
+        //      for a loan whose money actually went out and was never repaid —
+        //      exactly what the comment on LOAN_REJECTION_SOURCE_STATUSES says
+        //      must never happen. (Step 3 → 'approved' instead is the SPEI
+        //      replay; that one is additionally caught by onLoanApproved's
+        //      disbursement_queue/disbursedAt idempotency claim, but the credit
+        //      path has no such second guard.)
+        //
+        // Step 1 is also harmful on its own: 'rejected'/'cancelled' are not in
+        // DEDUCTIBLE_STATUSES, so processPayroll silently stops collecting on a
+        // loan that has already been funded — the same harm submitReviewDecision
+        // refuses below by gating on the source status alone.
         throw new HttpsError(
           'failed-precondition',
-          `Cannot move loan from '${loan['status']}' back to '${status}' — disbursement has already started`
+          `Cannot move loan from '${loan['status']}' to '${status}' — disbursement has already started`
         );
       }
 
