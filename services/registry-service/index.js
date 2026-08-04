@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const helmet = require('helmet');
 require('dotenv').config();
@@ -38,8 +39,25 @@ app.use((req, res, next) => {
   next();
 });
 
+// Constant-time compare, matching softcredito-adapter's lib/internalAuth.js
+// -- whose header comment already claims "same pattern as ... vida-registry-
+// service", which was not true of the plain !== this replaces.
+// crypto.timingSafeEqual throws when the buffers differ in length, and the
+// presented value's length is entirely the caller's, so hash both sides
+// first to get two fixed-width 32-byte digests. The boot check above is what
+// keeps this fail-closed: with INTERNAL_SECRET unset both sides would be
+// undefined and every /internal route would be open, so the service refuses
+// to start instead.
+function secretMatches(secret, presented) {
+  if (typeof secret !== 'string' || typeof presented !== 'string') return false;
+  if (!secret || !presented) return false;
+  const a = crypto.createHash('sha256').update(secret).digest();
+  const b = crypto.createHash('sha256').update(presented).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 const requireInternal = (req, res, next) => {
-  if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET) {
+  if (!secretMatches(process.env.INTERNAL_SECRET, req.headers['x-internal-secret'])) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
@@ -68,6 +86,30 @@ function sendRegistryError(res, err, genericMessage) {
       error: 'invalid_external_id',
       system: err.system,
       externalId: err.externalId,
+    });
+  }
+  // Two Postgres SQLSTATEs reachable from these routes are the CALLER's
+  // fault, and both used to fall through to the 500 below. That was wrong
+  // twice over: it returned raw driver text (naming the column, the type and
+  // the constraint) to whoever sent the bad request, and -- because alert5xx
+  // is wired to res.json for any status >= 500 -- it paged this service's
+  // on-call for someone else's typo. :entityId is a URL path parameter, so
+  // producing either of these needs nothing but a malformed URL.
+  if (err.code === '22P02') {
+    // invalid_text_representation, i.e. :entityId is not a uuid at all.
+    return res.status(400).json({
+      error: 'invalid_request',
+      message: 'entityId must be a uuid',
+    });
+  }
+  if (err.code === '23503') {
+    // foreign_key_violation on entity_refs.entity_id: the uuid is well
+    // formed but no such entity exists. Nothing is written -- the whole
+    // transaction rolls back -- so no ref is left dangling at a
+    // non-existent entity for a later resolve to hand out.
+    return res.status(404).json({
+      error: 'unknown_entity',
+      message: 'no entity exists with the supplied entityId',
     });
   }
   return res.status(500).json({ error: genericMessage, message: err.message });

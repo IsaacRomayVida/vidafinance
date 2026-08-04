@@ -132,12 +132,31 @@ async function addExternalRef(client, entityId, system, externalId) {
   );
   if (rows.length > 0) return;
 
-  const existingEntityId = await resolveEntity(client, system, normalized);
-  if (existingEntityId !== entityId) {
+  // The ref already exists. Whether that is the harmless idempotent case or
+  // the split-identity signal turns on one comparison -- and it has to be
+  // made by Postgres, not by JS. entityId arrives as whatever the caller
+  // spelled it: registry-service takes it straight off the URL as the
+  // :entityId path parameter, and scripts/backfill.js passes through
+  // whatever it was handed. Postgres stores and returns uuids in exactly one
+  // canonical form, so '2898CEFA-...', '2898cefa-...' and the unhyphenated
+  // '2898cefa37bc...' are one uuid to the database and three different
+  // strings to `!==`. Comparing the raw strings therefore reported a ref
+  // that already points at EXACTLY this entity as a conflict -- and not a
+  // quiet one, since RefConflictError's message reads "possible duplicate
+  // identity, do not auto-merge". An ordinary retry raised the alarm that is
+  // supposed to mean two real humans collided, which is how a false alarm
+  // ends up costing someone a manual identity review. Casting to uuid here
+  // makes the comparison the one that matters: same row, or not.
+  const { rows: conflicting } = await client.query(
+    `SELECT entity_id FROM entity_refs
+     WHERE system = $1 AND external_id = $2 AND entity_id <> $3::uuid`,
+    [system, normalized, entityId]
+  );
+  if (conflicting.length > 0) {
     throw new RefConflictError({
       system,
       externalId: normalized,
-      existingEntityId,
+      existingEntityId: conflicting[0].entity_id,
       requestedEntityId: entityId,
     });
   }

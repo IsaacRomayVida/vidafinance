@@ -140,6 +140,43 @@ test('addExternalRef re-adding the same (system, externalId) to the same entity 
   }
 });
 
+// entityId reaches addExternalRef as whatever the caller spelled -- it is a
+// URL path parameter on registry-service's /internal/entities/:entityId/refs.
+// Postgres stores and returns uuids in one canonical form, so comparing the
+// caller's spelling to the stored one with a JS !== reports a ref that
+// already points at EXACTLY this entity as a conflict. That conflict is not
+// a quiet one: RefConflictError's own message says "possible duplicate
+// identity, do not auto-merge", so a plain idempotent retry raises the
+// alarm that is supposed to mean two humans collided.
+test('addExternalRef is still a no-op when the SAME entity id is spelled in a different uuid form', async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const entityId = await resolveOrCreateEntity(client, {
+      system: 'firebase',
+      externalId: 'uid-uuid-spelling',
+      kind: 'worker',
+    });
+    await addExternalRef(client, entityId, 'curp', 'CURP111111HDFRRL11');
+    await client.query('COMMIT');
+
+    // Same uuid, three spellings Postgres accepts and treats as identical.
+    for (const spelling of [entityId, entityId.toUpperCase(), entityId.replace(/-/g, '')]) {
+      await client.query('BEGIN');
+      await expect(addExternalRef(client, spelling, 'curp', 'CURP111111HDFRRL11')).resolves.toBeUndefined();
+      await client.query('COMMIT');
+    }
+
+    const { rows } = await pool.query(
+      'SELECT count(*)::int AS n FROM entity_refs WHERE system = $1 AND external_id = $2',
+      ['curp', 'CURP111111HDFRRL11']
+    );
+    expect(rows[0].n).toBe(1);
+  } finally {
+    client.release();
+  }
+});
+
 test('addExternalRef throws RefConflictError when the ref already resolves to a different entity', async () => {
   const client = await pool.connect();
   try {

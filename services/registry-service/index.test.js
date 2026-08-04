@@ -172,6 +172,82 @@ test('addExternalRef route surfaces a conflict as 409, not 500', async () => {
   expect(conflict.body.requestedEntityId).toBe(other.body.entityId);
 });
 
+// ── :entityId handling ──────────────────────────────────────────────────────
+//
+// :entityId is a URL path parameter, so its spelling is entirely the
+// caller's. The three tests below cover the three shapes a caller can send
+// that the route used to answer wrongly -- all three of which ended in an
+// answer that blames the wrong party: a false identity-conflict alarm, or a
+// 5xx (which also fires alert5xx and pages this service's on-call) for what
+// is a malformed request.
+
+test('re-attaching the same ref with a differently-spelled entity id is idempotent, not a conflict', async () => {
+  const seed = await request(app)
+    .post('/internal/entities/resolve')
+    .set('x-internal-secret', 'test-secret')
+    .send({ system: 'firebase', externalId: 'uid-spelling', kind: 'worker' });
+  const entityId = seed.body.entityId;
+
+  const first = await request(app)
+    .post(`/internal/entities/${entityId}/refs`)
+    .set('x-internal-secret', 'test-secret')
+    .send({ system: 'curp', externalId: 'SPEL800101HDFRRL05' });
+  expect(first.status).toBe(200);
+
+  // Same entity, same ref -- just an uppercase uuid. This is the ordinary
+  // retry case, not a duplicate identity.
+  const retry = await request(app)
+    .post(`/internal/entities/${entityId.toUpperCase()}/refs`)
+    .set('x-internal-secret', 'test-secret')
+    .send({ system: 'curp', externalId: 'SPEL800101HDFRRL05' });
+  expect(retry.status).toBe(200);
+  expect(retry.body).toEqual({ ok: true });
+
+  const { rows } = await pool.query(
+    "SELECT count(*)::int AS n FROM entity_refs WHERE system = 'curp' AND external_id = 'SPEL800101HDFRRL05'"
+  );
+  expect(rows[0].n).toBe(1);
+});
+
+test('400s (not 500) when :entityId is not a uuid, and leaks no Postgres internals', async () => {
+  const res = await request(app)
+    .post('/internal/entities/not-a-uuid/refs')
+    .set('x-internal-secret', 'test-secret')
+    .send({ system: 'curp', externalId: 'BADI800101HDFRRL06' });
+  expect(res.status).toBe(400);
+  expect(res.body.error).toBe('invalid_request');
+  // A 5xx here would page on-call for a client's typo, and the raw driver
+  // text names the column and type to whoever sent the bad request.
+  expect(JSON.stringify(res.body)).not.toMatch(/invalid input syntax/);
+});
+
+test('404s (not 500) when :entityId is a well-formed uuid for an entity that does not exist', async () => {
+  const res = await request(app)
+    .post('/internal/entities/11111111-2222-3333-4444-555555555555/refs')
+    .set('x-internal-secret', 'test-secret')
+    .send({ system: 'curp', externalId: 'NONE800101HDFRRL07' });
+  expect(res.status).toBe(404);
+  expect(res.body.error).toBe('unknown_entity');
+  expect(JSON.stringify(res.body)).not.toMatch(/foreign key constraint/);
+
+  // And nothing was written -- an orphan ref pointing at a non-existent
+  // entity would be a dangling identity the next resolve would hand out.
+  const { rows } = await pool.query(
+    "SELECT count(*)::int AS n FROM entity_refs WHERE external_id = 'NONE800101HDFRRL07'"
+  );
+  expect(rows[0].n).toBe(0);
+});
+
+test('rejects a wrong internal secret regardless of its length', async () => {
+  for (const presented of ['', 'x', 'test-secre', 'test-secrets', 'test-secret-longer-than-the-real-one']) {
+    const res = await request(app)
+      .post('/internal/entities/resolve')
+      .set('x-internal-secret', presented)
+      .send({ system: 'firebase', externalId: 'uid-secret-probe', kind: 'worker' });
+    expect(res.status).toBe(401);
+  }
+});
+
 test('400s when externalId is a JSON number instead of a string', async () => {
   const res = await request(app)
     .post('/internal/entities/resolve')
