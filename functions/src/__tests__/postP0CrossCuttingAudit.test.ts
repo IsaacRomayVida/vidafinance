@@ -58,8 +58,13 @@ jest.mock('firebase-functions', () => ({ logger: mockLogger }));
 jest.mock('firebase-functions/v2', () => ({ logger: mockLogger }));
 
 const mockSetCustomUserClaims = jest.fn().mockResolvedValue(undefined);
+// Mirrors UserRecord for the one field the employer_admin grant paths in
+// index.ts read before overwriting a principal's claims: `customClaims`, absent
+// here because every employer in this suite is an ordinary principal. See
+// approveEmployer.test.ts for the suite that varies it.
+const mockGetUser = jest.fn(async (uid: string) => ({ uid }));
 jest.mock('firebase-admin', () => ({
-  auth: jest.fn(() => ({ setCustomUserClaims: mockSetCustomUserClaims })),
+  auth: jest.fn(() => ({ setCustomUserClaims: mockSetCustomUserClaims, getUser: mockGetUser })),
 }));
 
 class MockTimestamp {

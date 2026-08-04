@@ -56,8 +56,29 @@ jest.mock('firebase-functions', () => ({ logger: mockLogger }));
 jest.mock('firebase-functions/v2', () => ({ logger: mockLogger }));
 
 const mockSetCustomUserClaims = jest.fn().mockResolvedValue(undefined);
+
+// `getUser` is load-bearing, not filler. setCustomUserClaims REPLACES the whole
+// claims object, so this trigger now reads what the target principal currently
+// IS before overwriting it. An auth mock that cannot be asked that question
+// models the trigger that never asked — the defect, not the fix.
+//
+// Mirrors the slice of UserRecord that decides it: `customClaims` is absent for
+// a principal who has none, which is the honest default for a newly created
+// employer. Tests register a uid here to make it something else.
+const mockAuthUsers: Record<string, { uid: string; customClaims?: Record<string, unknown> }> = {};
+let mockGetUserFails = false;
+const mockGetUser = jest.fn(async (uid: string) => {
+  if (mockGetUserFails) {
+    throw Object.assign(new Error('auth backend unavailable'), { code: 'auth/internal-error' });
+  }
+  return mockAuthUsers[uid] ?? { uid };
+});
+
 jest.mock('firebase-admin', () => ({
-  auth: jest.fn(() => ({ setCustomUserClaims: mockSetCustomUserClaims })),
+  auth: jest.fn(() => ({
+    setCustomUserClaims: mockSetCustomUserClaims,
+    getUser: mockGetUser,
+  })),
 }));
 
 class MockTimestamp {
@@ -208,6 +229,8 @@ beforeEach(() => {
   mockSetCustomUserClaims.mockImplementation(async () => {
     sequence.push('claim_minted');
   });
+  for (const uid of Object.keys(mockAuthUsers)) delete mockAuthUsers[uid];
+  mockGetUserFails = false;
   mockDb = buildMockDb();
 });
 
@@ -283,6 +306,105 @@ describe('onEmployerDocCreated — audit before privilege', () => {
 
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
     expect(mockDb.auditWrites).toHaveLength(0);
+  });
+});
+
+// ── The status gate is about the EMPLOYER, not about the principal ───────────
+//
+// Every check above asks something about the document that was created. None of
+// them asked anything about `uid` — yet the grant replaces that principal's
+// entire claims object, because setCustomUserClaims does not merge.
+//
+// That was reachable with one client-side write and no callable at all.
+// firestore.rules' employers rule is
+//
+//     allow create: if isAdmin() || (isOwner(employerId) && isSelfServeEmployerCreate());
+//
+// and only the self-serve branch constrains the document — the isAdmin() branch
+// accepts any document id and any shape. So an `admin` (grantable by any other
+// admin through setAdminClaim; a stale legacy `admin: true` token resolves to it
+// too) could write `employers/{superAdminUid}` with `status: 'active'` straight
+// from the browser SDK and this trigger would demote that super_admin to
+// employer_admin. Repeat per super_admin and the product has no role above the
+// attacker's, recoverable only by an operator running
+// scripts/bootstrap-super-admin.js out of band.
+//
+// Target uids are not a secret: isAdmin() has read — get AND list — on
+// /users/{userId}, which is where adminClaims mirrors every principal's role.
+describe('onEmployerDocCreated — the grant must not strip a higher role', () => {
+  it.each([['super_admin'], ['admin']])(
+    'refuses to overwrite a %s, and writes no audit record claiming it granted anything',
+    async (role) => {
+      mockAuthUsers['victim'] = { uid: 'victim', customClaims: { role } };
+      const trigger = await loadTrigger();
+
+      await expect(trigger(makeEvent('victim', 'active'))).resolves.toBeNull();
+
+      expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+      expect(mockDb.auditWrites).toHaveLength(0);
+      expect(sequence).toEqual([]);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Refusing to overwrite privileged claims with employer_admin',
+        expect.objectContaining({ uid: 'victim', existingRole: role })
+      );
+    }
+  );
+
+  it('refuses a target holding only the legacy `admin: true` boolean', async () => {
+    // No `role` field — the shape every principal granted admin between 7864c4d
+    // and a23963f still carries, and which withAuth still honours as `admin`. A
+    // guard reading `role` alone would wave exactly these accounts through.
+    mockAuthUsers['legacy'] = { uid: 'legacy', customClaims: { admin: true } };
+    const trigger = await loadTrigger();
+
+    await expect(trigger(makeEvent('legacy', 'active'))).resolves.toBeNull();
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    expect(mockDb.auditWrites).toHaveLength(0);
+  });
+
+  it('returns rather than throwing, so a permanent refusal is not retried forever', async () => {
+    mockAuthUsers['victim'] = { uid: 'victim', customClaims: { role: 'super_admin' } };
+    const trigger = await loadTrigger();
+
+    // Contrast the audit-write failure above, which DOES rethrow: that one is
+    // transient and worth a retry. Being an admin is not going to change on the
+    // next attempt, so rethrowing would only buy an endless retry loop.
+    await expect(trigger(makeEvent('victim', 'active'))).resolves.toBeNull();
+  });
+
+  it('refuses when the target\'s claims cannot be read at all, and rethrows so the runtime retries', async () => {
+    // Fails CLOSED, and this one IS transient — an auth-backend blip must not
+    // resolve to "the target was nobody", nor silently drop a legitimate grant.
+    mockGetUserFails = true;
+    const trigger = await loadTrigger();
+
+    await expect(trigger(makeEvent('employer-7', 'active'))).rejects.toThrow(
+      /refusing to overwrite them/
+    );
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    expect(mockDb.auditWrites).toHaveLength(0);
+  });
+
+  it('still grants to an ordinary principal with no claims (no regression)', async () => {
+    const trigger = await loadTrigger();
+
+    await trigger(makeEvent('plain-employer', 'active'));
+
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith('plain-employer', {
+      role: 'employer_admin',
+    });
+    expect(sequence).toEqual(['audit_write', 'claim_minted']);
+  });
+
+  it('still grants to a principal whose existing claim is employee or employer_admin', async () => {
+    mockAuthUsers['rehired'] = { uid: 'rehired', customClaims: { role: 'employee' } };
+    const trigger = await loadTrigger();
+
+    await trigger(makeEvent('rehired', 'active'));
+
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith('rehired', { role: 'employer_admin' });
   });
 });
 
