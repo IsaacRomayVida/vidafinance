@@ -98,6 +98,20 @@ jest.mock("firebase-admin", () => ({
     }),
   }),
 }));
+// employer-b.js persists its due-diligence result through
+// `firebase-admin/firestore`'s `getFirestore()` — a distinct module from the
+// `firebase-admin` mock above (which only backs the config seams). Defaults
+// to a healthy transaction; the outage test below overrides it per-case.
+let mockEmployerBRunTransaction = jest.fn(async (fn) =>
+  fn({ get: jest.fn().mockResolvedValue({ data: () => ({}) }), update: jest.fn() })
+);
+jest.mock("firebase-admin/firestore", () => ({
+  getFirestore: () => ({
+    collection: () => ({ doc: () => ({}) }),
+    runTransaction: (fn) => mockEmployerBRunTransaction(fn),
+  }),
+  FieldValue: { serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP") },
+}));
 
 const { runPipeline, sumCosts, STAGE_NAMES } = require("./decision-engine");
 const metamapClient = require("./metamap-client");
@@ -106,6 +120,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockMetamapCalls = [];
   mockMetamapResult = { pass: true, mocked: true, verificationId: "mock-mm" };
+  mockEmployerBRunTransaction = jest.fn(async (fn) =>
+    fn({ get: jest.fn().mockResolvedValue({ data: () => ({}) }), update: jest.fn() })
+  );
 
   metamapClient.createVerification.mockImplementation((...args) => {
     mockMetamapCalls.push(args);
@@ -353,6 +370,73 @@ describe("Decision Engine — MetaMap integration", () => {
       const applicant = applicantWithoutAmount();
       await runPipeline({ applicant, employer: EMPLOYER, loanAmount: 3000 }, { logger: quietLog() });
       expect(applicant.principalAmount).toBeUndefined();
+    });
+  });
+
+  // Blast-radius regression for employer-b.js's Firestore persist step.
+  // Before the fix, a rejected `db.runTransaction` there propagated out of
+  // `runEmployerDueDiligence`, decision-engine.js's stage try/catch turned
+  // that into `results.employerB = {pass:false, reason:"STAGE_ERROR"}`, and
+  // decision-engine.js:111 answered THAT with `decision:"rejected",
+  // reason:"EMPLOYER_SCORE_LOW"` — a specific, plausible business reason
+  // for a loan denial that was never true. The employer scored fine; only
+  // the audit-trail write to Firestore hiccuped.
+  describe("employer-b Firestore persist outage", () => {
+    const quietLog = () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() });
+    const happyPathFetch = () => {
+      const fetch = require("node-fetch");
+      fetch.mockImplementation((url) => {
+        if (typeof url === "string" && url.includes("/bureau/query")) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                bureau_score: 720,
+                has_bureau_record: true,
+                active_defaults: 0,
+                competitor_loans: 0,
+                dias_atraso: 0,
+                cartera_vencida: false,
+              }),
+          });
+        }
+        if (typeof url === "string" && url.includes("/score")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ championScore: 0.88 }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ is_fraud: false, anomaly_score: 10 }) });
+      });
+    };
+
+    it("does not reject a well-qualified employer's loan when the persist write fails", async () => {
+      happyPathFetch();
+      mockEmployerBRunTransaction.mockRejectedValueOnce(new Error("Firestore unavailable"));
+      const employerWithId = { ...EMPLOYER, employerId: "emp_123" };
+
+      const result = await runPipeline(
+        { applicant: APPLICANT, employer: employerWithId },
+        { logger: quietLog(), db: {} }
+      );
+
+      expect(result.reason).not.toBe("EMPLOYER_SCORE_LOW");
+      expect(result.stages.employerB.pass).toBe(true);
+      expect(result.stages.employerB.tier).toBeGreaterThan(0);
+      expect(result.decision).toBe("approved");
+    });
+
+    it("still approves the same applicant when the persist write succeeds (control)", async () => {
+      happyPathFetch();
+      const employerWithId = { ...EMPLOYER, employerId: "emp_123" };
+
+      const result = await runPipeline(
+        { applicant: APPLICANT, employer: employerWithId },
+        { logger: quietLog(), db: {} }
+      );
+
+      expect(result.decision).toBe("approved");
+      expect(result.stages.employerB.pass).toBe(true);
     });
   });
 

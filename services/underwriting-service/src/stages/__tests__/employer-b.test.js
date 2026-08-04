@@ -767,6 +767,35 @@ describe("runEmployerDueDiligence", () => {
 
       expect(mockUpdate.mock.calls[0][0]).toHaveProperty("maxActiveSlots");
     });
+
+    // A Firestore outage during the persist step must not discard the
+    // due-diligence result that was already correctly computed above it.
+    // Before the fix, `runEmployerDueDiligence` let the transaction
+    // rejection propagate, so decision-engine.js's stage try/catch turned a
+    // strong Tier 1 employer into `results.employerB = {pass:false, reason:
+    // "STAGE_ERROR"}` — which decision-engine.js:111 answers with
+    // `decision: "rejected", reason: "EMPLOYER_SCORE_LOW"`. That reason is
+    // false: the employer scored fine, Firestore was just unavailable.
+    it("still returns the computed Tier 1 result when the Firestore transaction rejects", async () => {
+      mockRunTransaction.mockRejectedValueOnce(new Error("Firestore unavailable"));
+      const employer = makeEmployer();
+      const partA = makePartAResults();
+
+      const result = await runEmployerDueDiligence(employer, partA);
+
+      expect(result.pass).toBe(true);
+      expect(result.tier).toBe(1);
+      expect(result.maxActiveSlots).toBe(10);
+      expect(result.score).toBeGreaterThanOrEqual(TIER_1_THRESHOLD);
+    });
+
+    it("does not reject its promise when the Firestore transaction rejects", async () => {
+      mockRunTransaction.mockRejectedValueOnce(new Error("Firestore unavailable"));
+      const employer = makeEmployer();
+      const partA = makePartAResults();
+
+      await expect(runEmployerDueDiligence(employer, partA)).resolves.toBeDefined();
+    });
   });
 
   describe("signals", () => {
