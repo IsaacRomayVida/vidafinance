@@ -397,6 +397,47 @@ describe("stage5-review: active learning routing", () => {
   });
 });
 
+// ─── AML/Criminal Screening Failure ──────────────────────────────────────────
+
+describe("stage5-review: AML/criminal screening failure", () => {
+  const originalMetamapMock = process.env.METAMAP_MOCK;
+  const fetchMock = require("node-fetch");
+
+  afterEach(() => {
+    process.env.METAMAP_MOCK = originalMetamapMock;
+    fetchMock.mockReset();
+  });
+
+  it("does not let a failed AML/criminal/PEP screen look identical to a clean one", async () => {
+    // Simulate a MetaMap outage during the AML screen itself (createVerification
+    // never gets past auth), the same shape of failure that previously caused
+    // Belvo and SAT lookups elsewhere in this codebase to silently clear flags.
+    process.env.METAMAP_MOCK = "false";
+    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const result = await runStage5({
+      loanId: "test-aml-outage",
+      correlationId: "corr-aml-outage",
+      applicant: { ...baseApplicant, rfc: "PEPJ900101ABC" },
+      accumulatedSignals: baseSignals,
+      firestore: null,
+    });
+
+    // A screen we couldn't run at all must not be indistinguishable from one
+    // that came back clean: the reviewer needs to be told the screen failed
+    // instead of reading a generic "Escalated from Stage 4" as "AML is clear",
+    // risk level should not default to "medium" as if nothing were wrong, and
+    // it should be queued at top priority since we have zero AML signal —
+    // higher urgency than a case we actually screened and are merely unsure about.
+    assert.ok(/aml|screening/i.test(result.reason),
+      `reason should mention the AML screening failure, got: ${result.reason}`);
+    assert.strictEqual(result.riskLevel, "high",
+      `an unscreened applicant should not default to riskLevel "medium", got: ${result.riskLevel}`);
+    assert.strictEqual(result.priority, 1,
+      `an AML screening failure should get top queue priority, got: ${result.priority}`);
+  }, 15000);
+});
+
 // ─── Review Queue Document Structure ─────────────────────────────────────────
 
 describe("stage5-review: review queue document", () => {
