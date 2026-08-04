@@ -124,14 +124,61 @@ service cloud.firestore {
     //   employer must also exist, be in a status this codebase already treats
     //   as eligible, and (if that employer opted into a CURP allowlist) admit
     //   this CURP — see employeeCreateEligibleEmployer below.
+    //   The identity verdict may not be self-assigned either — see
+    //   noSelfAssignedVerification below.
     // Update: ops (any field), or self (whitelisted personal fields only) —
-    //   creditLimit, availableCredit, employerId, kycStatus must come from CFs.
+    //   creditLimit, availableCredit, employerId and the verification fields
+    //   are absent from that whitelist, so they can only come from CFs.
     // Delete: ops only.
     // =============================================
     function noSelfAssignedCredit() {
       return !request.resource.data.keys().hasAny([
         'creditLimit', 'availableCredit', 'creditLimitSetAt', 'salarySource', 'riskTier', 'mlScore'
       ]);
+    }
+
+    // The identity verdict, made server-owned.
+    //
+    // The comment above has said "kycStatus must come from CFs" since this
+    // block was written, and nothing ever implemented it: noSelfAssignedCredit
+    // names the six credit fields and stops. `allow update` was never the hole
+    // — a self-update is confined to onlyAffects([phone, bankClabe, ...]),
+    // which lists none of these fields. CREATE was the hole, and it is the
+    // write that matters, because employees/{uid} is created ONCE, by the
+    // browser, with whatever payload the browser chose. A signup could carry
+    // kycStatus: 'approved' and nothing looked at it again.
+    //
+    // Two different treatments, because these fields are not the same kind of
+    // thing:
+    //
+    //   metamapStatus / metamapVerifiedAt / metamapLastEventAt are MetaMap's
+    //   verdict, written only by handleVerificationCompleted (functions/src/
+    //   webhooks/metamap.ts) behind an HMAC signature check, and read by
+    //   requestLoan as the sole proof of identity (IDENTITY_NOT_VERIFIED).
+    //   That handler uses the Admin SDK, which does not evaluate these rules
+    //   at all, so blocking the fields here costs the verification path
+    //   nothing and takes the client out of it completely. Without this, the
+    //   server-side gate would be decorative: a borrower refused for
+    //   metamapStatus could simply write metamapStatus: 'verified' onto their
+    //   own document at signup.
+    //
+    //   metamapVerificationId is deliberately NOT blocked. Onboarding.tsx
+    //   writes it as the key handleVerificationCompleted matches the incoming
+    //   webhook against, so the client must be able to set it, and on its own
+    //   it asserts nothing — it names a verification, it does not claim one
+    //   passed.
+    //
+    //   kycStatus is a display field (KYCBanner, EmployeeRoster's KycBadge)
+    //   that onboarding legitimately writes, so it is constrained by VALUE
+    //   rather than blocked outright: the client may say "not started",
+    //   "waiting" or "rejected" about itself, never "approved"/"verified".
+    //   Nothing with money behind it reads this field any more.
+    function noSelfAssignedVerification() {
+      return !request.resource.data.keys().hasAny([
+               'metamapStatus', 'metamapVerifiedAt', 'metamapLastEventAt'
+             ])
+          && (!('kycStatus' in request.resource.data)
+              || request.resource.data.kycStatus in ['not_started', 'pending_review', 'rejected']);
     }
 
     // employees/{uid}.employerId is client-chosen and, until this rule,
@@ -223,6 +270,7 @@ service cloud.firestore {
                   || isOps();
       allow create: if isOwner(employeeId)
                     && noSelfAssignedCredit()
+                    && noSelfAssignedVerification()
                     && employeeCreateEligibleEmployer(request.resource.data.employerId, request.resource.data.curp);
       allow update: if isOps()
                     || (isOwner(employeeId)

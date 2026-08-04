@@ -91,14 +91,33 @@ async function handleVerificationCompleted(
     return;
   }
 
+  // limit(2), not limit(1), so an AMBIGUOUS match is detectable rather than
+  // silently resolved. `metamapVerificationId` is written by the browser
+  // (Onboarding.tsx) and is the only thing tying this verdict to an account —
+  // and since requestLoan now treats `metamapStatus == 'verified'` as proof of
+  // identity, whichever document this picks is the one that can borrow. Under
+  // limit(1) two accounts claiming the same verificationId meant an arbitrary
+  // one of them was marked verified: an attacker who learned a colleague's id
+  // could put it on their own document and take the verdict from a real
+  // verification they never sat. Fail CLOSED and mark neither — a stuck
+  // verification is a support ticket, a wrongly granted one is a loan to
+  // someone whose identity was never checked.
   const snap = await db
     .collectionGroup('employees')
     .where('metamapVerificationId', '==', verificationId)
-    .limit(1)
+    .limit(2)
     .get();
 
   if (snap.empty) {
     logger.warn('verification.completed: no employee with verificationId', { verificationId });
+    return;
+  }
+
+  if (snap.size > 1) {
+    logger.error('verification.completed: verificationId claimed by multiple employees', {
+      verificationId,
+      employeeIds: snap.docs.map((d) => d.id),
+    });
     return;
   }
 

@@ -22,6 +22,13 @@ export enum VidaErrorCode {
   // VIDA; this one is the employer's own decision about this person. Neither is
   // a credit decline, and neither must be shown to the borrower as one.
   EMPLOYER_ENROLLMENT_NOT_PERMITTED = 'EMPLOYER_ENROLLMENT_NOT_PERMITTED',
+  // Identity was never proven for this borrower — MetaMap has not returned a
+  // 'verified' verdict for them. Deliberately distinct from every employer code
+  // above: those are about the company, this is about whether the person on the
+  // other end is who they claim to be. It is NOT a credit decline either, and
+  // must never be surfaced to the borrower as one — the remedy is to finish
+  // identity verification, not to apply again later or for less.
+  IDENTITY_NOT_VERIFIED = 'IDENTITY_NOT_VERIFIED',
 }
 
 interface ErrorContext {
