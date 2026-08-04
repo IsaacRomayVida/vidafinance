@@ -118,6 +118,9 @@ jest.mock('../utils/sentry', () => ({ initSentry: jest.fn(), captureException: j
 type Handler = (req: unknown) => Promise<unknown>;
 
 const EMPLOYEE_AUTH = { uid: 'employee-1', token: { role: 'employee' } };
+const OPS_AUTH = { uid: 'ops-1', token: { role: 'ops' } };
+const ADMIN_AUTH = { uid: 'admin-1', token: { role: 'admin' } };
+const EMPLOYER_ADMIN_AUTH = { uid: 'employer-1', token: { role: 'employer_admin' } };
 
 beforeEach(() => {
   jest.resetModules();
@@ -262,6 +265,236 @@ describe('read-only dashboards stay fail-OPEN by design', () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Rate limiter unavailable'),
       expect.objectContaining({ context: 'getEmployeeDashboard' })
+    );
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// #556-adjacent: `enforceRateLimit()` landed but 20 call sites still inlined
+// the old try/checkRateLimit/catch-and-warn pattern, so a limiter outage
+// silently lifted every one of those limits. This section pins the migrated
+// behaviour of every one of them — closed where the guidance calls for it,
+// and open (with the decision stated) where it does not.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('migrated call sites fail CLOSED — money, mutations with a blast radius beyond capacity', () => {
+  it('generatePaymentLink refuses rather than reaching the paid payment-server API', async () => {
+    redisAvailable = false;
+    const { generatePaymentLink } = await import('../index');
+
+    await expect(
+      (generatePaymentLink as unknown as Handler)({ data: {}, auth: EMPLOYEE_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('markLoanDisbursed refuses rather than recording an STP disbursement', async () => {
+    redisAvailable = false;
+    const { markLoanDisbursed } = await import('../index');
+
+    await expect(
+      (markLoanDisbursed as unknown as Handler)({ data: {}, auth: OPS_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    expect(mockCollection.get).not.toHaveBeenCalled();
+  });
+
+  it('processPayroll refuses rather than deducting from employee payroll', async () => {
+    redisAvailable = false;
+    const { processPayroll } = await import('../index');
+
+    await expect(
+      (processPayroll as unknown as Handler)({ data: {}, auth: EMPLOYER_ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('approveEmployer (the LIVE callable, inline in index.ts) refuses rather than activating an employer', async () => {
+    redisAvailable = false;
+    const { approveEmployer } = await import('../index');
+
+    await expect(
+      (approveEmployer as unknown as Handler)({ data: {}, auth: ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('updateLoanStatus (the LIVE callable, inline in index.ts) refuses rather than writing loan status', async () => {
+    redisAvailable = false;
+    const { updateLoanStatus } = await import('../index');
+
+    await expect(
+      (updateLoanStatus as unknown as Handler)({ data: {}, auth: ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('acceptInvite refuses rather than reopening invite-token acceptance to brute force', async () => {
+    redisAvailable = false;
+    const { acceptInvite } = await import('../index');
+
+    await expect(
+      (acceptInvite as unknown as Handler)({ data: {}, auth: EMPLOYEE_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('sendEmployeeInvite refuses rather than spamming outbound invite email', async () => {
+    redisAvailable = false;
+    const { sendEmployeeInvite } = await import('../index');
+
+    await expect(
+      (sendEmployeeInvite as unknown as Handler)({ data: {}, auth: EMPLOYER_ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('submitReviewDecision refuses rather than deciding a loan approve/reject', async () => {
+    redisAvailable = false;
+    const { submitReviewDecision } = await import('../index');
+
+    await expect(
+      (submitReviewDecision as unknown as Handler)({ data: {}, auth: OPS_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('updateEmployerTier refuses rather than changing an employer risk tier or slot cap', async () => {
+    redisAvailable = false;
+    const { updateEmployerTier } = await import('../index');
+
+    await expect(
+      (updateEmployerTier as unknown as Handler)({ data: {}, auth: OPS_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('setEmployerClaims refuses rather than granting employer_admin', async () => {
+    redisAvailable = false;
+    const { setEmployerClaims } = await import('../index');
+
+    await expect(
+      (setEmployerClaims as unknown as Handler)({ data: { uid: 'target-1' }, auth: ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('updateEmployerCurpConfig refuses rather than widening an employer CURP gate', async () => {
+    redisAvailable = false;
+    const { updateEmployerCurpConfig } = await import('../index');
+
+    await expect(
+      (updateEmployerCurpConfig as unknown as Handler)({ data: {}, auth: EMPLOYER_ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('submitEmployerDocs refuses rather than accepting KYC document URLs', async () => {
+    redisAvailable = false;
+    const { submitEmployerDocs } = await import('../index');
+
+    await expect(
+      (submitEmployerDocs as unknown as Handler)({ data: {}, auth: EMPLOYER_ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('submitPayrollDeductionSetup refuses rather than registering the payroll deduction path', async () => {
+    redisAvailable = false;
+    const { submitPayrollDeductionSetup } = await import('../index');
+
+    await expect(
+      (submitPayrollDeductionSetup as unknown as Handler)({ data: {}, auth: EMPLOYER_ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('ensureEmployerCode refuses rather than reopening the employer-code space to minting', async () => {
+    redisAvailable = false;
+    const { ensureEmployerCode } = await import('../index');
+
+    await expect(
+      (ensureEmployerCode as unknown as Handler)({ data: {}, auth: EMPLOYER_ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  // The two files below are NOT deployed — index.ts defines its own inline
+  // updateLoanStatus/approveEmployer and neither imports these. Confirmed by
+  // grepping index.ts for an import of either path (none exists) and by each
+  // file's own header comment. They are fixed anyway per the audit brief, and
+  // pinned here so they cannot regress back to fail-open unnoticed.
+
+  it('loans/updateLoanStatus.ts (NOT deployed — reference variant) refuses rather than writing loan status', async () => {
+    redisAvailable = false;
+    const { updateLoanStatus } = await import('../loans/updateLoanStatus');
+
+    await expect(
+      (updateLoanStatus as unknown as Handler)({ data: {}, auth: OPS_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('employers/approveEmployer.ts (NOT deployed — decoy module) refuses rather than activating an employer', async () => {
+    redisAvailable = false;
+    const { approveEmployerHandler } = await import('../employers/approveEmployer');
+
+    await expect(
+      approveEmployerHandler({ data: { employerId: 'emp-1', decision: 'approved' }, auth: ADMIN_AUTH })
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+});
+
+describe('migrated call sites stay fail-OPEN by stated decision — reads that protect capacity, not money or a secret', () => {
+  it('getPortfolioReport runs its handler when the limiter is down (admin-only aggregation read)', async () => {
+    redisAvailable = false;
+    const { getPortfolioReport } = await import('../index');
+
+    const err = (await (getPortfolioReport as unknown as Handler)({
+      data: {},
+      auth: ADMIN_AUTH,
+    }).catch((e: unknown) => e)) as { code?: string } | undefined;
+
+    if (err) expect(err.code).not.toBe('unavailable');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Rate limiter unavailable'),
+      expect.objectContaining({ context: 'getPortfolioReport' })
+    );
+  });
+
+  it('getEmployerDashboard runs its handler when the limiter is down (read-only dashboard)', async () => {
+    redisAvailable = false;
+    const { getEmployerDashboard } = await import('../index');
+
+    const err = (await (getEmployerDashboard as unknown as Handler)({
+      data: {},
+      auth: EMPLOYEE_AUTH,
+    }).catch((e: unknown) => e)) as { code?: string };
+
+    expect(err.code).not.toBe('unavailable');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Rate limiter unavailable'),
+      expect.objectContaining({ context: 'getEmployerDashboard' })
+    );
+  });
+
+  it('getReviewDetail runs its handler when the limiter is down (read-only detail view)', async () => {
+    redisAvailable = false;
+    const { getReviewDetail } = await import('../index');
+
+    const err = (await (getReviewDetail as unknown as Handler)({
+      data: {},
+      auth: OPS_AUTH,
+    }).catch((e: unknown) => e)) as { code?: string };
+
+    expect(err.code).not.toBe('unavailable');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Rate limiter unavailable'),
+      expect.objectContaining({ context: 'getReviewDetail' })
+    );
+  });
+
+  it('sendVerificationEmail runs its handler when the limiter is down (not yet implemented — no spend to protect)', async () => {
+    redisAvailable = false;
+    const { sendVerificationEmail } = await import('../index');
+
+    const err = (await (sendVerificationEmail as unknown as Handler)({
+      data: {},
+      auth: EMPLOYEE_AUTH,
+    }).catch((e: unknown) => e)) as { code?: string };
+
+    // Reaches its own 'unimplemented' error, not 'unavailable' — proof
+    // execution passed the limiter gate rather than being stopped by it.
+    expect(err.code).not.toBe('unavailable');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Rate limiter unavailable'),
+      expect.objectContaining({ context: 'sendVerificationEmail' })
     );
   });
 });

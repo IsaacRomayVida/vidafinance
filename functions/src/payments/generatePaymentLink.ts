@@ -1,12 +1,11 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { logger } from 'firebase-functions';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
 import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 import { DISBURSED_STATUSES, LOAN_STATUS } from '../loans/loanStatus';
 
 // A loan is repayable from "funds sent" (`DISBURSED_STATUSES`: 'active' —
@@ -40,16 +39,13 @@ export const generatePaymentLink = onCall(
           loanId: (data as Record<string, unknown>)['loanId'] as string,
         },
         async () => {
-          // Rate limit: 20/min/uid (mutation — creates payment link, hits external payment server)
-          try {
-            const allowed = await checkRateLimit(`rl:generatePaymentLink:${auth.uid}`, 20, 60);
-            if (!allowed) {
-              throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-            }
-          } catch (e: unknown) {
-            if (e instanceof HttpsError) throw e;
-            logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-          }
+          // Rate limit: 20/min/uid (mutation — creates payment link, hits external payment server).
+          // Fail closed: a limiter outage must not lift the only brake on
+          // spamming the paid payment-server checkout endpoint.
+          await enforceRateLimit(`rl:generatePaymentLink:${auth.uid}`, 20, 60, {
+            onUnavailable: 'closed',
+            context: 'generatePaymentLink',
+          });
 
           const parseResult = GeneratePaymentLinkSchema.safeParse(data);
           if (!parseResult.success) {
