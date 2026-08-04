@@ -1589,6 +1589,98 @@ export const updateLoanStatus = onCall(
 
 // generatePaymentLink is exported from ./payments/generatePaymentLink
 
+// ── The employer_admin grant, and what it must never take away ───────────────
+
+/**
+ * Roles an employer-onboarding path may never overwrite.
+ *
+ * These are the two roles that gate role management itself (setAdminClaim /
+ * revokeAdminClaim), so losing one is not a sideways move — it is the loss of
+ * the only in-product means of getting it back.
+ *
+ * `ops` is deliberately NOT in this set. Demoting an ops user is a real
+ * annoyance, but it takes nothing away that an admin could not already take
+ * away legitimately through setAdminClaim, so it is not an escalation and
+ * blocking it here would only refuse work ops does to itself.
+ */
+const EMPLOYER_GRANT_PROTECTED_ROLES: readonly string[] = ['admin', 'super_admin'];
+
+/**
+ * Reads what a principal currently IS, from the claims that actually authorize
+ * their requests.
+ *
+ * Mirrors resolveEffectiveRole in middleware/authMiddleware.ts, including the
+ * legacy `admin: true` boolean: a principal granted admin between 7864c4d and
+ * a23963f carries the bare boolean and no `role` field, and that token still
+ * satisfies every admin gate in this codebase. A guard that read only `role`
+ * would wave exactly those accounts through.
+ */
+function effectiveRoleFromClaims(claims: Record<string, unknown> | undefined): string | null {
+  const role = claims?.['role'];
+  if (typeof role === 'string' && role.length > 0) return role;
+  if (claims?.['admin'] === true) return 'admin';
+  return null;
+}
+
+/**
+ * Refuses to hand `employer_admin` to a principal who is currently an admin or
+ * a super_admin.
+ *
+ * setCustomUserClaims REPLACES the whole claims object — it does not merge — so
+ * every `setCustomUserClaims(uid, { role: 'employer_admin' })` in this file is a
+ * write that silently destroys whatever the target was before. None of the three
+ * call sites ever read that. Each one gates on a property of the EMPLOYER
+ * DOCUMENT (does it exist, is its status approved) and never on a property of
+ * the PRINCIPAL whose privileges it is about to overwrite.
+ *
+ * That is reachable, not theoretical. firestore.rules' employers rule reads
+ *
+ *     allow create: if isAdmin() || (isOwner(employerId) && isSelfServeEmployerCreate());
+ *
+ * and the isAdmin() branch carries no shape constraint at all — only the
+ * self-serve branch is pinned to 'pending_verification'. So any `admin` (a role
+ * any other admin can grant through setAdminClaim, and which a stale legacy
+ * `admin: true` token resolves to) can write `employers/{victimUid}` with
+ * `status: 'active'` straight from the browser SDK, for a uid that is not
+ * theirs. onEmployerDocCreated then fires and rewrites that victim's claims to
+ * `{ role: 'employer_admin' }`. Victim uids are not secret either: isAdmin()
+ * grants read — get AND list — on /users/{userId}, where adminClaims mirrors
+ * every principal's role. Point it at each super_admin in turn and the product
+ * is left with no role above the attacker's, recoverable only by an operator
+ * running scripts/bootstrap-super-admin.js out of band.
+ *
+ * Fails closed on an unreadable auth record. Under-reading the target's
+ * privileges is the entire defect, so "I could not find out what they were" must
+ * refuse rather than assume they were nobody.
+ */
+async function resolveProtectedRole(uid: string): Promise<string | null> {
+  let existingRole: string | null;
+  try {
+    const user = await admin.auth().getUser(uid);
+    existingRole = effectiveRoleFromClaims(user.customClaims as Record<string, unknown> | undefined);
+  } catch (e: unknown) {
+    // Deliberately NOT swallowed into "not privileged". Every caller below turns
+    // this into a refusal; a lookup that did not answer is not an answer of no.
+    throw new HttpsError(
+      'internal',
+      `Cannot verify existing privileges for ${uid}; refusing to overwrite them: ${(e as Error).message}`
+    );
+  }
+
+  return existingRole && EMPLOYER_GRANT_PROTECTED_ROLES.includes(existingRole) ? existingRole : null;
+}
+
+async function assertNotOverwritingPrivilegedClaims(uid: string): Promise<void> {
+  const protectedRole = await resolveProtectedRole(uid);
+  if (protectedRole) {
+    throw new HttpsError(
+      'failed-precondition',
+      `User ${uid} is currently '${protectedRole}'. Granting employer_admin would strip that role — ` +
+        'change it deliberately through revokeAdminClaim first.'
+    );
+  }
+}
+
 // ── approveEmployer — admin only ─────────────────────────────────────────────
 
 interface ApproveEmployerData {
@@ -1639,6 +1731,13 @@ export const approveEmployer = onCall(
         const empDoc = await db.collection('employers').doc(employerUid).get();
         if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
         const emp = empDoc.data()!;
+
+        // Checked HERE, before the activation write below, and not next to the
+        // setCustomUserClaims call at the bottom of this handler. A refusal must
+        // leave nothing half-applied: refusing later would still have activated
+        // the employer, ML-scored them and registered them with SoftCrédito for
+        // an approval this function then declined to complete.
+        await assertNotOverwritingPrivilegedClaims(employerUid);
 
         await db.collection('employers').doc(employerUid).update({
           status: 'active',
@@ -2521,6 +2620,34 @@ export const onEmployerDocCreated = onDocumentCreated('employers/{uid}', async (
     return null;
   }
 
+  // The document's status is a fact about the EMPLOYER. It is not a fact about
+  // `uid`, and until this check nothing here ever established one — yet the line
+  // below replaces that principal's entire claims object.
+  //
+  // An approved-at-creation employer document can only have come from an admin
+  // (firestore.rules pins the self-serve branch to 'pending_verification'), and
+  // the admin branch of that same create rule is unconstrained: `allow create:
+  // if isAdmin()`, any document id, any shape. So one admin writing
+  // `employers/{superAdminUid}` with `status: 'active'` from the browser SDK was
+  // enough to demote a super_admin to employer_admin — no callable involved.
+  //
+  // Refused rather than thrown, unlike the audit-write failure below: being an
+  // admin is a permanent condition, so rethrowing would only buy an endless
+  // Cloud Functions retry loop against a fact that will never change. A
+  // resolveProtectedRole lookup FAILURE does still throw, because that one is
+  // transient and worth retrying.
+  const protectedRole = await resolveProtectedRole(uid);
+  if (protectedRole) {
+    logger.error('Refusing to overwrite privileged claims with employer_admin', {
+      uid,
+      existingRole: protectedRole,
+      status,
+      trigger: 'onEmployerDocCreated',
+      service: 'functions',
+    });
+    return null;
+  }
+
   // This trigger mints employer_admin and previously left no trace at all — the
   // grant was invisible to ops even after audit_log became readable. Log first so
   // a failed audit write aborts (and retries) the grant instead of hiding it.
@@ -2559,6 +2686,13 @@ export const setEmployerClaims = onCall(
 
         const empDoc = await db.collection('employers').doc(uid).get();
         if (!empDoc.exists) throw new HttpsError('not-found', 'Employer not found');
+
+        // The employer document's existence is the ONLY thing this callable
+        // checked, and it says nothing about who `uid` is. An admin who can
+        // create employers/{victimUid} (firestore.rules: `allow create: if
+        // isAdmin()`, unconstrained) could point this at a super_admin and
+        // replace their claims wholesale.
+        await assertNotOverwritingPrivilegedClaims(uid);
 
         // Privilege escalation: log first, mint the claim second, and let an audit
         // failure propagate. An employer_admin claim granted with no record of who
