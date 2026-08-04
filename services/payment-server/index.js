@@ -364,17 +364,38 @@ app.post('/internal/repayment', requireInternal, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── Queue stats (for admin monitoring) ─────────────────────────────
+// ── Queue stats (for admin monitoring) ──────────────────────────────
+// Express 4 does not catch a rejected promise from an async route handler, so
+// an unguarded `await Promise.all([...counts])` sent no response at all when
+// Redis was unreachable -- the caller hung until its own timeout instead of
+// getting an error status. Same defect class as #526/#528. Each queue's
+// counts are now collected in their own try/catch so one unreachable queue
+// degrades only that queue's entry instead of the whole response, and
+// `q.close()` moved into a `finally` so every Queue instance is closed
+// regardless of outcome -- previously a rejection left that iteration's queue
+// open and never even reached the remaining queue names, leaking a
+// connection per call during an outage. Only when every queue is unreachable
+// does the route answer 503; a partial outage still returns what it has.
 app.get('/internal/queue-stats', requireInternal, async (req, res) => {
   const names = ['vida-disbursements', 'vida-notifications', 'vida-pdfs', 'vida-underwriting'];
   const stats = {};
+  const errors = {};
   for (const n of names) {
     const q = new Queue(n, { connection: redis });
-    const [w, a, f, c, d] = await Promise.all([q.getWaitingCount(), q.getActiveCount(), q.getFailedCount(), q.getCompletedCount(), q.getDelayedCount()]);
-    stats[n] = { waiting: w, active: a, failed: f, completed: c, delayed: d };
-    await q.close();
+    try {
+      const [w, a, f, c, d] = await Promise.all([q.getWaitingCount(), q.getActiveCount(), q.getFailedCount(), q.getCompletedCount(), q.getDelayedCount()]);
+      stats[n] = { waiting: w, active: a, failed: f, completed: c, delayed: d };
+    } catch (err) {
+      errors[n] = err.message;
+    } finally {
+      await q.close().catch(() => {});
+    }
   }
-  res.json({ queues: stats, ts: new Date().toISOString() });
+
+  if (Object.keys(stats).length === 0) {
+    return res.status(503).json({ error: 'Queue stats unavailable — Redis unreachable', errors, ts: new Date().toISOString() });
+  }
+  res.json({ queues: stats, ...(Object.keys(errors).length ? { errors } : {}), ts: new Date().toISOString() });
 });
 
 // ── BullMQ: disbursement worker ─────────────────────────────────────

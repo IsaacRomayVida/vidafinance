@@ -5,6 +5,8 @@
 // listeners so tests can invoke the disbursement logic directly, the same
 // way BullMQ would invoke it when a job runs.
 
+let failingCounts = new Map(); // queue name -> error message to throw on any getXCount()
+
 class Queue {
   constructor(name) {
     this.name = name;
@@ -16,15 +18,22 @@ class Queue {
     Queue.allAdded.push({ queue: this.name, ...job });
     return { id: `job_${Queue.allAdded.length}` };
   }
-  async getWaitingCount() { return 0; }
-  async getActiveCount() { return 0; }
-  async getFailedCount() { return 0; }
-  async getCompletedCount() { return 0; }
-  async getDelayedCount() { return 0; }
-  async close() {}
+  _maybeFailCount() {
+    if (failingCounts.has(this.name)) throw new Error(failingCounts.get(this.name));
+  }
+  async getWaitingCount() { this._maybeFailCount(); return 0; }
+  async getActiveCount() { this._maybeFailCount(); return 0; }
+  async getFailedCount() { this._maybeFailCount(); return 0; }
+  async getCompletedCount() { this._maybeFailCount(); return 0; }
+  async getDelayedCount() { this._maybeFailCount(); return 0; }
+  async close() { Queue.closedNames.push(this.name); }
 }
 Queue.allAdded = [];
-Queue.__reset = () => { Queue.allAdded = []; };
+Queue.closedNames = [];
+Queue.__reset = () => { Queue.allAdded = []; Queue.closedNames = []; failingCounts = new Map(); };
+// Arm every getXCount() on the named queue to reject, simulating Redis being
+// unreachable for that queue -- same shape as admin.__failAdds().
+Queue.__failCounts = (name, message = 'Redis unavailable') => { failingCounts.set(name, message); };
 
 class Worker {
   constructor(name, processor, opts) {
