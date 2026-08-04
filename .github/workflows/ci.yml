@@ -341,7 +341,7 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/vida_registry_test
 
   firestore-rules:
-    name: "Firestore Rules Tests (emulator, HARD gate)"
+    name: "Security Rules Tests (Firestore + Storage emulator, HARD gate)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -373,8 +373,14 @@ jobs:
       # (#385) and the suite is 92/92. These rules are the last line of defence
       # on tenant isolation and on the loan audit trail, so a regression here
       # must block the merge rather than show green with a red log.
-      - name: Rules tests (Firestore emulator)
-        run: firebase emulators:exec --only firestore --project demo-vida-finance-test "npm run test:rules"
+      # storage joined the emulator list on 2026-08-04 with storage.rules.test.ts.
+      # storage.rules had guarded employer KYC docs, borrower identity documents,
+      # signed contracts and payroll CSVs with no test of any kind, which is how
+      # onboarding/employer_signup/* kept an anonymous-write grant. Starting only
+      # the firestore emulator here would let that suite fail to connect rather
+      # than fail on the rules, so both emulators come up together.
+      - name: Rules tests (Firestore + Storage emulators)
+        run: firebase emulators:exec --only firestore,storage --project demo-vida-finance-test "npm run test:rules"
 
   loan-flow-e2e:
     name: "Loan Flow E2E (emulator, HARD gate)"
