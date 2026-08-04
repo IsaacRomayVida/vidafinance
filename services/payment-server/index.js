@@ -304,12 +304,7 @@ app.post('/create-checkout', requireInternal, async (req, res) => {
 
     if (!conektaRes.ok) {
       const errBody = await conektaRes.text();
-      await db.collection('incident_log').add({
-        source: 'create-checkout',
-        loanId,
-        error: errBody,
-        ts: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      await logIncident({ source: 'create-checkout', loanId, error: errBody });
       return res.status(502).json({ error: 'Conekta order creation failed', details: errBody });
     }
 
@@ -323,12 +318,7 @@ app.post('/create-checkout', requireInternal, async (req, res) => {
 
     res.json({ paymentUrl, orderId });
   } catch (err) {
-    await db.collection('incident_log').add({
-      source: 'create-checkout',
-      loanId,
-      error: err.message,
-      ts: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    await logIncident({ source: 'create-checkout', loanId, error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
