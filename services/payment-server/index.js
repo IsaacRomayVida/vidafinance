@@ -153,7 +153,18 @@ app.post('/webhooks/conekta', async (req, res) => {
   let valid = false;
   try {
     const pubKey = process.env.CONEKTA_WEBHOOK_SECRET;
-    if (pubKey.startsWith('-----BEGIN PUBLIC KEY')) {
+    // Fail closed on a missing OR empty secret. An unset one already failed
+    // closed by accident -- startsWith() throws on undefined and the catch
+    // below sets valid = false. An empty string does NOT throw: it fell
+    // through to the HMAC branch and derived the expected digest from a
+    // zero-length key, which the caller can derive just as easily. That made
+    // every event on this route forgeable, `charge.paid` included -- and that
+    // one runs applyCardRepayment, so a forgery could settle a loan and mint a
+    // receipt for money nobody ever sent. Checked explicitly rather than left
+    // to the throw, so the empty case is handled on purpose and says why.
+    if (!pubKey) {
+      console.error('[payment-server] CONEKTA_WEBHOOK_SECRET is not configured — rejecting webhook unverified');
+    } else if (pubKey.startsWith('-----BEGIN PUBLIC KEY')) {
       const verifier = crypto.createVerify('RSA-SHA256');
       verifier.update(payload);
       valid = verifier.verify(pubKey, sig, 'base64');

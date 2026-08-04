@@ -61,6 +61,66 @@ describe('signature verification — HMAC secret', () => {
   });
 });
 
+// ── Signature verification under a misconfigured secret ─────────────────
+// The verifier reads CONEKTA_WEBHOOK_SECRET and branches on
+// `pubKey.startsWith('-----BEGIN PUBLIC KEY')`. An UNSET secret makes that
+// throw, and the catch fails closed — that case is a control below. An EMPTY
+// secret does not throw: it falls through to the HMAC branch and derives the
+// expected digest from a zero-length key, which any caller can also derive.
+// That made every event on this route forgeable — including `charge.paid`,
+// which runs applyCardRepayment and can settle a loan and mint a receipt for
+// money that was never received.
+describe('signature verification — misconfigured secret', () => {
+  const REAL_SECRET = process.env.CONEKTA_WEBHOOK_SECRET;
+
+  afterEach(() => {
+    process.env.CONEKTA_WEBHOOK_SECRET = REAL_SECRET;
+  });
+
+  const forgeable = () =>
+    conektaEvent('charge.paid', {
+      id: 'chg_forged',
+      order_id: 'ord_forged',
+      amount: 500000,
+      metadata: { loanId: 'loan_1', employeeId: 'emp_1' },
+    });
+
+  // CONTROL — passes before and after: startsWith() throws on undefined and
+  // the catch already fails closed.
+  test('rejects a forged event when CONEKTA_WEBHOOK_SECRET is unset', async () => {
+    delete process.env.CONEKTA_WEBHOOK_SECRET;
+    const body = forgeable();
+    const res = await post(body, { digest: hmacSign('', body) });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid signature' });
+  });
+
+  // RED before the fix: answered 200 and applied the forged repayment.
+  test('rejects a forged event when CONEKTA_WEBHOOK_SECRET is set but empty', async () => {
+    process.env.CONEKTA_WEBHOOK_SECRET = '';
+    const body = forgeable();
+    const res = await post(body, { digest: hmacSign('', body) });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid signature' });
+    const incidents = admin.__all('incident_log');
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0].data.error).toBe('invalid_signature');
+  });
+
+  // CONTROL — passes before and after: a properly configured secret still
+  // accepts a correctly signed event.
+  test('still accepts a correctly signed event with the secret configured', async () => {
+    const body = conektaEvent('order.payment_failed', {
+      id: 'ord_cfg',
+      metadata: { loanId: 'loan_1' },
+      payment_status: 'declined',
+    });
+    const res = await post(body, { digest: hmacSign(REAL_SECRET, body) });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ received: true });
+  });
+});
+
 describe('signature verification — RSA public-key secret', () => {
   let publicKeyPem, privateKey;
 
