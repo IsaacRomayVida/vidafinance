@@ -98,7 +98,10 @@ service cloud.firestore {
     //   credit line may not be self-assigned. creditLimit/availableCredit are
     //   derived from monthlySalary by onEmployeeDocCreated; before this
     //   constraint the client wrote both directly (Onboarding.tsx), so a user
-    //   could pick their own borrowing ceiling at registration.
+    //   could pick their own borrowing ceiling at registration. The named
+    //   employer must also exist, be in a status this codebase already treats
+    //   as eligible, and (if that employer opted into a CURP allowlist) admit
+    //   this CURP — see employeeCreateEligibleEmployer below.
     // Update: ops (any field), or self (whitelisted personal fields only) —
     //   creditLimit, availableCredit, employerId, kycStatus must come from CFs.
     // Delete: ops only.
@@ -109,11 +112,96 @@ service cloud.firestore {
       ]);
     }
 
+    // employees/{uid}.employerId is client-chosen and, until this rule,
+    // nothing ever cross-checked it — anyone who knew (or guessed) an
+    // employer's join code could enrol under that employer with a
+    // self-declared salary. PR #566 closed the money-side half of this
+    // (requestLoan now enforces curpConfig at loan time); this is the
+    // write-side half, since every other consumer of /employees — employer
+    // dashboards, ops tooling, exports — reads a document that was never
+    // verified at the point it was created.
+    //
+    // A rules gate only binds writes made from today forward: every
+    // enrolment already sitting in /employees is untouched by this, and nothing
+    // here attempts to detect or clean those up.
+    //
+    // What this CAN verify, with one extra document read:
+    //   - the named employer actually exists;
+    //   - it is in a status this codebase already treats as eligible to take
+    //     on employees — the same 'active' / 'pending_verification' pair
+    //     requestLoan's own employer gate accepts (functions/src/index.ts,
+    //     the EMPLOYER_NOT_APPROVED check) — so an employer mid-self-serve-
+    //     onboarding is not locked out, but a rejected/suspended one is;
+    //   - when that employer has turned on a CURP allowlist
+    //     (curpConfig.mode == 'allowlist', set via updateEmployerCurpConfig),
+    //     the registering CURP's prefix is one that employer actually listed.
+    //
+    // What this CANNOT verify: an employer that has never turned the
+    // allowlist on — curpConfig absent, or mode: 'open', true for most of the
+    // existing book today — has no per-employee membership signal in
+    // Firestore at all, so anyone who knows that employer's join code can
+    // still self-enrol under it. Rules cannot call out to payroll or any
+    // other system of record to confirm real employment; closing that
+    // remaining gap requires the employer to turn curpConfig on, which is a
+    // product decision this file cannot make for them.
+    function employeeCreateEligibleEmployer(employerId, curp) {
+      return employerId is string
+          && employerAcceptsEnrolment(
+               get(/databases/$(database)/documents/employers/$(employerId)).data, curp);
+    }
+    function employerAcceptsEnrolment(employer, curp) {
+      return (employer.status == 'active' || employer.status == 'pending_verification')
+          && curpAllowedByEmployer(employer, curp);
+    }
+    // Absent curpConfig, or an explicit mode: 'open', means the employer never
+    // restricted who may enrol under it — mirrors the same fallback
+    // updateEmployerCurpConfig itself applies (any mode other than
+    // 'allowlist' resolves to 'open').
+    //
+    // The stored prefix list is NOT trusted to be well-formed. Two reasons:
+    //   - updateEmployerCurpConfig only started rejecting an allowlist with no
+    //     usable prefixes in #566, so documents saved while curpConfig was
+    //     inert can still carry an empty or junk list;
+    //   - even today it filters on length == 4 alone, so a four-character
+    //     string of regex metacharacters ('.*ab', '[[[[') survives it, and
+    //     this file interpolates that list straight into a match pattern.
+    //
+    // So the list is enforced only when it is EXACTLY a '|'-joined run of
+    // 4-character alphanumeric prefixes; anything else is treated as
+    // unconfigured. That gives, in one test:
+    //   - regex safety — a metacharacter can never reach the pattern, whether
+    //     it widens the alternation or breaks it into an evaluation error that
+    //     would lock the employer's own new hires out;
+    //   - agreement with requestLoan (index.ts, assertBorrowerAdmittedByEmployer),
+    //     which treats "no usable prefixes" as OPEN and says so in the log.
+    //     Denying here where the money gate admits would take an employer's new
+    //     hires off the product on the enforcing deploy, silently, for a
+    //     malformed setting they were never shown the meaning of — the exact
+    //     outcome #566 declined to ship.
+    // Where the two still differ ('GARJ' alongside a junk entry: requestLoan
+    // enforces the survivor, this treats the config as open) the divergence
+    // falls open at REGISTRATION only. The loan itself is still gated, so a
+    // borrower this admits is one requestLoan can and does still refuse.
+    function curpAllowedByEmployer(employer, curp) {
+      return !('curpConfig' in employer)
+          || employer.curpConfig.mode != 'allowlist'
+          || !curpPrefixListIsEnforceable(employer.curpConfig.prefixes)
+          || (curp is string
+              && curp.upper().matches('^(' + employer.curpConfig.prefixes.join('|') + ').*'));
+    }
+    function curpPrefixListIsEnforceable(prefixes) {
+      return prefixes is list
+          && prefixes.size() > 0
+          && prefixes.join('|').matches('^[A-Za-z0-9]{4}([|][A-Za-z0-9]{4})*$');
+    }
+
     match /employees/{employeeId} {
       allow read: if isOwner(employeeId)
                   || (resource != null && isEmployerAdminOf(resource.data.employerId))
                   || isOps();
-      allow create: if isOwner(employeeId) && noSelfAssignedCredit();
+      allow create: if isOwner(employeeId)
+                    && noSelfAssignedCredit()
+                    && employeeCreateEligibleEmployer(request.resource.data.employerId, request.resource.data.curp);
       allow update: if isOps()
                     || (isOwner(employeeId)
                         && onlyAffects(['phone', 'bankClabe', 'bankName', 'address',

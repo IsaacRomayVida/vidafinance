@@ -700,6 +700,14 @@ describe('employees collection', () => {
       kycStatus: 'pending_review',
     };
 
+    beforeEach(async () => {
+      // The enrolment-rules gate (fix/employee-enrolment-rules) reads the
+      // named employer at create time, so these tests need a real one behind
+      // 'employer1' now — status 'active' via the seedEmployer default, no
+      // curpConfig, so it does not additionally constrain CURP.
+      await seedEmployer('employer1');
+    });
+
     it('registration is rejected when it carries a creditLimit', async () => {
       const ctx = testEnv.authenticatedContext('employee1');
       await assertFails(
@@ -762,6 +770,228 @@ describe('employees collection', () => {
     it('a user still cannot register as somebody else', async () => {
       const ctx = testEnv.authenticatedContext('employee1');
       await assertFails(setDoc(doc(ctx.firestore(), 'employees/employee2'), registration));
+    });
+  });
+
+  // ── employee enrolment cannot forge an employerId (fix/employee-enrolment-rules) ──
+  // employees/{uid}.employerId is client-chosen. Before this gate, nothing
+  // cross-checked it against the named employer's existence, status, or CURP
+  // allowlist — anyone who knew (or guessed) an employer's join code could
+  // enrol under that employer. These are the write-time counterpart to
+  // requestLoan's own curpConfig enforcement (PR #566, money side).
+
+  describe('employee enrolment cannot forge an employerId (VID3 enrolment gate)', () => {
+    const registrationFor = (employerId: string, curp: string) => ({
+      name: 'Test Employee',
+      email: 'employee@acme.mx',
+      phone: '+525512345678',
+      dateOfBirth: '1990-01-15',
+      curp,
+      gender: 'M',
+      rfc: 'TES900115AAA',
+      employerId,
+      employerName: 'Acme SA de CV',
+      employerCode: 'ACME01',
+      monthlySalary: 12000,
+      payFrequency: 'quincenal',
+      employmentTenure: '2y',
+      bankClabe: '012345678901234567',
+      kycStatus: 'pending_review',
+    });
+
+    it('registration is rejected when the named employer does not exist', async () => {
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('no-such-employer', 'TEST900115HDFXXX01'))
+      );
+    });
+
+    it('registration is rejected when the named employer is suspended', async () => {
+      await seedEmployer('employerSuspended', { status: 'suspended' });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerSuspended', 'TEST900115HDFXXX01'))
+      );
+    });
+
+    it('registration is rejected when the named employer is rejected', async () => {
+      await seedEmployer('employerRejected', { status: 'rejected' });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerRejected', 'TEST900115HDFXXX01'))
+      );
+    });
+
+    it(`registration succeeds against an employer still 'pending_verification' (self-serve onboarding, pre-approval)`, async () => {
+      await seedEmployer('employerPending', { status: 'pending_verification' });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerPending', 'TEST900115HDFXXX01'))
+      );
+    });
+
+    it('registration succeeds against an active employer with no curpConfig at all', async () => {
+      await seedEmployer('employerNoConfig', { status: 'active' });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerNoConfig', 'TEST900115HDFXXX01'))
+      );
+    });
+
+    it(`registration succeeds against an employer whose curpConfig.mode is 'open'`, async () => {
+      await seedEmployer('employerOpen', {
+        status: 'active',
+        curpConfig: { mode: 'open', prefixes: ['ZZZZ'] },
+      });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerOpen', 'TEST900115HDFXXX01'))
+      );
+    });
+
+    it(`registration is rejected when curpConfig is an allowlist and the CURP prefix is not on it`, async () => {
+      // The forged-employerId attack this gate exists for: the attacker knows
+      // a real employer's join code, but that employer has restricted
+      // enrolment to a specific CURP prefix set and the attacker's CURP isn't
+      // one of them.
+      await seedEmployer('employerAllowlisted', {
+        status: 'active',
+        curpConfig: { mode: 'allowlist', prefixes: ['ACME'] },
+      });
+
+      const ctx = testEnv.authenticatedContext('attacker1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employees/attacker1'), registrationFor('employerAllowlisted', 'ZZZZ900115HDFXXX01'))
+      );
+    });
+
+    it(`registration succeeds when curpConfig is an allowlist and the CURP prefix matches (case-insensitive)`, async () => {
+      await seedEmployer('employerAllowlisted', {
+        status: 'active',
+        curpConfig: { mode: 'allowlist', prefixes: ['ACME'] },
+      });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerAllowlisted', 'acme900115HDFXXX01'))
+      );
+    });
+
+    // ── a stored allowlist that is not well-formed reads as UNCONFIGURED ──
+    // Not as "deny everyone". requestLoan (index.ts,
+    // assertBorrowerAdmittedByEmployer, #566) makes exactly this call and says
+    // so in the log: an employer entitled to no borrowers at all is not a
+    // setting anyone picks on purpose, and until #566 saving it did literally
+    // nothing, so an employer may hold that state having never been shown what
+    // it meant. Denying here while the money gate admits would take their new
+    // hires off the product on the enforcing deploy, silently.
+
+    it('an allowlist with an empty prefix list reads as unconfigured, matching requestLoan — it does not lock the employer out of hiring', async () => {
+      await seedEmployer('employerEmptyAllowlist', {
+        status: 'active',
+        curpConfig: { mode: 'allowlist', prefixes: [] },
+      });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerEmptyAllowlist', 'TEST900115HDFXXX01'))
+      );
+    });
+
+    it('an allowlist carrying a prefix of the wrong length reads as unconfigured', async () => {
+      // updateEmployerCurpConfig keeps only length-4 entries, so a stored 'AB'
+      // predates that filter. Enforcing it verbatim would silently widen the
+      // allowlist to every CURP beginning 'AB'.
+      await seedEmployer('employerShortPrefix', {
+        status: 'active',
+        curpConfig: { mode: 'allowlist', prefixes: ['AB'] },
+      });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerShortPrefix', 'ZZZZ900115HDFXXX01'))
+      );
+    });
+
+    it('a 4-character prefix of regex metacharacters cannot widen the allowlist to everyone', async () => {
+      // '.*ab' is four characters, so updateEmployerCurpConfig's length filter
+      // passes it through, and this file interpolates the list into a match
+      // pattern. Read as a regex it admits every CURP in existence — the
+      // opposite of an allowlist. It must read as unconfigured instead, which
+      // leaves requestLoan as the gate that still refuses this borrower.
+      await seedEmployer('employerRegexPrefix', {
+        status: 'active',
+        curpConfig: { mode: 'allowlist', prefixes: ['.*ab'] },
+      });
+
+      const ctx = testEnv.authenticatedContext('attacker1');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employees/attacker1'), registrationFor('employerRegexPrefix', 'ZZZZ900115HDFXXX01'))
+      );
+    });
+
+    it('a 4-character prefix that is not a valid regex does not collapse evaluation into a blanket deny', async () => {
+      // '[[[[' would throw inside matches(), and a rule that errors denies —
+      // locking a legitimate employer's whole intake out over a malformed
+      // setting. The well-formedness test has to run BEFORE the pattern does.
+      await seedEmployer('employerBrokenRegex', {
+        status: 'active',
+        curpConfig: { mode: 'allowlist', prefixes: ['[[[['] },
+      });
+
+      const ctx = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), 'employees/employee1'), registrationFor('employerBrokenRegex', 'TEST900115HDFXXX01'))
+      );
+    });
+
+    it('a well-formed multi-prefix allowlist is still enforced, and still refuses a non-member', async () => {
+      // The leniency above must not degrade into "any allowlist is unconfigured".
+      await seedEmployer('employerMultiPrefix', {
+        status: 'active',
+        curpConfig: { mode: 'allowlist', prefixes: ['ACME', 'GARJ'] },
+      });
+
+      const member = testEnv.authenticatedContext('employee1');
+      await assertSucceeds(
+        setDoc(doc(member.firestore(), 'employees/employee1'), registrationFor('employerMultiPrefix', 'GARJ900115HDFXXX01'))
+      );
+
+      const outsider = testEnv.authenticatedContext('attacker1');
+      await assertFails(
+        setDoc(doc(outsider.firestore(), 'employees/attacker1'), registrationFor('employerMultiPrefix', 'ZZZZ900115HDFXXX01'))
+      );
+    });
+
+    it('an allowlisted employer still refuses a registration carrying no CURP at all', async () => {
+      // The registrant supplies their own document; admitting on a missing
+      // field would make the control evadable by omitting one.
+      await seedEmployer('employerAllowlisted', {
+        status: 'active',
+        curpConfig: { mode: 'allowlist', prefixes: ['ACME'] },
+      });
+
+      const ctx = testEnv.authenticatedContext('attacker1');
+      const { curp: _omitted, ...noCurp } = registrationFor('employerAllowlisted', 'ACME900115HDFXXX01');
+      await assertFails(setDoc(doc(ctx.firestore(), 'employees/attacker1'), noCurp));
+    });
+
+    it('an existing employee document can still be updated by its owner after the gate ships', async () => {
+      // The gate only applies to `create` — a document written before this
+      // rule shipped, or one whose employer has since changed status, must
+      // still be reachable by the ordinary self-update flow.
+      await seedEmployer('employerSuspended', { status: 'suspended' });
+      await seedEmployee('employeeExisting', 'employerSuspended', { curp: 'TEST900115HDFXXX01' });
+
+      const ctx = testEnv.authenticatedContext('employeeExisting', { role: 'employee' });
+      await assertSucceeds(
+        updateDoc(doc(ctx.firestore(), 'employees/employeeExisting'), { phone: '+521111111111' })
+      );
     });
   });
 });
