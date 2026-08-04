@@ -33,6 +33,19 @@ jobs:
       - name: TypeScript typecheck (functions)
         run: cd functions && npm run typecheck
 
+      # functions/tsconfig.json excludes src/**/*.test.ts, so the check above
+      # never typechecks test files as one program — only ts-jest does, per file,
+      # at test time. Two test files with no top-level import/export once collided
+      # as global scripts (both declared `const mockLogger`), and that collision
+      # only fired intermittently on the GitHub runner: it passed every local repro
+      # attempt and passed `npm run typecheck`. That gap silently blocked prod
+      # deploys for ~40 minutes (see #538). This step compiles every src file,
+      # tests included, as one TS program so a redeclaration like that is a
+      # deterministic compile error on every commit instead of an intermittent
+      # test-time failure.
+      - name: TypeScript typecheck (functions, including tests) — hard gate
+        run: cd functions && npm run typecheck:tests
+
       - name: Lint (functions)
         run: cd functions && npm run lint
 
