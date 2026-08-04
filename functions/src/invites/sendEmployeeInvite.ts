@@ -107,6 +107,36 @@ export const sendEmployeeInvite = onCall(
         const createdAt = Timestamp.now();
         const expiresAt = Timestamp.fromDate(new Date(Date.now() + INVITE_TTL_MS));
 
+        // Minting a new link retires every link already outstanding for this
+        // employee. The roster's Resend button just calls this function again,
+        // and the UI already assumes a single live invite per employee (it
+        // collapses invitesByEmployee to the newest by sentAt) — but nothing
+        // retired the older documents, so a link an admin believed they had
+        // replaced stayed redeemable for the rest of its 30-day TTL.
+        const priorInvites = await db
+          .collection('invites')
+          .where('employerId', '==', employerId)
+          .where('employeeDocId', '==', employeeDocId)
+          .where('status', '==', 'pending')
+          .get();
+
+        if (!priorInvites.empty) {
+          const batch = db.batch();
+          for (const prior of priorInvites.docs) {
+            batch.update(prior.ref, {
+              status: 'superseded',
+              supersededAt: FieldValue.serverTimestamp(),
+            });
+          }
+          await batch.commit();
+          logger.info('Superseded prior pending invites', {
+            employerId,
+            employeeDocId,
+            count: priorInvites.size,
+            service: 'functions',
+          });
+        }
+
         const inviteRef = db.collection('invites').doc(inviteId);
         await inviteRef.set({
           employerId,

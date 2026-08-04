@@ -10,6 +10,16 @@ const mockInviteRef = {
   update: mockInviteDocUpdate,
 };
 
+// Query over /invites used to retire links already outstanding for this employee.
+const mockPriorInvitesGet = jest.fn().mockResolvedValue({ empty: true, size: 0, docs: [] });
+const mockInviteWhere3 = jest.fn(() => ({ get: mockPriorInvitesGet }));
+const mockInviteWhere2 = jest.fn(() => ({ where: mockInviteWhere3 }));
+const mockInviteWhere1 = jest.fn(() => ({ where: mockInviteWhere2 }));
+
+const mockBatchUpdate = jest.fn();
+const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
+const mockBatch = jest.fn(() => ({ update: mockBatchUpdate, commit: mockBatchCommit }));
+
 const mockEmployeeRef = { get: mockEmployeeDocGet };
 const mockEmployerEmployeesCollection = {
   doc: jest.fn().mockReturnValue(mockEmployeeRef),
@@ -24,12 +34,12 @@ const mockCollection = jest.fn().mockImplementation((name: string) => {
     return { doc: jest.fn().mockReturnValue(mockEmployerRef) };
   }
   if (name === 'invites') {
-    return { doc: jest.fn().mockReturnValue(mockInviteRef) };
+    return { doc: jest.fn().mockReturnValue(mockInviteRef), where: mockInviteWhere1 };
   }
   return { doc: jest.fn() };
 });
 
-const mockDb = { collection: mockCollection };
+const mockDb = { collection: mockCollection, batch: mockBatch };
 
 jest.mock('firebase-admin/firestore', () => ({
   getFirestore: jest.fn(() => mockDb),
@@ -107,6 +117,8 @@ const validInput = {
 beforeEach(() => {
   jest.clearAllMocks();
   _nanoidCallCount = 0;
+  mockPriorInvitesGet.mockResolvedValue({ empty: true, size: 0, docs: [] });
+  mockBatch.mockImplementation(() => ({ update: mockBatchUpdate, commit: mockBatchCommit }));
   mockEmployeeDocGet.mockResolvedValue({
     exists: true,
     data: () => ({
@@ -204,6 +216,42 @@ describe('sendEmployeeInvite', () => {
     await expect(fn({ auth: employerAuth, data: validInput })).rejects.toMatchObject({
       code: 'already-exists',
     });
+  });
+
+  it('retires links already outstanding for this employee before minting a new one', async () => {
+    // The roster's Resend button is just another call to this function. An admin
+    // who resends expects the previous link to stop working; before this it kept
+    // working for the remainder of its 30-day TTL, so one employee could have
+    // several live invitations outstanding at once.
+    const priorRefA = { id: 'old-invite-a' };
+    const priorRefB = { id: 'old-invite-b' };
+    mockPriorInvitesGet.mockResolvedValue({
+      empty: false,
+      size: 2,
+      docs: [{ ref: priorRefA }, { ref: priorRefB }],
+    });
+
+    const result = (await fn({ auth: employerAuth, data: validInput })) as Record<string, unknown>;
+    expect(result.success).toBe(true);
+
+    // Scoped to this employee's pending invites only.
+    expect(mockInviteWhere1).toHaveBeenCalledWith('employerId', '==', 'employer-abc');
+    expect(mockInviteWhere2).toHaveBeenCalledWith('employeeDocId', '==', 'emp-doc-1');
+    expect(mockInviteWhere3).toHaveBeenCalledWith('status', '==', 'pending');
+
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(2);
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      priorRefA,
+      expect.objectContaining({ status: 'superseded' })
+    );
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      priorRefB,
+      expect.objectContaining({ status: 'superseded' })
+    );
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+
+    // The replacement invite is still created.
+    expect(mockInviteDocSet).toHaveBeenCalledTimes(1);
   });
 
   it('continues when the notification queue fails', async () => {
