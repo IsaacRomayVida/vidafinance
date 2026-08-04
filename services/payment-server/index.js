@@ -4,16 +4,16 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Queue, Worker, UnrecoverableError } = require('bullmq');
-const { applyCardRepayment, REPAID_STATUSES } = require('./cardRepayment');
+const { applyCardRepayment, applyPayrollRepayment } = require('./applyRepayment');
 const { alert5xx, alertDisbursementFailed, alertQueueDepth, alertRedisLost } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 require('dotenv').config();
 
 // Fail closed: requireInternal compares the request header against
 // process.env.INTERNAL_SECRET. If the variable is unset both sides are
-// `undefined`, the strict-inequality check is false, and every /internal route
-// (including POST /internal/repayment) becomes publicly callable with no header
-// at all. Refuse to boot rather than serve the money path unauthenticated.
+// `undefined`, the comparison passes, and every /internal route (including
+// POST /internal/repayment) becomes publicly callable with no header at all.
+// Refuse to boot rather than serve the money path unauthenticated.
 // Same pattern as vida-registry-service.
 if (!process.env.INTERNAL_SECRET) {
   throw new Error('INTERNAL_SECRET is required to start vida-payment-server');
@@ -96,8 +96,30 @@ const DISBURSE_TIMEOUT_MS = () => Number(process.env.DISBURSE_HTTP_TIMEOUT_MS) |
 const isAbortError = (err) =>
   !!err && (err.name === 'AbortError' || err.name === 'TimeoutError' || err.type === 'aborted');
 
+// Constant-time comparison of two secrets that arrive as strings.
+//
+// `a === b` on a JS string returns at the first byte that differs, so the time
+// it takes to reject a candidate leaks how many leading bytes were right. That
+// is the whole attack: an unauthenticated caller who can post to
+// /webhooks/conekta as often as it likes recovers the expected digest for a
+// body IT chose one byte at a time, and then posts that body signed. The body
+// it would choose is a `charge.paid`, which settles a loan and mints a receipt
+// for money nobody sent.
+//
+// crypto.timingSafeEqual throws on a length mismatch, which would leak the
+// length by exception -- so the lengths are equalised first by hashing both
+// sides. A digest of a fixed length also means the compare covers the full
+// input rather than a prefix of it.
+const timingSafeStringEqual = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ha = crypto.createHash('sha256').update(a, 'utf8').digest();
+  const hb = crypto.createHash('sha256').update(b, 'utf8').digest();
+  return crypto.timingSafeEqual(ha, hb);
+};
+
 const requireInternal = (req, res, next) => {
-  if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
+  const provided = req.headers['x-internal-secret'];
+  if (!timingSafeStringEqual(Array.isArray(provided) ? '' : provided, process.env.INTERNAL_SECRET))
     return res.status(401).json({ error: 'Unauthorized' });
   next();
 };
@@ -113,7 +135,7 @@ const getQueue = name => new Queue(name, {
 // which was consistent only because that path also settled unconditionally --
 // now that a partial payment stays partial, telling the borrower they are done
 // would be a lie, and a Conekta retry must not mint a second receipt. Same
-// stance as POST /internal/repayment, which notifies only on 'applied'.
+// stance as POST /internal/repayment, which notifies only on a settlement.
 async function announceRepayment(result, { loanId, employeeId, chargeId }) {
   if (!result || !result.settled) return;
   const amount = result.appliedAmount;
@@ -200,7 +222,7 @@ app.post('/webhooks/conekta', async (req, res) => {
       valid = verifier.verify(pubKey, sig, 'base64');
     } else {
       const exp = crypto.createHmac('sha256', pubKey).update(payload).digest('base64');
-      valid = (sig === exp);
+      valid = timingSafeStringEqual(sig, exp);
     }
   } catch (_) { valid = false; }
   if (!valid) {
@@ -234,7 +256,7 @@ app.post('/webhooks/conekta', async (req, res) => {
 
       // Apply per charge, keyed by charge id, because that is the only
       // identifier this event shares with `charge.paid` -- see rule 2 in
-      // cardRepayment.js. The order total is used only when the order carries
+      // applyRepayment.js. The order total is used only when the order carries
       // exactly one charge whose own amount is missing; with several charges
       // there is no safe way to attribute it, and inventing one would
       // double-count against the sibling `charge.paid` events.
@@ -383,7 +405,7 @@ app.post('/create-checkout', requireInternal, async (req, res) => {
     //    `loans.conektaOrderId` (ibid:167). Timing out changes how FAST we
     //    give up, not whether a retry can produce a second order.
     //  * A duplicate order is not a duplicate settlement. Every repayment row
-    //    is keyed `conekta_<chargeId>` (cardRepayment.js:113-116) and a fresh
+    //    is keyed `conekta_<chargeId>` (applyRepayment.js, rule 2) and a fresh
     //    charge landing on an already-settled loan is recorded `unapplied` /
     //    `loan_already_settled` and moves nothing (ibid:144-151). A second
     //    payment is a refund case, not a double-forgiven debt or a
@@ -414,79 +436,72 @@ app.post('/create-checkout', requireInternal, async (req, res) => {
 });
 
 // ── Internal repayment (from SoftCrédito payroll deduction sync) ────
+//
+// `ref` is the SoftCrédito deduction reference and it is what names the
+// payment, so it becomes the `repayments/payroll_<ref>` document id and with
+// it this channel's only replay guard (rule 2 in applyRepayment.js). It is
+// therefore validated as a document-id fragment before it is concatenated into
+// a path: a `/` in a caller-supplied id does not fail, it silently addresses a
+// DIFFERENT document (`repayments/payroll_a/b/c`), which is an idempotency key
+// an attacker chooses the collision behaviour of.
+const REPAYMENT_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+
 app.post('/internal/repayment', requireInternal, async (req, res) => {
   const { loanId, employeeId, amount, ref, method } = req.body;
   if (!loanId || !employeeId || !amount) return res.status(400).json({ error: 'Missing fields' });
+
+  // `!amount` alone rejects 0 and '' and nothing else. A negative number, a
+  // numeric string, an object and an array are all truthy, and every one of
+  // them used to be written straight onto `loans.paidAmount` and into a
+  // `repayments` row as if it were money. -500 is the expensive one: it is a
+  // repayment that INCREASES the debt basis, and on the old unconditional
+  // settlement path it also closed the loan and restored the full credit line
+  // while doing it.
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'amount must be a positive number of pesos' });
+  }
+  if (typeof ref !== 'string' || !REPAYMENT_ID_PATTERN.test(ref)) {
+    // Fail closed rather than apply an unidentifiable payment. Without a usable
+    // reference there is no idempotency key, and a payroll deduction that can
+    // be applied twice is worse than one that is held for reconciliation --
+    // partial deductions now leave the loan `active`, so nothing else would
+    // stop the second application. Recorded, because a rejection nobody can
+    // see is how the payroll channel goes quiet.
+    await logIncident({ source: 'internal-repayment', loanId, error: `unusable deduction reference: ${JSON.stringify(ref)}` });
+    return res.status(400).json({ error: 'ref must be a deduction reference matching [A-Za-z0-9_.:-]{1,128}' });
+  }
+
   try {
-    const outcome = await db.runTransaction(async tx => {
-      const loanRef = db.collection('loans').doc(loanId);
-      const employeeRef = db.collection('employees').doc(employeeId);
-
-      // ── read phase: every read below precedes every write ───────────────
-      //
-      // Firestore is not lenient about this and the penalty is not a subtle
-      // one. `Transaction.get()` throws READ_AFTER_WRITE_ERROR_MSG --
-      // "Firestore transactions require all reads to be executed before all
-      // writes." -- the moment the write batch is non-empty
-      // (@google-cloud/firestore/build/src/transaction.js, pinned here at
-      // 7.11.6 via firebase-admin ^12). It throws locally, before any RPC, so
-      // the transaction never commits and NOTHING is written.
-      //
-      // The employee read used to sit below the two writes, at the point where
-      // its result is used. That made this route throw on every single call
-      // that had any money to apply -- the two outcomes that return early,
-      // 'not_found' and 'already_paid', are exactly the two that write nothing
-      // and were therefore the only ones that ever worked. The SoftCrédito
-      // payroll-deduction channel (dailyLoanCheck -> the adapter's
-      // /internal/sync-repayments -> here) is the automated repayment channel
-      // for every employer that does not upload a CSV, and it recorded nothing
-      // at all: the employer withheld the installment from the paycheck, we
-      // 500'd, and the loan stayed 'active' at full balance. The borrower was
-      // then dunned for money already taken from their wages, offered a card
-      // checkout for the whole remaining balance (generatePaymentLink charges
-      // `remainingBalance ?? total`, and neither had moved), and never got
-      // their credit line back.
-      //
-      // The employee is read unconditionally rather than only when it is about
-      // to be credited. A conditional read is what tempts the read back down
-      // into the write phase.
-      const doc = await tx.get(loanRef);
-      if (!doc.exists) return 'not_found';
-      // The SoftCrédito daily sync (dailyLoanCheck -> softcredito-adapter's
-      // /internal/sync-repayments) can report its registered deduction as
-      // completed for a loan the OTHER repayment channel -- processPayroll.ts's
-      // employer-CSV path -- already closed first, under the canonical
-      // 'repaid' spelling (or a legacy alias). Checking only the literal
-      // string this route itself writes ('paid') let that second signal fall
-      // through as a fresh settlement: it re-wrote status, clobbered
-      // paidAmount, and unconditionally restored the employee's
-      // availableCredit by the full principal a second time, on top of the
-      // restoration processPayroll's 'repaid' transition already triggered
-      // (functions/src/index.ts's isCreditRestoringRepayment). Same
-      // REPAID_STATUSES set cardRepayment.js's applyCardRepayment already
-      // guards on, for the identical reason.
-      if (REPAID_STATUSES.includes(doc.data().status)) return 'already_paid';
-      const emp = await tx.get(employeeRef);
-
-      // ── write phase ─────────────────────────────────────────────────────
-      tx.update(loanRef, { status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), paidAmount: amount, repaymentRef: ref });
-      tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: method || 'payroll_deduction', externalRef: ref, status: 'completed', paidAt: admin.firestore.FieldValue.serverTimestamp() });
-      if (emp.exists) tx.update(employeeRef, { availableCredit: admin.firestore.FieldValue.increment(doc.data().amount) });
-      return 'applied';
-    });
+    // One routine, one set of rules, shared with the card channel. This route
+    // used to carry its own transaction body, and what that body did was
+    // settle: `status: 'paid'`, `paidAmount: amount`, and the employee's full
+    // principal handed back as credit -- with no comparison of `amount`
+    // against `remainingBalance ?? total` anywhere. `amount` is whatever
+    // SoftCrédito reported collecting, so any short deduction forgave the
+    // remainder of the debt. It also credited `employees/{req.body.employeeId}`
+    // rather than the loan's own employee. See applyRepayment.js, rules 1 and 4.
+    const result = await applyPayrollRepayment({ db, admin }, { loanId, employeeId, amount, ref, method });
 
     // A repayment against a loan we do not have is a reconciliation failure on
     // the payroll side. Reporting success hides it and, worse, used to tell the
     // borrower their loan was paid.
-    if (outcome === 'not_found') return res.status(404).json({ error: 'Loan not found', loanId });
+    if (result.outcome === 'loan_not_found') return res.status(404).json({ error: 'Loan not found', loanId });
 
-    // Only a repayment we actually applied may raise the notification; a replay
-    // against an already-paid loan must not re-notify.
-    if (outcome === 'applied') {
-      await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId, amount, method: method || 'payroll_deduction' });
+    // Only a repayment that actually CLOSED the loan raises "your loan is
+    // paid". A partial deduction leaves a balance, and telling the borrower
+    // they are done would be a lie -- the same stance announceRepayment takes
+    // on the card path. `already_paid` is kept as the wire spelling for the
+    // already-settled outcome so the adapter's existing reconciliation reading
+    // does not shift under it.
+    if (result.settled) {
+      await getQueue('vida-notifications').add('loan_paid', { type: 'loan_paid', loanId, employeeId: result.employeeId ?? employeeId, amount: result.appliedAmount, method: method || 'payroll_deduction' });
     }
-    res.json({ success: true, status: outcome });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const status = result.outcome === 'already_settled' ? 'already_paid' : result.outcome;
+    res.json({ success: true, status });
+  } catch (err) {
+    await logIncident({ source: 'internal-repayment', loanId, ref, error: err.message });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Queue stats (for admin monitoring) ──────────────────────────────

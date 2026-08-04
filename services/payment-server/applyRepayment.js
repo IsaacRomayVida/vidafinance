@@ -1,15 +1,32 @@
 'use strict';
 
 /**
- * The single balance-aware settlement routine for the card repayment path.
+ * The single balance-aware settlement routine for EVERY repayment channel this
+ * service accepts money on.
  *
- * Both Conekta webhook handlers (`order.paid` and `charge.paid`) call this.
- * They used to carry two near-identical, silently divergent transaction
- * bodies, and that divergence WAS the bug: `charge.paid` decremented a
- * balance, while `order.paid` unconditionally wrote `status: 'paid'` and
- * handed back the full principal as credit no matter how little had actually
- * been paid. A 1,000 payment against a 6,500 obligation closed the loan and
- * restored the borrower's credit line. One routine, one set of rules.
+ * It started as the card-only routine, and it started that way for a reason:
+ * `order.paid` and `charge.paid` used to carry two near-identical, silently
+ * divergent transaction bodies, and that divergence WAS the bug. `charge.paid`
+ * decremented a balance, while `order.paid` unconditionally wrote
+ * `status: 'paid'` and handed back the full principal as credit no matter how
+ * little had actually been paid. A 1,000 payment against a 6,500 obligation
+ * closed the loan and restored the borrower's credit line.
+ *
+ * POST /internal/repayment -- the SoftCrédito payroll-deduction channel -- was
+ * left out of that unification and kept doing exactly the thing that was fixed
+ * here: it took `amount` from the request body, wrote `status: 'paid'` and
+ * `paidAmount: amount` without ever comparing that number to what the loan
+ * owed, and incremented the employee's `availableCredit` by the whole
+ * principal. `amount` on that route is whatever SoftCrédito reported as
+ * collected, so a payroll cycle that withheld 500 of a 6,500 installment --
+ * an employee on unpaid leave, a short paycheck, a partial run -- forgave the
+ * other 6,000 and handed the borrower their credit line back to spend again.
+ * The third channel, the employer-CSV path (functions/src/payroll/
+ * processPayroll.ts), has always been balance-aware and even refuses a
+ * deduction larger than the balance. Two of three channels agreed; the third
+ * was the one an outside system supplied the number for.
+ *
+ * So: one routine, one set of rules, for all of them.
  *
  * The rules, in the order they matter:
  *
@@ -24,16 +41,21 @@
  *     debt. A loan with no usable obligation basis throws, which surfaces as
  *     an incident_log row and a 500, rather than settling for less.
  *
- *  2. IDEMPOTENCY IS JOINT, NOT PER-HANDLER. A paid Conekta order contains
- *     its charge, so one card payment can deliver BOTH `order.paid` and
- *     `charge.paid`. Keyed on anything order-scoped, that applies the money
- *     twice. So every repayment row -- from either handler -- is keyed
- *     `conekta_<chargeId>`, and the charge id is the one identifier both
- *     events agree on (`order.paid` carries it at charges.data[i].id,
- *     `charge.paid` at object.id). Whichever event lands first applies the
- *     money; the other becomes a no-op. This is also why `order.paid` applies
- *     per charge rather than applying the order total as one lump: an order
- *     with two charges must reconcile against two `charge.paid` events.
+ *  2. IDEMPOTENCY IS JOINT, NOT PER-HANDLER, AND THE CALLER MUST NAME THE
+ *     PAYMENT. Every repayment row is a document whose id the caller supplies
+ *     (`payment.docId`), and a payment whose row already exists moves nothing.
+ *     On the card side that id is `conekta_<chargeId>`, because a paid Conekta
+ *     order contains its charge and one card payment can therefore deliver
+ *     BOTH `order.paid` and `charge.paid`; keyed on anything order-scoped,
+ *     that applies the money twice, and the charge id is the one identifier
+ *     both events agree on (`order.paid` carries it at charges.data[i].id,
+ *     `charge.paid` at object.id). This is also why `order.paid` applies per
+ *     charge rather than applying the order total as one lump: an order with
+ *     two charges must reconcile against two `charge.paid` events. On the
+ *     payroll side it is `payroll_<ref>`, the SoftCrédito deduction reference.
+ *     That row is load-bearing on BOTH channels now: once a partial payment
+ *     leaves the loan `active`, the settled-status guard below can no longer
+ *     catch a replay, so the row is the only thing that does.
  *
  *  3. CREDIT COMES BACK AT MOST ONCE, AND AT MOST THE PRINCIPAL.
  *     `availableCredit` was reduced by the PRINCIPAL at origination
@@ -44,7 +66,15 @@
  *     `min(principal, totalRepaid)`, so it is monotonic, never exceeds what
  *     was actually repaid, and cannot double-apply across partial payments.
  *
- *  4. EVERY PRECONDITION IS A `tx.get`. Two concurrent webhook deliveries
+ *  4. THE LOAN DOCUMENT SAYS WHOSE DEBT THIS IS, THE CALLER DOES NOT. A
+ *     caller-supplied `employeeId` is a fallback for a loan document that does
+ *     not carry one, and nothing more. Trusting it is how a repayment's
+ *     restored credit line ends up on somebody else's employee document:
+ *     /internal/repayment used to read `employees/{req.body.employeeId}` and
+ *     increment it by the loan's full principal without ever comparing it to
+ *     `loans/{loanId}.employeeId`.
+ *
+ *  5. EVERY PRECONDITION IS A `tx.get`. Two concurrent webhook deliveries
  *     that both read before the transaction would both pass their checks and
  *     both commit. Nothing here reads outside the transaction.
  *
@@ -53,11 +83,12 @@
  * spelling so it does not double-restore credit that this file already
  * restored (see isCreditRestoringRepayment in functions/src/loans/
  * loanStatus.ts). That split is intentional and is left alone. Its documented
- * residual -- nobody frees the employer's `activeLoans` slot on the card path,
- * which permanently consumes origination capacity now that slot caps are
- * enforced (ADR-007) -- is closed here instead, by the settling transaction
- * that already owns the other counter. The trigger still never sees 'paid',
- * so there is still no double-count.
+ * residual -- nobody frees the employer's `activeLoans` slot, which
+ * permanently consumes origination capacity now that slot caps are enforced
+ * (ADR-007) -- is closed here instead, by the settling transaction that
+ * already owns the other counter. The trigger still never sees 'paid', so
+ * there is still no double-count. Routing the payroll channel through this
+ * routine closes that leak on the payroll channel too, which never had it.
  */
 
 // Mirrors REPAID_STATUSES in functions/src/loans/loanStatus.ts. That module is
@@ -80,26 +111,27 @@ const asFiniteNumber = (value) =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
 
 /**
- * Apply one or more card charges against a loan, inside a single transaction.
+ * Apply one or more payments against a loan, inside a single transaction.
  *
  * @param {object} deps            - { db, admin }
  * @param {object} input
  * @param {string} input.loanId
- * @param {string} input.employeeId - from webhook metadata; the loan document wins if they disagree
- * @param {string} [input.orderId]
- * @param {Array<{chargeId: string, amount: number}>} input.payments - amounts in PESOS
+ * @param {string} input.employeeId - fallback only; the loan document wins (rule 4)
+ * @param {string} input.method     - stamped on every repayment row: 'card' | 'payroll_deduction'
+ * @param {Array<{id: string, docId: string, amount: number, extra?: object}>} input.payments
+ *        `amount` is in PESOS; `docId` is the idempotency key (rule 2).
  * @returns {Promise<{outcome: string, settled: boolean, appliedAmount: number, ...}>}
  */
-async function applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, payments }) {
+async function applyRepayment({ db, admin }, { loanId, employeeId, method, payments }) {
   const FieldValue = admin.firestore.FieldValue;
 
   if (!Array.isArray(payments) || payments.length === 0) {
-    throw new Error('applyCardRepayment called with no payments');
+    throw new Error('applyRepayment called with no payments');
   }
   for (const p of payments) {
-    if (!p || !p.chargeId) throw new Error('Card repayment is missing a charge id');
+    if (!p || !p.id || !p.docId) throw new Error(`A ${method} repayment is missing its payment id`);
     if (asFiniteNumber(p.amount) === null || p.amount <= 0) {
-      throw new Error(`Card repayment ${p.chargeId} has a non-positive or non-numeric amount`);
+      throw new Error(`${method} repayment ${p.id} has a non-positive or non-numeric amount`);
     }
   }
 
@@ -107,7 +139,7 @@ async function applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, 
     const loanRef = db.collection('loans').doc(loanId);
     const rows = payments.map((p) => ({
       payment: p,
-      ref: db.collection('repayments').doc(`conekta_${p.chargeId}`),
+      ref: db.collection('repayments').doc(p.docId),
     }));
 
     // ── read phase: every precondition below is a transactional read ──────
@@ -115,13 +147,13 @@ async function applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, 
     const seen = await Promise.all(rows.map((r) => tx.get(r.ref)));
 
     // A payment against a loan we do not have is a reconciliation failure, not
-    // a success. Same stance as POST /internal/repayment's 404.
+    // a success.
     if (!loanDoc.exists) return { outcome: 'loan_not_found', settled: false, appliedAmount: 0 };
     const loan = loanDoc.data();
 
     const fresh = rows.filter((_, i) => !seen[i].exists);
     if (fresh.length === 0) {
-      // Every charge in this event already has a repayment row: a Conekta
+      // Every payment in this event already has a repayment row: an upstream
       // retry, the sibling event for the same payment, or a replay attempt.
       return { outcome: 'duplicate', settled: false, appliedAmount: 0 };
     }
@@ -130,15 +162,14 @@ async function applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, 
       loanId,
       employeeId: loan.employeeId ?? employeeId ?? null,
       amount: payment.amount,
-      method: 'card',
-      conektaChargeId: payment.chargeId,
-      conektaOrderId: orderId ?? null,
+      method,
       createdAt: FieldValue.serverTimestamp(),
+      ...(payment.extra || {}),
       ...extra,
     });
 
-    // A fresh charge against a loan that is ALREADY settled is money we cannot
-    // apply -- an overpayment, a duplicate checkout, or a charge for the wrong
+    // A fresh payment against a loan that is ALREADY settled is money we cannot
+    // apply -- an overpayment, a duplicate checkout, or a payment for the wrong
     // loan. Record it (so the row exists and replays stay no-ops) but move
     // nothing: re-settling would restore credit a second time.
     if (REPAID_STATUSES.includes(loan.status)) {
@@ -173,7 +204,7 @@ async function applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, 
     if (settled) {
       updates.status = 'paid';
       updates.paidAt = FieldValue.serverTimestamp();
-      updates.repaymentRef = fresh[fresh.length - 1].payment.chargeId;
+      updates.repaymentRef = fresh[fresh.length - 1].payment.id;
     }
 
     // Rule 3: credit restoration is a delta toward min(principal, repaid).
@@ -182,8 +213,8 @@ async function applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, 
     const targetRestoredCents = Math.min(principalCents, totalPaidCents);
     const restoreDeltaCents = Math.max(0, targetRestoredCents - restoredCents);
 
-    // The loan document is authoritative for WHO gets the credit back; the
-    // webhook metadata only says which loan to look up.
+    // Rule 4: the loan document is authoritative for WHO gets the credit back;
+    // the caller's employeeId only says which loan to look up.
     const creditEmployeeId = loan.employeeId ?? employeeId ?? null;
     let employeeDoc = null;
     if (restoreDeltaCents > 0 && creditEmployeeId) {
@@ -229,4 +260,47 @@ async function applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, 
   });
 }
 
-module.exports = { applyCardRepayment, REPAID_STATUSES };
+/** Conekta card charges. Idempotency key: `conekta_<chargeId>` (rule 2). */
+function applyCardRepayment({ db, admin }, { loanId, employeeId, orderId, payments }) {
+  if (!Array.isArray(payments) || payments.length === 0) {
+    throw new Error('applyCardRepayment called with no payments');
+  }
+  for (const p of payments) {
+    if (!p || !p.chargeId) throw new Error('Card repayment is missing a charge id');
+  }
+  return applyRepayment(
+    { db, admin },
+    {
+      loanId,
+      employeeId,
+      method: 'card',
+      payments: payments.map((p) => ({
+        id: p.chargeId,
+        docId: `conekta_${p.chargeId}`,
+        amount: p.amount,
+        extra: { conektaChargeId: p.chargeId, conektaOrderId: orderId ?? null },
+      })),
+    }
+  );
+}
+
+/**
+ * One SoftCrédito payroll deduction. Idempotency key: `payroll_<ref>` -- the
+ * deduction reference the adapter registered and SoftCrédito echoes back on
+ * `/deductions/completed`. The caller is responsible for having validated
+ * `ref` as a safe Firestore document-id fragment before this point; see
+ * REPAYMENT_REF_PATTERN in index.js.
+ */
+function applyPayrollRepayment({ db, admin }, { loanId, employeeId, amount, ref, method }) {
+  return applyRepayment(
+    { db, admin },
+    {
+      loanId,
+      employeeId,
+      method: method || 'payroll_deduction',
+      payments: [{ id: ref, docId: `payroll_${ref}`, amount, extra: { externalRef: ref } }],
+    }
+  );
+}
+
+module.exports = { applyRepayment, applyCardRepayment, applyPayrollRepayment, REPAID_STATUSES };
