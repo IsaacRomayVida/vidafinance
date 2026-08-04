@@ -1,6 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 
+import { DISBURSED_STATUSES } from '../loans/loanStatus';
 import { auditLog } from '../utils/auditLog';
 import { getQueue } from '../utils/queue';
 
@@ -15,7 +16,12 @@ export const dailyLoanCheck = onSchedule(
     let repaymentSyncError: string | null = null;
     try {
       const adapterUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
-      if (adapterUrl) {
+      if (!adapterUrl) {
+        // Not "nothing to do" — it means we have no idea which loans were
+        // repaid by payroll since yesterday, which is the same blindness as a
+        // failed call and must gate the sweep the same way.
+        repaymentSyncError = 'SOFTCREDITO_ADAPTER_URL not configured';
+      } else {
         const resp = await fetch(adapterUrl + '/internal/sync-repayments', {
           method: 'POST',
           headers: {
@@ -36,11 +42,27 @@ export const dailyLoanCheck = onSchedule(
       repaymentSyncError = err instanceof Error ? err.message : 'unknown error';
     }
 
-    const overdueSnap = await db
-      .collection('loans')
-      .where('status', '==', 'active')
-      .where('dueDate', '<', now)
-      .get();
+    // Marking a loan overdue is an adverse action against the borrower: it
+    // writes overdue_log, dunns them over the notification queue, and shows up
+    // in arrears reporting. It is only sound if we know what payroll collected
+    // since yesterday. When the repayment sync failed — or never ran, because
+    // the adapter URL is unconfigured — that knowledge is stale, and sweeping
+    // anyway flips loans the borrower has already paid. Skip the sweep and
+    // record the run as degraded so it is visible rather than silent; the next
+    // run picks these loans up once the sync is healthy again.
+    const overdueSnap = repaymentSyncError
+      ? { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[], size: 0 }
+      : await db
+          .collection('loans')
+          // Both live "funds were actually sent" spellings: 'active' (the
+          // automatic onLoanApproved path) and 'disbursed' (markLoanDisbursed,
+          // the manual ops-confirmed path). This used to be `== 'active'`, so
+          // every manually-disbursed loan was invisible to the sweep and never
+          // went overdue at all. Firestore serves `in` from the same
+          // (status, dueDate) composite index as `==`, so no index change.
+          .where('status', 'in', DISBURSED_STATUSES)
+          .where('dueDate', '<', now)
+          .get();
 
     for (const doc of overdueSnap.docs) {
       const loan = doc.data();
@@ -85,9 +107,12 @@ export const dailyLoanCheck = onSchedule(
     }
 
     const tomorrow = Timestamp.fromMillis(Date.now() + 25 * 60 * 60 * 1000);
+    // The reminder pass is NOT gated on the sync: a heads-up to a borrower who
+    // has in fact already paid is harmless, whereas withholding it from one who
+    // has not is the failure that costs them. Same 'active'/'disbursed' fix.
     const remindSnap = await db
       .collection('loans')
-      .where('status', '==', 'active')
+      .where('status', 'in', DISBURSED_STATUSES)
       .where('dueDate', '<', tomorrow)
       .get();
 
@@ -112,7 +137,8 @@ export const dailyLoanCheck = onSchedule(
       overdueFound: overdueSnap.size,
       repaymentsSynced,
       ...(repaymentSyncError ? { repaymentSyncError } : {}),
-      status: 'complete',
+      // 'degraded' means the overdue sweep was deliberately skipped this run.
+      status: repaymentSyncError ? 'degraded' : 'complete',
     });
   }
 );
