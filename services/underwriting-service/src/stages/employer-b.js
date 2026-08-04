@@ -350,22 +350,44 @@ async function runEmployerDueDiligence(employer, partAResults, { logger } = {}) 
     // otherwise this write silently reverts a human decision on the next
     // due-diligence run. Everything else (score, tier, timestamps) is still
     // refreshed. A MISSING source is NOT an override.
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const opsOwnsCap = (snap.data() || {}).maxActiveSlotsSource === "ops_override";
-      const update = {
-        employerScore: score,
-        tier: pass ? tier : null,
-        tierAssignedAt: FieldValue.serverTimestamp(),
-        lastDueDiligenceAt: FieldValue.serverTimestamp(),
-        dueDiligenceResult: { pass, tier, score },
-      };
-      if (!opsOwnsCap) {
-        update.maxActiveSlots = maxActiveSlots;
-        update.maxActiveSlotsSource = "due_diligence";
-      }
-      tx.update(ref, update);
-    });
+    //
+    // This write is guarded, not left to throw: score/tier/maxActiveSlots
+    // above are already fully computed from Part A + IMSS signals in hand,
+    // and this transaction only persists an audit trail plus the cache the
+    // NEXT due-diligence run reads. Before this guard, a Firestore outage
+    // here rejected the whole function, which decision-engine.js's stage
+    // try/catch turned into `results.employerB = {pass:false, reason:
+    // "STAGE_ERROR"}` — and decision-engine.js:111 answers THAT with
+    // `decision: "rejected", reason: "EMPLOYER_SCORE_LOW"`, a specific,
+    // plausible-sounding business reason for what was actually a database
+    // hiccup unrelated to the employer's creditworthiness. A correctly
+    // scored, Tier 1 employer's employees would be denied loans on a
+    // "score too low" reason that was never true. Persistence failing here
+    // must cost the next run its fresh cache, not this applicant their
+    // decision.
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const opsOwnsCap = (snap.data() || {}).maxActiveSlotsSource === "ops_override";
+        const update = {
+          employerScore: score,
+          tier: pass ? tier : null,
+          tierAssignedAt: FieldValue.serverTimestamp(),
+          lastDueDiligenceAt: FieldValue.serverTimestamp(),
+          dueDiligenceResult: { pass, tier, score },
+        };
+        if (!opsOwnsCap) {
+          update.maxActiveSlots = maxActiveSlots;
+          update.maxActiveSlotsSource = "due_diligence";
+        }
+        tx.update(ref, update);
+      });
+    } catch (err) {
+      log.error(
+        { stage: "employer-b", rfc, employerId: employer.employerId, err: err.message },
+        "Failed to persist due-diligence result to Firestore — returning the already-computed result anyway"
+      );
+    }
   }
 
   return {
