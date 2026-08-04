@@ -1713,6 +1713,50 @@ const ADMIN_DASHBOARD_DISBURSED_STATUSES: readonly string[] = [
   ...REPAID_STATUSES,
 ];
 
+// The sum below needs the (status ASC, amount ASC) composite index shipped in
+// firestore.indexes.json with this change — but it will NOT exist the moment
+// this code first runs. `.github/workflows/deploy.yml` deploys functions
+// (step "Deploy to Firebase") well before "Deploy Firestore indexes", and even
+// after that step returns Firestore builds the index ASYNCHRONOUSLY. So there
+// is a guaranteed window on every deploy of this file where the new handler is
+// live and the index it depends on is missing or still BUILDING, and the query
+// throws FAILED_PRECONDITION (code 9).
+//
+// Unguarded, that throw is inside the handler's `Promise.all` — so a missing
+// index does not just blank out `totalDisbursed`, it rejects the whole call and
+// takes the ENTIRE admin dashboard dark. Trading a permanently-cheap read for a
+// self-inflicted outage on every deploy is not a fix.
+//
+// So: try the aggregation, and on precondition failure only, fall back to the
+// pre-existing bounded scan for this one figure. The fallback is the expensive
+// shape this change exists to remove — that is the point. It is the error path,
+// not the steady state, and it self-heals to the cheap path the instant the
+// index finishes building. Any OTHER error still propagates; we are not
+// swallowing real faults to serve a plausible-looking number.
+async function sumDisbursedForAdminDashboard(): Promise<number> {
+  try {
+    const agg = await db
+      .collection('loans')
+      .where('status', 'in', ADMIN_DASHBOARD_DISBURSED_STATUSES)
+      .aggregate({ totalDisbursed: AggregateField.sum('amount') })
+      .get();
+    return agg.data().totalDisbursed ?? 0;
+  } catch (err) {
+    const code = (err as { code?: number | string })?.code;
+    const isMissingIndex =
+      code === 9 || code === 'failed-precondition' || /requires an index|FAILED_PRECONDITION/i.test(String(err));
+    if (!isMissingIndex) throw err;
+
+    logger.warn('getAdminDashboard: (status, amount) index unavailable — falling back to unbounded scan', {
+      context: 'getAdminDashboard',
+      error: String(err),
+    });
+
+    const snap = await db.collection('loans').where('status', 'in', ADMIN_DASHBOARD_DISBURSED_STATUSES).get();
+    return snap.docs.reduce((sum, d) => sum + ((d.data()['amount'] as number) || 0), 0);
+  }
+}
+
 export const getAdminDashboard = onCall(
   { cors: true, enforceAppCheck: true },
   withAuth<Record<string, never>, Record<string, unknown>>(
@@ -1741,16 +1785,15 @@ export const getAdminDashboard = onCall(
         //    same story — Firestore sums server-side and returns one number.
         // Both scale with the aggregation's cost, not the collection's size.
         //
-        // The sum below REQUIRES the (status ASC, amount ASC) composite index
-        // added to firestore.indexes.json alongside this change. Firestore
-        // serves a filtered sum/avg only from an index carrying both the
-        // filtered field and the aggregated one; without it the query throws
-        // FAILED_PRECONDITION at runtime and the whole dashboard goes dark.
-        // The `.count()` calls need nothing extra — they run off the automatic
-        // single-field index on `status`. Mocked unit tests cannot catch a
-        // missing index, so that entry is load-bearing: do not drop it while
-        // this aggregation exists.
-        const [healthDoc, queueDoc, pendingLoansAgg, activeLoansAgg, employersAgg, employeesAgg, disbursedAgg] =
+        // The sum REQUIRES the (status ASC, amount ASC) composite index added to
+        // firestore.indexes.json alongside this change. Firestore serves a
+        // filtered sum/avg only from an index carrying both the filtered field
+        // and the aggregated one. That entry is load-bearing — mocked unit tests
+        // cannot catch a missing index, so do not drop it while this aggregation
+        // exists; see sumDisbursedForAdminDashboard for what happens when it is
+        // absent or still building. The `.count()` calls need nothing extra —
+        // they run off the automatic single-field index on `status`.
+        const [healthDoc, queueDoc, pendingLoansAgg, activeLoansAgg, employersAgg, employeesAgg, totalDisbursed] =
           await Promise.all([
             db.collection('system_health').doc('current').get(),
             db.collection('system_health').doc('queues').get(),
@@ -1758,16 +1801,11 @@ export const getAdminDashboard = onCall(
             db.collection('loans').where('status', '==', 'active').count().get(),
             db.collection('employers').count().get(),
             db.collection('employees').count().get(),
-            db
-              .collection('loans')
-              .where('status', 'in', ADMIN_DASHBOARD_DISBURSED_STATUSES)
-              .aggregate({ totalDisbursed: AggregateField.sum('amount') })
-              .get(),
+            sumDisbursedForAdminDashboard(),
           ]);
 
         const pendingLoans = pendingLoansAgg.data().count;
         const activeLoans = activeLoansAgg.data().count;
-        const totalDisbursed = disbursedAgg.data().totalDisbursed ?? 0;
 
         return {
           systemHealth: healthDoc.data() ?? {},
