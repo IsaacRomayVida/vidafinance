@@ -67,6 +67,12 @@ jobs:
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
           REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
+          # See deploy.yml's METAMAP_WEBHOOK_SECRET comment for the full
+          # finding. Short version: read by webhooks/metamap.ts, written by no
+          # workflow, so metamapWebhook has been returning 500 to every MetaMap
+          # callback. Empty until the secret is provisioned, which preserves
+          # today's fail-closed behaviour rather than changing it.
+          METAMAP_WEBHOOK_SECRET=${{ secrets.METAMAP_WEBHOOK_SECRET }}
           ENVEOF
 
       - name: Write functions .env (Production)
@@ -82,6 +88,8 @@ jobs:
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
           REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
+          # See deploy.yml's METAMAP_WEBHOOK_SECRET comment for the full finding.
+          METAMAP_WEBHOOK_SECRET=${{ secrets.METAMAP_WEBHOOK_SECRET }}
           ENVEOF
 
       # Same required-vs-optional determination as deploy.yml's identical

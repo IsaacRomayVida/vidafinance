@@ -146,6 +146,26 @@ jobs:
           PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
           ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
           REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
+          # METAMAP_WEBHOOK_SECRET was read by functions/src/webhooks/metamap.ts
+          # but written by NO workflow, so it could never reach the deployed
+          # runtime. metamapWebhook fails CLOSED on an unset secret (metamap.ts
+          # :31-36 -> 500 webhook_not_configured), and it IS deployed
+          # (functions/src/index.ts:59, invoker 'public') — so every MetaMap
+          # callback has been rejected with a 500 and no KYC result or
+          # document.signed event has ever been recorded.
+          #
+          # It escaped earlier env audits because metamap.ts reads it
+          # indirectly, via `process.env[WEBHOOK_SECRET_ENV]` with
+          # WEBHOOK_SECRET_ENV a module const — a grep for
+          # `process.env['METAMAP_WEBHOOK_SECRET']` finds nothing.
+          #
+          # NOT on the REQUIRED list below, deliberately: the GitHub secret is
+          # not provisioned yet, so requiring it would block every deploy. This
+          # line is what makes provisioning it sufficient — until then the
+          # value is empty and the handler keeps failing closed exactly as it
+          # does today, so this is a no-op rather than a regression. Promote it
+          # to REQUIRED once the secret exists.
+          METAMAP_WEBHOOK_SECRET=${{ secrets.METAMAP_WEBHOOK_SECRET }}
           SENTRY_DSN=${{ secrets.SENTRY_DSN }}
           SENTRY_RELEASE=${{ github.sha }}
           ENVEOF
