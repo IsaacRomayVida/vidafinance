@@ -92,9 +92,16 @@ jest.mock('bullmq', () => ({
   Queue: jest.fn().mockImplementation(() => ({ add: mockQueueAdd })),
 }));
 
-jest.mock('../../utils/rateLimiter', () => ({
-  checkRateLimit: jest.fn().mockResolvedValue(true),
-}));
+jest.mock('../../utils/rateLimiter', () => {
+  const mod = { checkRateLimit: jest.fn().mockResolvedValue(true) };
+  return {
+    ...mod,
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    enforceRateLimit: require('../../__mocks__/utils/rateLimiter').makeEnforceRateLimit(
+      (...a: unknown[]) => (mod as { checkRateLimit: (...a: unknown[]) => Promise<boolean> }).checkRateLimit(...a)
+    ),
+  };
+});
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 

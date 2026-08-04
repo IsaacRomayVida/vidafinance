@@ -1,10 +1,9 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { logger } from 'firebase-functions';
 import { getFirestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import { withErrorHandling } from '../utils/errorHandler';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 
 /**
  * Resolves an employerCode to the minimal public identity of that employer.
@@ -46,20 +45,14 @@ export const lookupEmployerByCode = onCall(
       const code = parsed.data.code.toUpperCase();
 
       // 10/min per App Check app id — enough for a user typing a code with
-      // debounce, far too slow to sweep the code space.
+      // debounce, far too slow to sweep the code space. Fails CLOSED: "far too
+      // slow to sweep" is only true while the limiter is answering.
       const appCheckId = request.app?.appId ?? 'anon';
-      try {
-        const allowed = await checkRateLimit(`rl:lookupEmployerByCode:${appCheckId}`, 10, 60);
-        if (!allowed) {
-          throw new HttpsError('resource-exhausted', 'Too many lookup attempts. Please wait.');
-        }
-      } catch (e: unknown) {
-        if (e instanceof HttpsError) throw e;
-        logger.warn('Rate limiter unavailable for lookupEmployerByCode', {
-          error: (e as Error).message,
-          service: 'functions',
-        });
-      }
+      await enforceRateLimit(`rl:lookupEmployerByCode:${appCheckId}`, 10, 60, {
+        onUnavailable: 'closed',
+        message: 'Too many lookup attempts. Please wait.',
+        context: 'lookupEmployerByCode',
+      });
 
       const db = getFirestore();
       const snap = await db

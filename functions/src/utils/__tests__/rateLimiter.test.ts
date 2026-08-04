@@ -1,14 +1,21 @@
+// checkRateLimit now issues its INCR and EXPIRE as a single server-side Lua
+// step rather than two round-trips, so this fake stands in for the Redis side
+// of that contract: it keeps counters and TTLs, and `eval` applies the same
+// rules the script does (INCR; set the window on the first hit, or whenever the
+// key is found without one). The behavioural expectations below — counting,
+// per-key independence, the boundary at exactly the limit — are unchanged.
 jest.mock('../redis', () => {
   const counters: Record<string, number> = {};
   const expires: Record<string, number> = {};
   const instance = {
-    incr: jest.fn(async (key: string) => {
+    eval: jest.fn(async (_script: string, _numKeys: number, key: string, windowArg: string) => {
       counters[key] = (counters[key] ?? 0) + 1;
+      // `expires[key] === undefined` is this fake's stand-in for redis TTL < 0:
+      // the key exists but carries no window.
+      if (counters[key] === 1 || expires[key] === undefined) {
+        expires[key] = Number(windowArg);
+      }
       return counters[key];
-    }),
-    expire: jest.fn(async (key: string, seconds: number) => {
-      expires[key] = seconds;
-      return 1;
     }),
     _reset: () => {
       for (const k of Object.keys(counters)) delete counters[k];
@@ -16,6 +23,7 @@ jest.mock('../redis', () => {
     },
     _get: (key: string) => counters[key],
     _getExpire: (key: string) => expires[key],
+    _dropExpire: (key: string) => delete expires[key],
   };
   return {
     getRedis: jest.fn(() => instance),
@@ -26,11 +34,11 @@ import { checkRateLimit } from '../rateLimiter';
 import { getRedis } from '../redis';
 
 type MockRedis = {
-  incr: jest.Mock;
-  expire: jest.Mock;
+  eval: jest.Mock;
   _reset: () => void;
   _get: (key: string) => number | undefined;
   _getExpire: (key: string) => number | undefined;
+  _dropExpire: (key: string) => void;
 };
 
 describe('checkRateLimit', () => {
@@ -39,24 +47,36 @@ describe('checkRateLimit', () => {
   beforeEach(() => {
     redis = getRedis() as unknown as MockRedis;
     redis._reset();
-    redis.incr.mockClear();
-    redis.expire.mockClear();
+    redis.eval.mockClear();
   });
 
   it('allows the first request', async () => {
     const allowed = await checkRateLimit('test:key1', 10, 60);
     expect(allowed).toBe(true);
-    expect(redis.incr).toHaveBeenCalledWith('test:key1');
+    expect(redis.eval).toHaveBeenCalledWith(expect.any(String), 1, 'test:key1', '60');
   });
 
-  it('sets expiry on first request only', async () => {
+  it('sets the window on the first request', async () => {
     await checkRateLimit('test:key2', 10, 60);
-    expect(redis.expire).toHaveBeenCalledWith('test:key2', 60);
     expect(redis._getExpire('test:key2')).toBe(60);
+  });
 
-    const expireCallsBefore = redis.expire.mock.calls.length;
-    await checkRateLimit('test:key2', 10, 60);
-    expect(redis.expire.mock.calls.length).toBe(expireCallsBefore);
+  it('counts and expires in a single round-trip', async () => {
+    await checkRateLimit('test:atomic', 10, 60);
+    // The old two-call version could lose its EXPIRE between calls and leave
+    // the key immortal. One call cannot be half-applied.
+    expect(redis.eval).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the window on a key that lost its TTL, rather than counting forever', async () => {
+    await checkRateLimit('test:stuck', 10, 60);
+    redis._dropExpire('test:stuck'); // the state a lost EXPIRE used to leave behind
+
+    await checkRateLimit('test:stuck', 10, 60);
+
+    // Re-armed. Under the old `current === 1` guard this key would have stayed
+    // immortal, climbed past the limit and refused that principal permanently.
+    expect(redis._getExpire('test:stuck')).toBe(60);
   });
 
   it('15 requests at limit=10 -> 10 allowed, 5 denied', async () => {

@@ -76,7 +76,16 @@ jest.mock('node-fetch', () => ({
   default: (...args: unknown[]) => mockFetch(...args),
 }));
 
-jest.mock('../utils/rateLimiter', () => ({ checkRateLimit: jest.fn().mockResolvedValue(true) }));
+jest.mock('../utils/rateLimiter', () => {
+  const mod = { checkRateLimit: jest.fn().mockResolvedValue(true) };
+  return {
+    ...mod,
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    enforceRateLimit: require('../__mocks__/utils/rateLimiter').makeEnforceRateLimit(
+      (...a: unknown[]) => (mod as { checkRateLimit: (...a: unknown[]) => Promise<boolean> }).checkRateLimit(...a)
+    ),
+  };
+});
 jest.mock('../utils/notify', () => ({ notifyLoanEvent: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../utils/slackAlert', () => ({ sendSlackAlert: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../utils/sentry', () => ({ initSentry: jest.fn(), captureException: jest.fn() }));

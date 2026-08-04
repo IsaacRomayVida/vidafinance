@@ -115,9 +115,16 @@ jest.mock('crypto', () => ({
   }),
 }));
 
-jest.mock('../../utils/rateLimiter', () => ({
-  checkRateLimit: jest.fn().mockResolvedValue(true),
-}));
+jest.mock('../../utils/rateLimiter', () => {
+  const mod = { checkRateLimit: jest.fn().mockResolvedValue(true) };
+  return {
+    ...mod,
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    enforceRateLimit: require('../../__mocks__/utils/rateLimiter').makeEnforceRateLimit(
+      (...a: unknown[]) => (mod as { checkRateLimit: (...a: unknown[]) => Promise<boolean> }).checkRateLimit(...a)
+    ),
+  };
+});
 
 const mockResolveEntity = jest.fn().mockResolvedValue('entity-uuid-123');
 const mockAddEntityRef = jest.fn().mockResolvedValue(undefined);
