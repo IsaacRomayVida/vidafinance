@@ -431,6 +431,209 @@ describe('onLoanApproved — payroll-deduction registration failure must not be 
   });
 });
 
+describe('onLoanApproved — a failed adapter call must not erase a transfer that happened', () => {
+  // The adapter does its own bookkeeping on the way out of a SUCCESSFUL SPEI
+  // transfer: markClaimSent, then loans.update({status:'active', disbursedAt,
+  // disbursementRef, softcreditoTransferId}), then disbursement_queue.update,
+  // then spei_log.add (softcredito-adapter/index.js:292-311). Those are four
+  // separate writes and the last three can fail on ordinary Firestore
+  // transients. When one does, the adapter's catch answers 500 — after it has
+  // already written `disbursedAt` and a real SPEI tracking reference onto the
+  // loan.
+  //
+  // The trigger's failure handler then wrote `status: 'disbursement_failed'`
+  // straight over it. `update()` leaves the sibling fields alone, so the loan
+  // ends up carrying a genuine `disbursedAt` and `disbursementRef` under a
+  // status that says no money moved — and `disbursement_failed` is not in
+  // DISBURSED_STATUSES, so dailyLoanCheck never sweeps it, it never goes
+  // overdue, and nothing ever collects. Real pesos out, no debt on the books.
+  function mockAdapterThatPaidThenFailedBookkeeping() {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/internal/disburse')) {
+        // The transfer went through and the adapter recorded it...
+        const entry = mockDb._store.get('loans/loan-1');
+        if (entry) {
+          entry.data['status'] = 'active';
+          entry.data['disbursedAt'] = MockTimestamp.now();
+          entry.data['disbursementRef'] = 'SPEI-REAL-1';
+        }
+        // ...and then its own follow-up write threw.
+        return { ok: false, status: 500, json: async () => ({}), text: async () => 'upstream_error' };
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
+  }
+
+  it('RED: does not mark a loan disbursement_failed when it already carries a disbursedAt', async () => {
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    mockAdapterThatPaidThenFailedBookkeeping();
+    const { onLoanApproved } = await loadTriggers();
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    const loan = mockDb._store.get('loans/loan-1')?.data;
+    expect(loan?.['disbursementRef']).toBe('SPEI-REAL-1');
+    expect(loan?.['status']).not.toBe('disbursement_failed');
+    // Still needs a human — the adapter's bookkeeping is half-written — but as
+    // a reconciliation, not as "no money moved".
+    expect(loan?.['disbursementNeedsReconciliation']).toBe(true);
+  });
+
+  it('RED: an unknown outcome with no evidence of a transfer is flagged indeterminate, not just failed', async () => {
+    // Same 500, but this time the adapter got nowhere near a transfer, so the
+    // loan carries no disbursedAt. The status is correctly `disbursement_failed`
+    // — but from outside the adapter a 500 is indistinguishable from a transfer
+    // whose outcome is unknown (the adapter leaves its claim `in_flight` for
+    // exactly this reason), so it must not read as a clean "nothing happened".
+    // payment-server's worker already writes this same flag for the same
+    // reason (services/payment-server/index.js:605-607).
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    mockFetch.mockImplementation(async () => ({
+      ok: false, status: 500, json: async () => ({}), text: async () => 'upstream_error',
+    }));
+    const { onLoanApproved } = await loadTriggers();
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    const loan = mockDb._store.get('loans/loan-1')?.data;
+    expect(loan?.['status']).toBe('disbursement_failed');
+    expect(loan?.['disbursementIndeterminate']).toBe(true);
+  });
+
+  it('RED: a 503 claim_unavailable is a clean failure — nothing was dispatched', async () => {
+    // The adapter answers 503 only from the branch that could not even
+    // establish its idempotency claim, and a transaction that throws never
+    // committed, so nothing reached SoftCrédito. This one really is "no money
+    // moved", and flagging it indeterminate would send ops reconciling against
+    // a transfer that provably never existed.
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    mockFetch.mockImplementation(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+      text: async () => '{"error":"disbursement_claim_unavailable"}',
+    }));
+    const { onLoanApproved } = await loadTriggers();
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    const loan = mockDb._store.get('loans/loan-1')?.data;
+    expect(loan?.['status']).toBe('disbursement_failed');
+    expect(loan?.['disbursementIndeterminate']).toBeUndefined();
+  });
+});
+
+describe('onLoanApproved — a deduction is never registered against an unfunded loan', () => {
+  // The payroll deduction is an instruction to SoftCrédito to take money OUT of
+  // the borrower's next paycheck. It only makes sense once the borrower has
+  // been paid. The registration block sat after the disbursement block with no
+  // gate between them, so every way the disbursement could fail — the adapter
+  // 500ing, answering 503 disbursement_claim_unavailable, or answering 409
+  // disbursement_indeterminate — still fell through and registered one. The
+  // loan reads `disbursement_failed`, no SPEI ever left, and the employee's
+  // salary is docked 1,300 pesos on their next payroll run for a loan they
+  // never received. sync-repayments then forwards that completed deduction and
+  // applyRepayment books it against the unfunded loan, so the loss is not even
+  // visible as an unexplained deduction.
+  function mockAdapter({ disburseOk = true, deductionOk = true } = {}) {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/internal/disburse')) {
+        return disburseOk
+          ? { ok: true, status: 200, json: async () => ({ ref: 'SPEI-1' }), text: async () => '' }
+          : { ok: false, status: 500, json: async () => ({}), text: async () => 'disburse down' };
+      }
+      if (String(url).endsWith('/internal/register-deduction')) {
+        return deductionOk
+          ? { ok: true, status: 200, json: async () => ({ deductionId: 'DED-1' }), text: async () => '' }
+          : { ok: false, status: 500, json: async () => ({}), text: async () => 'adapter down' };
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
+  }
+
+  it('RED: a failed disbursement must not register a payroll deduction', async () => {
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    mockAdapter({ disburseOk: false });
+    const { onLoanApproved } = await loadTriggers();
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    // No money moved.
+    expect(mockDb._store.get('loans/loan-1')?.data['status']).toBe('disbursement_failed');
+
+    // So nothing may be scheduled to come out of the borrower's paycheck.
+    const dedCalls = mockFetch.mock.calls.filter(([url]) =>
+      String(url).endsWith('/internal/register-deduction')
+    );
+    expect(dedCalls).toHaveLength(0);
+    expect(mockDb._store.get('loans/loan-1')?.data['softcreditoDeductionId']).toBeUndefined();
+  });
+
+  it('RED: the skipped registration is recorded on the loan, not silently dropped', async () => {
+    // Skipping is correct but it leaves the loan with no collection channel, so
+    // whoever re-disburses after reconciling has to be able to see that one is
+    // still owed. A silent skip is how a re-disbursed loan ends up funded with
+    // nothing collecting against it.
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    mockAdapter({ disburseOk: false });
+    const { onLoanApproved } = await loadTriggers();
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    expect(mockDb._store.get('loans/loan-1')?.data['payrollDeductionSkipped']).toBe(
+      'disbursement_not_confirmed'
+    );
+  });
+
+  it('CONTROL: a confirmed disbursement still registers the deduction', async () => {
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    mockAdapter({ disburseOk: true, deductionOk: true });
+    const { onLoanApproved } = await loadTriggers();
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    expect(mockDb._store.get('loans/loan-1')?.data['status']).toBe('active');
+    expect(mockDb._store.get('loans/loan-1')?.data['softcreditoDeductionId']).toBe('DED-1');
+    expect(mockDb._store.get('loans/loan-1')?.data['payrollDeductionSkipped']).toBeUndefined();
+  });
+
+  it('CONTROL: the stub-disbursement path (dev/test) still registers the deduction', async () => {
+    // ALLOW_STUB_DISBURSEMENT marks the loan active without calling the
+    // adapter. That is a *confirmed* (simulated) disbursement, so the local
+    // deduction flow must keep working or every emulator run silently loses it.
+    process.env['ALLOW_STUB_DISBURSEMENT'] = 'true';
+    delete process.env['SOFTCREDITO_ADAPTER_URL'];
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    const { onLoanApproved } = await loadTriggers();
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    expect(mockDb._store.get('loans/loan-1')?.data['status']).toBe('active');
+    expect(mockDb._store.get('loans/loan-1')?.data['payrollDeductionSkipped']).toBeUndefined();
+  });
+});
+
 describe('updateLoanStatus — P0-B: ops/admin cannot rewind a disbursed loan', () => {
   const opsAuth = { uid: 'ops-1', token: { role: 'ops' } };
 

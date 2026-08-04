@@ -384,6 +384,7 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const data = await scCall('GET', '/deductions/completed?date=' + today);
     let synced = 0;
+    const failed = [];
     const fetch = await getFetch();
     for (const item of data.deductions || []) {
       const snap = await db.collection('loans')
@@ -392,19 +393,84 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
       if (snap.empty || snap.docs[0].data().status === 'paid') continue;
       const loanId = snap.docs[0].id;
       const loan = snap.docs[0].data();
-      await fetch(process.env.PAYMENT_SERVER_URL + '/internal/repayment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_SECRET },
-        body: JSON.stringify({
-          loanId,
-          employeeId: loan.employeeId,
-          amount: item.amount,
-          ref: item.reference,
-          method: 'payroll_deduction'
-        })
-      });
+
+      // THE FORWARD'S ANSWER IS THE ONLY EVIDENCE THE MONEY WAS BOOKED.
+      //
+      // This was a bare `await fetch(...)` with no `resp.ok` branch, followed
+      // unconditionally by `synced++`. payment-server answers 400 on an
+      // unusable deduction reference, 404 when the loan is not found and 500
+      // when the settlement transaction throws -- and every one of those was
+      // counted as a synced repayment and rolled into `{ success: true }`.
+      //
+      // The deduction has already been taken out of the borrower's paycheck by
+      // this point; the forward is what turns it into a balance reduction. A
+      // dropped forward is never retried either, because the next run queries
+      // `/deductions/completed?date=` for ITS date -- today's deductions are
+      // never asked for again. The repayment is simply lost.
+      //
+      // And a 200 here is load-bearing beyond this service:
+      // functions/src/scheduled/dailyLoanCheck.ts:34-53 gates the overdue sweep
+      // on this route's status precisely so it never takes an adverse action on
+      // stale knowledge of what payroll collected. Reporting success on a batch
+      // we failed to book defeats that gate, and the borrower who did pay is
+      // marked overdue, dunned over the notification queue and counted in
+      // arrears.
+      //
+      // A throw is caught per item rather than left to abort the loop: one
+      // unreachable moment must not strand the rest of the batch, which would
+      // be the same silent loss one deduction wider.
+      let resp;
+      try {
+        resp = await fetch(process.env.PAYMENT_SERVER_URL + '/internal/repayment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_SECRET },
+          body: JSON.stringify({
+            loanId,
+            employeeId: loan.employeeId,
+            amount: item.amount,
+            ref: item.reference,
+            method: 'payroll_deduction'
+          })
+        });
+      } catch (fwdErr) {
+        log.error({ loanId, error: fwdErr.message }, 'repayment forward failed — deduction collected but not booked');
+        failed.push({ loanId, status: null });
+        continue;
+      }
+
+      if (!resp.ok) {
+        log.error({ loanId, status: resp.status }, 'repayment forward rejected — deduction collected but not booked');
+        failed.push({ loanId, status: resp.status });
+        continue;
+      }
       synced++;
     }
+
+    // Non-2xx when anything failed to book. Deliberately not a partial success:
+    // the caller's only question is "do I now know what payroll collected?",
+    // and with even one deduction unbooked the answer is no. `synced` still
+    // rides along so a human can see how much of the batch did land, and the
+    // successful forwards stay applied -- they are idempotent on
+    // `repayments/payroll_<ref>`, so the retry that follows re-applies nothing.
+    //
+    // No explicit alert call: the 5xx interceptor above fires alert5xx on any
+    // response this route sends with a >= 500 status, and the only alert helper
+    // that fits the shape is alertDisbursementFailed, which would page with
+    // "Disbursement failed for loan X" -- the wrong incident entirely, and the
+    // wrong runbook, for a repayment that failed to book.
+    if (failed.length > 0) {
+      log.error(
+        { failed: failed.length, synced, loanIds: failed.map((f) => f.loanId) },
+        'repayment sync incomplete — deductions collected but not booked',
+      );
+      return res.status(502).json({
+        error: 'repayment_forward_failed',
+        reason: 'deductions_collected_but_not_booked',
+        synced,
+        failed: failed.length,
+      });
+    }
+
     res.json({ success: true, synced });
   } catch (err) {
     respondUpstreamFailure(res, err, '/internal/sync-repayments');

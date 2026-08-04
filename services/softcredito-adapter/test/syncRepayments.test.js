@@ -123,13 +123,16 @@ describe('POST /internal/sync-repayments — upstream failure', () => {
     expect(res.body).toEqual({ error: 'upstream_error', reason: 'network_error' });
   });
 
-  // DEFECT: the forward call to payment-server's /internal/repayment never
-  // checks the response status (`await fetch(...)` with no `if (!r.ok)`
-  // branch at all) -- a failing forward is still counted as `synced`, and
-  // the caller (a cron/ops trigger) sees { success: true } with no signal
-  // that the money never actually got recorded on the payment-server side.
-  // See services/softcredito-adapter/index.js:220-231.
-  test('a failing forward to payment-server is still silently counted as synced', async () => {
+  // The deduction has already been taken out of the borrower's paycheck by the
+  // time this route sees it; the forward to payment-server is what turns it
+  // into a balance reduction. Pre-fix the forward's status was never read --
+  // `await fetch(...)` with no `if (!resp.ok)` branch -- so a rejected forward
+  // was counted as `synced` and rolled into `{ success: true }`. Nothing
+  // retries it (the next run queries a different date), so that repayment is
+  // lost, and dailyLoanCheck's overdue sweep -- which gates on this route's
+  // status exactly so it never acts on stale collection data -- runs anyway and
+  // marks the borrower who paid overdue.
+  test('a forward payment-server rejects is not counted as synced and is not reported as success', async () => {
     admin.__seed('loans', 'loan_3', { softcreditoDeductionId: 'ded_3', status: 'active', employeeId: 'emp_3' });
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { deductions: [{ deductionId: 'ded_3', amount: 300, reference: 'REF3' }] }))
@@ -137,8 +140,56 @@ describe('POST /internal/sync-repayments — upstream failure', () => {
 
     const res = await postSyncRepayments();
 
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ success: true, synced: 1 });
+    expect(res.status).toBe(502);
+    expect(res.body).toEqual({
+      error: 'repayment_forward_failed',
+      reason: 'deductions_collected_but_not_booked',
+      synced: 0,
+      failed: 1,
+    });
+  });
+
+  test('a forward that throws (payment-server unreachable) does not strand the rest of the batch', async () => {
+    admin.__seed('loans', 'loan_a', { softcreditoDeductionId: 'ded_a', status: 'active', employeeId: 'emp_a' });
+    admin.__seed('loans', 'loan_b', { softcreditoDeductionId: 'ded_b', status: 'active', employeeId: 'emp_b' });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, {
+        deductions: [
+          { deductionId: 'ded_a', amount: 100, reference: 'REFA' },
+          { deductionId: 'ded_b', amount: 200, reference: 'REFB' },
+        ],
+      }))
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      .mockResolvedValueOnce(jsonResponse(200, { success: true }));
+
+    const res = await postSyncRepayments();
+
+    // The second deduction was still attempted and still booked...
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ loanId: 'loan_b' });
+    // ...but the run is reported as failed, because one deduction is collected
+    // and unbooked and the caller must not sweep on that.
+    expect(res.status).toBe(502);
+    expect(res.body).toMatchObject({ synced: 1, failed: 1 });
+  });
+
+  test('a partial batch does not report success even when most forwards land', async () => {
+    admin.__seed('loans', 'loan_ok', { softcreditoDeductionId: 'ded_ok', status: 'active', employeeId: 'emp_ok' });
+    admin.__seed('loans', 'loan_bad', { softcreditoDeductionId: 'ded_bad', status: 'active', employeeId: 'emp_bad' });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, {
+        deductions: [
+          { deductionId: 'ded_ok', amount: 100, reference: 'REFOK' },
+          { deductionId: 'ded_bad', amount: 200, reference: 'REFBAD' },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse(200, { success: true }))
+      .mockResolvedValueOnce(jsonResponse(404, { error: 'Loan not found' }));
+
+    const res = await postSyncRepayments();
+
+    expect(res.status).toBe(502);
+    expect(res.body).toMatchObject({ synced: 1, failed: 1 });
   });
 });
 
