@@ -100,32 +100,96 @@ jest.mock('../../utils/sentry', () => ({ initSentry: jest.fn(), captureException
 /** Records the order of side effects so the audit-before-mint ordering is observable. */
 let sequence: string[] = [];
 
-function buildMockDb({ auditWriteFails = false } = {}) {
+/**
+ * A tiny in-memory Firestore covering the three collections this trigger now
+ * touches: `audit_log` (the claim grant), and `employerCodes` + `employers`
+ * (the join-code mint and its reservation).
+ *
+ * The two code registries are modelled for real rather than stubbed away,
+ * because the property under test is that a minted code is reserved and unique
+ * across BOTH of them — a stub that always says "free" would pass whatever the
+ * mint did.
+ */
+function buildMockDb({ auditWriteFails = false, mintFails = false } = {}) {
   const auditWrites: Array<Record<string, unknown>> = [];
-  const collection = jest.fn((name: string) => {
-    if (name !== 'audit_log') {
-      throw new Error(`Unexpected collection: ${name}`);
-    }
+  /** code -> reservation document */
+  const reservations = new Map<string, Record<string, unknown>>();
+  /** employerId -> employer document */
+  const employers = new Map<string, Record<string, unknown>>();
+
+  const auditCollection = {
+    add: jest.fn(async (docData: Record<string, unknown>) => {
+      if (auditWriteFails) {
+        sequence.push('audit_write_failed');
+        throw new Error('audit_log unavailable');
+      }
+      sequence.push('audit_write');
+      auditWrites.push(docData);
+      return { id: `audit-${auditWrites.length}` };
+    }),
+  };
+
+  function employerCodesCollection() {
     return {
-      add: jest.fn(async (docData: Record<string, unknown>) => {
-        if (auditWriteFails) {
-          sequence.push('audit_write_failed');
-          throw new Error('audit_log unavailable');
-        }
-        sequence.push('audit_write');
-        auditWrites.push(docData);
-        return { id: `audit-${auditWrites.length}` };
+      doc: (code: string) => ({ _kind: 'reservation' as const, code }),
+    };
+  }
+
+  function employersCollection() {
+    return {
+      doc: (id: string) => ({ _kind: 'employer' as const, id }),
+      where: (field: string, _op: string, value: string) => ({
+        limit: () => ({ _kind: 'employerCodeQuery' as const, field, value }),
       }),
     };
+  }
+
+  const collection = jest.fn((name: string) => {
+    if (name === 'audit_log') return auditCollection;
+    if (name === 'employerCodes') return employerCodesCollection();
+    if (name === 'employers') return employersCollection();
+    throw new Error(`Unexpected collection: ${name}`);
   });
-  return { collection, auditWrites };
+
+  type Ref =
+    | { _kind: 'reservation'; code: string }
+    | { _kind: 'employer'; id: string }
+    | { _kind: 'employerCodeQuery'; field: string; value: string };
+
+  const runTransaction = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+    if (mintFails) throw new Error('firestore unavailable');
+    const tx = {
+      get: async (ref: Ref) => {
+        if (ref._kind === 'reservation') {
+          return { exists: reservations.has(ref.code) };
+        }
+        if (ref._kind === 'employerCodeQuery') {
+          const taken = [...employers.values()].some((e) => e[ref.field] === ref.value);
+          return { empty: !taken };
+        }
+        const doc = employers.get(ref.id);
+        return { exists: doc !== undefined, data: () => doc };
+      },
+      create: (ref: Ref, data: Record<string, unknown>) => {
+        if (ref._kind !== 'reservation') throw new Error('unexpected create');
+        reservations.set(ref.code, data);
+      },
+      update: (ref: Ref, data: Record<string, unknown>) => {
+        if (ref._kind !== 'employer') throw new Error('unexpected update');
+        employers.set(ref.id, { ...(employers.get(ref.id) ?? {}), ...data });
+      },
+    };
+    return fn(tx);
+  });
+
+  return { collection, runTransaction, auditWrites, reservations, employers };
 }
 
 /** Minimal shape of the onDocumentCreated event the trigger reads. */
-function makeEvent(uid: string, status: string | undefined) {
+function makeEvent(uid: string, status: string | undefined, extra: Record<string, unknown> = {}) {
   return {
     params: { uid },
-    data: { data: () => (status === undefined ? {} : { status }) },
+    data: { data: () => (status === undefined ? { ...extra } : { status, ...extra }) },
   };
 }
 
@@ -218,5 +282,100 @@ describe('onEmployerDocCreated — audit before privilege', () => {
 
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
     expect(mockDb.auditWrites).toHaveLength(0);
+  });
+});
+
+// ── The join code ────────────────────────────────────────────────────────────
+//
+// The employer join code used to be generated in the browser and written onto
+// the employer document at signup: firestore.rules blocked it on UPDATE (which
+// is why ensureEmployerCode exists) but not on CREATE.
+//
+// The code is public — it is on the employer's own roster screen and given to
+// every employee they onboard — so a client that may choose one may choose a
+// real company's. lookupEmployerByCode resolves a code with `.limit(1)` and no
+// explicit order, i.e. by document id, so the squatter wins by re-registering
+// until their uid sorts below the real employer's. Every employee who then
+// typed that company's code wrote `employerId: <squatter uid>` onto their own
+// record, and firestore.rules grants `isEmployerAdminOf(employerId)` a read on
+// a bare uid match — no role claim — so the squatter could list the cohort and
+// read each victim's name, CURP, RFC, date of birth, phone, bank CLABE and
+// salary, plus their loans via getEmployerDashboard.
+//
+// The namespace is server-owned now. These tests pin that.
+describe('onEmployerDocCreated — join code', () => {
+  it('mints a code for a self-serve employer, which never gets the claim', async () => {
+    const trigger = await loadTrigger();
+
+    await trigger(makeEvent('employer-selfserve', 'pending_verification'));
+
+    // The status that withholds employer_admin is exactly the status a
+    // self-signup lands in, so the mint must not sit behind the claim gate.
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+
+    const minted = mockDb.employers.get('employer-selfserve')?.['employerCode'] as string;
+    expect(minted).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
+    // Reserved in the same transaction, which is what makes it unique rather
+    // than merely unlikely to collide.
+    expect(mockDb.reservations.get(minted)).toMatchObject({ employerId: 'employer-selfserve' });
+  });
+
+  it('never issues a code another employer already holds', async () => {
+    const trigger = await loadTrigger();
+
+    // Every candidate but the last collides — the first with a reservation, the
+    // second with a legacy employer document that predates the ledger and is
+    // therefore absent from it. Only checking the ledger would hand out 'BBBBBB'.
+    mockDb.reservations.set('AAAAAA', { employerId: 'employer-a' });
+    mockDb.employers.set('employer-b', { employerCode: 'BBBBBB' });
+    const candidates = ['AAAAAA', 'BBBBBB', 'CCCCCC'];
+    let next = 0;
+    jest.spyOn(Math, 'random').mockImplementation(() => {
+      // Drive generateEmployerCodeCandidate to emit the candidates in order:
+      // each call picks one alphabet index, six calls per candidate.
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const code = candidates[Math.min(Math.floor(next / 6), candidates.length - 1)];
+      const index = alphabet.indexOf(code[next % 6]);
+      next += 1;
+      return index / alphabet.length;
+    });
+
+    try {
+      await trigger(makeEvent('employer-c', 'pending_verification'));
+    } finally {
+      (Math.random as jest.Mock).mockRestore();
+    }
+
+    expect(mockDb.employers.get('employer-c')?.['employerCode']).toBe('CCCCCC');
+    expect(mockDb.reservations.get('CCCCCC')).toMatchObject({ employerId: 'employer-c' });
+  });
+
+  it('leaves an admin-supplied code alone', async () => {
+    const trigger = await loadTrigger();
+
+    // firestore.rules still lets an ADMIN create an employer in any shape, code
+    // included (the admin console seeds employers that way). Only the self-serve
+    // path is constrained, so a code that is already there is authoritative.
+    await trigger(makeEvent('employer-seeded', 'active', { employerCode: 'SEEDED' }));
+
+    expect(mockDb.employers.has('employer-seeded')).toBe(false);
+    expect(mockDb.reservations.size).toBe(0);
+  });
+
+  it('still grants the claim when the mint fails', async () => {
+    mockDb = buildMockDb({ mintFails: true });
+    const trigger = await loadTrigger();
+
+    await trigger(makeEvent('employer-7', 'approved'));
+
+    // A code is recoverable (EmployeeRoster's ensureEmployerCode backfill); a
+    // claim withheld by a Firestore blip leaves an approved employer locked out
+    // of their own console with no in-product remedy. The mint must not be able
+    // to take the grant down with it.
+    expect(sequence).toEqual(['audit_write', 'claim_minted']);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Failed to mint employer join code',
+      expect.objectContaining({ uid: 'employer-7' })
+    );
   });
 });

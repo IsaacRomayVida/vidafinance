@@ -535,6 +535,52 @@ describe('employers collection', () => {
       );
     });
 
+    // The join-code namespace is server-owned. This was the one field blocked
+    // on UPDATE (see the E6c test above, which is why ensureEmployerCode
+    // exists) and wide open on CREATE, so the control was one signup away from
+    // being bypassed entirely.
+    //
+    // The code is not a secret — it is printed on the employer's roster screen
+    // and handed to every employee. So an attacker could self-create
+    // employers/{ownUid} carrying a REAL company's code, then win
+    // lookupEmployerByCode's `.limit(1)` (a Firestore query with no explicit
+    // order resolves by document id, so the lower uid wins — re-register until
+    // it does). Every employee who then typed that company's code wrote
+    // `employerId: <attacker uid>`, and the /employees read rule below grants
+    // `isEmployerAdminOf(resource.data.employerId)` on a bare uid match with no
+    // role claim, handing the attacker each victim's name, CURP, RFC, date of
+    // birth, phone, bank CLABE and salary.
+    it('user cannot self-create an employer carrying an employerCode', async () => {
+      const ctx = testEnv.authenticatedContext('attacker1');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employers/attacker1'), {
+          name: 'My Company',
+          status: 'pending_verification',
+          employerCode: 'ACME01',
+        })
+      );
+    });
+
+    it('user cannot squat the employerCode of an existing employer', async () => {
+      // The squat, spelled out end to end: employer1 already holds ACME01.
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'employers/employer1'), {
+          companyName: 'Acme',
+          status: 'active',
+          employerCode: 'ACME01',
+        });
+      });
+
+      const ctx = testEnv.authenticatedContext('aaa-sorts-first');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'employers/aaa-sorts-first'), {
+          companyName: 'Acme',
+          status: 'pending_verification',
+          employerCode: 'ACME01',
+        })
+      );
+    });
+
     // ADR-009: `maxActiveSlots` was already blocked here, but the fields that
     // FEED it were not. An employer that self-created with `tier: 1` and a
     // pre-loaded `cleanPayrollCyclesSinceReview` would walk its first
@@ -580,7 +626,8 @@ describe('employers collection', () => {
           payrollSystem: 'other',
           usesDispersora: false,
           bankClabe: '012345678901234567',
-          employerCode: 'NUE123',
+          // No employerCode: Onboarding.tsx no longer sends one, and this rule
+          // would now reject the write if it did. onEmployerDocCreated mints it.
           employeeCurps: [],
           dispersoraName: null,
           status: 'pending_verification',

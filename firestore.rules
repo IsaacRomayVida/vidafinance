@@ -66,12 +66,34 @@ service cloud.firestore {
       // due-diligence review a pre-loaded accrual and walk straight into a
       // credited increment. Blocking the cap while leaving its inputs
       // writable is not a cap.
+      //
+      // `employerCode` is blocked for a different reason: it is a NAMESPACE,
+      // not a property of this document. It was generated in the browser
+      // (Onboarding.tsx's generateEmployerCode) and written straight here, so
+      // the namespace was first-come-first-served to anyone with an email
+      // address — and the code is not a secret, it is printed on the
+      // employer's own roster screen and handed to every employee they
+      // onboard. An attacker could self-register an "employer" carrying a code
+      // a real company was already using. lookupEmployerByCode resolves it
+      // with .where(...).limit(1), and an unordered Firestore query is ordered
+      // by document id, so of the two documents now holding that code the
+      // lower uid wins — and the attacker can re-register until theirs does.
+      // Every employee who then typed that company's code wrote
+      // `employerId: <attacker uid>` onto their own employees/{uid} document,
+      // and the read rule below grants isEmployerAdminOf(employerId) on it: no
+      // role claim needed, just a uid match. Full name, CURP, RFC, date of
+      // birth, phone, bank CLABE and salary for the whole cohort, plus their
+      // loans via getEmployerDashboard.
+      //
+      // onEmployerDocCreated is now the single writer of this field, minting
+      // and reserving it in one transaction against both registries.
       return request.resource.data.status == 'pending_verification'
              && !request.resource.data.keys().hasAny([
                   'apiKeyHash', 'creditLimit', 'riskTier', 'mlScore', 'llmAnalysis',
                   'approvedAt', 'approvedBy', 'currentOutstandingBalance', 'maxActiveSlots',
                   'maxActiveSlotsSource', 'tier', 'cleanPayrollCycles',
-                  'cleanPayrollCyclesSinceReview', 'employerScore', 'dueDiligenceResult'
+                  'cleanPayrollCyclesSinceReview', 'employerScore', 'dueDiligenceResult',
+                  'employerCode'
                 ]);
     }
 

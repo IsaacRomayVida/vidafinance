@@ -72,14 +72,17 @@ const MX_STATES = [
   'Sinaloa', 'Sonora', 'Tabasco', 'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas',
 ];
 
-function generateEmployerCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
+// generateEmployerCode() used to live here, and its result was written straight
+// onto the new employers/{uid} document. It is gone, and firestore.rules now
+// refuses an `employerCode` on a self-serve create, because the join code is
+// what decides which employer an employee attaches to — and therefore who may
+// read that employee's record. That namespace cannot be client-writable: the
+// code is public (it is on the employer's own roster screen), so a client that
+// may choose one may choose a real company's, and collect the employees who
+// type it. It is minted and reserved server-side by onEmployerDocCreated the
+// moment the document lands; EmployerDashboard renders it from its own live
+// employer snapshot, and EmployeeRoster's ensureEmployerCode call backfills a
+// document that somehow ends up without one.
 
 // const CURP_REGEX = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/; // Used server-side only
 // const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/; // Extracted from INE via MetaMap
@@ -510,7 +513,8 @@ export function Onboarding() {
         payrollSystem: empData.payrollSystem,
         usesDispersora: empData.usesDispersora === 'yes',
         bankClabe: empData.bankClabe,
-        employerCode: generateEmployerCode(),
+        // employerCode is deliberately NOT written here — see the note where
+        // generateEmployerCode used to be. onEmployerDocCreated mints it.
         employeeCurps: empData.employeeCurps,
         dispersoraName: empData.usesDispersora === 'yes' ? empData.dispersoraName : null,
         status: 'pending_verification',
