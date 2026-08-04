@@ -366,17 +366,31 @@ async function pollVerification(verificationId, rfc, opts = {}) {
  * `metadata` come off the raw payload; `result` is the parsed KYC/AML view of
  * it for callers that do not want to re-fetch.
  *
- * Signature posture is unchanged: if METAMAP_WEBHOOK_SECRET is unset, payloads
- * are accepted unverified. This endpoint only writes to metamap_shadow_log and
- * makes no credit decision. Hardening that default is a deploy-coupled change
- * (it 401s every environment missing the variable) and is deliberately not
- * bundled into this fix.
+ * An unset METAMAP_WEBHOOK_SECRET means `valid: false`, not `valid: true`.
+ * This used to initialise `valid = true` and only re-derive it inside
+ * `if (secret)`, so a missing variable accepted every payload with no
+ * signature at all — and .env.example ships that variable empty, with no boot
+ * guard for it, so the default configuration was the open one. The previous
+ * note here argued the route "only writes to metamap_shadow_log and makes no
+ * credit decision", but writing is the exposure: an anonymous caller could put
+ * a document of their choosing into metamap_shadow_log under a verificationId
+ * of their choosing (set(), no merge, so an existing legitimate entry is
+ * overwritten), tag it with any loanId, and drive one credential-bearing
+ * getVerificationResult call into our MetaMap tenant per request. Fail closed;
+ * an environment missing the variable now 401s and lands in incident_log
+ * instead of silently accepting strangers. functions/src/webhooks/metamap.ts
+ * has always taken this stance for the same events.
+ *
+ * Deliberately NOT a boot guard, unlike INTERNAL_SECRET at the top of
+ * index.js: that secret gates the credit-decision path, this one gates a
+ * shadow log, and refusing to start underwriting over a missing observability
+ * secret trades a contained hole for an outage on the lending path.
  */
 function parseWebhook(body, signature) {
   const secret = process.env.METAMAP_WEBHOOK_SECRET;
   const raw = typeof body === "string" ? body : JSON.stringify(body);
 
-  let valid = true;
+  let valid = false;
   if (secret) {
     const expected = crypto.createHmac("sha256", secret).update(raw).digest("hex");
     // timingSafeEqual throws on a length mismatch, which an attacker controls,

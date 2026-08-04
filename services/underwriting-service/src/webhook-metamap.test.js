@@ -80,9 +80,9 @@ process.env.INTERNAL_SECRET = "test-internal-secret";
 /* ------------------------------------------------------------------ */
 /*  Helper: HMAC sign a payload                                       */
 /* ------------------------------------------------------------------ */
-function sign(body) {
+function sign(body, secret = WEBHOOK_SECRET) {
   return crypto
-    .createHmac("sha256", WEBHOOK_SECRET)
+    .createHmac("sha256", secret)
     .update(JSON.stringify(body))
     .digest("hex");
 }
@@ -281,9 +281,12 @@ describe("metamap-client contract (real module, not the mock)", () => {
   it("parseWebhook returns the envelope index.js:115 destructures", () => {
     const body = { eventName: "verification_completed", resource: "v-123", metadata: { loanId: "L1" } };
     const secretBefore = process.env.METAMAP_WEBHOOK_SECRET;
-    delete process.env.METAMAP_WEBHOOK_SECRET;
+    // Signed, because an unset secret is no longer a way to reach `valid: true`
+    // — see the fail-closed note on parseWebhook. This case is about the
+    // envelope's SHAPE on the accepting path, so it has to actually accept.
+    process.env.METAMAP_WEBHOOK_SECRET = "envelope-shape-secret";
     try {
-      const out = actual.parseWebhook(body, undefined);
+      const out = actual.parseWebhook(body, sign(body, "envelope-shape-secret"));
       // A bare parsed result (the old return) has none of these keys, so `valid`
       // read as undefined and every correctly-signed webhook took the 401 branch.
       expect(out).toHaveProperty("valid");
@@ -291,6 +294,23 @@ describe("metamap-client contract (real module, not the mock)", () => {
       expect(out).toHaveProperty("verificationId", "v-123");
       expect(out).toHaveProperty("metadata");
       expect(out.valid).toBe(true);
+    } finally {
+      if (secretBefore === undefined) delete process.env.METAMAP_WEBHOOK_SECRET;
+      else process.env.METAMAP_WEBHOOK_SECRET = secretBefore;
+    }
+  });
+
+  it("parseWebhook refuses to validate when METAMAP_WEBHOOK_SECRET is unset", () => {
+    // RED before the fix: `valid` was initialised to true and only re-derived
+    // inside `if (secret)`, so a missing variable accepted anything. See
+    // src/webhook-metamap-unsigned.test.js for what that let a caller do.
+    const body = { eventName: "verification_completed", resource: "v-123" };
+    const secretBefore = process.env.METAMAP_WEBHOOK_SECRET;
+    delete process.env.METAMAP_WEBHOOK_SECRET;
+    try {
+      expect(actual.parseWebhook(body, undefined).valid).toBe(false);
+      expect(actual.parseWebhook(body, "any-signature-at-all").valid).toBe(false);
+      expect(actual.parseWebhook(body, undefined).result).toBeNull();
     } finally {
       if (secretBefore === undefined) delete process.env.METAMAP_WEBHOOK_SECRET;
       else process.env.METAMAP_WEBHOOK_SECRET = secretBefore;

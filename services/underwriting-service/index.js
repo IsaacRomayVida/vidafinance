@@ -16,6 +16,19 @@ if (!process.env.INTERNAL_SECRET) {
   throw new Error('INTERNAL_SECRET is required to start vida-underwriting-service');
 }
 
+// Not fatal, unlike INTERNAL_SECRET above: this secret gates POST
+// /webhooks/metamap, which feeds the shadow log rather than the credit
+// decision, so a missing value must not take underwriting down. It is loud
+// because the route now fails closed without it (see parseWebhook) — every
+// MetaMap delivery will 401 until it is set, and an operator reading only the
+// 401s would otherwise be hunting a provider-side problem that isn't there.
+if (!process.env.METAMAP_WEBHOOK_SECRET) {
+  console.warn(
+    '[underwriting] METAMAP_WEBHOOK_SECRET is not set — POST /webhooks/metamap ' +
+    'will reject every delivery as unsigned. Set it to accept MetaMap webhooks.'
+  );
+}
+
 const metamapClient = require('./src/metamap-client');
 const { riskSealSmokeHandler } = require('./src/riskseal-smoke');
 
