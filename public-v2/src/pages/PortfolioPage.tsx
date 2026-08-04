@@ -7,7 +7,10 @@ interface PortfolioSummary {
   totalDisbursedMXN: number;
   totalRepaidMXN: number;
   totalRevenueMXN: number;
-  defaultRate: string;
+  // null when there is no disbursed volume to divide by. The backend
+  // deliberately returns null rather than a fabricated '0%' so an empty or
+  // all-pending book cannot read as a clean bill of health.
+  defaultRate: string | null;
 }
 
 interface PortfolioReport {
@@ -31,6 +34,11 @@ function fmtCurrency(n: number): string {
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
   approved: 'Approved',
+  // 'active' and 'disbursed' are two live spellings of the same thing (the
+  // automatic adapter path vs the manual ops-confirmed path). 'active' was
+  // missing here entirely, so every automatically-disbursed loan rendered
+  // under the raw key.
+  active: 'Disbursed (auto)',
   disbursed: 'Disbursed',
   disbursement_queued: 'Queued',
   repaid: 'Repaid',
@@ -44,6 +52,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   pending: 'var(--gold)',
   approved: 'var(--brand-light)',
+  active: 'var(--brand)',
   disbursed: 'var(--brand)',
   disbursement_queued: 'var(--t2)',
   repaid: 'var(--brand-light)',
@@ -80,7 +89,11 @@ export function PortfolioPage() {
           // Show empty state instead of error
           setReport({
             period,
-            summary: { totalLoans: 0, totalDisbursedMXN: 0, totalRepaidMXN: 0, totalRevenueMXN: 0, defaultRate: '0%' },
+            // defaultRate stays null on the error path: we did not fetch the
+            // book, so we do not know it. Rendering '0%' here told an admin the
+            // portfolio was performing perfectly at the exact moment the report
+            // failed to load.
+            summary: { totalLoans: 0, totalDisbursedMXN: 0, totalRepaidMXN: 0, totalRevenueMXN: 0, defaultRate: null },
             byStatus: {},
             byEmployer: {},
             generatedAt: new Date().toISOString(),
@@ -127,7 +140,13 @@ export function PortfolioPage() {
 
   // Compute derived metrics
   const summary = report?.summary;
-  const activeStatuses = ['disbursed', 'disbursement_queued', 'approved'];
+  // Loans with money out and not yet repaid. This previously counted
+  // 'approved' and 'disbursement_queued' — neither of which has sent a peso —
+  // while omitting 'active', the spelling the automatic disbursement path
+  // writes, so the tile missed every auto-disbursed loan and padded the count
+  // with loans that had not been funded. 'written_off' is money out but no
+  // longer a live receivable, so it stays out of this tile.
+  const activeStatuses = ['active', 'disbursed', 'overdue', 'in_collections'];
   const activeCount = report ? activeStatuses.reduce((sum, s) => sum + (report.byStatus[s] || 0), 0) : 0;
   const avgLoanSize = summary && summary.totalLoans > 0 ? summary.totalDisbursedMXN / summary.totalLoans : 0;
   const repaymentRate = summary && summary.totalDisbursedMXN > 0
@@ -221,8 +240,20 @@ export function PortfolioPage() {
             </div>
             <div style={cardStyle}>
               <div style={labelStyle}>Default Rate</div>
-              <div style={valueStyle}>{summary!.defaultRate}</div>
-              <div style={subValueStyle}>Overdue &gt; 30 days</div>
+              {/* An absent rate renders as an explicit em-dash, never as a
+                  number. React renders null as nothing, which would have left
+                  this tile silently blank and read as "fine". */}
+              <div style={valueStyle}>{summary!.defaultRate ?? '—'}</div>
+              {/* The backend has never measured days-late: there is no
+                  days-overdue field on the loan doc. This figure is the
+                  share of disbursed VOLUME sitting anywhere on the default
+                  ladder. The old ">30 days" subtitle described a metric that
+                  does not exist. */}
+              <div style={subValueStyle}>
+                {summary!.defaultRate === null
+                  ? 'No disbursed volume yet'
+                  : 'Share of disbursed volume overdue, in collections or written off'}
+              </div>
             </div>
             <div style={cardStyle}>
               <div style={labelStyle}>Avg Loan Size</div>

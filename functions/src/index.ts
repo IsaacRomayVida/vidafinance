@@ -34,13 +34,14 @@ import {
 } from './loans/loanStatusTransitions';
 import {
   ALL_LOAN_STATUSES,
+  DEFAULT_STATUSES,
   DISBURSED_STATUSES,
   LOAN_STATUS,
+  OUTSTANDING_STATUSES,
   REPAID_STATUSES,
   isCreditRestoringRepayment,
   isDisbursedStatus,
   isRepaidStatus,
-  OUTSTANDING_STATUSES,
 } from './loans/loanStatus';
 import { computeEmployerDashboardStats } from './employers/computeEmployerDashboardStats';
 import { allowTestBypass } from './utils/environment';
@@ -1629,52 +1630,120 @@ export const getPortfolioReport = onCall(
           context: 'getPortfolioReport',
         });
 
-        // Same unbounded-read shape getAdminDashboard had (fixed — see the
-        // aggregation queries there): four full status-filtered scans of
-        // 'loans', each downloading every matching document. Left AS UNBOUNDED
-        // here, deliberately, rather than folded into that fix: unlike
-        // getAdminDashboard's plain counts and a single sum, this handler also
+        // Separate `.where('status', ...)` reads rather than one
+        // full-collection `.get()` filtered client-side.
+        //
+        // Left AS UNBOUNDED, deliberately, unlike getAdminDashboard (which was
+        // converted to `.count()`/`.aggregate()` in #564): this handler also
         // builds totalRevenue (needs `fee`/`commission` per doc, which no
         // aggregation query can read) and a byEmployer breakdown (needs
-        // `employerId` per doc to group by — an aggregate query returns one
-        // number, not a grouping). Neither can be answered by `.count()` or
-        // `.aggregate()` without a maintained per-employer/per-status rollup
-        // collection, which is a real project (backfill + a write-side hook
-        // wherever a loan's status or amount changes), not a query-shape swap.
-        // Tracked as follow-up; not fixed in this pass.
-        const [activeSnap, pendingSnap, repaidSnap, allSnap] = await Promise.all([
-          db.collection('loans').where('status', '==', 'active').get(),
-          db.collection('loans').where('status', '==', 'pending').get(),
-          db.collection('loans').where('status', '==', 'repaid').get(),
-          db.collection('loans').where('status', '==', 'disbursed').get(),
+        // `employerId` per doc to group by — an aggregate returns one number,
+        // not a grouping). The documents have to be read regardless. Bounding
+        // it needs a maintained per-employer/per-status rollup collection,
+        // which is a real project (backfill + a write-side hook wherever a
+        // loan's status or amount changes), not a query-shape swap. Tracked as
+        // follow-up; this pass fixes the figures, not the read volume.
+        const [activeSnap, pendingSnap, repaidSnap, disbursedSnap, defaultedSnap] = await Promise.all([
+          db.collection('loans').where('status', '==', LOAN_STATUS.ACTIVE).get(),
+          db.collection('loans').where('status', '==', LOAN_STATUS.PENDING).get(),
+          // 'in' pulls every spelling a fully-repaid loan may carry (REPAID_STATUSES
+          // = 'repaid' plus LEGACY_REPAID_ALIASES) — matching only 'repaid' here
+          // silently dropped any hand-written 'paid'/'complete'/'completed' doc
+          // from revenue and repaid-volume entirely, not just miscategorized it.
+          db.collection('loans').where('status', 'in', REPAID_STATUSES as string[]).get(),
+          db.collection('loans').where('status', '==', LOAN_STATUS.DISBURSED).get(),
+          // The WHOLE default ladder ('overdue' -> 'in_collections' ->
+          // 'written_off'), not just its first rung. Querying only 'overdue'
+          // means a loan LEAVES the default rate the moment it deteriorates
+          // into collections or gets written off — the numerator shrinks as
+          // the book gets worse, so the report reads cleanest exactly when
+          // the loss is realised. DEFAULT_STATUSES is the codebase's own
+          // definition of the class (loans/loanStatus.ts); use it rather than
+          // re-typing a status literal here.
+          db.collection('loans').where('status', 'in', DEFAULT_STATUSES as string[]).get(),
         ]);
 
-        const totalLoans = activeSnap.size + pendingSnap.size + repaidSnap.size + allSnap.size;
+        const totalLoans =
+          activeSnap.size + pendingSnap.size + repaidSnap.size + disbursedSnap.size + defaultedSnap.size;
         let totalDisbursed = 0;
+        let totalDefaultVolume = 0;
         let totalRepaid = 0;
         let totalRevenue = 0;
         const byStatus: Record<string, number> = {
           active: activeSnap.size,
           pending: pendingSnap.size,
           repaid: repaidSnap.size,
-          disbursed: allSnap.size,
+          disbursed: disbursedSnap.size,
         };
+        // Report each default rung separately — 'overdue', 'in_collections' and
+        // 'written_off' are three different operational realities and collapsing
+        // them into one bar hides where in the ladder the book is stuck. Seeded
+        // with explicit zeros so a clean book renders "written_off: 0" rather
+        // than an absent row that reads as "not measured".
+        for (const status of DEFAULT_STATUSES) byStatus[status] = 0;
+        for (const doc of defaultedSnap.docs) {
+          const status = String(doc.data().status);
+          byStatus[status] = (byStatus[status] || 0) + 1;
+        }
         const byEmployer: Record<string, { count: number; volume: number }> = {};
 
-        const allDocs = [...activeSnap.docs, ...pendingSnap.docs, ...repaidSnap.docs, ...allSnap.docs];
+        const allDocs = [
+          ...activeSnap.docs,
+          ...pendingSnap.docs,
+          ...repaidSnap.docs,
+          ...disbursedSnap.docs,
+          ...defaultedSnap.docs,
+        ];
         for (const doc of allDocs) {
           const d = doc.data();
           const amt = Number(d.amount) || 0;
-          totalDisbursed += amt;
-          if (d.status === 'repaid') {
+          const status = d.status as string;
+          const isDefaulted = DEFAULT_STATUSES.includes(status);
+          // Money that has actually left the building: the two live "sent"
+          // spellings, the default ladder (still sent — late, in collections,
+          // or lost), and every repaid spelling (sent, and since paid back).
+          // 'pending' is excluded — that money has not moved yet, so it must
+          // not inflate the headline disbursed figure (compare
+          // weeklyPortfolioSnapshot above).
+          const isMoneyOut = isDisbursedStatus(status) || isDefaulted || isRepaidStatus(status);
+          if (isMoneyOut) {
+            totalDisbursed += amt;
+          }
+          if (isDefaulted) {
+            totalDefaultVolume += amt;
+          }
+          if (isRepaidStatus(status)) {
             totalRepaid += amt;
             totalRevenue += Number(d.fee || d.commission) || 0;
           }
-          const eid = String(d.employerId || 'unknown');
-          if (!byEmployer[eid]) byEmployer[eid] = { count: 0, volume: 0 };
-          byEmployer[eid].count++;
-          byEmployer[eid].volume += amt;
+          // byEmployer is a "top employers by loan VOLUME" ranking, so it is
+          // scoped to the same money-out set as totalDisbursedMXN. Counting
+          // pending loans here (as this did) made the per-employer column
+          // silently unreconcilable with the headline it sits under: the rows
+          // summed to more than the total. An employer with nothing but
+          // pending requests now correctly has no volume to rank.
+          if (isMoneyOut) {
+            const eid = String(d.employerId || 'unknown');
+            if (!byEmployer[eid]) byEmployer[eid] = { count: 0, volume: 0 };
+            byEmployer[eid].count++;
+            byEmployer[eid].volume += amt;
+          }
         }
+
+        // defaultRate = defaulted volume / total disbursed volume (the same
+        // "money that left the building" figure as totalDisbursedMXN above,
+        // so the two numbers share a denominator). This is bucket-based, not
+        // days-late-based: there is no days-overdue threshold stored on the
+        // loan doc today, only the statuses dailyLoanCheck
+        // (scheduled/dailyLoanCheck.ts) and ops assign. If a graduated
+        // threshold is added later, narrow the numerator to volume past that
+        // threshold instead of the whole default ladder — and fix the UI
+        // subtitle with it, which claimed ">30 days" this never measured.
+        // Returns null — not a fabricated '0%' — when there is no disbursed
+        // volume to divide by, so an empty or all-pending book reads as "not
+        // computed" rather than as a false clean bill of health.
+        const defaultRate =
+          totalDisbursed > 0 ? `${((totalDefaultVolume / totalDisbursed) * 100).toFixed(2)}%` : null;
 
         return {
           period: 'all',
@@ -1683,7 +1752,7 @@ export const getPortfolioReport = onCall(
             totalDisbursedMXN: totalDisbursed,
             totalRepaidMXN: totalRepaid,
             totalRevenueMXN: totalRevenue,
-            defaultRate: '0%',
+            defaultRate,
           },
           byStatus,
           byEmployer,
