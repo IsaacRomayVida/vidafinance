@@ -3,9 +3,51 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { z } from 'zod';
 
-import { withAuth } from '../middleware/authMiddleware';
+import { withAuth, type AuthContext } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
+
+const SUPER_ADMIN: AuthContext['role'] = 'super_admin';
+
+/**
+ * Refuses any role change aimed at a super_admin unless the actor is one too.
+ *
+ * Both callables gate on ['admin', 'super_admin'] and neither used to look at
+ * what the TARGET already was, so an `admin` could mint a super_admin a
+ * `{ role: 'employee' }` claim. `admin` is grantable in-product by any other
+ * admin, and a stale legacy `admin: true` token resolves to it as well, so one
+ * compromised admin account was enough to leave the product with no role above
+ * the attacker's — recoverable only by an operator running
+ * scripts/bootstrap-super-admin.js out of band.
+ *
+ * The target's role is read from BOTH sources of truth. The custom claim is what
+ * actually authorizes the target's own requests; the users/{uid} mirror is what
+ * the console renders and what this file writes first. They can legitimately
+ * disagree mid-flight, so either one reading super_admin is enough. Under-reading
+ * the target's role is precisely the bug being fixed, so this fails closed: a
+ * target whose auth record cannot be read is refused rather than assumed unprivileged.
+ */
+async function assertTargetIsNotProtected(
+  targetUid: string,
+  actor: AuthContext,
+  mirrorRole: string | null
+): Promise<void> {
+  let claimRole: string | null;
+  try {
+    const targetUser = await getAuth().getUser(targetUid);
+    claimRole = (targetUser.customClaims?.['role'] as string | undefined) ?? null;
+  } catch {
+    throw new HttpsError('not-found', `No auth record for user ${targetUid}`);
+  }
+
+  const targetIsSuperAdmin = claimRole === SUPER_ADMIN || mirrorRole === SUPER_ADMIN;
+  if (targetIsSuperAdmin && actor.role !== SUPER_ADMIN) {
+    throw new HttpsError(
+      'permission-denied',
+      "Only a super_admin can change another super_admin's role"
+    );
+  }
+}
 
 const AdminClaimSchema = z.object({
   targetUid: z.string().min(1),
@@ -40,7 +82,11 @@ export const setAdminClaim = onCall(
         }
         const { targetUid, role } = parseResult.data;
 
-        if (targetUid === auth.uid && role !== 'admin') {
+        // Compared against the actor's OWN effective role, not the literal
+        // 'admin'. The old form let a super_admin hand themselves `role: 'admin'`
+        // and drop the one role this API cannot grant back — a self-demotion
+        // wearing a no-op's clothes.
+        if (targetUid === auth.uid && role !== auth.role) {
           throw new HttpsError('failed-precondition', 'Cannot change your own role');
         }
 
@@ -49,6 +95,8 @@ export const setAdminClaim = onCall(
 
         const userRef = db.collection('users').doc(targetUid);
         const previousRole = (await userRef.get()).data()?.['role'] ?? null;
+
+        await assertTargetIsNotProtected(targetUid, auth, previousRole);
 
         // Record the grant BEFORE the claim is minted, atomically with the role
         // field on the user document. If the audit write fails the transaction
@@ -105,6 +153,8 @@ export const revokeAdminClaim = onCall(
 
         const userRef = db.collection('users').doc(targetUid);
         const previousRole = (await userRef.get()).data()?.['role'] ?? null;
+
+        await assertTargetIsNotProtected(targetUid, auth, previousRole);
 
         // Same ordering as setAdminClaim: the audit record commits atomically with
         // the role field, and only then is the claim changed. A revoke that cannot

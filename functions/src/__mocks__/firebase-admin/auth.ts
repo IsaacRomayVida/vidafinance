@@ -4,6 +4,11 @@ export interface MockUserRecord {
   uid: string;
   email?: string;
   emailVerified: boolean;
+  // Mirrors UserRecord.customClaims. Callers that decide anything from the
+  // TARGET's current privileges read it from here, so a suite that omits it is
+  // asserting against a principal with no claims — not one whose claims were
+  // never looked at.
+  customClaims?: Record<string, unknown>;
 }
 
 // Suites that exercise auth handlers set `_mockUsers[uid]` (or override
