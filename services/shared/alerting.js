@@ -8,15 +8,42 @@
  *   - warning  → Slack only (5xx, queue depth, rate limits, etc.)
  *   - critical → Slack + PagerDuty page (health down, disbursement failed, etc.)
  *
- * Rate limiting: max 1 alert per key per 5 minutes (deduplication).
+ * Rate limiting: max 1 alert per key per 5 minutes (deduplication),
+ * enforced per process — each running instance of a service keeps its own
+ * dedup table, so a service with N instances can still emit up to N alerts
+ * for the same key inside one window. Acceptable: it bounds spam from a
+ * single instance, which is what actually loops (retries, poll ticks); it
+ * does not require new shared infrastructure (e.g. Redis) to fix.
  *
  * Environment variables:
  *   SLACK_WEBHOOK_URL      — Slack incoming webhook URL (#vida-alerts)
  *   PAGERDUTY_ROUTING_KEY  — PagerDuty Events API v2 routing key
+ *
+ * Read at call time, not captured into a module-level const at require
+ * time: several call sites `require('../shared/alerting')` before their own
+ * `dotenv.config()` runs, which would otherwise freeze these to '' forever
+ * for that process regardless of what .env later provides.
  */
 
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || '';
-const PAGERDUTY_ROUTING_KEY = process.env.PAGERDUTY_ROUTING_KEY || '';
+function _slackWebhookUrl() {
+  return process.env.SLACK_WEBHOOK_URL || '';
+}
+
+function _pagerDutyRoutingKey() {
+  return process.env.PAGERDUTY_ROUTING_KEY || '';
+}
+
+// ── Unconfigured-channel warning (once per process, not once per alert) ──
+const _unconfiguredWarned = new Set();
+
+function _warnUnconfigured(channel, envVar) {
+  if (_unconfiguredWarned.has(channel)) return;
+  _unconfiguredWarned.add(channel);
+  console.error(
+    `[alerting] ${envVar} is not set — every ${channel} alert this process sends from now on ` +
+    `will be silently dropped. This is the only time this will be logged for ${channel}.`,
+  );
+}
 
 // ── Rate limiting ─────────────────────────────────────────────────────
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
@@ -49,7 +76,11 @@ const RUNBOOKS = {
 
 // ── Slack ──────────────────────────────────────────────────────────────
 async function sendSlackAlert(message, level = 'warning', { service, alertType, runbook } = {}) {
-  if (!SLACK_WEBHOOK_URL) return;
+  const webhookUrl = _slackWebhookUrl();
+  if (!webhookUrl) {
+    _warnUnconfigured('Slack', 'SLACK_WEBHOOK_URL');
+    return;
+  }
   const emoji = level === 'critical' ? ':rotating_light:' : ':warning:';
   const svcLabel = service ? ` \`${service}\`` : '';
   const typeLabel = alertType ? ` — ${alertType}` : '';
@@ -73,7 +104,7 @@ async function sendSlackAlert(message, level = 'warning', { service, alertType, 
   }
 
   try {
-    const resp = await fetch(SLACK_WEBHOOK_URL, {
+    const resp = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blocks, text: `${emoji} VIDA Alert (${level.toUpperCase()})${svcLabel}: ${message}` }),
@@ -86,9 +117,13 @@ async function sendSlackAlert(message, level = 'warning', { service, alertType, 
 
 // ── PagerDuty ─────────────────────────────────────────────────────────
 async function sendPagerDutyAlert(summary, severity = 'warning', source = 'vida', component = 'unknown', { runbook } = {}) {
-  if (!PAGERDUTY_ROUTING_KEY) return;
+  const routingKey = _pagerDutyRoutingKey();
+  if (!routingKey) {
+    _warnUnconfigured('PagerDuty', 'PAGERDUTY_ROUTING_KEY');
+    return;
+  }
   const payload = {
-    routing_key: PAGERDUTY_ROUTING_KEY,
+    routing_key: routingKey,
     event_action: 'trigger',
     payload: { summary, severity, source, component, group: 'vida', class: 'monitoring' },
   };
@@ -286,4 +321,9 @@ module.exports = {
   // Constants (for testing)
   RUNBOOKS,
   DEDUP_WINDOW_MS,
+  // Test-only: clears dedup + once-per-process warning state
+  _resetForTests: () => {
+    _recentAlerts.clear();
+    _unconfiguredWarned.clear();
+  },
 };
