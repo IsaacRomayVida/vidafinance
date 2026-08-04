@@ -1,8 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
 
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 
 /**
  * Resend email verification for the calling user.
@@ -17,26 +16,19 @@ export const sendVerificationEmail = onCall(
 
     // Rate limit: 20/min/uid. Fails OPEN, deliberately.
     //
-    // #547 moved the limits that guard money or secrets onto
-    // enforceRateLimit({ onUnavailable: 'closed' }). This one stays open on
-    // purpose: the handler's only remaining side effect is a single Firebase
-    // Admin getUser() read, which is capacity, not spend — the case
-    // utils/rateLimiter documents 'open' for. Failing closed here would turn
-    // a Redis blip into a verification lockout for users who are already
-    // locked out of everything else until they verify.
+    // This one stays open on purpose: the handler's only remaining side
+    // effect is a single Firebase Admin getUser() read, which is capacity,
+    // not spend — the case utils/rateLimiter documents 'open' for. Failing
+    // closed here would turn a Redis blip into a verification lockout for
+    // users who are already locked out of everything else until they verify.
     //
-    // This must flip to enforceRateLimit(..., { onUnavailable: 'closed' })
-    // the day the send below is actually implemented, because at that point
-    // the endpoint starts spending on outbound email.
-    try {
-      const allowed = await checkRateLimit(`rl:sendVerificationEmail:${request.auth.uid}`, 20, 60);
-      if (!allowed) {
-        throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-      }
-    } catch (e: unknown) {
-      if (e instanceof HttpsError) throw e;
-      logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-    }
+    // This must flip to onUnavailable: 'closed' the day the send below is
+    // actually implemented, because at that point the endpoint starts
+    // spending on outbound email.
+    await enforceRateLimit(`rl:sendVerificationEmail:${request.auth.uid}`, 20, 60, {
+      onUnavailable: 'open',
+      context: 'sendVerificationEmail',
+    });
 
     const auth = getAuth();
     const user = await auth.getUser(request.auth.uid);

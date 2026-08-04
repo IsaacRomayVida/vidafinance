@@ -7,7 +7,7 @@ import { nanoid } from 'nanoid';
 import IORedis from 'ioredis';
 import { Queue } from 'bullmq';
 
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 import { resolveEntity } from '../utils/registryClient';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 import type { PayFrequency } from '../loans/calculateNextPayrollDate';
@@ -180,16 +180,13 @@ export async function approveEmployerHandler(
     }
   }
 
-  // Rate limit: 20/min/uid (mutation)
-  try {
-    const allowed = await checkRateLimit(`rl:approveEmployer:${adminUid}`, 20, 60);
-    if (!allowed) {
-      throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-    }
-  } catch (e: unknown) {
-    if (e instanceof HttpsError) throw e;
-    logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-  }
+  // Rate limit: 20/min/uid (mutation). Fail closed: approval mints an
+  // employer join code and grants employer_admin — an outage must not lift
+  // the only brake on it. (NOT DEPLOYED — see the live callable in index.ts.)
+  await enforceRateLimit(`rl:approveEmployer:${adminUid}`, 20, 60, {
+    onUnavailable: 'closed',
+    context: 'approveEmployer',
+  });
 
   // Fetch admin email for audit log (best-effort from token or Firestore)
   const adminEmail =

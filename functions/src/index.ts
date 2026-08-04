@@ -11,7 +11,7 @@ import { nanoid } from 'nanoid';
 
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
-import { checkRateLimit, enforceRateLimit } from './utils/rateLimiter';
+import { enforceRateLimit } from './utils/rateLimiter';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
 import {
@@ -1183,16 +1183,14 @@ export const updateLoanStatus = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
 
     return withErrorHandling({ functionName: 'updateLoanStatus', uid: request.auth.uid }, async () => {
-      // Rate limit: 20/min/uid (mutation)
-      try {
-        const allowed = await checkRateLimit(`rl:updateLoanStatus:${request.auth!.uid}`, 20, 60);
-        if (!allowed) {
-          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-        }
-      } catch (e: unknown) {
-        if (e instanceof HttpsError) throw e;
-        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-      }
+      // Rate limit: 20/min/uid (mutation). Fail closed: this is the live
+      // callable that writes loans/{loanId}.status, including
+      // post-disbursement transitions — an outage must not lift the only
+      // brake on it.
+      await enforceRateLimit(`rl:updateLoanStatus:${request.auth!.uid}`, 20, 60, {
+        onUnavailable: 'closed',
+        context: 'updateLoanStatus',
+      });
 
       const { loanId, status, note } = request.data as UpdateLoanStatusData;
 
@@ -1316,16 +1314,13 @@ export const approveEmployer = onCall(
     ['admin', 'super_admin'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'approveEmployer', uid: auth.uid }, async () => {
-        // Rate limit: 20/min/uid (mutation)
-        try {
-          const allowed = await checkRateLimit(`rl:approveEmployer:${auth.uid}`, 20, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 20/min/uid (mutation). Fail closed: this is the live
+        // employer-approval callable — an outage must not lift the only
+        // brake on it.
+        await enforceRateLimit(`rl:approveEmployer:${auth.uid}`, 20, 60, {
+          onUnavailable: 'closed',
+          context: 'approveEmployer',
+        });
 
         const { employerUid, approved, decision } = data;
         if (!employerUid) throw new HttpsError('invalid-argument', 'employerUid is required');
@@ -1506,16 +1501,13 @@ export const getPortfolioReport = onCall(
     ['admin', 'super_admin', 'ops'],
     async (_data, auth) =>
       withErrorHandling({ functionName: 'getPortfolioReport', uid: auth.uid }, async () => {
-        // Rate limit: 10/min/uid (expensive aggregation across all loans)
-        try {
-          const allowed = await checkRateLimit(`rl:getPortfolioReport:${auth.uid}`, 10, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 10/min/uid (expensive aggregation across all loans).
+        // Fail open: read-only report, admin-only — the limit protects
+        // query capacity, not money or a secret.
+        await enforceRateLimit(`rl:getPortfolioReport:${auth.uid}`, 10, 60, {
+          onUnavailable: 'open',
+          context: 'getPortfolioReport',
+        });
 
         // Use same query pattern as getAdminDashboard (which works)
         const [activeSnap, pendingSnap, repaidSnap, allSnap] = await Promise.all([
@@ -1655,16 +1647,12 @@ export const getEmployerDashboard = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
 
     return withErrorHandling({ functionName: 'getEmployerDashboard', uid: request.auth.uid }, async () => {
-      // Rate limit: 60/min/uid (read-only dashboard)
-      try {
-        const allowed = await checkRateLimit(`rl:getEmployerDashboard:${request.auth!.uid}`, 60, 60);
-        if (!allowed) {
-          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-        }
-      } catch (e: unknown) {
-        if (e instanceof HttpsError) throw e;
-        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-      }
+      // Rate limit: 60/min/uid (read-only dashboard). Fail open: protects
+      // capacity, not money or a secret.
+      await enforceRateLimit(`rl:getEmployerDashboard:${request.auth!.uid}`, 60, 60, {
+        onUnavailable: 'open',
+        context: 'getEmployerDashboard',
+      });
 
       const uid = request.auth!.uid;
 
@@ -1716,16 +1704,13 @@ export const submitReviewDecision = onCall(
     ['ops', 'admin', 'super_admin'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'submitReviewDecision', uid: auth.uid }, async () => {
-        // Rate limit: 20/min/uid (mutation)
-        try {
-          const allowed = await checkRateLimit(`rl:submitReviewDecision:${auth.uid}`, 20, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 20/min/uid (mutation). Fail closed: this decides loan
+        // approve/reject and writes loans/{loanId}.status — an outage must
+        // not lift the only brake on it.
+        await enforceRateLimit(`rl:submitReviewDecision:${auth.uid}`, 20, 60, {
+          onUnavailable: 'closed',
+          context: 'submitReviewDecision',
+        });
 
         const { reviewId, decision, notes } = data;
         if (!reviewId || !decision) throw new HttpsError('invalid-argument', 'reviewId and decision are required');
@@ -1892,16 +1877,12 @@ export const getReviewDetail = onCall(
     ['ops', 'admin', 'super_admin'],
     async (data, _auth) =>
       withErrorHandling({ functionName: 'getReviewDetail', uid: _auth.uid }, async () => {
-        // Rate limit: 60/min/uid (read-only detail view)
-        try {
-          const allowed = await checkRateLimit(`rl:getReviewDetail:${_auth.uid}`, 60, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 60/min/uid (read-only detail view). Fail open:
+        // protects capacity, not money or a secret.
+        await enforceRateLimit(`rl:getReviewDetail:${_auth.uid}`, 60, 60, {
+          onUnavailable: 'open',
+          context: 'getReviewDetail',
+        });
 
         const { reviewId } = data;
         if (!reviewId) throw new HttpsError('invalid-argument', 'reviewId is required');
@@ -1959,16 +1940,14 @@ export const updateEmployerTier = onCall(
     ['ops', 'admin', 'super_admin'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'updateEmployerTier', uid: auth.uid }, async () => {
-        // Rate limit: 20/min/uid (mutation)
-        try {
-          const allowed = await checkRateLimit(`rl:updateEmployerTier:${auth.uid}`, 20, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 20/min/uid (mutation). Fail closed: this changes an
+        // employer's active-loan slot cap and risk tier — a lever on
+        // aggregate loan exposure — an outage must not lift the only brake
+        // on it.
+        await enforceRateLimit(`rl:updateEmployerTier:${auth.uid}`, 20, 60, {
+          onUnavailable: 'closed',
+          context: 'updateEmployerTier',
+        });
 
         const { employerId, action, newSlots } = data;
         if (!employerId || !action) throw new HttpsError('invalid-argument', 'employerId and action are required');
@@ -2065,16 +2044,13 @@ export const setEmployerClaims = onCall(
     ['admin', 'super_admin'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'setEmployerClaims', uid: auth.uid }, async () => {
-        // Rate limit: 20/min/uid (mutation — claims assignment)
-        try {
-          const allowed = await checkRateLimit(`rl:setEmployerClaims:${auth.uid}`, 20, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 20/min/uid (mutation — claims assignment). Fail
+        // closed: this grants employer_admin, a privilege escalation — an
+        // outage must not lift the only brake on it.
+        await enforceRateLimit(`rl:setEmployerClaims:${auth.uid}`, 20, 60, {
+          onUnavailable: 'closed',
+          context: 'setEmployerClaims',
+        });
 
         const { uid } = data;
         if (!uid) throw new HttpsError('invalid-argument', 'uid is required');
@@ -2114,16 +2090,14 @@ export const updateEmployerCurpConfig = onCall(
     ['employer_admin'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'updateEmployerCurpConfig', uid: auth.uid }, async () => {
-        // Rate limit: 20/min/uid (mutation)
-        try {
-          const allowed = await checkRateLimit(`rl:updateEmployerCurpConfig:${auth.uid}`, 20, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 20/min/uid (mutation). Fail closed: this can flip an
+        // employer's CURP gate to mode: 'open', widening who can request a
+        // loan under that employer — an outage must not lift the only
+        // brake on it.
+        await enforceRateLimit(`rl:updateEmployerCurpConfig:${auth.uid}`, 20, 60, {
+          onUnavailable: 'closed',
+          context: 'updateEmployerCurpConfig',
+        });
 
         const { prefixes, mode } = data;
 
@@ -2182,15 +2156,12 @@ export const submitEmployerDocs = onCall(
     ['employer_admin'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'submitEmployerDocs', uid: auth.uid }, async () => {
-        try {
-          const allowed = await checkRateLimit(`rl:submitEmployerDocs:${auth.uid}`, 20, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 20/min/uid (mutation — KYC document URLs feeding
+        // employer approval). Fail closed: a mutation, not a read.
+        await enforceRateLimit(`rl:submitEmployerDocs:${auth.uid}`, 20, 60, {
+          onUnavailable: 'closed',
+          context: 'submitEmployerDocs',
+        });
 
         const uid = auth.uid;
         const { docRFC, docId, docAddress } = data;
@@ -2242,15 +2213,12 @@ export const submitPayrollDeductionSetup = onCall(
     ['employer_admin'],
     async (data, auth) =>
       withErrorHandling({ functionName: 'submitPayrollDeductionSetup', uid: auth.uid }, async () => {
-        try {
-          const allowed = await checkRateLimit(`rl:submitPayrollDeductionSetup:${auth.uid}`, 20, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 20/min/uid (mutation — sets up the payroll deduction
+        // path that later collects on disbursed loans). Fail closed.
+        await enforceRateLimit(`rl:submitPayrollDeductionSetup:${auth.uid}`, 20, 60, {
+          onUnavailable: 'closed',
+          context: 'submitPayrollDeductionSetup',
+        });
 
         const curps = Array.isArray(data.curps) ? data.curps.map((c) => String(c).toUpperCase()) : [];
         if (curps.length !== 3 || curps.some((c) => !PARTB_CURP_REGEX.test(c))) {
@@ -2309,15 +2277,13 @@ export const ensureEmployerCode = onCall(
     ['employer_admin'],
     async (_data, auth) =>
       withErrorHandling({ functionName: 'ensureEmployerCode', uid: auth.uid }, async () => {
-        try {
-          const allowed = await checkRateLimit(`rl:ensureEmployerCode:${auth.uid}`, 10, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 10/min/uid (mints/reserves a join code). Fail closed:
+        // this is the only brake on the code-minting loop below racing
+        // itself into enumerating the employerCodes space.
+        await enforceRateLimit(`rl:ensureEmployerCode:${auth.uid}`, 10, 60, {
+          onUnavailable: 'closed',
+          context: 'ensureEmployerCode',
+        });
 
         const uid = auth.uid;
         const empRef = db.collection('employers').doc(uid);

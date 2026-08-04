@@ -1,12 +1,11 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { createHash } from 'crypto';
 import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 
 const AcceptInviteSchema = z.object({
   inviteId: z.string().min(1),
@@ -31,16 +30,12 @@ export const acceptInvite = onCall(
     [],
     async (data, auth) =>
       withErrorHandling({ functionName: 'acceptInvite', uid: auth.uid }, async () => {
-        // Rate limit: 20/min/uid (mutation — invite acceptance)
-        try {
-          const allowed = await checkRateLimit(`rl:acceptInvite:${auth.uid}`, 20, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: 20/min/uid (mutation — invite acceptance). Fail closed:
+        // this is the only brake on brute-forcing another user's invite token.
+        await enforceRateLimit(`rl:acceptInvite:${auth.uid}`, 20, 60, {
+          onUnavailable: 'closed',
+          context: 'acceptInvite',
+        });
 
         const parsed = AcceptInviteSchema.safeParse(data);
         if (!parsed.success) {

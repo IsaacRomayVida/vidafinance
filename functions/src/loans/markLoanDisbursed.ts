@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { getRedis } from '../utils/redis';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 import { buildLoanInstallments, DEFAULT_LOAN_TERM_DAYS } from '../config/loanConfig';
 import { calculateNextPayrollDate } from './calculateNextPayrollDate';
@@ -41,16 +41,13 @@ export const markLoanDisbursed = onCall(
           loanId: (data as Record<string, unknown>)['loanId'] as string,
         },
         async () => {
-          // Rate limit: 20/min/uid (mutation)
-          try {
-            const allowed = await checkRateLimit(`rl:markLoanDisbursed:${auth.uid}`, 20, 60);
-            if (!allowed) {
-              throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-            }
-          } catch (e: unknown) {
-            if (e instanceof HttpsError) throw e;
-            logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-          }
+          // Rate limit: 20/min/uid (mutation). Fail closed: this records a real
+          // STP disbursement and moves loan/employer balances — a limiter
+          // outage must not lift the only brake on it.
+          await enforceRateLimit(`rl:markLoanDisbursed:${auth.uid}`, 20, 60, {
+            onUnavailable: 'closed',
+            context: 'markLoanDisbursed',
+          });
 
           const parseResult = MarkLoanDisbursedSchema.safeParse(data);
           if (!parseResult.success) {
