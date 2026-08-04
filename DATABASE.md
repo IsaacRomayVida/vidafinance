@@ -129,14 +129,32 @@ Loan applications and lifecycle. Document ID is a nanoid.
 | `contractUrl` | string | Signed contract PDF URL |
 | `receiptUrl` | string | Receipt PDF URL |
 | `statusNote` | string | Note from status change |
-| `mlDecisionId` | string | ML decision reference |
-| `mlCreditScore` | number | ML credit score |
-| `mlDefaultProb` | number | ML default probability |
+| `mlDecisionId` | string | ML decision reference (pointer into `ml_decisions`, which is ops-only) |
 | `createdAt` | timestamp | Request timestamp |
 | `acceptedAt` | timestamp | Terms acceptance timestamp |
 | `requestedAt` | timestamp | Alias for createdAt |
 
 **Access:** Owner (employee), employer (via `employerId`), ops, admin. All writes via Admin SDK only.
+
+`mlCreditScore` and `mlDefaultProb` used to live on this document and no longer
+do. Because the loan document is readable by the borrower and by their employer's
+admin (see Access above), storing the model's credit score and default
+probability here disclosed both to them — including the exact probability the
+inline gate compares against its cut-off. They now live in the ops-only
+`loans/{loanId}/underwritingDetail` subcollection, alongside the rest of the
+underwriting numbers, for exactly the reason that subcollection exists.
+
+#### `loans/{loanId}/underwritingDetail/{docId}`
+
+Every number an underwriting decision was made on, kept in a subcollection so it
+does NOT inherit the loan document's borrower/employer read access.
+**Access:** ops only (`firestore.rules`). Admin SDK writes only, in the same
+transaction as the loan.
+
+| Doc | Written by | Contents |
+|---|---|---|
+| `detail` | 6-stage pipeline (Stage 3) | `decision`, `reason`, `allPass`, `conditions[]` — bureau score, LTI, RiskSeal fraud score and ML default probability, each with the bound it was tested against |
+| `inlineMl` | inline ML gate (`requestLoan`) | `decisionId`, `creditScore`, `defaultProbability`, `defaultProbabilityBound` |
 
 **Indexes:**
 - `employerId` + `createdAt` desc

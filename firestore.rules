@@ -252,7 +252,21 @@ service cloud.firestore {
     // =============================================
     match /scheduler_runs/{d}        { allow read: if isOps();    allow write: if false; }
     match /portfolio_snapshots/{d}   { allow read: if isOps();    allow write: if false; }
-    match /system_health/{d}         { allow read: if true;       allow write: if false; }
+    // Was `if true` — readable by anyone on the internet with the project id and
+    // no account at all. systemHealthCheck writes the live up/down state and
+    // latency of the payment server and the ML underwriting service into
+    // system_health/current, and on a failed probe it writes the raw fetch error,
+    // which carries the internal hostname it could not reach; queueHealthCheck
+    // writes per-queue failure counts into system_health/queues. That is an
+    // anonymous, real-time feed of which money-moving dependency is down right
+    // now, and what it is called internally.
+    // No client needs it: public-v2 reads health through the ops-only
+    // getSystemHealth callable and the aggregate on getAdminDashboard, both of
+    // which use the Admin SDK and bypass these rules. The only direct client
+    // reads are on the legacy public/ console, which firebase.json does not
+    // serve (hosting publishes public-v2/dist) and whose health screens are
+    // admin-only anyway, so they satisfy isOps() too.
+    match /system_health/{d}         { allow read: if isOps();    allow write: if false; }
 
     // =============================================
     // PLATFORM CONFIG (#389) — NO CLIENT ACCESS AT ALL

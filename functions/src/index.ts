@@ -771,6 +771,11 @@ export const requestLoan = onCall(
         let mlGateOutageReason: string | null = null;
 
         const loanExtra: Record<string, unknown> = {};
+        // The inline gate's own numbers, held aside for the ops-only
+        // `underwritingDetail` subcollection rather than for the loan document —
+        // see where it is written, below the identical rule for the 6-stage
+        // pipeline's condition breakdown.
+        let inlineMlDetail: Record<string, unknown> | null = null;
         try {
           const ml = await callML('/underwrite/employee', {
             employeeId: uid,
@@ -801,11 +806,41 @@ export const requestLoan = onCall(
             });
             throw new HttpsError('failed-precondition', 'No es posible aprobar tu solicitud en este momento');
           }
+          // `mlCreditScore` and `mlDefaultProb` used to be spread onto the loan
+          // document from here, which handed both numbers to the borrower and to
+          // the employer's admin over a plain client read: firestore.rules grants
+          // /loans/{loanId} read to isOwner(employeeId) and
+          // isEmployerAdminOf(employerId), and getEmployerDashboard returns whole
+          // loan documents to the employer on top of that. So every applicant
+          // could read their own model-derived credit score and, worse, the exact
+          // default probability this gate compares against
+          // INLINE_ML_MAX_DEFAULT_PROBABILITY — telling a fraud applicant
+          // precisely where the line sits and how far from it they landed — and
+          // every employer admin could read the same two numbers for each of
+          // their employees.
+          //
+          // That is the identical exposure the 6-stage pipeline's condition
+          // breakdown is kept off the loan document to avoid (see
+          // `underwritingDetail` below), so it gets the identical treatment: the
+          // numbers move to the ops-only subcollection and only `mlDecisionId`
+          // stays on the loan. The id is a pointer into `ml_decisions`, which
+          // firestore.rules already gates isOps() — knowing the id discloses
+          // nothing on its own, and it is what correlates a loan with its
+          // decision record.
           Object.assign(loanExtra, {
             mlDecisionId: ml['decisionId'],
-            mlCreditScore: ml['credit_score'],
-            mlDefaultProb: ml['default_probability'],
           });
+          inlineMlDetail = {
+            source: 'inline_ml_gate',
+            decisionId: ml['decisionId'] ?? null,
+            creditScore: ml['credit_score'] ?? null,
+            defaultProbability: ml['default_probability'] ?? null,
+            // The bound the probability above was actually tested against,
+            // recorded next to it for the same reason stage3's conditions are:
+            // a number without its threshold is not reviewable.
+            defaultProbabilityBound: INLINE_ML_MAX_DEFAULT_PROBABILITY,
+            evaluatedAt: FieldValue.serverTimestamp(),
+          };
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
           mlGateOutageReason = (e as Error).message;
@@ -1130,6 +1165,19 @@ export const requestLoan = onCall(
             );
           }
 
+          // The inline gate's score and default probability, in the same
+          // ops-only subcollection and in the same transaction as the loan they
+          // describe — a decision can never be persisted without the numbers it
+          // was made on. A separate document from `detail` because the two come
+          // from different assessors (the 6-stage pipeline vs. the inline ML
+          // call) and either can run without the other.
+          if (inlineMlDetail) {
+            tx.set(
+              db.collection('loans').doc(loanId).collection('underwritingDetail').doc('inlineMl'),
+              inlineMlDetail
+            );
+          }
+
           // The loan just landed as 'under_review' because the ML gate that
           // would have assessed it was unreachable (`mlGateFellOpen` above),
           // not because Stage 5 put it there. `under_review` is only
@@ -1176,6 +1224,25 @@ interface UpdateLoanStatusData {
   status: string;
   note?: string;
 }
+
+/**
+ * The employer states that only an admin action can have produced.
+ *
+ * firestore.rules pins a SELF-created employer document to
+ * 'pending_verification' (isSelfServeEmployerCreate) and keeps `status` off the
+ * employer-update whitelist, so no client can move its own employer document
+ * into this set. Reaching it requires approveEmployer or a direct admin write —
+ * i.e. a human at VIDA decided this company may lend to its staff.
+ *
+ * That makes it the load-bearing fact for "is this caller an employer we
+ * actually onboarded", which is a different and much stronger question than
+ * "does this loan name this caller as its employer". Used by updateLoanStatus
+ * below and, as CLAIM_ELIGIBLE_EMPLOYER_STATUSES, by onEmployerDocCreated to
+ * decide whether creating an employer document may mint employer_admin. One
+ * list, because the two decisions rest on exactly the same reasoning and a
+ * divergence between them would reopen either hole.
+ */
+const ADMIN_APPROVED_EMPLOYER_STATUSES = ['approved', 'active'];
 
 export const updateLoanStatus = onCall(
   { cors: true, enforceAppCheck: true },
@@ -1227,6 +1294,56 @@ export const updateLoanStatus = onCall(
         if (loan['employerId'] !== uid) {
           throw new HttpsError('permission-denied', 'Not authorized for this loan');
         }
+
+        // `loan.employerId === uid` proves the caller is the employer NAMED on
+        // the loan. It does not prove anybody ever approved that employer, and
+        // this callable carries no role gate at all — so on its own it was
+        // satisfiable by an ordinary borrower who had simply named THEMSELVES as
+        // their own employer, every step of which firestore.rules permits:
+        //
+        //   1. create employees/{ownUid} with `employerId: ownUid` and a
+        //      self-declared `monthlySalary` — the employees create rule only
+        //      blocks the credit fields (noSelfAssignedCredit), and
+        //      onEmployeeDocCreated then derives availableCredit from that
+        //      salary up to EMPLOYEE_CREDIT_CEILING;
+        //   2. create employers/{ownUid} — isSelfServeEmployerCreate allows any
+        //      authenticated user to bootstrap their own employer document;
+        //   3. call requestLoan — the employer gate above accepts
+        //      'pending_verification', so the loan is created and lands
+        //      'pending';
+        //   4. call this function with status 'approved' — employerId === uid,
+        //      the loan is 'pending', 'approved' is in the permitted set — and
+        //      onLoanApproved queues a real SPEI transfer to the CLABE that same
+        //      user wrote on their own employee document.
+        //
+        // So the question that has to be answered here is not "are you this
+        // loan's employer" but "are you an employer VIDA approved". A self-serve
+        // employer document is pinned to 'pending_verification' and can never be
+        // moved out of it from a client, so it fails this check; a real employer
+        // was activated by approveEmployer and passes it.
+        //
+        // Deliberately NOT a withAuth(['employer_admin']) role gate, which is the
+        // obvious-looking fix: the employer_admin claim is only minted by the
+        // grant in approveEmployer (see the comment at its setCustomUserClaims
+        // call), which the deployed handler did not have until recently — so
+        // every employer approved before that carries no role claim at all and
+        // would lose the ability to act on their own employees' loans, with no
+        // in-product remedy short of an admin running setEmployerClaims for each
+        // of them. The employer document's status is the fact that is already
+        // true for all of them.
+        //
+        // Fails closed on a missing employer document (undefined status is not in
+        // the set) — an approval can never be the thing that discovers the
+        // employer record is gone.
+        const approverSnap = await db.collection('employers').doc(uid).get();
+        const approverStatus = approverSnap.data()?.['status'] as string | undefined;
+        if (!approverStatus || !ADMIN_APPROVED_EMPLOYER_STATUSES.includes(approverStatus)) {
+          throw new HttpsError(
+            'permission-denied',
+            'Your employer account is not approved to decide loans'
+          );
+        }
+
         if (loan['status'] !== 'pending') {
           throw new HttpsError('failed-precondition', 'Loan is not in pending status');
         }
@@ -2004,7 +2121,11 @@ export const updateEmployerTier = onCall(
 // admin-created document can be, since firestore.rules pins self-created
 // employers to 'pending_verification'. The normal path for a self-signup
 // employer is approveEmployer, which grants the claim on approval.
-const CLAIM_ELIGIBLE_EMPLOYER_STATUSES = ['approved', 'active'];
+//
+// Same list updateLoanStatus gates its employer branch on, and deliberately the
+// same constant: both decisions rest on "only an admin can have produced this
+// status", so they must never drift apart.
+const CLAIM_ELIGIBLE_EMPLOYER_STATUSES = ADMIN_APPROVED_EMPLOYER_STATUSES;
 
 export const onEmployerDocCreated = onDocumentCreated('employers/{uid}', async (event) => {
   const uid = event.params['uid'];

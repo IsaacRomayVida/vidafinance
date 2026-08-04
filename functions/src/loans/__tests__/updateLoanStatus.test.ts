@@ -192,6 +192,12 @@ const ULS_LOAN_BASE = {
 
 const ULS_EMPLOYEE = { bankClabe: 'CLABE123', bankName: 'BBVA' };
 
+/** The employer named on ULS_LOAN_BASE, in the state approveEmployer leaves it
+ *  in. The employer branch of the callable now requires this document to exist
+ *  and to be admin-approved, so a suite that exercises that branch has to model
+ *  it — see the self-employer regression tests at the bottom of this file. */
+const ULS_APPROVED_EMPLOYER = { employers: { 'employer-1': { status: 'active' } } };
+
 const ULS_OPS_AUTH = { uid: 'ops-1', token: { role: 'ops' } };
 
 type UlsCallable = (req: { auth?: unknown; data: unknown }) => Promise<{ success: boolean; status: string }>;
@@ -517,7 +523,10 @@ describe('updateLoanStatus — authorization', () => {
   });
 
   it('refuses an employer acting on a loan that is no longer pending', async () => {
-    ulsMockDb = ulsBuildMockDb({ loans: { 'loan-1': { ...ULS_LOAN_BASE, status: 'active' } } });
+    ulsMockDb = ulsBuildMockDb({
+      loans: { 'loan-1': { ...ULS_LOAN_BASE, status: 'active' } },
+      ...ULS_APPROVED_EMPLOYER,
+    });
     const { updateLoanStatus } = await ulsLoad();
 
     await expect(
@@ -529,7 +538,10 @@ describe('updateLoanStatus — authorization', () => {
   });
 
   it('restricts an employer to approve/reject even on their own pending loan', async () => {
-    ulsMockDb = ulsBuildMockDb({ loans: { 'loan-1': { ...ULS_LOAN_BASE, status: 'pending' } } });
+    ulsMockDb = ulsBuildMockDb({
+      loans: { 'loan-1': { ...ULS_LOAN_BASE, status: 'pending' } },
+      ...ULS_APPROVED_EMPLOYER,
+    });
     const { updateLoanStatus } = await ulsLoad();
 
     await expect(
@@ -540,13 +552,35 @@ describe('updateLoanStatus — authorization', () => {
     ).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
-  it('allows an employer to approve their own pending loan', async () => {
-    ulsMockDb = ulsBuildMockDb({ loans: { 'loan-1': { ...ULS_LOAN_BASE, status: 'pending' } } });
+  it('allows an APPROVED employer to approve their own pending loan', async () => {
+    ulsMockDb = ulsBuildMockDb({
+      loans: { 'loan-1': { ...ULS_LOAN_BASE, status: 'pending' } },
+      ...ULS_APPROVED_EMPLOYER,
+    });
     const { updateLoanStatus } = await ulsLoad();
 
     await expect(
       updateLoanStatus({
         auth: { uid: 'employer-1', token: { role: 'employer' } },
+        data: { loanId: 'loan-1', status: 'approved' },
+      })
+    ).resolves.toMatchObject({ success: true });
+  });
+
+  // The employer_admin claim was not minted by the deployed approveEmployer
+  // until recently, so the whole existing employer book carries no role claim.
+  // The gate must key on the employer DOCUMENT, not on the claim, or every one
+  // of them loses the ability to decide their own employees' loans.
+  it('allows an approved employer carrying no role claim at all (legacy employers keep working)', async () => {
+    ulsMockDb = ulsBuildMockDb({
+      loans: { 'loan-1': { ...ULS_LOAN_BASE, status: 'pending' } },
+      employers: { 'employer-1': { status: 'approved' } },
+    });
+    const { updateLoanStatus } = await ulsLoad();
+
+    await expect(
+      updateLoanStatus({
+        auth: { uid: 'employer-1', token: {} },
         data: { loanId: 'loan-1', status: 'approved' },
       })
     ).resolves.toMatchObject({ success: true });
@@ -571,6 +605,92 @@ describe('updateLoanStatus — authorization', () => {
       updateLoanStatus({ auth: ULS_OPS_AUTH, data: { loanId: 'ghost', status: 'approved' } })
     ).rejects.toMatchObject({ code: 'not-found' });
     expect(ulsMockDb._writes.filter((w) => w.collection === 'loans')).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4b. The borrower who is their own employer
+//
+// `loan.employerId === auth.uid` is satisfiable by an ordinary borrower, because
+// firestore.rules lets any authenticated user create employees/{ownUid} with
+// `employerId: ownUid` AND create employers/{ownUid}. With no further check that
+// self-declared "employer" could approve their own loan, and onLoanApproved
+// queues a real SPEI transfer to the CLABE on their own employee document. The
+// gate is therefore the employer document's status, which firestore.rules pins
+// to 'pending_verification' on self-serve creation and never lets a client
+// change.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('updateLoanStatus — a borrower who named themselves as their own employer', () => {
+  const SELF = 'self-dealer-1';
+  const SELF_LOAN = { ...ULS_LOAN_BASE, employeeId: SELF, employerId: SELF, status: 'pending' };
+
+  it('DENIES self-approval when the self-created employer is pending_verification', async () => {
+    ulsMockDb = ulsBuildMockDb({
+      loans: { 'loan-1': SELF_LOAN },
+      employers: { [SELF]: { status: 'pending_verification' } },
+    });
+    const { updateLoanStatus } = await ulsLoad();
+
+    await expect(
+      updateLoanStatus({
+        auth: { uid: SELF, token: { role: 'employee' } },
+        data: { loanId: 'loan-1', status: 'approved' },
+      })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    // Nothing may reach the loan — an approval write is what fires
+    // onLoanApproved and queues the transfer.
+    expect(ulsMockDb._writes.filter((w) => w.collection === 'loans')).toHaveLength(0);
+  });
+
+  it('DENIES self-rejection too — the branch is closed, not just the approve side', async () => {
+    ulsMockDb = ulsBuildMockDb({
+      loans: { 'loan-1': SELF_LOAN },
+      employers: { [SELF]: { status: 'pending_verification' } },
+    });
+    const { updateLoanStatus } = await ulsLoad();
+
+    await expect(
+      updateLoanStatus({
+        auth: { uid: SELF, token: { role: 'employee' } },
+        data: { loanId: 'loan-1', status: 'rejected' },
+      })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('DENIES self-approval when no employer document exists at all (fails closed)', async () => {
+    ulsMockDb = ulsBuildMockDb({ loans: { 'loan-1': SELF_LOAN } });
+    const { updateLoanStatus } = await ulsLoad();
+
+    await expect(
+      updateLoanStatus({
+        auth: { uid: SELF, token: { role: 'employee' } },
+        data: { loanId: 'loan-1', status: 'approved' },
+      })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(ulsMockDb._writes.filter((w) => w.collection === 'loans')).toHaveLength(0);
+  });
+
+  it('DENIES self-approval for every employer status a client can actually write', async () => {
+    // firestore.rules pins isSelfServeEmployerCreate to 'pending_verification';
+    // these are the other values a rules change or a seeded document could
+    // plausibly leave behind. None of them is an approval.
+    for (const status of ['pending_verification', 'pending', 'rejected', 'rejected_ml', 'suspended', '']) {
+      ulsMockDb = ulsBuildMockDb({
+        loans: { 'loan-1': SELF_LOAN },
+        employers: { [SELF]: { status } },
+      });
+      jest.resetModules();
+      const { updateLoanStatus } = await ulsLoad();
+
+      await expect(
+        updateLoanStatus({
+          auth: { uid: SELF, token: { role: 'employee' } },
+          data: { loanId: 'loan-1', status: 'approved' },
+        })
+      ).rejects.toMatchObject({ code: 'permission-denied' });
+    }
   });
 });
 
