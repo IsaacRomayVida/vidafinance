@@ -160,18 +160,23 @@ describe('POST /internal/disburse — upstream failure', () => {
 });
 
 describe('POST /internal/disburse — replay / idempotency', () => {
-  // DEFECT: /internal/disburse has NO idempotency guard of any kind -- no
-  // idempotency key accepted from the caller, no check of loans.status or
-  // disbursement_queue.status before calling SoftCrédito, and no dedup on
-  // (loanId, amount, clabe). SPEI itself has no idempotency key either. This
-  // test pins the current (dangerous) behavior: replaying the exact same
-  // disbursement request twice dispatches TWO real SPEI transfers to the
-  // same CLABE. See services/softcredito-adapter/index.js:132-160
-  // (app.post('/internal/disburse', ...)).
-  test('replaying the identical request sends a SECOND real SPEI transfer, not a no-op', async () => {
+  // This block used to PIN the defect: replaying the identical request
+  // dispatched TWO real SPEI transfers to the same CLABE, because
+  // /internal/disburse had no idempotency guard of any kind -- no key, no
+  // check of loans.status or disbursement_queue.status, no dedup on
+  // (loanId, amount, clabe) -- and SPEI has no idempotency key of its own
+  // (functions/src/loans/loanStatusTransitions.ts:89).
+  //
+  // The unit of idempotency is the LOAN's disbursement, claimed server-side
+  // in disbursement_claims/{loanId}. See lib/disbursementClaim.js.
+
+  test('replaying the identical request does NOT send a second SPEI transfer', async () => {
     seedLoanAndQueue('loan_5');
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-FIRST', transferId: 'tr_first' }))
+      // Armed on purpose: if the guard regresses, the replay gets a usable
+      // second transfer back and the assertions below fail loudly rather than
+      // erroring out on an exhausted mock.
       .mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-SECOND', transferId: 'tr_second' }));
 
     const body = { ...VALID_BODY, loanId: 'loan_5' };
@@ -179,20 +184,289 @@ describe('POST /internal/disburse — replay / idempotency', () => {
     const second = await postDisburse(body);
 
     expect(first.status).toBe(200);
-    expect(second.status).toBe(200); // no rejection, no "already disbursed" signal of any kind
+    expect(first.body).toEqual({ success: true, ref: 'TRK-FIRST', transferId: 'tr_first' });
 
-    // Two real outbound transfer calls to SoftCrédito for the identical loan/clabe/amount.
+    // 200, not a 4xx: the caller is payment-server's disburseWorker
+    // (services/payment-server/index.js:410), which treats any !resp.ok as a
+    // job failure and retries up to 5 times before marking the loan
+    // disbursement_error and paging ops. Answering a replay of an
+    // already-funded loan with an error would page ops about a loan that was
+    // in fact paid correctly. The original receipt is returned instead.
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({
+      success: true,
+      ref: 'TRK-FIRST',
+      transferId: 'tr_first',
+      idempotentReplay: true,
+    });
+
+    // The whole point: exactly ONE outbound transfer for one loan.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const loan = admin.__get('loans', 'loan_5');
+    expect(loan.softcreditoTransferId).toBe('tr_first');
+
+    const speiLog = admin.__all('spei_log');
+    expect(speiLog).toHaveLength(1);
+    expect(speiLog.map((e) => e.data.speiRef)).toEqual(['TRK-FIRST']);
+  });
+
+  test('a duplicate arriving while the first transfer is still in flight refuses, and never dispatches', async () => {
+    // A plain Promise.all of two supertest calls does not reliably overlap --
+    // the mocked transfer resolves on a microtask, so the first request can
+    // finish end-to-end before the second is even dispatched, and the test
+    // would then be exercising the replay path while claiming to test the
+    // race. Hold the first transfer open instead, so the second request is
+    // provably inside the window where a claim exists with no outcome yet.
+    seedLoanAndQueue('loan_6');
+    let releaseFirstTransfer;
+    const firstTransferInFlight = new Promise((resolve) => {
+      fetchMock.mockImplementationOnce(() => {
+        resolve();
+        return new Promise((r) => { releaseFirstTransfer = () => r(jsonResponse(200, { trackingCode: 'TRK-ONLY', transferId: 'tr_only' })); });
+      });
+    });
+    // Armed so a regression dispatches a real second transfer and fails the
+    // call-count assertion, rather than hanging on an unmocked call.
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-DUPE', transferId: 'tr_dupe' }));
+
+    const body = { ...VALID_BODY, loanId: 'loan_6' };
+    // .then() is not decoration -- it is what puts this request on the wire.
+    // A supertest Test is a lazy superagent Request: it dispatches nothing
+    // until something subscribes to it (.then/.end/await). `const p =
+    // postDisburse(body)` on its own sends NO request, so the wait below would
+    // block until the jest timeout and the test would never reach the assertion
+    // it exists to make.
+    const firstPending = postDisburse(body).then((r) => r);
+    await firstTransferInFlight;
+
+    // The claim is taken transactionally before dispatch, so this second
+    // request sees a claim with no recorded outcome. That is the indeterminate
+    // state: refuse, do not wait for the first and do not re-send.
+    const second = await postDisburse(body);
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({
+      error: 'disbursement_indeterminate',
+      reason: 'previous_attempt_unconfirmed',
+      loanId: 'loan_6',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    releaseFirstTransfer();
+    const first = await firstPending;
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({ success: true, ref: 'TRK-ONLY', transferId: 'tr_only' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__all('spei_log')).toHaveLength(1);
+  });
+
+  test('a retry after an unconfirmed attempt (network timeout) REFUSES and never re-sends', async () => {
+    seedLoanAndQueue('loan_7');
+    fetchMock
+      .mockRejectedValueOnce(Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' }))
+      .mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-RETRY', transferId: 'tr_retry' }));
+
+    const body = { ...VALID_BODY, loanId: 'loan_7' };
+    const first = await postDisburse(body);
+    expect(first.status).toBe(500);
+    expect(first.body).toEqual({ error: 'upstream_error', reason: 'timeout' });
+
+    // The transfer may or may not have reached SPEI -- we never got an answer.
+    // Re-sending is how a borrower gets paid twice; refusing costs a
+    // reconciliation ticket. Refuse.
+    const second = await postDisburse(body);
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({
+      error: 'disbursement_indeterminate',
+      reason: 'previous_attempt_unconfirmed',
+      loanId: 'loan_7',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__all('spei_log')).toHaveLength(0);
+    expect(admin.__get('loans', 'loan_7').status).toBe('approved');
+  });
+
+  test('a retry after SoftCrédito definitively REJECTED the transfer is allowed through', async () => {
+    seedLoanAndQueue('loan_8');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(400, { error_code: 'INSUFFICIENT_FUNDS', message: 'no' }))
+      .mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-OK', transferId: 'tr_ok' }));
+
+    const body = { ...VALID_BODY, loanId: 'loan_8' };
+    const first = await postDisburse(body);
+    expect(first.status).toBe(500);
+
+    // SoftCrédito answered, and its answer was "I did not do this". That is a
+    // known outcome, not an unknown one: no money moved, so the claim is
+    // released and a legitimate retry can still fund the borrower. Collapsing
+    // this into the indeterminate state would strand every transient vendor
+    // rejection behind a manual reconciliation.
+    const second = await postDisburse(body);
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ success: true, ref: 'TRK-OK', transferId: 'tr_ok' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(admin.__all('spei_log')).toHaveLength(1);
+  });
+
+  test('a retry after a SoftCrédito 5xx REFUSES and never re-sends', async () => {
+    seedLoanAndQueue('loan_8b');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(500, { error_code: 'INTERNAL', message: 'boom' }))
+      // Armed: a regression that treats 5xx as a definite rejection re-sends
+      // here and fails on the call count below rather than on an empty mock.
+      .mockResolvedValue(jsonResponse(200, { trackingCode: 'TRK-DUP', transferId: 'tr_dup' }));
+
+    const body = { ...VALID_BODY, loanId: 'loan_8b' };
+    const first = await postDisburse(body);
+    expect(first.status).toBe(500);
+
+    // A 5xx is NOT the upstream saying "I did not do this". It is what a vendor
+    // returns when it initiated the SPEI and then fell over writing its own
+    // ledger, and what an intermediary returns for a request the origin may
+    // have processed in full. Money may well have moved, so this belongs with
+    // the timeouts in the indeterminate state -- not with the 4xx rejections.
+    // Releasing it would hand disburseWorker's five BullMQ retries a licence to
+    // pay the borrower again.
+    const second = await postDisburse(body);
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({
+      error: 'disbursement_indeterminate',
+      reason: 'previous_attempt_unconfirmed',
+      loanId: 'loan_8b',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__all('spei_log')).toHaveLength(0);
+    expect(admin.__get('loans', 'loan_8b').status).toBe('approved');
+  });
+
+  test('a loan already disbursed before this guard existed is not re-sent', async () => {
+    // Loans funded before disbursement_claims existed carry no claim doc. The
+    // evidence the old code wrote -- loans.disbursedAt/disbursementRef and
+    // disbursement_queue.status=completed -- is what stands in for one.
+    admin.__seed('loans', 'loan_9', {
+      status: 'active',
+      amount: VALID_BODY.amount,
+      employeeId: VALID_BODY.employeeId,
+      disbursedAt: '__mock_timestamp__',
+      disbursementRef: 'TRK-LEGACY',
+      softcreditoTransferId: 'tr_legacy',
+    });
+    admin.__seed('disbursement_queue', 'loan_9', { status: 'completed', loanId: 'loan_9' });
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-AGAIN', transferId: 'tr_again' }));
+
+    const res = await postDisburse({ ...VALID_BODY, loanId: 'loan_9' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      ref: 'TRK-LEGACY',
+      transferId: 'tr_legacy',
+      idempotentReplay: true,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('a second disbursement for the same loan with a different amount or CLABE is refused', async () => {
+    seedLoanAndQueue('loan_10');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-A', transferId: 'tr_a' }))
+      .mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-B', transferId: 'tr_b' }));
+
+    const first = await postDisburse({ ...VALID_BODY, loanId: 'loan_10' });
+    expect(first.status).toBe(200);
+
+    // Not a replay -- a DIFFERENT payout riding the same loanId. Returning the
+    // first receipt would report this one as done; dispatching it would pay the
+    // loan out twice. Neither is acceptable, so it is refused outright.
+    const second = await postDisburse({ ...VALID_BODY, loanId: 'loan_10', amount: 9999 });
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({
+      error: 'disbursement_conflict',
+      reason: 'loan_already_disbursed_with_different_terms',
+      loanId: 'loan_10',
+    });
+
+    const third = await postDisburse({ ...VALID_BODY, loanId: 'loan_10', clabe: '012180099999999999' });
+    expect(third.status).toBe(409);
+    expect(third.body).toMatchObject({ error: 'disbursement_conflict' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__all('spei_log')).toHaveLength(1);
+  });
+
+  test('after a definitive rejection, a corrected CLABE funds the loan instead of conflicting forever', async () => {
+    seedLoanAndQueue('loan_11');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(400, { error_code: 'INVALID_CLABE', message: 'bad clabe' }))
+      .mockResolvedValueOnce(jsonResponse(200, { trackingCode: 'TRK-FIXED', transferId: 'tr_fixed' }))
+      // Armed: a regression that re-sends below fails on the call count rather
+      // than erroring out on an exhausted mock.
+      .mockResolvedValue(jsonResponse(200, { trackingCode: 'TRK-EXTRA', transferId: 'tr_extra' }));
+
+    const BAD_CLABE = '012180000000000000';
+    const first = await postDisburse({ ...VALID_BODY, loanId: 'loan_11', clabe: BAD_CLABE });
+    expect(first.status).toBe(500);
+
+    // The rejected attempt's fingerprint is still on the claim doc --
+    // releaseClaim() merges. Checking it against a 'released' claim would make
+    // the ONLY request that can ever fund this loan the one already known to
+    // fail: ops corrects the CLABE, gets 409 conflict, and the borrower is
+    // stranded permanently with no override anywhere in the system. Nothing is
+    // being protected here, because 'released' is precisely SoftCrédito saying
+    // it did not move the money.
+    const second = await postDisburse({ ...VALID_BODY, loanId: 'loan_11' });
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ success: true, ref: 'TRK-FIXED', transferId: 'tr_fixed' });
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
-    // Nothing in local state distinguishes this from a single legitimate disbursement --
-    // the loan doc just reflects whichever transfer completed last.
-    const loan = admin.__get('loans', 'loan_5');
-    expect(loan.softcreditoTransferId).toBe('tr_second');
+    // The corrected terms REPLACED the old fingerprint rather than joining it:
+    // they now replay, and the abandoned CLABE is the mismatch. Re-claiming a
+    // released doc must not leave the dead attempt's terms behind to be matched
+    // against later.
+    const third = await postDisburse({ ...VALID_BODY, loanId: 'loan_11' });
+    expect(third.status).toBe(200);
+    expect(third.body).toMatchObject({ ref: 'TRK-FIXED', idempotentReplay: true });
 
-    // Both real transfers are logged, which is the only local trace that two money
-    // movements happened -- nothing blocks or flags the second one before it fires.
-    const speiLog = admin.__all('spei_log');
-    expect(speiLog).toHaveLength(2);
-    expect(speiLog.map((e) => e.data.speiRef)).toEqual(['TRK-FIRST', 'TRK-SECOND']);
+    const fourth = await postDisburse({ ...VALID_BODY, loanId: 'loan_11', clabe: BAD_CLABE });
+    expect(fourth.status).toBe(409);
+    expect(fourth.body).toMatchObject({ error: 'disbursement_conflict' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(admin.__all('spei_log')).toHaveLength(1);
+  });
+
+  test('adopting a pre-guard disbursement does not invent a fingerprint from whichever request arrived first', async () => {
+    admin.__seed('loans', 'loan_12', {
+      status: 'active',
+      amount: VALID_BODY.amount,
+      employeeId: VALID_BODY.employeeId,
+      disbursedAt: '__mock_timestamp__',
+      disbursementRef: 'TRK-OLD',
+      softcreditoTransferId: 'tr_old',
+    });
+    admin.__seed('disbursement_queue', 'loan_12', { status: 'completed', loanId: 'loan_12' });
+    fetchMock.mockResolvedValue(jsonResponse(200, { trackingCode: 'TRK-NEVER', transferId: 'tr_never' }));
+
+    // A legacy loan's destination CLABE was only ever written to spei_log, so
+    // the adoption below cannot know the terms it was actually disbursed on.
+    // The first request to arrive after deploy is just whichever one arrived
+    // first -- here one carrying the wrong amount. Fingerprinting the claim
+    // from it would make 9999 this loan's permanent definition of "the same
+    // disbursement".
+    const wrong = await postDisburse({ ...VALID_BODY, loanId: 'loan_12', amount: 9999 });
+    expect(wrong.status).toBe(200);
+    expect(wrong.body).toMatchObject({ ref: 'TRK-OLD', transferId: 'tr_old', idempotentReplay: true });
+
+    // ...and this one -- the genuine retried job, carrying the loan's real
+    // terms -- would then be answered 409 conflict and page ops about a
+    // borrower who was funded correctly, once, before any of this shipped.
+    const real = await postDisburse({ ...VALID_BODY, loanId: 'loan_12' });
+    expect(real.status).toBe(200);
+    expect(real.body).toMatchObject({ ref: 'TRK-OLD', transferId: 'tr_old', idempotentReplay: true });
+
+    expect(admin.__get('disbursement_claims', 'loan_12').fingerprint).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
