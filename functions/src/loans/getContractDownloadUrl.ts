@@ -52,8 +52,36 @@ export const getContractDownloadUrl = onCall(
 
           const isOwnerEmployee =
             loan['employeeUid'] === auth.uid || loan['employeeId'] === auth.uid;
+
+          // Both sides of this comparison must be a non-empty string before it is
+          // allowed to authorize anything.
+          //
+          // It used to be a bare `loan['employerId'] === auth.employerId`, and
+          // both operands are routinely absent. No setCustomUserClaims call site
+          // in this repo ever writes an `employerId` claim — approveEmployer,
+          // setEmployerClaims and onEmployerDocCreated all write `{ role }` and
+          // nothing else — so `auth.employerId` is undefined for every real
+          // employer_admin. On a loan document that is ALSO missing `employerId`
+          // the check degenerated to `undefined === undefined` and granted every
+          // employer_admin in the system a signed URL to that borrower's contract
+          // PDF: full name, CURP/RFC, amount, repayment schedule.
+          //
+          // Deliberately NOT widened to `loan['employerId'] === auth.uid` while
+          // fixing this, even though firestore.rules' isEmployerAdminOf() accepts
+          // that pair for the loan DOCUMENT. storage.rules gates the contract FILE
+          // on `loanDoc(loanId).employerAdminUid` — a separate, explicitly recorded
+          // field — so matching on the employer id here would hand out a file the
+          // storage layer deliberately withholds. Employer access to contracts is
+          // broken end to end today (nothing writes employerAdminUid); repairing it
+          // is a product decision about who may read a borrower's signed contract,
+          // not a security fix, and is reported rather than made here.
+          const loanEmployerId = loan['employerId'];
           const isEmployerAdmin =
-            auth.role === 'employer_admin' && loan['employerId'] === auth.employerId;
+            auth.role === 'employer_admin' &&
+            typeof loanEmployerId === 'string' &&
+            loanEmployerId.length > 0 &&
+            loanEmployerId === auth.employerId;
+
           const isOps = OPS_ROLES.includes(auth.role);
 
           if (!isOwnerEmployee && !isEmployerAdmin && !isOps) {
