@@ -8,7 +8,6 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
 import { nanoid } from 'nanoid';
-import { Queue } from 'bullmq';
 
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
@@ -43,6 +42,7 @@ import {
 import { computeEmployerDashboardStats } from './employers/computeEmployerDashboardStats';
 import { allowTestBypass } from './utils/environment';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
+import { getQueue } from './utils/queue';
 
 initSentry();
 
@@ -126,17 +126,6 @@ function initialSlotsForEmployerTier(riskTier: unknown): number {
   if (tier === 1) return EMPLOYER_TIER_1_INITIAL_SLOTS;
   if (tier === 2) return EMPLOYER_TIER_2_INITIAL_SLOTS;
   return 0;
-}
-
-function getQueue(name: string): Queue {
-  const redisUrl = process.env['REDIS_URL'] ?? '';
-  if (!redisUrl) throw new Error('REDIS_URL not configured — queue unavailable');
-  return new Queue(name, {
-    connection: {
-      url: redisUrl,
-      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {}),
-    },
-  });
 }
 
 // ── Internal utilities ───────────────────────────────────────────────────────
