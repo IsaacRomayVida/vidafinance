@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../../__mocks__/txReadAfterWrite';
 /**
  * Regression tests for the payroll deduction channel — the product's primary
  * repayment path, which had no test file at all. That is why all five of the
@@ -174,7 +175,7 @@ const mockDb = {
     if (mockStore.failTransactionOnRow === mockStore.transactionCount) {
       throw new Error('deadline_exceeded');
     }
-    return fn(makeTransaction());
+    return fn(mockGuardReadAfterWrite(makeTransaction()));
   }),
 };
 

@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../__mocks__/txReadAfterWrite';
 // Regression test for the ACTUAL deployed `requestLoan` callable (inline in
 // index.ts — NOT the unused src/loans/requestLoan.ts variant). It exercises
 // the real payload shape LoanWizard.tsx sends: { amount, employerCode,
@@ -291,7 +292,7 @@ function buildMockDb({
             transactionCalls.push({ op: 'set', ref: ref?._kind, data })
           ),
         };
-        await fn(txn);
+        await fn(mockGuardReadAfterWrite(txn));
         return transactionCalls;
       }
     ),

@@ -29,19 +29,27 @@
 // ════════════════════════════════════════════════════════════════════
 
 // ── Mock firebase-admin/firestore ───────────────────────────────────
+const { guardReadAfterWrite: mockGuardReadAfterWrite } = require("../../test-support/txReadAfterWrite");
+
 const mockUpdate = jest.fn().mockResolvedValue();
 const mockDoc = jest.fn(() => ({ update: mockUpdate }));
 const mockCollection = jest.fn(() => ({ doc: mockDoc }));
 // The employer document the ADR-008 guard reads inside the transaction to
 // decide whether ops owns `maxActiveSlots`. Tests override it per-case.
 let mockEmployerDocData = {};
+// Guarded: the ADR-008 branch reads the employer doc to decide whether ops owns
+// the cap, and that read has to stay above the update it guards. See
+// test-support/txReadAfterWrite.js for why the mock enforces this rather than
+// tolerating it.
 const mockRunTransaction = jest.fn(async (fn) =>
-  fn({
-    get: jest.fn().mockResolvedValue({ data: () => mockEmployerDocData }),
-    // Assert on `mockUpdate` with the payload only, so the existing
-    // expectations keep reading the same regardless of doc-vs-transaction.
-    update: (_ref, payload) => mockUpdate(payload),
-  })
+  fn(
+    mockGuardReadAfterWrite({
+      get: jest.fn().mockResolvedValue({ data: () => mockEmployerDocData }),
+      // Assert on `mockUpdate` with the payload only, so the existing
+      // expectations keep reading the same regardless of doc-vs-transaction.
+      update: (_ref, payload) => mockUpdate(payload),
+    })
+  )
 );
 const mockGetFirestore = jest.fn(() => ({
   collection: mockCollection,

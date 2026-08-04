@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../__mocks__/txReadAfterWrite';
 // Regression tests for #407 — `request_info` and `escalate` used to be permanent
 // dead ends. The precondition only accepted `pending`/`pending_review`, so once a
 // review moved to `info_requested` or `escalated` no further decision could ever be
@@ -158,7 +159,7 @@ function buildMockDb({
             pending.push({ ref, data });
           }),
         };
-        const result = await fn(txn);
+        const result = await fn(mockGuardReadAfterWrite(txn));
         if (simulateLoanWriteFailure && pending.some((p) => p.ref._collection === 'loans')) {
           throw new Error('FIRESTORE_UNAVAILABLE: transaction commit failed (simulated outage)');
         }

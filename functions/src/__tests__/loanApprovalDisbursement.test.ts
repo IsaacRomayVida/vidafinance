@@ -1,3 +1,4 @@
+import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../__mocks__/txReadAfterWrite';
 // Regression tests for two P0 defects in the loan disbursement path.
 //
 // P0-A: both onLoanStatusChange and onLoanApproved gated on the exact
@@ -180,7 +181,7 @@ function buildMockDb(seed: Record<string, Record<string, Record<string, unknown>
           writes.push({ collection: collection!, id: id!, op: 'tx.update', data });
         }),
       };
-      return fn(tx);
+      return fn(mockGuardReadAfterWrite(tx));
     }),
     _store: store,
     _writes: writes,
