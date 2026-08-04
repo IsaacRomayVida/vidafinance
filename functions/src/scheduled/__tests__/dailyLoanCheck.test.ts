@@ -19,6 +19,9 @@
  */
 export {};
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 jest.mock('firebase-functions/v2/scheduler', () => ({
   onSchedule: jest.fn((_opts: unknown, handler: unknown) => handler),
 }));
@@ -237,5 +240,25 @@ describe('D2 — a stale/failed repayment sync must not dun a borrower who alrea
     await handler();
 
     expect(mockQueueAdd.mock.calls.some((c) => c[0] === 'loan_reminder_24h')).toBe(true);
+  });
+});
+
+// #541 fixed D1/D2 in this file, but never wired the fix into the deployed
+// function: index.ts had (and, absent this guard, could regress back to) its
+// own inline `dailyLoanCheck` that predates both fixes — hardcoded
+// `status == 'active'` (missing every manually-disbursed loan) and no
+// repayment-sync gate at all. All 6 tests above exercised only this
+// never-deployed copy and would stay green regardless of what ships. Reads
+// the real source file on disk so an inline regression can't hide behind a
+// mock.
+describe('dailyLoanCheck wiring (index.ts) — #541 follow-up', () => {
+  it('index.ts deploys this fixed module via re-export, not its own inline copy', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../index.ts'), 'utf8');
+
+    expect(src).toMatch(/export\s*\{\s*dailyLoanCheck\s*\}\s*from\s*'\.\/scheduled\/dailyLoanCheck'/);
+    // Catches the unfixed inline definition reappearing in index.ts (there
+    // are unrelated, legitimate `status == 'active'` queries elsewhere in the
+    // file, so this checks for the inline declaration specifically).
+    expect(src).not.toMatch(/export const dailyLoanCheck = onSchedule/);
   });
 });
