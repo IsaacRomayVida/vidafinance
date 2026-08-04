@@ -1,3 +1,10 @@
+// Marked as a module (`export {}`) so its top-level `const`/`class` declarations
+// stay file-scoped. Without this a .test.ts with no top-level import/export is a
+// global script, and two such files declaring the same name (`mockLogger`,
+// `MockTimestamp`) fail to compile the moment both are on main — which is exactly
+// how they broke the build when they first met.
+export {};
+
 // `validateCURP` is the identity gate: it answers "is this a real CURP, and
 // does it belong to this person". Every failure path used to answer that
 // question `valid: true`, with a `fullName` copied straight out of the
