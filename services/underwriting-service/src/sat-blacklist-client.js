@@ -25,6 +25,27 @@
  *     `{ pass: false, skipped: true, error }` signal which escalates
  *     the application to Stage 5 (manual review) — the existing safe
  *     default. We never silently pass when SAT data is missing.
+ *   - "Missing" includes a blob that downloads and parses cleanly but
+ *     carries no usable rows. An empty `Map` is not "nobody is on the
+ *     list", it is "we do not know who is on the list": every RFC lookup
+ *     misses, `situacion` is null, `hasDebt` is false, and every employer
+ *     in the country clears both screens with pass:true. `parseRows`
+ *     therefore rejects a blob whose `rows` is absent, not an object, an
+ *     array, or empty, and it does so BEFORE the loaded tables are
+ *     swapped in — a bad refresh leaves the last-good list in place
+ *     rather than blanking it.
+ *
+ * Cache scoping:
+ *   - The per-RFC Redis entries are keyed by the `generatedAt` of the
+ *     dataset that produced them. A verdict is only meaningful relative
+ *     to a specific SAT publication, so an answer computed against one
+ *     generation is never replayed against another. Without this, a pass
+ *     computed during a bad-data window outlives the window by the full
+ *     24h TTL, long after the underlying blob is repaired.
+ *   - Consequently `ensureLoaded()` runs before the cache read: we cannot
+ *     name the generation we are answering for until the tables are
+ *     loaded. In practice this costs nothing — any pod serving real
+ *     traffic misses the cache on its first unseen RFC and loads anyway.
  */
 
 const admin = require("firebase-admin");
@@ -63,11 +84,26 @@ async function downloadJson(path) {
   return JSON.parse(buf.toString("utf-8"));
 }
 
-function toMap(obj) {
-  const m = new Map();
-  if (!obj || typeof obj !== "object") return m;
-  for (const [rfc, entry] of Object.entries(obj)) {
-    m.set(rfc, entry);
+function isPlainObject(v) {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+// Turn a downloaded blob into the lookup Map, or throw. Throwing is the whole
+// point: every rejection here reaches employer-a.js as a skipped check and
+// escalates to manual review, which is the correct answer when we cannot say
+// whether an RFC is blacklisted. Silently returning an empty Map would answer
+// "clean" for every employer instead.
+function parseRows(blob, path) {
+  if (!isPlainObject(blob) || !isPlainObject(blob.rows)) {
+    throw new Error(
+      `${path} is not a { generatedAt, rows: { [rfc]: entry } } blob — refusing to screen against it`
+    );
+  }
+  const m = new Map(Object.entries(blob.rows));
+  if (m.size === 0) {
+    throw new Error(
+      `${path} loaded 0 rows — refusing to screen employers against an empty SAT list`
+    );
   }
   return m;
 }
@@ -77,8 +113,13 @@ async function doLoad() {
     downloadJson(EFOS_PATH),
     downloadJson(ART69_PATH),
   ]);
-  state.efos = toMap(efosBlob.rows);
-  state.art69 = toMap(art69Blob.rows);
+  // Validate both blobs before mutating `state`, so a bad refresh cannot
+  // replace a good in-memory list with an empty one.
+  const efos = parseRows(efosBlob, EFOS_PATH);
+  const art69 = parseRows(art69Blob, ART69_PATH);
+
+  state.efos = efos;
+  state.art69 = art69;
   state.loadedAt = Date.now();
   state.generatedAt = {
     efos: efosBlob.generatedAt || null,
@@ -104,14 +145,25 @@ async function ensureLoaded() {
   return state.loadPromise;
 }
 
+// A verdict is only valid for the SAT publication it was computed from, so the
+// generation is part of the key. `unknown` covers a legacy blob written before
+// the refresh function stamped `generatedAt`.
+function cacheKeyFor(list, rfc) {
+  const generation =
+    (list === "69b" ? state.generatedAt.efos : state.generatedAt.art69) ||
+    "unknown";
+  return `sat:${list}:${generation}:${rfc}`;
+}
+
 // ── Lista 69-B (EFOS) ────────────────────────────────────────────────────
 // Return shape matches sw-client.check69B exactly.
 async function check69B(rfc) {
-  const cacheKey = `sat:69b:${rfc}`;
+  await ensureLoaded();
+
+  const cacheKey = cacheKeyFor("69b", rfc);
   const cached = await redis.get(cacheKey).catch(() => null);
   if (cached) return JSON.parse(cached);
 
-  await ensureLoaded();
   const entry = state.efos.get(rfc) || null;
   const situacion = entry?.situacion || null;
 
@@ -137,11 +189,12 @@ async function check69B(rfc) {
 // ── Art. 69 — fiscal debt registry ───────────────────────────────────────
 // Return shape matches sw-client.checkArt69 exactly.
 async function checkArt69(rfc) {
-  const cacheKey = `sat:art69:${rfc}`;
+  await ensureLoaded();
+
+  const cacheKey = cacheKeyFor("art69", rfc);
   const cached = await redis.get(cacheKey).catch(() => null);
   if (cached) return JSON.parse(cached);
 
-  await ensureLoaded();
   const entry = state.art69.get(rfc) || null;
   const hasDebt = !!entry;
 

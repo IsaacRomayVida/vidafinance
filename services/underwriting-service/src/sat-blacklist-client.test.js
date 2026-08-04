@@ -50,6 +50,12 @@ beforeEach(() => {
   process.env.FIREBASE_STORAGE_BUCKET = "vida-finance.appspot.com";
   client.__resetForTests();
 
+  // clearAllMocks() clears calls but not implementations — reset the Redis
+  // stubs explicitly so a cache-shaped test cannot leak into the next one.
+  const redisMock = require("./redis-client");
+  redisMock.get.mockImplementation(async () => null);
+  redisMock.set.mockImplementation(async () => "OK");
+
   // Route downloads by path
   mockDownload.mockImplementation(async () => {
     throw new Error("mockDownload default — override in test");
@@ -161,5 +167,134 @@ describe("drop-in compatibility with sw-client", () => {
 describe("getSWToken", () => {
   it("throws a helpful error (not a valid operation for the local provider)", async () => {
     await expect(client.getSWToken()).rejects.toThrow(/no token concept/);
+  });
+});
+
+// ── Structurally-empty blob must not read as "nobody is blacklisted" ──────
+//
+// The header contract of this module is "We never silently pass when SAT data
+// is missing". A blob that is *absent* or *unparseable* honours that: download
+// or JSON.parse throws, employer-a's Promise.allSettled turns it into
+// { pass:false, skipped:true } and escalates to Stage 5.
+//
+// A blob that is present and parseable but carries no rows does not. It loads
+// as an empty Map, so every RFC lookup misses, so situacion is null and hasDebt
+// is false, and every employer in the country clears 69-B and Art. 69 screening
+// with pass:true — indistinguishable from a genuinely clean employer.
+describe("empty / structurally-invalid blob", () => {
+  function serveEfos(efosPayload) {
+    mockFile.mockImplementation((path) => ({
+      download: path.endsWith("efos.json")
+        ? makeDownload(efosPayload)
+        : makeDownload(ART69_BLOB),
+    }));
+  }
+  function serveArt69(art69Payload) {
+    mockFile.mockImplementation((path) => ({
+      download: path.endsWith("efos.json")
+        ? makeDownload(EFOS_BLOB)
+        : makeDownload(art69Payload),
+    }));
+  }
+
+  it("rejects rather than passing when the EFOS blob has zero rows", async () => {
+    serveEfos({ generatedAt: "2026-04-15T02:00:00.000Z", source: "x", rows: {} });
+    await expect(client.check69B("ANY_RFC")).rejects.toThrow(/0 rows/);
+  });
+
+  it("rejects rather than passing when the Art. 69 blob has zero rows", async () => {
+    serveArt69({ generatedAt: "2026-04-15T02:00:00.000Z", source: "x", rows: {} });
+    await expect(client.checkArt69("ANY_RFC")).rejects.toThrow(/0 rows/);
+  });
+
+  it("rejects when the EFOS blob has no `rows` key at all", async () => {
+    serveEfos({ generatedAt: "2026-04-15T02:00:00.000Z", source: "x" });
+    await expect(client.check69B("ANY_RFC")).rejects.toThrow(/sat\/efos\.json/);
+  });
+
+  it("rejects when the blob is valid JSON of the wrong shape (bare array)", async () => {
+    serveEfos([]);
+    await expect(client.check69B("ANY_RFC")).rejects.toThrow(/sat\/efos\.json/);
+  });
+
+  it("rejects when `rows` is an array instead of an rfc-keyed object", async () => {
+    // Object.entries() on an array yields index keys ("0", "1"), so the map
+    // loads "successfully" and no RFC can ever match it.
+    serveEfos({
+      generatedAt: "2026-04-15T02:00:00.000Z",
+      rows: [{ rfc: "DEFAULT_RFC", situacion: "DEFINITIVO" }],
+    });
+    await expect(client.check69B("DEFAULT_RFC")).rejects.toThrow(/sat\/efos\.json/);
+  });
+
+  it("does not write a pass into the Redis cache when the blob is empty", async () => {
+    const redisMock = require("./redis-client");
+    serveEfos({ generatedAt: "2026-04-15T02:00:00.000Z", rows: {} });
+    await client.check69B("ANY_RFC").catch(() => {});
+    expect(redisMock.set).not.toHaveBeenCalled();
+  });
+
+  it("keeps the last-good in-memory list when a later refresh returns empty", async () => {
+    // Warm up on good data.
+    expect((await client.check69B("DEFAULT_RFC")).hardReject).toBe(true);
+
+    // 4h later the scheduled reload picks up an empty blob. It must not
+    // overwrite the loaded table with an empty one.
+    serveEfos({ generatedAt: "2026-05-15T02:00:00.000Z", rows: {} });
+    jest.spyOn(Date, "now").mockReturnValue(Date.now() + 5 * 60 * 60 * 1000);
+    await client.check69B("DEFAULT_RFC").catch(() => {});
+    Date.now.mockRestore();
+
+    // Restore a healthy blob; the DEFINITIVO must still be known.
+    mockFile.mockImplementation((path) => ({
+      download: path.endsWith("efos.json")
+        ? makeDownload(EFOS_BLOB)
+        : makeDownload(ART69_BLOB),
+    }));
+    expect((await client.check69B("DEFAULT_RFC")).hardReject).toBe(true);
+  });
+});
+
+// ── Per-RFC Redis cache is not scoped to the dataset it was computed from ─
+//
+// check69B/checkArt69 cache under `sat:69b:<rfc>` / `sat:art69:<rfc>` for 24h
+// with nothing in the key identifying which SAT dataset produced the answer.
+// A pass computed while the blacklist was empty therefore keeps being served
+// for a full day after the data is restored.
+describe("cache is scoped to the dataset generation", () => {
+  it("does not serve a 69-B pass computed from a different dataset generation", async () => {
+    const redisMock = require("./redis-client");
+    // A pass banked under the legacy/other-generation key.
+    redisMock.get.mockImplementation(async (key) =>
+      key.includes("2026-04-15") ? null : JSON.stringify({ rfc: "DEFAULT_RFC", situacion: null, pass: true })
+    );
+
+    const result = await client.check69B("DEFAULT_RFC");
+    expect(result.pass).toBe(false);
+    expect(result.hardReject).toBe(true);
+  });
+
+  it("does not serve an Art. 69 pass computed from a different dataset generation", async () => {
+    const redisMock = require("./redis-client");
+    redisMock.get.mockImplementation(async (key) =>
+      key.includes("2026-04-15") ? null : JSON.stringify({ rfc: "DEBTOR_RFC", hasDebt: false, pass: true })
+    );
+
+    const result = await client.checkArt69("DEBTOR_RFC");
+    expect(result.pass).toBe(false);
+    expect(result.hasDebt).toBe(true);
+  });
+
+  it("still serves a cache hit written by the current dataset generation", async () => {
+    const redisMock = require("./redis-client");
+    await client.check69B("DEFAULT_RFC"); // populates state.generatedAt
+    const key = redisMock.set.mock.calls[0][0];
+    expect(key).toContain("2026-04-15T02:00:00.000Z");
+
+    redisMock.get.mockImplementation(async (k) =>
+      k === key ? JSON.stringify({ rfc: "DEFAULT_RFC", pass: false, cachedHit: true }) : null
+    );
+    const result = await client.check69B("DEFAULT_RFC");
+    expect(result.cachedHit).toBe(true);
   });
 });
