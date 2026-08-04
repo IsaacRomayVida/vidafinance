@@ -5,7 +5,6 @@ setBaseEnv();
 
 jest.mock('../lib/scToken', () => ({
   scTokenRaw: jest.fn().mockRejectedValue(new Error('scToken should not be called for a 401')),
-  scTokenProbe: jest.fn(),
 }));
 jest.mock('../lib/fetchClient', () => ({
   getFetch: jest.fn().mockRejectedValue(new Error('fetch should not be called for a 401')),
@@ -56,13 +55,12 @@ describe('requireInternal — every internal route', () => {
   }
 });
 
-test('the health, metrics and debug-routes endpoints are NOT behind requireInternal', async () => {
+// The unauthenticated surface is exactly two routes. /debug-routes used to be a
+// third; it and the other debug scaffolding are gone -- see debugRoutes.test.js.
+test('the health and metrics endpoints are NOT behind requireInternal', async () => {
   const health = await request(app).get('/health');
   expect(health.status).not.toBe(401);
 
   const metrics = await request(app).get('/metrics');
   expect(metrics.status).not.toBe(401);
-
-  const routes = await request(app).get('/debug-routes');
-  expect(routes.status).not.toBe(401);
 });

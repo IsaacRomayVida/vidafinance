@@ -53,47 +53,4 @@ function scTokenRaw() {
   });
 }
 
-// Diagnostic probe: same wire format as scTokenRawFromUrl but resolves with
-// full response metadata (status, headers, raw body) for /debug-connectivity.
-function scTokenProbe(tokenUrl, opts = {}) {
-  return new Promise((resolve, reject) => {
-    if (!tokenUrl) return reject(new Error('tokenUrl is required'));
-    let u;
-    try {
-      u = new URL(tokenUrl);
-    } catch (e) {
-      return reject(new Error('tokenUrl invalid: ' + e.message));
-    }
-    const start = Date.now();
-    const req = https.request({
-      host: u.hostname,
-      port: u.port || 443,
-      path: u.pathname + u.search,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-REST-PRODUCT': opts.product,
-        'X-REST-APPLICATION': opts.application,
-        'Content-Length': '0',
-      },
-      timeout: opts.timeout || 15000,
-    }, (res) => {
-      let body = '';
-      res.on('data', (c) => { body += c; });
-      res.on('end', () => {
-        resolve({
-          status: res.statusCode,
-          headers: res.headers,
-          body,
-          latencyMs: Date.now() - start,
-        });
-      });
-    });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(new Error('probe timeout')); });
-    req.end();
-  });
-}
-
-module.exports = { scTokenRaw, scTokenRawFromUrl, scTokenProbe };
+module.exports = { scTokenRaw, scTokenRawFromUrl };
