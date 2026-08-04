@@ -85,3 +85,25 @@ test('an unknown loanId is a 404, writes nothing, and queues no notification', a
   expect(admin.__all('repayments')).toHaveLength(0);
   expect(Queue.allAdded).toHaveLength(0);
 });
+
+// A loan already closed by the OTHER repayment channel -- processPayroll.ts's
+// employer-CSV path, which writes the canonical 'repaid' spelling and whose
+// onLoanStatusChange trigger already restored the employee's availableCredit
+// once for that closure -- must be recognised as settled here too. The
+// SoftCrédito daily sync (dailyLoanCheck -> softcredito-adapter's
+// /internal/sync-repayments) can observe its own registered deduction as
+// "completed" for a loan the payroll-CSV path already closed first (the two
+// channels race for the same underlying payroll cycle), and this route is the
+// one that decides whether that second signal moves any more money.
+test('replaying against a loan already closed as `repaid` by the payroll-CSV path does not double-credit', async () => {
+  admin.__seed('loans', 'loan_3', { status: 'repaid', amount: 2500 });
+  admin.__seed('employees', 'emp_3', { availableCredit: 2800 }); // already restored once by the repaid trigger
+
+  const res = await postRepayment({ loanId: 'loan_3', employeeId: 'emp_3', amount: 2500, ref: 'SC-REF-3' });
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual({ success: true, status: 'already_paid' });
+  expect(admin.__get('employees', 'emp_3').availableCredit).toBe(2800);
+  expect(admin.__all('repayments')).toHaveLength(0);
+  expect(Queue.allAdded).toHaveLength(0);
+});
