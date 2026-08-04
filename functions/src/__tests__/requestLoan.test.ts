@@ -104,8 +104,18 @@ function makeLoansChain(
   clauses: Array<{ field: string; value: unknown }>,
   state: { activeLoans: Array<Record<string, unknown>>; outstandingLoansCount: number },
   employerActiveLoansCountQuery: { _kind: 'employerActiveLoansCountQuery' }
-): { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } {
-  const chain: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
+): { _kind: 'loansQuery'; where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } {
+  const chain: {
+    _kind: 'loansQuery';
+    where: jest.Mock;
+    limit: jest.Mock;
+    get: jest.Mock;
+    count: jest.Mock;
+  } = {
+    // Tagged so the runTransaction mock's `get()` can resolve it: the
+    // per-employee duplicate-application guard is read through `tx.get()`
+    // inside the transaction now, not only through a plain `.get()` before it.
+    _kind: 'loansQuery',
     where: jest.fn((field: string, _op: string, value: unknown) =>
       makeLoansChain([...clauses, { field, value }], state, employerActiveLoansCountQuery)
     ),
@@ -225,14 +235,23 @@ function buildMockDb({
     ),
   };
 
+  // Same tagging, for the same reason: the borrower's credit line is read once
+  // before the transaction (the cheap ceiling check) and again via
+  // `tx.get(empRef)` inside it, against the balance the decrement will apply
+  // to. `currentEmployee` is mutable so a test can move the line BETWEEN those
+  // two reads — which is exactly what a concurrent second request does.
+  let currentEmployee = employee;
+  const employeeDocRef = {
+    _kind: 'employeeDocRef' as const,
+    get: jest.fn().mockImplementation(() =>
+      Promise.resolve({ exists: currentEmployee !== null, data: () => currentEmployee })
+    ),
+  };
+
   return {
     collection: jest.fn().mockImplementation((name: string) => {
       if (name === 'employees') {
-        return {
-          doc: jest.fn().mockReturnValue({
-            get: jest.fn().mockResolvedValue({ exists: employee !== null, data: () => employee }),
-          }),
-        };
+        return { doc: jest.fn().mockReturnValue(employeeDocRef) };
       }
       if (name === 'employers') {
         return { doc: jest.fn().mockReturnValue(employerDocRef) };
@@ -281,18 +300,27 @@ function buildMockDb({
         fn: (txn: { get: jest.Mock; update: jest.Mock; set: jest.Mock }) => Promise<void>
       ) => {
         const txn = {
-          get: jest.fn((refOrQuery: { _kind?: string } | undefined) => {
+          get: jest.fn((refOrQuery: { _kind?: string; get?: () => unknown } | undefined) => {
             if (refOrQuery?._kind === 'employerDocRef') {
               return Promise.resolve({ exists: currentEmployer !== null, data: () => currentEmployer });
             }
             if (refOrQuery?._kind === 'employerActiveLoansCountQuery') {
               return Promise.resolve({ data: () => ({ count: activeEmployerLoansCount }) });
             }
+            if (refOrQuery?._kind === 'employeeDocRef') {
+              return Promise.resolve({ exists: currentEmployee !== null, data: () => currentEmployee });
+            }
+            // The per-employee duplicate-application query. Answered by the
+            // chain's own clause-aware `get()` so the transactional read and
+            // the pre-transaction read cannot diverge in the mock.
+            if (refOrQuery?._kind === 'loansQuery') {
+              return refOrQuery.get!();
+            }
             throw new Error('Mock tx.get() called with an unrecognized ref/query');
           }),
           update: jest.fn((ref: { _kind?: string }, data: Record<string, unknown>) => {
             if (ref?._kind === 'employerDocRef') currentEmployer = { ...(currentEmployer ?? {}), ...data };
-            transactionCalls.push({ op: 'update', data });
+            transactionCalls.push({ op: 'update', ref: ref?._kind, data });
           }),
           set: jest.fn((ref: { _kind?: string }, data: unknown) =>
             transactionCalls.push({ op: 'set', ref: ref?._kind, data })
@@ -309,6 +337,16 @@ function buildMockDb({
     // reaching into module internals.
     _setConfigData: (data: Record<string, unknown> | null) => {
       currentConfigData = data;
+    },
+    // Lets a test move the borrower's own record — their credit line, or the
+    // set of loans they already have open — between requestLoan's
+    // pre-transaction reads and the transactional ones, which is what a second
+    // request landing concurrently does.
+    _setEmployee: (data: Record<string, unknown> | null) => {
+      currentEmployee = data;
+    },
+    _setActiveLoans: (loans: Array<Record<string, unknown>>) => {
+      loansState.activeLoans = loans;
     },
   };
 }
@@ -1145,6 +1183,173 @@ describe('requestLoan (deployed handler in index.ts)', () => {
           (c) => c.op === 'update' && (c.data as Record<string, unknown>)?.['maxActiveSlots'] !== undefined
         );
         expect(seedWrite).toBeUndefined();
+      });
+    });
+  });
+
+  // The borrower-side guards, tested against the state at COMMIT time rather
+  // than the state at request time.
+  //
+  // requestLoan reads the credit line and the borrower's open-application
+  // query near the top of the handler, then calls underwriting — a call it
+  // allows 30 seconds — and only then opens the transaction that writes the
+  // loan and decrements the line. Both guards used to be decided from those
+  // early reads and never revisited, so anything the borrower's OTHER
+  // in-flight request committed during the call was invisible: two overlapping
+  // requests each saw "no open application, 5,000 available" and both
+  // committed. Nothing upstream stops that — the 3-per-day limit is an atomic
+  // INCR, so three simultaneous calls all pass it — and the result was three
+  // 5,000-peso loans against one 5,000-peso line, with `availableCredit` at
+  // -10,000 because `FieldValue.increment` never looks at the balance.
+  //
+  // The mocked ML call below IS that window: it mutates the borrower's record
+  // mid-request, the way a concurrent request committing would, and then fails
+  // so the loan still takes the ordinary `under_review` origination path.
+  describe('a concurrent request cannot overdraw the line or double-originate', () => {
+    const ML_URL = 'https://ml.internal';
+
+    async function landConcurrentRequestDuringUnderwriting(mutate: () => void) {
+      process.env['ML_SERVICE_URL'] = ML_URL;
+      const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
+      fetchModule.mockImplementation(async () => {
+        mutate();
+        throw new Error('ECONNRESET');
+      });
+    }
+
+    async function callRequestLoan() {
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      return fn({ auth, data: realClientPayload });
+    }
+
+    const creditHold = () =>
+      mockDb._transactionCalls.find(
+        (c) => c.op === 'update' && (c.data as Record<string, unknown>)?.['availableCredit'] !== undefined
+      );
+
+    it('refuses when the line was spent between the ceiling check and the commit', async () => {
+      await landConcurrentRequestDuringUnderwriting(() =>
+        mockDb._setEmployee({ ...mockEmployee, availableCredit: 0 })
+      );
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'invalid-argument',
+        message: 'El monto excede tu crédito disponible',
+      });
+    });
+
+    it('writes no loan and takes no hold when the line was spent underneath it', async () => {
+      await landConcurrentRequestDuringUnderwriting(() =>
+        mockDb._setEmployee({ ...mockEmployee, availableCredit: 0 })
+      );
+
+      await expect(callRequestLoan()).rejects.toThrow();
+      // Nothing commits: the throw is inside the transaction, so the loan
+      // document, the credit hold and the review_queue row all roll back
+      // together.
+      expect(mockDb._transactionCalls.some((c) => c.ref === 'loanDocRef')).toBe(false);
+      expect(creditHold()).toBeUndefined();
+    });
+
+    it('refuses a partial overdraw, not only a fully spent line', async () => {
+      // 1,000 requested against 999 left. The old code compared against the
+      // 5,000 it read before underwriting and committed anyway.
+      await landConcurrentRequestDuringUnderwriting(() =>
+        mockDb._setEmployee({ ...mockEmployee, availableCredit: 999 })
+      );
+
+      await expect(callRequestLoan()).rejects.toMatchObject({ code: 'invalid-argument' });
+    });
+
+    it('refuses when the borrower opened another application during the same window', async () => {
+      await landConcurrentRequestDuringUnderwriting(() =>
+        mockDb._setActiveLoans([{ status: 'pending', employeeId: 'user-123' }])
+      );
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'DUPLICATE_LOAN_APPLICATION',
+      });
+      expect(mockDb._transactionCalls.some((c) => c.ref === 'loanDocRef')).toBe(false);
+    });
+
+    it('still originates when nothing moved during the window', async () => {
+      // The guard must refuse a changed balance, not every balance: this is
+      // the same ML-outage path as the cases above, with the borrower's record
+      // left alone.
+      await landConcurrentRequestDuringUnderwriting(() => {});
+
+      const result = (await callRequestLoan()) as { status: string };
+
+      expect(result.status).toBe('under_review');
+      expect(creditHold()).toBeDefined();
+    });
+  });
+
+  // `emp` is untyped Firestore data and both credit ceilings were bare
+  // comparisons against it. JavaScript answers `1000 > undefined` false and
+  // `1000 > NaN` false, so a borrower carrying neither number had no ceiling
+  // at all rather than a zero one. That state is reachable: firestore.rules
+  // forbids the client from writing the credit fields, so they exist only once
+  // onEmployeeDocCreated has derived them — and that write is inside a
+  // try/catch that logs and returns, while the role claim is granted on the
+  // line above it.
+  describe('a credit line that cannot be read is refused, not treated as unlimited', () => {
+    async function callRequestLoan() {
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      return fn({ auth, data: realClientPayload });
+    }
+
+    it('refuses a borrower whose availableCredit was never derived', async () => {
+      const { availableCredit: _absent, ...noCreditLine } = mockEmployee;
+      mockDb = buildMockDb({ employee: noCreditLine });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'CREDIT_LINE_NOT_ESTABLISHED',
+      });
+      expect(mockDb._transactionCalls).toHaveLength(0);
+    });
+
+    it('refuses a borrower whose monthlySalary is missing, so the salary cap is NaN', async () => {
+      const { monthlySalary: _absent, ...noSalary } = mockEmployee;
+      mockDb = buildMockDb({ employee: noSalary });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'CREDIT_LINE_NOT_ESTABLISHED',
+      });
+    });
+
+    it('refuses a credit line stored as something other than a number', async () => {
+      mockDb = buildMockDb({ employee: { ...mockEmployee, availableCredit: '5000' } });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'CREDIT_LINE_NOT_ESTABLISHED',
+      });
+    });
+
+    it('does not tell the borrower they were declined for credit', async () => {
+      // The line failed to be established on OUR side. Surfacing that as a
+      // credit ceiling refusal would tell a borrower with a perfectly good
+      // salary that they asked for too much.
+      const { availableCredit: _absent, ...noCreditLine } = mockEmployee;
+      mockDb = buildMockDb({ employee: noCreditLine });
+
+      await expect(callRequestLoan()).rejects.not.toMatchObject({
+        message: 'El monto excede tu crédito disponible',
+      });
+    });
+
+    it('a zero credit line is still a real line, and refuses on the ceiling', async () => {
+      mockDb = buildMockDb({ employee: { ...mockEmployee, availableCredit: 0 } });
+
+      await expect(callRequestLoan()).rejects.toMatchObject({
+        code: 'invalid-argument',
+        message: 'El monto excede tu crédito disponible',
       });
     });
   });

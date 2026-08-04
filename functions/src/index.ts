@@ -447,6 +447,14 @@ interface RequestLoanData {
 const CURP_PREFIX_LENGTH = 4;
 
 /**
+ * The refusal a borrower sees when the amount is above their line. Declared
+ * once because the ceiling is now tested twice — cheaply before the
+ * transaction, and again inside it against the balance the write will actually
+ * decrement — and the borrower must not be able to tell the two apart.
+ */
+const CREDIT_EXCEEDED_MESSAGE = 'El monto excede tu crédito disponible';
+
+/**
  * Refuses the loan when the employer has restricted who may borrow under its
  * name and this borrower is not one of them.
  *
@@ -613,17 +621,55 @@ export const requestLoan = onCall(
         // an employer's configuration.
         assertBorrowerIdentityVerified(emp, uid);
 
-        if (amount > emp['availableCredit'])
-          throw new HttpsError('invalid-argument', 'El monto excede tu crédito disponible');
-        if (amount > Math.round(emp['monthlySalary'] * EMPLOYEE_CREDIT_SALARY_RATIO))
+        // Both credit ceilings now fail CLOSED on a field that is not a finite
+        // number. They were bare comparisons against untyped Firestore data —
+        // `amount > emp['availableCredit']` and
+        // `amount > Math.round(emp['monthlySalary'] * ratio)` — and JavaScript
+        // answers BOTH of those `false` when the field is missing: `5000 >
+        // undefined` is false, and `5000 > NaN` is false. A borrower whose
+        // document carried neither number therefore had no ceiling at all, not
+        // a zero one, and could draw the full MAX_LOAN_AMOUNT.
+        //
+        // That state is reachable, not hypothetical. firestore.rules forbids the
+        // client from writing the credit fields at all (noSelfAssignedCredit),
+        // so `availableCredit` exists only once onEmployeeDocCreated has derived
+        // and written it — and that write is inside a try/catch that logs
+        // "Failed to set derived credit limit" and returns normally. The role
+        // claim is set BEFORE it, on the line above, so a borrower whose
+        // derivation failed keeps a working account with an unbounded credit
+        // gate. Refusing is the only safe answer: a credit line we cannot read
+        // is not a credit line we can lend against.
+        const availableCredit = emp['availableCredit'];
+        const monthlySalary = emp['monthlySalary'];
+        if (
+          typeof availableCredit !== 'number' ||
+          !Number.isFinite(availableCredit) ||
+          typeof monthlySalary !== 'number' ||
+          !Number.isFinite(monthlySalary)
+        ) {
+          logger.error('Loan refused: borrower credit line is not readable', {
+            uid,
+            hasAvailableCredit: typeof availableCredit === 'number',
+            hasMonthlySalary: typeof monthlySalary === 'number',
+            service: 'functions',
+          });
+          throw new HttpsError('failed-precondition', VidaErrorCode.CREDIT_LINE_NOT_ESTABLISHED);
+        }
+
+        if (amount > availableCredit) throw new HttpsError('invalid-argument', CREDIT_EXCEEDED_MESSAGE);
+        if (amount > Math.round(monthlySalary * EMPLOYEE_CREDIT_SALARY_RATIO))
           throw new HttpsError('invalid-argument', 'El monto excede el 30% de tu salario mensual');
 
-        const active = await db
+        // Built once, read TWICE: here for a fast refusal that costs the
+        // borrower nothing, and again inside the transaction below, which is
+        // the read that actually decides. See the transaction for why this one
+        // cannot.
+        const activeEmployeeLoansQuery = db
           .collection('loans')
           .where('employeeId', '==', uid)
           .where('status', 'in', ACTIVE_LOAN_STATUSES)
-          .limit(1)
-          .get();
+          .limit(1);
+        const active = await activeEmployeeLoansQuery.get();
         if (!active.empty)
           throw new HttpsError('failed-precondition', VidaErrorCode.DUPLICATE_LOAN_APPLICATION);
 
@@ -1228,11 +1274,11 @@ export const requestLoan = onCall(
           // decide whether this loan is allowed to exist — the employer's
           // cap and how many of its slots are already occupied — happen
           // INSIDE this transaction, alongside the write that would occupy
-          // one more. A read taken before the transaction (as the guards
-          // above deliberately do NOT do for this check) is decorative for a
+          // one more. A read taken before the transaction is decorative for a
           // cap: two concurrent requests would both read N-1-of-N used and
           // both commit, overshooting the cap by exactly the race this
-          // change exists to prevent.
+          // change exists to prevent. The per-borrower guards below are here
+          // for the same reason, and used to be the counter-example.
           //
           // `tx.get()` on a Query (here, an aggregate `.count()`) is
           // documented by the Admin SDK to hold a pessimistic lock on every
@@ -1245,10 +1291,52 @@ export const requestLoan = onCall(
           //
           // Both reads happen before any write in this transaction, per
           // Firestore's requirement that all reads precede all writes.
-          const [employerTxSnap, activeCountSnap] = await Promise.all([
-            tx.get(employerRef),
-            tx.get(activeEmployerLoansCountQuery),
-          ]);
+          const [employerTxSnap, activeCountSnap, empTxSnap, activeEmployeeLoansSnap] =
+            await Promise.all([
+              tx.get(employerRef),
+              tx.get(activeEmployerLoansCountQuery),
+              tx.get(empRef),
+              tx.get(activeEmployeeLoansQuery),
+            ]);
+
+          // The two PER-BORROWER guards, re-read here for exactly the reason
+          // the employer cap above already is. Both were decided far earlier in
+          // this handler, from reads taken before the underwriting call — a
+          // window of hundreds of milliseconds, sometimes the full 30-second
+          // /underwrite timeout — and neither was ever re-checked against the
+          // writes that act on them.
+          //
+          // So two overlapping requestLoan calls from the same borrower both
+          // saw "no open application" and "5,000 available", and both
+          // committed. Nothing upstream stops that: the rate limit is 3 per
+          // borrower per day and is an atomic INCR, so three simultaneous
+          // calls all pass it, and the employer slot cap defaults to 3. The
+          // result is three separate 5,000-peso loans — each one individually
+          // inside the borrower's 5,000-peso line, all three disbursable —
+          // and an `availableCredit` of -10,000, because
+          // `FieldValue.increment(-amount)` never looks at the balance it is
+          // decrementing. A double-click on the wizard's submit button is
+          // enough to reproduce it; no crafted client is required.
+          //
+          // `tx.get()` on these queries takes the same pessimistic lock the
+          // slot-cap count relies on, so the loser of the race retries against
+          // the winner's committed write and then refuses on the freshly-read
+          // state rather than on the stale one it opened with.
+          if (!activeEmployeeLoansSnap.empty)
+            throw new HttpsError('failed-precondition', VidaErrorCode.DUPLICATE_LOAN_APPLICATION);
+
+          // Only where a hold is actually taken. A `rejected` loan consumes no
+          // credit (`holdCredit` above), and refusing to write one because the
+          // line moved underneath us would discard an adverse-action record to
+          // protect a balance the write was never going to touch.
+          if (holdCredit) {
+            const txAvailableCredit = (empTxSnap.data() ?? {})['availableCredit'];
+            if (typeof txAvailableCredit !== 'number' || !Number.isFinite(txAvailableCredit))
+              throw new HttpsError('failed-precondition', VidaErrorCode.CREDIT_LINE_NOT_ESTABLISHED);
+            if (amount > txAvailableCredit)
+              throw new HttpsError('invalid-argument', CREDIT_EXCEEDED_MESSAGE);
+          }
+
           const employerTxData = employerTxSnap.data() ?? {};
           const storedMaxSlots = employerTxData['maxActiveSlots'];
           const maxSlots =

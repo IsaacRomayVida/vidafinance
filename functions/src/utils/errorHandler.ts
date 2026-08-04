@@ -29,6 +29,16 @@ export enum VidaErrorCode {
   // must never be surfaced to the borrower as one — the remedy is to finish
   // identity verification, not to apply again later or for less.
   IDENTITY_NOT_VERIFIED = 'IDENTITY_NOT_VERIFIED',
+  // The borrower's credit line could not be read — `availableCredit` or
+  // `monthlySalary` is absent or not a number on their employee document.
+  // That is our own bookkeeping having failed (onEmployeeDocCreated derives
+  // both and swallows its own write error), not a judgement about the
+  // borrower, so it is deliberately distinct from every ceiling refusal: the
+  // remedy is for VIDA to establish the line, not for them to apply for less.
+  // Until this code existed that state was not refused at all — the ceiling
+  // comparisons evaluated `false` against `undefined`/`NaN` and let the loan
+  // straight through.
+  CREDIT_LINE_NOT_ESTABLISHED = 'CREDIT_LINE_NOT_ESTABLISHED',
 }
 
 interface ErrorContext {

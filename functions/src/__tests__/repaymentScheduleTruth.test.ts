@@ -142,7 +142,17 @@ const EMPLOYER = {
 };
 
 function makeQuery() {
-  const query: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
+  const query: {
+    _kind: 'loansQuery';
+    where: jest.Mock;
+    limit: jest.Mock;
+    get: jest.Mock;
+    count: jest.Mock;
+  } = {
+    // The per-employee duplicate-application guard is read through `tx.get()`
+    // inside the loan transaction as well as before it, so the query object has
+    // to be recognizable to the transaction mock below.
+    _kind: 'loansQuery',
     where: jest.fn(),
     limit: jest.fn(),
     get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
@@ -169,14 +179,17 @@ function buildMockDb() {
     get: jest.fn().mockResolvedValue({ exists: true, data: () => EMPLOYER }),
   };
 
+  // Read once before the loan transaction (the credit ceiling) and again
+  // inside it, against the balance the decrement actually applies to.
+  const employeeDocRef = {
+    _kind: 'employeeDocRef' as const,
+    get: jest.fn().mockResolvedValue({ exists: true, data: () => EMPLOYEE }),
+  };
+
   return {
     collection: jest.fn().mockImplementation((name: string) => {
       if (name === 'employees') {
-        return {
-          doc: jest.fn().mockReturnValue({
-            get: jest.fn().mockResolvedValue({ exists: true, data: () => EMPLOYEE }),
-          }),
-        };
+        return { doc: jest.fn().mockReturnValue(employeeDocRef) };
       }
       if (name === 'employers') {
         return { doc: jest.fn().mockReturnValue(employerDocRef) };
@@ -252,6 +265,12 @@ function buildMockDb() {
             }
             if (refOrQuery?._kind === 'disbursementQueueDocRef') {
               return Promise.resolve({ exists: false, data: () => undefined });
+            }
+            if (refOrQuery?._kind === 'employeeDocRef') {
+              return Promise.resolve({ exists: true, data: () => EMPLOYEE });
+            }
+            if (refOrQuery?._kind === 'loansQuery') {
+              return loansQuery.get();
             }
             throw new Error('Mock tx.get() called with an unrecognized ref/query');
           }),
