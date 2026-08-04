@@ -287,6 +287,22 @@ describe('performRefresh', () => {
     expect(mockSave).not.toHaveBeenCalled();
   });
 
+  it('refuses to overwrite the blacklist when the source CSV has zero data rows', async () => {
+    // Simulates SAT publishing an empty file / HTML placeholder / truncated
+    // response during their monthly rotation. HTTP 200, but no data rows —
+    // the /rows.length>0 ? rate : 0/ guard used to treat this as "0% parse
+    // failures" and happily overwrite the last-good blacklist with {}.
+    mockFetch
+      .mockImplementationOnce(async () => makeResp('rfc,nombre,situacion\n')) // header only, 0 rows
+      .mockImplementationOnce(async () =>
+        makeResp('rfc,nombre,tipo_adeudo,monto\nAAAA010101AAA,X,Firme,1\n')
+      );
+
+    await expect(performRefresh()).rejects.toThrow(/0 data rows/);
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(mockMetaSet).not.toHaveBeenCalled();
+  });
+
   it('respects url overrides from opts', async () => {
     mockFetch.mockImplementation(() =>
       makeResp('rfc,nombre,situacion\nAAAA010101AAA,X,DEFINITIVO\n')
