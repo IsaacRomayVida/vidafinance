@@ -120,8 +120,18 @@ async function withBureauFallback({ mode, liveFn, log }) {
     const reason = classifyError(err);
     fallbackCounter.inc({ mode, reason });
     if (log && typeof log.warn === 'function') {
+      // NOT err.message. scCall() builds that from the raw upstream body, and
+      // a bureau validation error quotes the CURP and full name it was queried
+      // with -- so this line wrote a national ID and a name into the log
+      // stream in clear on every optimistic/pessimistic fallback.
+      //
+      // Deliberately not "log the body and let the formatter scrub it": this
+      // module is handed whatever `log` its caller passes, so it cannot assume
+      // a redacting logger. Status + classified reason is the same detail the
+      // already-fixed /bureau/query and /curp/validate handlers log, and is
+      // what the fallback metric is labelled by.
       log.warn(
-        { mode, reason, error: err && err.message },
+        { mode, reason, upstreamStatus: err && err.status },
         'SoftCredito bureau call failed — returning synthesized fallback',
       );
     }

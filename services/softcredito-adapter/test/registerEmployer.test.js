@@ -116,7 +116,15 @@ describe('POST /internal/register-employer — upstream failure', () => {
     const res = await postRegisterEmployer(VALID_BODY);
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/RFC_ALREADY_REGISTERED/);
+    // The vendor's machine code survives; the body it came in -- which echoes
+    // the RFC and contact email we sent -- does not. See
+    // test/upstreamPiiLeak.test.js.
+    expect(res.body).toEqual({
+      error: 'upstream_error',
+      reason: 'upstream_error_code',
+      code: 'RFC_ALREADY_REGISTERED',
+      upstreamStatus: 409,
+    });
     expect(admin.__get('employers', 'employer_1').softcreditoEmployerId).toBeUndefined();
     expect(admin.__all('softcredito_employers')).toHaveLength(0);
   });

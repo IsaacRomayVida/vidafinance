@@ -21,8 +21,20 @@ const { scTokenRaw } = require('./lib/scToken');
 const { getFetch } = require('./lib/fetchClient');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 const { parseBureauMode, withBureauFallback, classifyError } = require('./lib/bureauFallback');
+const { redactPii } = require('./lib/piiRedact');
+const { markUpstreamFailure, toClientError } = require('./lib/upstreamError');
 
-const log = pino({ name: 'vida-softcredito-adapter', level: process.env.LOG_LEVEL || 'info', formatters: { level: (label) => ({ level: label }) } });
+// `formatters.log` runs on every merged log object, which makes it the one
+// choke point PII has to pass through on its way into the log stream. There
+// was no `redact` config here to extend, and pino's `redact` would not have
+// covered this anyway: it matches statically declared paths, and the objects
+// most in need of scrubbing are upstream response bodies whose shape
+// SoftCrédito chooses. See lib/piiRedact.js.
+const log = pino({
+  name: 'vida-softcredito-adapter',
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: { level: (label) => ({ level: label }), log: redactPii },
+});
 
 // Fail-fast on invalid BUREAU_MODE. Default is 'live' (no behavior change).
 const BUREAU_MODE = parseBureauMode(process.env.BUREAU_MODE);
@@ -97,28 +109,70 @@ async function scToken() {
 const SC_READ_TIMEOUT_MS = () => Number(process.env.SC_HTTP_TIMEOUT_MS) || 15000;
 
 async function scCall(method, path, body, callOpts = {}) {
-  const fetch = await getFetch();
-  const token = await scToken();
-  const opts = {
-    method,
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
-  };
-  if (body) opts.body = JSON.stringify(body);
-  if (callOpts.timeoutMs) opts.signal = AbortSignal.timeout(callOpts.timeoutMs);
-  const r = await fetch(process.env.SOFTCREDITO_API_URL + path, opts);
-  if (r.status === 429) {
-    alertRateLimit(SERVICE_NAME, 'SoftCredito');
+  try {
+    const fetch = await getFetch();
+    const token = await scToken();
+    const opts = {
+      method,
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+    };
+    if (body) opts.body = JSON.stringify(body);
+    if (callOpts.timeoutMs) opts.signal = AbortSignal.timeout(callOpts.timeoutMs);
+    const r = await fetch(process.env.SOFTCREDITO_API_URL + path, opts);
+    if (r.status === 429) {
+      alertRateLimit(SERVICE_NAME, 'SoftCredito');
+    }
+    const d = await r.json();
+    if (!r.ok) {
+      // The status is carried on the error object so failure paths can log which
+      // upstream status we got without logging the response body, which for the
+      // bureau and CURP endpoints echoes the queried subject's CURP and name.
+      //
+      // The parsed body rides along on `upstreamBody` rather than only inside
+      // the message string, so lib/upstreamError.js can lift a machine-readable
+      // code out of it without anyone having to re-parse free text.
+      const err = new Error('SC API ' + path + ': ' + JSON.stringify(d));
+      err.status = r.status;
+      err.upstreamBody = d;
+      throw err;
+    }
+    return d;
+  } catch (err) {
+    // Everything thrown from inside this function has touched the upstream and
+    // is therefore unsafe to echo to a caller: the !r.ok branch carries the
+    // response body; r.json() throws a JSON parse error whose message quotes a
+    // slice of the offending input; the transport and the token fetch can
+    // quote a URL or our own credentials. Tagging here -- rather than at each
+    // call site -- is what makes "did this text come from outside?" a property
+    // of the error itself. See lib/upstreamError.js.
+    throw markUpstreamFailure(err, path);
   }
-  const d = await r.json();
-  if (!r.ok) {
-    // The status is carried on the error object so failure paths can log which
-    // upstream status we got without logging the response body, which for the
-    // bureau and CURP endpoints echoes the queried subject's CURP and name.
-    const err = new Error('SC API ' + path + ': ' + JSON.stringify(d));
-    err.status = r.status;
-    throw err;
-  }
-  return d;
+}
+
+// Answer a failed /internal/* request without handing the caller anything the
+// upstream wrote. The full detail goes to the operator instead, through the
+// logger above, whose formatter hashes PII-named fields and scrubs
+// identifier-shaped substrings -- redacted, not dropped.
+//
+// Status codes are unchanged (500): payment-server and functions/src/index.ts
+// both branch on `!resp.ok` and nothing finer.
+function respondUpstreamFailure(res, err, route) {
+  const payload = toClientError(err);
+  log.error(
+    {
+      route,
+      reason: payload.reason || 'local_error',
+      upstreamStatus: err && err.status,
+      upstreamCode: payload.code,
+      // For an upstream failure the parsed body IS the detail, and it survives
+      // the log formatter in structured form. For a local error there is no
+      // body, so the message is the only detail there is.
+      upstreamBody: err && err.upstreamBody,
+      detail: err && err.isUpstreamFailure && err.upstreamBody ? undefined : err && err.message,
+    },
+    'request failed',
+  );
+  res.status(500).json(payload);
 }
 
 
@@ -176,7 +230,7 @@ app.post('/internal/disburse', requireInternal, async (req, res) => {
     });
     res.json({ success: true, ref: r.trackingCode, transferId: r.transferId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    respondUpstreamFailure(res, err, '/internal/disburse');
   }
 });
 
@@ -203,7 +257,7 @@ app.post('/internal/register-employer', requireInternal, async (req, res) => {
     });
     res.json({ success: true, employerId: r.employerId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    respondUpstreamFailure(res, err, '/internal/register-employer');
   }
 });
 
@@ -225,7 +279,7 @@ app.post('/internal/register-deduction', requireInternal, async (req, res) => {
     await db.collection('loans').doc(loanId).update({ softcreditoDeductionId: r.deductionId });
     res.json({ success: true, deductionId: r.deductionId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    respondUpstreamFailure(res, err, '/internal/register-deduction');
   }
 });
 
@@ -258,7 +312,7 @@ app.post('/internal/sync-repayments', requireInternal, async (req, res) => {
     }
     res.json({ success: true, synced });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    respondUpstreamFailure(res, err, '/internal/sync-repayments');
   }
 });
 

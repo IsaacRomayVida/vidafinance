@@ -106,6 +106,12 @@ describe('POST /internal/disburse — happy path', () => {
 });
 
 describe('POST /internal/disburse — upstream failure', () => {
+  // These used to assert on the upstream response body echoed back verbatim
+  // (`SC API /spei/transfer: {...}`). That body quotes the fields we sent --
+  // recipientName and destinationClabe -- and payment-server persists this
+  // string to loans.disbursementError and incident_log and Slack-alerts it, so
+  // the free text is gone. The status code is unchanged; what replaces the
+  // message is a stable machine-readable shape. See test/upstreamPiiLeak.test.js.
   test('SoftCrédito rejecting the transfer (non-2xx) is a 500, and no Firestore write happens', async () => {
     seedLoanAndQueue('loan_2');
     fetchMock.mockResolvedValueOnce(jsonResponse(400, { error_code: 'INVALID_CLABE', message: 'bad clabe' }));
@@ -113,8 +119,12 @@ describe('POST /internal/disburse — upstream failure', () => {
     const res = await postDisburse({ ...VALID_BODY, loanId: 'loan_2' });
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/^SC API \/spei\/transfer: /);
-    expect(res.body.error).toMatch(/INVALID_CLABE/);
+    expect(res.body).toEqual({
+      error: 'upstream_error',
+      reason: 'upstream_error_code',
+      code: 'INVALID_CLABE', // the vendor's code survives; its free text does not
+      upstreamStatus: 400,
+    });
     expect(admin.__get('loans', 'loan_2').status).toBe('approved'); // unchanged
     expect(admin.__all('spei_log')).toHaveLength(0);
   });
@@ -130,7 +140,10 @@ describe('POST /internal/disburse — upstream failure', () => {
     const res = await postDisburse({ ...VALID_BODY, loanId: 'loan_3' });
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/Unexpected token/);
+    // No upstream status and no code: the response never parsed, so there was
+    // no body to lift one from. The parse error's own message is withheld --
+    // Node embeds a slice of the offending input in it.
+    expect(res.body).toEqual({ error: 'upstream_error', reason: 'network_error' });
     expect(admin.__all('spei_log')).toHaveLength(0);
   });
 
@@ -141,7 +154,7 @@ describe('POST /internal/disburse — upstream failure', () => {
     const res = await postDisburse({ ...VALID_BODY, loanId: 'loan_4' });
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('request timed out');
+    expect(res.body).toEqual({ error: 'upstream_error', reason: 'timeout' });
     expect(admin.__all('spei_log')).toHaveLength(0);
   });
 });
