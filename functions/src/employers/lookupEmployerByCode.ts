@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { getFirestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
@@ -55,14 +56,49 @@ export const lookupEmployerByCode = onCall(
       });
 
       const db = getFirestore();
-      const snap = await db
-        .collection('employers')
-        .where('employerCode', '==', code)
-        .limit(1)
-        .get();
+      // No `.limit(1)` here on purpose. #568 fixed the mint path (employerCode
+      // is now server-minted and reserved in the `employerCodes` ledger), but
+      // it did nothing about the existing book: every code minted by the old
+      // client-side generator (Onboarding.tsx's `generateEmployerCode`, now
+      // deleted) went straight onto the employer document with no uniqueness
+      // check at all, and the ledger has no record of any of them. A
+      // `.limit(1)` read cannot tell "one employer owns this code" apart from
+      // "two employers collided and Firestore's default document-id ordering
+      // picked one of them for you" — which is precisely how #568's squat
+      // worked: the attacker re-registered until their uid sorted first. This
+      // reads every match so that case is detectable instead of silently
+      // resolved.
+      const snap = await db.collection('employers').where('employerCode', '==', code).get();
 
       if (snap.empty) {
         return { found: false };
+      }
+
+      if (snap.size > 1) {
+        // Fail closed with a distinct error rather than `{ found: false }`.
+        // Guessing which of the two documents is the "real" one from inside
+        // this function would just move the #568 bug from "attacker wins a
+        // race" to "attacker wins a race and we launder it with a confident
+        // `found: true`" — the caller has no way to tell a safe resolution
+        // from a lucky one. `failed-precondition` (not `not-found`) so ops
+        // tooling and, eventually, the client can tell "this code does not
+        // exist" apart from "this code exists twice and needs a human" —
+        // Onboarding.tsx currently collapses every thrown error to the same
+        // "code not found" copy, so today a legitimate employee of a company
+        // caught in a collision sees exactly what a typo produces: no
+        // employerId is ever handed out, but they cannot self-register with
+        // this code until ops resolves the duplicate (see
+        // scripts/audit-duplicate-employer-codes.js). That onboarding outage
+        // is the deliberate cost of not guessing.
+        logger.error('lookupEmployerByCode: employerCode resolves to multiple employers', {
+          employerCode: code,
+          matchedEmployerIds: snap.docs.map((d) => d.id),
+          service: 'functions',
+        });
+        throw new HttpsError(
+          'failed-precondition',
+          'This employer code cannot be resolved right now. Please contact your employer or support.'
+        );
       }
 
       const doc = snap.docs[0];
