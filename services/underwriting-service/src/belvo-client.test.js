@@ -2,7 +2,15 @@
 
 jest.mock("belvo");
 
-const { extractBelvoError, resolveBelvoBaseUrl, getClient } = require("./belvo-client");
+const {
+  extractBelvoError,
+  resolveBelvoBaseUrl,
+  getClient,
+  getIMSSEmployment,
+  getINFONAVIT,
+  BELVO_TIMEOUT_MS,
+  BelvoTimeoutError,
+} = require("./belvo-client");
 
 describe("extractBelvoError", () => {
   it("captures message, code, and detail from Belvo SDK error", () => {
@@ -99,6 +107,102 @@ describe("resolveBelvoBaseUrl", () => {
     delete process.env.BELVO_BASE_URL;
     process.env.NODE_ENV = "production";
     expect(() => resolveBelvoBaseUrl()).toThrow(/BELVO_BASE_URL/);
+  });
+});
+
+describe("belvo-client: timeouts", () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  function freshClient() {
+    jest.resetModules();
+    jest.mock("belvo");
+    const belvoClient = require("./belvo-client");
+    const Belvo = require("belvo").default;
+    return { belvoClient, Belvo };
+  }
+
+  beforeEach(() => {
+    process.env.BELVO_SECRET_ID = "test-id";
+    process.env.BELVO_SECRET_PASSWORD = "test-pass";
+    process.env.BELVO_BASE_URL = "https://sandbox.belvo.com";
+    process.env.NODE_ENV = "test";
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
+  it("rejects with a distinct BelvoTimeoutError when links.register hangs past BELVO_TIMEOUT_MS", async () => {
+    process.env.BELVO_TIMEOUT_MS = "5000";
+    const { belvoClient, Belvo } = freshClient();
+
+    Belvo.mockImplementation(function () {
+      this.connect = jest.fn().mockResolvedValue(true);
+      this.links = {
+        register: jest.fn(() => new Promise(() => {})), // never resolves
+        delete: jest.fn().mockResolvedValue(true),
+      };
+      this.incomes = { retrieve: jest.fn() };
+    });
+
+    const pending = belvoClient.getINFONAVIT("CURP123456HDFXXX01");
+    const assertion = expect(pending).rejects.toBeInstanceOf(belvoClient.BelvoTimeoutError);
+    await jest.advanceTimersByTimeAsync(5000);
+    await assertion;
+  });
+
+  it("defaults BELVO_TIMEOUT_MS to 15000 when the env var is unset", () => {
+    delete process.env.BELVO_TIMEOUT_MS;
+    const { belvoClient } = freshClient();
+    expect(belvoClient.BELVO_TIMEOUT_MS()).toBe(15000);
+  });
+
+  it("honors an explicit BELVO_TIMEOUT_MS override", () => {
+    process.env.BELVO_TIMEOUT_MS = "3000";
+    const { belvoClient } = freshClient();
+    expect(belvoClient.BELVO_TIMEOUT_MS()).toBe(3000);
+  });
+
+  it("wraps a timed-out employmentRecords.retrieve into belvoDetail with a BELVO_TIMEOUT code, not a silent falsy value", async () => {
+    process.env.BELVO_TIMEOUT_MS = "5000";
+    const { belvoClient, Belvo } = freshClient();
+
+    Belvo.mockImplementation(function () {
+      this.connect = jest.fn().mockResolvedValue(true);
+      this.links = {
+        register: jest.fn().mockResolvedValue({ id: "link-abc" }),
+        delete: jest.fn().mockResolvedValue(true),
+      };
+      this.employmentRecords = { retrieve: jest.fn(() => new Promise(() => {})) };
+    });
+
+    const pending = belvoClient.getIMSSEmployment("CURP123456HDFXXX01");
+    const assertion = expect(pending).rejects.toMatchObject({
+      belvoDetail: expect.objectContaining({ code: "BELVO_TIMEOUT" }),
+    });
+    await jest.advanceTimersByTimeAsync(5000);
+    await assertion;
+  });
+
+  it("does not time out a call that resolves comfortably inside the window", async () => {
+    process.env.BELVO_TIMEOUT_MS = "5000";
+    const { belvoClient, Belvo } = freshClient();
+
+    Belvo.mockImplementation(function () {
+      this.connect = jest.fn().mockResolvedValue(true);
+      this.links = {
+        register: jest.fn().mockResolvedValue({ id: "link-abc" }),
+        delete: jest.fn().mockResolvedValue(true),
+      };
+      this.incomes = { retrieve: jest.fn().mockResolvedValue({ balance: 100 }) };
+    });
+
+    const pending = belvoClient.getINFONAVIT("CURP123456HDFXXX01");
+    await jest.advanceTimersByTimeAsync(0);
+    await expect(pending).resolves.toEqual({ balance: 100 });
   });
 });
 

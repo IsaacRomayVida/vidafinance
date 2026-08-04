@@ -18,6 +18,45 @@ const BelvoClient = require("belvo").default;
 
 const BELVO_SANDBOX_URL = "https://sandbox.belvo.com";
 
+// The belvo SDK (0.28.0, archived) wraps axios internally and does not expose
+// a per-call timeout or cancellation option through its public API (register/
+// retrieve/delete take no request config). Every SDK call sits directly in
+// the credit-decision path, so a hung Belvo request — sandbox flakiness, a
+// stuck gov-portal login, a dead connection — would otherwise hang the
+// underwriting stage indefinitely. BELVO_TIMEOUT_MS bounds how long we wait
+// for any single SDK call; same env-var-with-default convention as
+// SC_HTTP_TIMEOUT_MS in softcredito-adapter.
+const BELVO_TIMEOUT_MS = () => Number(process.env.BELVO_TIMEOUT_MS) || 15000;
+
+/**
+ * Distinct, identifiable error for a Belvo call that exceeded BELVO_TIMEOUT_MS.
+ * Callers must be able to tell "Belvo timed out" apart from "Belvo said no" —
+ * this is never null/undefined, always a real Error with a stable `.code`.
+ */
+class BelvoTimeoutError extends Error {
+  constructor(label, ms) {
+    super(`Belvo call timed out after ${ms}ms: ${label}`);
+    this.name = "BelvoTimeoutError";
+    this.code = "BELVO_TIMEOUT";
+    this.isTimeout = true;
+  }
+}
+
+/**
+ * Race a Belvo SDK call against a timer. The underlying HTTP request may
+ * still complete in the background (the SDK gives us no cancellation hook),
+ * but callers stop waiting and get a distinct BelvoTimeoutError instead of
+ * hanging forever.
+ */
+function withTimeout(promise, label) {
+  const ms = BELVO_TIMEOUT_MS();
+  let timer;
+  const timedOut = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new BelvoTimeoutError(label, ms)), ms);
+  });
+  return Promise.race([promise, timedOut]).finally(() => clearTimeout(timer));
+}
+
 let _client = null;
 
 /**
@@ -41,12 +80,13 @@ function resolveBelvoBaseUrl() {
 
 async function getClient() {
   if (_client) return _client;
-  _client = new BelvoClient(
+  const client = new BelvoClient(
     process.env.BELVO_SECRET_ID,
     process.env.BELVO_SECRET_PASSWORD,
     resolveBelvoBaseUrl()
   );
-  await _client.connect();
+  await withTimeout(client.connect(), "connect");
+  _client = client;
   return _client;
 }
 
@@ -107,17 +147,21 @@ async function getIMSSEmployment(curp) {
   let linkId;
   try {
     const c = await getClient();
-    const link = await c.links.register("imss_mx_employment", curp, "", {
-      accessMode: "single",
-    });
+    const link = await withTimeout(
+      c.links.register("imss_mx_employment", curp, "", { accessMode: "single" }),
+      "getIMSSEmployment:links.register"
+    );
     linkId = link.id;
-    const records = await c.employmentRecords.retrieve(link.id);
-    await c.links.delete(link.id).catch(() => {});
+    const records = await withTimeout(
+      c.employmentRecords.retrieve(link.id),
+      "getIMSSEmployment:employmentRecords.retrieve"
+    );
+    await withTimeout(c.links.delete(link.id), "getIMSSEmployment:links.delete").catch(() => {});
     return records;
   } catch (err) {
     if (linkId) {
       const c = await getClient().catch(() => null);
-      if (c) await c.links.delete(linkId).catch(() => {});
+      if (c) await withTimeout(c.links.delete(linkId), "getIMSSEmployment:links.delete(cleanup)").catch(() => {});
     }
     const detail = extractBelvoError(err, "getIMSSEmployment");
     const enriched = new Error(detail.summary);
@@ -132,11 +176,12 @@ async function getIMSSEmployment(curp) {
  */
 async function getINFONAVIT(curp) {
   const c = await getClient();
-  const link = await c.links.register("infonavit_mx", curp, "", {
-    accessMode: "single",
-  });
-  const data = await c.incomes.retrieve(link.id);
-  await c.links.delete(link.id).catch(() => {});
+  const link = await withTimeout(
+    c.links.register("infonavit_mx", curp, "", { accessMode: "single" }),
+    "getINFONAVIT:links.register"
+  );
+  const data = await withTimeout(c.incomes.retrieve(link.id), "getINFONAVIT:incomes.retrieve");
+  await withTimeout(c.links.delete(link.id), "getINFONAVIT:links.delete").catch(() => {});
   return data;
 }
 
@@ -150,17 +195,18 @@ async function getAFORE(curp) {
   let linkId;
   try {
     const c = await getClient();
-    const link = await c.links.register("afore_mx", curp, "", {
-      accessMode: "single",
-    });
+    const link = await withTimeout(
+      c.links.register("afore_mx", curp, "", { accessMode: "single" }),
+      "getAFORE:links.register"
+    );
     linkId = link.id;
-    const data = await c.incomes.retrieve(link.id);
-    await c.links.delete(link.id).catch(() => {});
+    const data = await withTimeout(c.incomes.retrieve(link.id), "getAFORE:incomes.retrieve");
+    await withTimeout(c.links.delete(link.id), "getAFORE:links.delete").catch(() => {});
     return data;
   } catch (err) {
     if (linkId) {
       const c = await getClient().catch(() => null);
-      if (c) await c.links.delete(linkId).catch(() => {});
+      if (c) await withTimeout(c.links.delete(linkId), "getAFORE:links.delete(cleanup)").catch(() => {});
     }
     const detail = extractBelvoError(err, "getAFORE");
     const enriched = new Error(detail.summary);
@@ -179,10 +225,14 @@ async function verifyEmployerIMSS(curps, patronRfc) {
   const results = [];
   for (const curp of curps.slice(0, 3)) {
     try {
-      const link = await c.links.register("imss_mx", curp, "", {
-        accessMode: "single",
-      });
-      const records = await c.employmentRecords.retrieve(link.id);
+      const link = await withTimeout(
+        c.links.register("imss_mx", curp, "", { accessMode: "single" }),
+        "verifyEmployerIMSS:links.register"
+      );
+      const records = await withTimeout(
+        c.employmentRecords.retrieve(link.id),
+        "verifyEmployerIMSS:employmentRecords.retrieve"
+      );
       const latest = records?.[0] || null;
       const match = latest?.employer_rfc === patronRfc;
       results.push({
@@ -192,9 +242,9 @@ async function verifyEmployerIMSS(curps, patronRfc) {
         sbc:        latest?.base_salary || null,
         tenure:     latest?.tenure_months || null,
       });
-      await c.links.delete(link.id).catch(() => {});
+      await withTimeout(c.links.delete(link.id), "verifyEmployerIMSS:links.delete").catch(() => {});
     } catch (e) {
-      results.push({ curp, error: e.message });
+      results.push({ curp, error: e.message, timeout: e.code === "BELVO_TIMEOUT" });
     }
   }
   return results;
@@ -207,11 +257,15 @@ async function verifyEmployerIMSS(curps, patronRfc) {
  */
 async function getISSSTE(curp) {
   const c = await getClient();
-  const link = await c.links.register("issste_mx", curp, "", {
-    accessMode: "single",
-  });
-  const records = await c.employmentRecords.retrieve(link.id);
-  await c.links.delete(link.id).catch(() => {});
+  const link = await withTimeout(
+    c.links.register("issste_mx", curp, "", { accessMode: "single" }),
+    "getISSSTE:links.register"
+  );
+  const records = await withTimeout(
+    c.employmentRecords.retrieve(link.id),
+    "getISSSTE:employmentRecords.retrieve"
+  );
+  await withTimeout(c.links.delete(link.id), "getISSSTE:links.delete").catch(() => {});
   return records;
 }
 
@@ -225,4 +279,6 @@ module.exports = {
   extractBelvoError,
   resolveBelvoBaseUrl,
   BELVO_SANDBOX_URL,
+  BELVO_TIMEOUT_MS,
+  BelvoTimeoutError,
 };
