@@ -68,6 +68,7 @@
   "calc_rate": "30% mensual",
   "calc_result_label": "Pago estimado",
   "calc_note": "Fondos disponibles en 24 horas",
+  "calc_note_below_min": "Con este salario tu línea aún no alcanza el mínimo de $500 MXN.",
   "calc_cta": "Solicitar Acceso",
   "emp_tag": "Para Empleadores",
   "emp_h2": "Ofrece estabilidad financiera sin carga.",
