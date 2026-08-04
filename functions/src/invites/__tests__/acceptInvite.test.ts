@@ -23,11 +23,16 @@ const mockEmployerRef = {
 };
 
 const mockTxnUpdate = jest.fn();
+// A real transactional read returns the document as it stands when the
+// transaction runs, which is not necessarily what a plain .get() before the
+// transaction returned. By default both agree; the race test below makes them
+// disagree, which is the whole point of putting the invite in the read set.
+const mockTxnGet = jest.fn(async (ref: { get: () => unknown }) => ref.get());
 const mockRunTransaction = jest
   .fn()
-  .mockImplementation(async (fn: (txn: unknown) => Promise<void>) => {
-    await fn({ update: mockTxnUpdate });
-  });
+  .mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) =>
+    fn({ get: mockTxnGet, update: mockTxnUpdate })
+  );
 
 const mockCollection = jest.fn((name: string) => {
   if (name === 'invites') {
@@ -107,9 +112,10 @@ function makePendingInvite(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<void>) => {
-    await fn({ update: mockTxnUpdate });
-  });
+  mockTxnGet.mockImplementation(async (ref: { get: () => unknown }) => ref.get());
+  mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) =>
+    fn({ get: mockTxnGet, update: mockTxnUpdate })
+  );
   mockInviteDocGet.mockResolvedValue(makePendingInvite());
   mockEmployeeDocGet.mockResolvedValue({
     exists: true,
@@ -158,7 +164,10 @@ describe('acceptInvite', () => {
     await expect(fn({ auth: mismatchedAuth, data: validInput })).rejects.toMatchObject({
       code: 'permission-denied',
     });
-    expect(mockRunTransaction).not.toHaveBeenCalled();
+    // The email check now runs inside the transaction (it reads the employee
+    // doc, which has to be in the transaction's read set), so what matters is
+    // that the transaction wrote nothing and therefore committed nothing.
+    expect(mockTxnUpdate).not.toHaveBeenCalled();
   });
 
   it('throws permission-denied when token hash does not match invite', async () => {
@@ -187,6 +196,65 @@ describe('acceptInvite', () => {
     await expect(fn({ data: validInput })).rejects.toMatchObject({
       code: 'unauthenticated',
     });
+  });
+
+  it('rejects a redemption that lost the race, instead of committing on a stale read', async () => {
+    // Two people (or one person double-submitting the signup wizard) redeem the
+    // same invite at once. Both take a snapshot showing status:'pending' — that
+    // is what the plain .get() still returns here. The other request wins and
+    // consumes the invite first, so by the time THIS request's transaction runs,
+    // the invite is already accepted and this redemption must not commit.
+    mockInviteDocGet.mockResolvedValue(makePendingInvite());
+    mockTxnGet.mockImplementation(async (ref: { get: () => unknown }) => {
+      if (ref === mockInviteRef) {
+        return makePendingInvite({ status: 'accepted', acceptedByUid: 'winner-uid' });
+      }
+      return ref.get();
+    });
+
+    await expect(fn({ auth: callerAuth, data: validInput })).rejects.toMatchObject({
+      code: 'failed-precondition',
+    });
+    expect(mockTxnUpdate).not.toHaveBeenCalled();
+  });
+
+  it('refuses to re-point an employee record already linked to another account', async () => {
+    // A second invite was minted for this employee before the first was used
+    // (the roster's Resend button), the employee then signed up with one of
+    // them, and the other link is still pending. Redeeming the leftover link
+    // must not hand the roster row — and the employer credit line behind it —
+    // to a different uid.
+    mockEmployeeDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        email: 'juan@acme.mx',
+        name: 'Juan Perez',
+        status: 'active',
+        authUid: 'first-owner-uid',
+      }),
+    });
+
+    await expect(fn({ auth: callerAuth, data: validInput })).rejects.toMatchObject({
+      code: 'failed-precondition',
+    });
+    expect(mockTxnUpdate).not.toHaveBeenCalled();
+  });
+
+  it('still accepts when the record is already linked to the caller themselves', async () => {
+    // Guards the check above against over-tightening: a retry by the rightful
+    // owner is not a takeover.
+    mockEmployeeDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        email: 'juan@acme.mx',
+        name: 'Juan Perez',
+        status: 'active',
+        authUid: 'new-user-uid',
+      }),
+    });
+
+    const result = (await fn({ auth: callerAuth, data: validInput })) as Record<string, unknown>;
+    expect(result.success).toBe(true);
   });
 
   it('throws resource-exhausted when rate-limited', async () => {
