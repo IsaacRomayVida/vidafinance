@@ -128,6 +128,10 @@ const EMPLOYEE = {
   availableCredit: 5000,
   monthlySalary: 20000,
   bankClabe: '032180000118359719',
+  // A borrower who actually passed MetaMap. requestLoan refuses to originate
+  // without this (IDENTITY_NOT_VERIFIED), and these cases are about the
+  // repayment schedule of a loan that WAS originated.
+  metamapStatus: 'verified',
 };
 
 const EMPLOYER = {

@@ -1443,3 +1443,185 @@ describe('default deny (VID3-710)', () => {
     );
   });
 });
+
+// ── the identity verdict cannot be self-assigned (server KYC enforcement) ────
+//
+// firestore.rules has carried the comment "creditLimit, availableCredit,
+// employerId, kycStatus must come from CFs" since the employees block was
+// written. noSelfAssignedCredit() implemented the first three and stopped:
+// kycStatus was never in the blocklist, and neither were the metamap* fields
+// the verification webhook writes.
+//
+// `allow update` was never the hole — a self-update is confined to
+// onlyAffects([phone, bankClabe, ...]). CREATE was, and create is the write
+// that matters: employees/{uid} is created exactly once, by the browser
+// (Onboarding.tsx), with whatever payload the browser chose.
+//
+// These are the write-side counterpart to requestLoan's IDENTITY_NOT_VERIFIED
+// gate. That gate reads `metamapStatus`, so if a client could write
+// `metamapStatus: 'verified'` here the server gate would be decorative.
+describe('employee cannot self-assign the identity verdict', () => {
+  const registration = {
+    name: 'Test Employee',
+    email: 'employee@acme.mx',
+    phone: '+525512345678',
+    dateOfBirth: '1990-01-15',
+    curp: 'TEST900115HDFXXX01',
+    gender: 'M',
+    rfc: 'TES900115AAA',
+    employerId: 'employer1',
+    employerName: 'Acme SA de CV',
+    employerCode: 'ACME01',
+    monthlySalary: 12000,
+    payFrequency: 'quincenal',
+    employmentTenure: '2y',
+    bankClabe: '012345678901234567',
+  };
+
+  beforeEach(async () => {
+    await seedEmployer('employer1');
+  });
+
+  // ── the field the money gate actually reads ──
+  it('registration is rejected when it forges metamapStatus: verified', async () => {
+    // The direct defeat of requestLoan's identity gate.
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        metamapStatus: 'verified',
+      })
+    );
+  });
+
+  it('registration is rejected when it forges any metamapStatus at all', async () => {
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        metamapStatus: 'pending',
+      })
+    );
+  });
+
+  it('registration is rejected when it forges metamapVerifiedAt', async () => {
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        metamapVerifiedAt: new Date(),
+      })
+    );
+  });
+
+  it('registration is rejected when it forges metamapLastEventAt', async () => {
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        metamapLastEventAt: new Date(),
+      })
+    );
+  });
+
+  // ── kycStatus: constrained by value, not blocked outright ──
+  it('registration is rejected when it self-declares kycStatus: approved', async () => {
+    // Verbatim what a tampered Onboarding.tsx payload would carry.
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        kycStatus: 'approved',
+      })
+    );
+  });
+
+  it('registration is rejected when it self-declares kycStatus: verified', async () => {
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        kycStatus: 'verified',
+      })
+    );
+  });
+
+  it('registration is rejected for an unrecognised kycStatus value', async () => {
+    // The constraint is an allowlist of non-approving values, not a denylist of
+    // the two known-good strings — a new approving value must not slip through.
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        kycStatus: 'totally_fine_trust_me',
+      })
+    );
+  });
+
+  // ── what must still work ──
+  it('the real onboarding shape (kycStatus: pending_review) is still accepted', async () => {
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        kycStatus: 'pending_review',
+      })
+    );
+  });
+
+  it('kycStatus: not_started is still accepted', async () => {
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        kycStatus: 'not_started',
+      })
+    );
+  });
+
+  it('metamapVerificationId is still writable — the webhook matches on it', async () => {
+    // Deliberately NOT blocked: Onboarding.tsx writes it as the key
+    // handleVerificationCompleted looks the incoming verdict up by. It names a
+    // verification, it does not claim one passed.
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        kycStatus: 'pending_review',
+        metamapVerificationId: 'mm-verif-8812',
+      })
+    );
+  });
+
+  // ── the update path ──
+  it('the owner cannot raise kycStatus after the fact', async () => {
+    await seedEmployee('employee1', 'employer1', { kycStatus: 'pending_review' });
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'employees/employee1'), { kycStatus: 'approved' })
+    );
+  });
+
+  it('the owner cannot write metamapStatus after the fact', async () => {
+    await seedEmployee('employee1', 'employer1', { kycStatus: 'pending_review' });
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'employees/employee1'), { metamapStatus: 'verified' })
+    );
+  });
+
+  it('the Admin SDK — the webhook path — can still write the verdict', async () => {
+    // handleVerificationCompleted runs on the Admin SDK, which bypasses rules
+    // entirely. Asserted rather than assumed: blocking the client above must
+    // cost the real verification path nothing.
+    await seedEmployee('employee1', 'employer1', { kycStatus: 'pending_review' });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await assertSucceeds(
+        updateDoc(doc(ctx.firestore(), 'employees/employee1'), {
+          metamapStatus: 'verified',
+          metamapVerifiedAt: new Date(),
+        })
+      );
+    });
+  });
+});

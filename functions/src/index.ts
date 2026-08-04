@@ -509,6 +509,74 @@ function assertBorrowerAdmittedByEmployer(
   }
 }
 
+/**
+ * The verdict MetaMap returns on its `verification.completed` webhook for a
+ * borrower whose identity checks out. See metamapStatus below.
+ */
+const METAMAP_VERIFIED_STATUS = 'verified';
+
+/** Test-account suffix, honoured only where allowTestBypass() permits. */
+const TEST_ACCOUNT_EMAIL_SUFFIX = '@vida-test.com';
+
+/**
+ * Identity verification (KYC), enforced where the money actually moves.
+ *
+ * Until this gate, identity was enforced NOWHERE on the server. The only check
+ * in the entire product was LoanWizard.tsx reading `employees/{uid}.kycStatus`
+ * in the borrower's own browser — and that field is written by the browser too
+ * (Onboarding.tsx's createEmployeeAccount payload). No Cloud Function ever
+ * wrote it, no rule ever constrained it: `firestore.rules` carried the comment
+ * "kycStatus must come from CFs" above a create rule that validated only the
+ * credit fields. So `kycStatus` was self-attestation. Anyone who could sign up
+ * could POST `kycStatus: 'approved'` onto their own document, satisfy the
+ * client gate, and draw real money without ever opening MetaMap. The client
+ * gate additionally fell OPEN when the field was absent entirely
+ * (`if (data.kycStatus && ...)`), so simply omitting it worked just as well.
+ *
+ * SOURCE OF TRUTH: `metamapStatus`, not `kycStatus`.
+ *
+ * `metamapStatus` is written in exactly one place — handleVerificationCompleted
+ * in webhooks/metamap.ts — from MetaMap's `verification.completed` callback,
+ * after an HMAC-SHA256 signature check against METAMAP_WEBHOOK_SECRET that
+ * fails closed when the secret is unset. That handler runs on the Admin SDK,
+ * which bypasses firestore.rules entirely, so locking the field down on the
+ * client side (see noSelfAssignedVerification in firestore.rules) costs the
+ * webhook nothing while removing the borrower's ability to write it at all.
+ *
+ * `kycStatus` is deliberately NOT consulted here. It remains a display field
+ * for KYCBanner/EmployeeRoster, it is still client-written, and nothing with
+ * money behind it reads it any more.
+ *
+ * Fails CLOSED: absent, null or any non-'verified' metamapStatus refuses the
+ * loan. A borrower who never started verification and one whose verification is
+ * still pending are the same answer — no proven identity, no disbursement.
+ */
+function assertBorrowerIdentityVerified(employee: Record<string, unknown>, uid: string): void {
+  if (employee['metamapStatus'] === METAMAP_VERIFIED_STATUS) return;
+
+  // Test-environment path, keyed on the DEPLOYMENT and not on the account.
+  // The email suffix alone is not a gate — the person signing up picks it —
+  // so it is only ever consulted once allowTestBypass() has established this
+  // is not production. Same shape as the validateCURP bypass above and the
+  // autoVerifyOn*Create triggers below; on the live project allowTestBypass()
+  // returns false before the suffix is even looked at.
+  const email = typeof employee['email'] === 'string' ? employee['email'] : '';
+  if (allowTestBypass() && email.endsWith(TEST_ACCOUNT_EMAIL_SUFFIX)) {
+    logger.info('Test-mode identity bypass at loan origination', { uid, service: 'functions' });
+    return;
+  }
+
+  logger.warn('Loan refused: borrower identity not verified', {
+    uid,
+    metamapStatus: employee['metamapStatus'] ?? null,
+    // Logged to show how far self-attestation had diverged from the real
+    // verdict on the accounts this starts refusing. Never returned to the caller.
+    selfDeclaredKycStatus: employee['kycStatus'] ?? null,
+    service: 'functions',
+  });
+  throw new HttpsError('failed-precondition', VidaErrorCode.IDENTITY_NOT_VERIFIED);
+}
+
 export const requestLoan = onCall(
   // Existing rate limit is 3/day/uid — intentionally stricter than the 20/min mutation default.
   { cors: true, enforceAppCheck: true },
@@ -537,6 +605,13 @@ export const requestLoan = onCall(
         const emplDoc = await empRef.get();
         if (!emplDoc.exists) throw new HttpsError('not-found', VidaErrorCode.EMPLOYEE_NOT_FOUND);
         const emp = emplDoc.data()!;
+
+        // Identity first, ahead of every credit and employer gate. Whether this
+        // person is who they say they are is prior to how much they may borrow,
+        // and running it first keeps an unverified caller from using the
+        // downstream errors (credit ceiling, slot cap, CURP allowlist) to probe
+        // an employer's configuration.
+        assertBorrowerIdentityVerified(emp, uid);
 
         if (amount > emp['availableCredit'])
           throw new HttpsError('invalid-argument', 'El monto excede tu crédito disponible');

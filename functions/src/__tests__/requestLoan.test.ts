@@ -144,6 +144,12 @@ const mockEmployee = {
   employerName: 'Test Co',
   availableCredit: 5000,
   monthlySalary: 20000,
+  // The MetaMap verdict, written only by the verification webhook. requestLoan
+  // fails CLOSED without it, so the default borrower here is a verified one and
+  // every other gate under test is reached. The identity gate itself is
+  // exercised by the IDENTITY_NOT_VERIFIED describe block below, which strips
+  // this field rather than relying on its absence anywhere else.
+  metamapStatus: 'verified',
 };
 
 const mockEmployer = {
@@ -1705,5 +1711,155 @@ describe('fee-rate literal guardrail (P0-2 regression)', () => {
     // reappearing (e.g. the old `Math.round(amount * 0.08)`), without false
     // -positiving on unrelated numeric literals like CSS opacity values.
     expect(src).not.toMatch(/amount\s*\*\s*0\.08/);
+  });
+});
+
+// ── Identity verification, enforced on the server (IDENTITY_NOT_VERIFIED) ────
+//
+// Before this gate, identity was enforced NOWHERE server-side. `grep -n kyc`
+// over index.ts returned only employer document-upload hits; requestLoan
+// checked duplicate loans, employer status, employer enrolment and credit, and
+// never once asked whether the borrower had passed MetaMap. The only gate in
+// the product was LoanWizard.tsx reading `kycStatus` in the borrower's own
+// browser — a field the browser itself writes at signup (Onboarding.tsx).
+//
+// These cases are written against `metamapStatus`, the webhook-written verdict,
+// and they deliberately assert that a self-declared `kycStatus: 'approved'`
+// buys nothing. A test that only stripped `metamapStatus` would still pass if
+// somebody "fixed" this by reading kycStatus instead, which is the bug.
+describe('requestLoan refuses a borrower whose identity was never verified', () => {
+  const auth = { uid: 'user-123', token: { role: 'employee' } };
+  const realClientPayload = {
+    amount: 1000,
+    employerCode: 'TESTCO',
+    bankAccountClabe: '032180000118359719',
+    termsAccepted: true as const,
+    termDays: 30,
+  };
+
+  // The default fixture minus the MetaMap verdict — i.e. every account that
+  // never completed verification.
+  const unverifiedEmployee = (extra: Record<string, unknown> = {}) => {
+    const emp: Record<string, unknown> = { ...mockEmployee, ...extra };
+    delete emp['metamapStatus'];
+    return emp;
+  };
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue(true);
+    delete process.env['UNDERWRITING_SERVICE_URL'];
+    delete process.env['INTERNAL_SECRET'];
+    delete process.env['ML_SERVICE_URL'];
+    // Pin to production so allowTestBypass() cannot short-circuit any of this.
+    process.env['GCLOUD_PROJECT'] = 'vida-finance';
+    delete process.env['FUNCTIONS_EMULATOR'];
+    delete process.env['VIDA_ALLOW_TEST_BYPASS'];
+  });
+
+  afterEach(() => {
+    delete process.env['GCLOUD_PROJECT'];
+    delete process.env['VIDA_ALLOW_TEST_BYPASS'];
+  });
+
+  async function callWith(employee: Record<string, unknown> | null) {
+    mockDb = buildMockDb({ employee });
+    const { requestLoan } = await import('../index');
+    const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+    return fn({ auth, data: realClientPayload });
+  }
+
+  it('refuses when the borrower never started verification', async () => {
+    await expect(callWith(unverifiedEmployee())).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'IDENTITY_NOT_VERIFIED',
+    });
+  });
+
+  it('refuses a SELF-DECLARED kycStatus of approved — the exact signup payload', async () => {
+    // This is the attack: Onboarding.tsx writes kycStatus straight from the
+    // browser, so the borrower picks this value. It satisfied the only gate
+    // that existed (LoanWizard.tsx) and must buy nothing on the server.
+    await expect(callWith(unverifiedEmployee({ kycStatus: 'approved' }))).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'IDENTITY_NOT_VERIFIED',
+    });
+  });
+
+  it('refuses a self-declared kycStatus of verified', async () => {
+    await expect(callWith(unverifiedEmployee({ kycStatus: 'verified' }))).rejects.toMatchObject({
+      message: 'IDENTITY_NOT_VERIFIED',
+    });
+  });
+
+  it('refuses while verification is still pending', async () => {
+    await expect(
+      callWith(unverifiedEmployee({ metamapStatus: 'pending', kycStatus: 'pending_review' }))
+    ).rejects.toMatchObject({ message: 'IDENTITY_NOT_VERIFIED' });
+  });
+
+  it('refuses when MetaMap actively rejected the borrower', async () => {
+    await expect(
+      callWith(unverifiedEmployee({ metamapStatus: 'rejected', kycStatus: 'approved' }))
+    ).rejects.toMatchObject({ message: 'IDENTITY_NOT_VERIFIED' });
+  });
+
+  it('refuses when metamapStatus is null (webhook fired with no verdict)', async () => {
+    await expect(
+      callWith(unverifiedEmployee({ metamapStatus: null }))
+    ).rejects.toMatchObject({ message: 'IDENTITY_NOT_VERIFIED' });
+  });
+
+  it('no loan document is written when identity is refused', async () => {
+    // The gate has to run BEFORE anything is persisted — a refused borrower
+    // must not leave a loan, or a slot occupied, behind them.
+    await callWith(unverifiedEmployee({ kycStatus: 'approved' })).catch(() => undefined);
+    expect(mockDb._transactionCalls.some((c) => c.op === 'set')).toBe(false);
+  });
+
+  it('does not tell the borrower they were declined for credit', async () => {
+    // Refusing for identity is not an underwriting decision and must never be
+    // dressed up as one — same reasoning as EMPLOYER_SLOT_LIMIT_REACHED.
+    const error = (await callWith(unverifiedEmployee()).catch((e: unknown) => e)) as Error;
+    expect(error.message).not.toMatch(/crédito|riesgo|sospechosa/i);
+    expect(error.message).toBe('IDENTITY_NOT_VERIFIED');
+  });
+
+  it('originates normally once MetaMap has returned verified', async () => {
+    // The other half of the gate: it must not have broken the real path.
+    // Note kycStatus is absent entirely — the server does not consult it.
+    const result = (await callWith({ ...mockEmployee, metamapStatus: 'verified' })) as {
+      loanId: string;
+    };
+    expect(result.loanId).toBeTruthy();
+  });
+
+  describe('the test-environment path', () => {
+    it('still originates for an @vida-test.com account off production', async () => {
+      process.env['GCLOUD_PROJECT'] = 'demo-vida';
+      const result = (await callWith(
+        unverifiedEmployee({ email: 'fixture@vida-test.com' })
+      )) as { loanId: string };
+      expect(result.loanId).toBeTruthy();
+    });
+
+    it('does NOT bypass on the production project, even for @vida-test.com', async () => {
+      // The suffix is chosen by whoever signs up. If it worked on production it
+      // would be a self-service way to skip identity entirely — the same hole
+      // PR #572 closed on the client.
+      process.env['GCLOUD_PROJECT'] = 'vida-finance';
+      process.env['VIDA_ALLOW_TEST_BYPASS'] = 'true';
+      await expect(
+        callWith(unverifiedEmployee({ email: 'attacker@vida-test.com' }))
+      ).rejects.toMatchObject({ message: 'IDENTITY_NOT_VERIFIED' });
+    });
+
+    it('does not bypass off production for a NON-test email', async () => {
+      process.env['GCLOUD_PROJECT'] = 'demo-vida';
+      await expect(
+        callWith(unverifiedEmployee({ email: 'juan@example.com' }))
+      ).rejects.toMatchObject({ message: 'IDENTITY_NOT_VERIFIED' });
+    });
   });
 });

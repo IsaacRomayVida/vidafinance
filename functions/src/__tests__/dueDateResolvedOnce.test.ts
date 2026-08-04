@@ -113,6 +113,10 @@ const BASE_EMPLOYEE = {
   availableCredit: 5000,
   monthlySalary: 20000,
   bankClabe: '032180000118359719',
+  // See requestLoan's IDENTITY_NOT_VERIFIED gate: origination requires a real
+  // MetaMap verdict, and these cases are about the due date of a loan that was
+  // originated.
+  metamapStatus: 'verified',
 };
 
 const EMPLOYER = {
