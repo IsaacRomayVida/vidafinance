@@ -4,7 +4,7 @@ const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Queue, Worker, UnrecoverableError } = require('bullmq');
-const { applyCardRepayment } = require('./cardRepayment');
+const { applyCardRepayment, REPAID_STATUSES } = require('./cardRepayment');
 const { alert5xx, alertDisbursementFailed, alertQueueDepth, alertRedisLost } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 require('dotenv').config();
@@ -422,7 +422,20 @@ app.post('/internal/repayment', requireInternal, async (req, res) => {
       const loanRef = db.collection('loans').doc(loanId);
       const doc = await tx.get(loanRef);
       if (!doc.exists) return 'not_found';
-      if (doc.data().status === 'paid') return 'already_paid';
+      // The SoftCrédito daily sync (dailyLoanCheck -> softcredito-adapter's
+      // /internal/sync-repayments) can report its registered deduction as
+      // completed for a loan the OTHER repayment channel -- processPayroll.ts's
+      // employer-CSV path -- already closed first, under the canonical
+      // 'repaid' spelling (or a legacy alias). Checking only the literal
+      // string this route itself writes ('paid') let that second signal fall
+      // through as a fresh settlement: it re-wrote status, clobbered
+      // paidAmount, and unconditionally restored the employee's
+      // availableCredit by the full principal a second time, on top of the
+      // restoration processPayroll's 'repaid' transition already triggered
+      // (functions/src/index.ts's isCreditRestoringRepayment). Same
+      // REPAID_STATUSES set cardRepayment.js's applyCardRepayment already
+      // guards on, for the identical reason.
+      if (REPAID_STATUSES.includes(doc.data().status)) return 'already_paid';
       tx.update(loanRef, { status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), paidAmount: amount, repaymentRef: ref });
       tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: method || 'payroll_deduction', externalRef: ref, status: 'completed', paidAt: admin.firestore.FieldValue.serverTimestamp() });
       const emp = await tx.get(db.collection('employees').doc(employeeId));
