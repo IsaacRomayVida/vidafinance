@@ -109,14 +109,37 @@ async function checkREPSE(rfc) {
   const cached = await redis.get(cacheKey).catch(() => null);
   if (cached) return JSON.parse(cached);
 
-  const res  = await fetch(`${baseUrl}?rfc=${rfc}`, { timeout: 10000 });
-  const data = await res.json().catch(() => ({ valido: false, vigente: false }));
+  const res = await fetch(`${baseUrl}?rfc=${rfc}`, { timeout: 10000 });
+
+  // Both guards below exist because of employer-a.js's contract: a REJECTION
+  // from here becomes `{pass: false, skipped: true}` and escalates to Stage 5
+  // manual review, while a RETURNED `pass: false` is read as REPSE having
+  // answered "not registered" and rejects the employer outright
+  // (employer-a.js:126, reason "repse_not_registered"). Only one of those is
+  // an honest description of an STPS outage.
+  //
+  // This used to have neither guard. `res.ok` was never tested, and the body
+  // parse was `.catch(() => ({valido: false, vigente: false}))` — so an STPS
+  // 503 HTML maintenance page, a captive portal, or any non-JSON body was
+  // silently converted into a definitive "not registered, not current"
+  // verdict. Every employer screened during an STPS outage was rejected for
+  // labour non-compliance on the strength of an error page, and the verdict
+  // was then cached for 24 h by the `redis.set` below, so the outage outlived
+  // itself by a day. checkDENUE (line 80) already throws on a non-2xx for
+  // exactly this reason; REPSE was the one live gov-apis call that did not.
+  if (!res.ok) {
+    throw new Error(`REPSE API ${res.status}: ${await res.text().catch(() => "")}`);
+  }
+  // No `.catch()`: an unparseable body is an outage, not a verdict. Letting
+  // it reject reaches employer-a.js as a skipped check, and skips the cache
+  // write below so nothing bogus is persisted.
+  const data = await res.json();
 
   const result = {
     registrado:     !!data.valido,
     vigente:        !!data.vigente,
     fechaVigencia:  data.fechaVigencia || null,
-    pass: data.valido && data.vigente,
+    pass: !!data.valido && !!data.vigente,
   };
 
   await redis.set(cacheKey, JSON.stringify(result), "EX", CACHE_TTL);
@@ -178,7 +201,27 @@ async function checkCedula(nombre, apellidoPaterno, apellidoMaterno) {
 async function checkCNBVSector(db, scianSectorCode) {
   const twoDigit = String(scianSectorCode).substring(0, 2);
   const doc = await db.collection("cnbv_sector_risk").doc(twoDigit).get();
-  if (!doc.exists) return { riskLevel: "unknown", pass: true };
+  // A sector code with no row in the registry is a sector we did not resolve —
+  // a new or mistyped SCIAN prefix, or a registry that was never populated. It
+  // is not a low-risk sector.
+  //
+  // This used to return `{riskLevel: "unknown", pass: true}` with no `skipped`,
+  // and that shape defeats the #458 provenance rule at its one blind spot.
+  // stage3-autoapprove.js:65 decides provenance with
+  // `block.skipped !== true ? "read" : "assumed"` — it trusts each lookup to
+  // declare whether it actually read anything. Claiming "read" while reporting
+  // the literal string "unknown" made condition 7 (`sector_safe`) pass on
+  // `pass !== false`, so an unresolved sector auto-approved. stage1-identity.js
+  // already returns `{pass: false, skipped: true}` when this call throws, and
+  // its own no-Firestore default is `{pass: true, skipped: true}`; the absent
+  // -document case is the same class of non-answer and now says so.
+  //
+  // This does not reject anyone: stage1-identity.js:107 returns `pass: true`
+  // regardless, CNBV being informational. It only stops an unread sector from
+  // clearing the auto-approve gate, sending the applicant to manual review.
+  if (!doc.exists) {
+    return { riskLevel: "unknown", found: false, pass: false, skipped: true };
+  }
   const { riskLevel } = doc.data();
   return {
     riskLevel,
