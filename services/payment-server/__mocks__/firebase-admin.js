@@ -80,16 +80,38 @@ function collection(name) {
   };
 }
 
+// The one Firestore rule this stand-in enforces rather than merely imitates.
+//
+// A transaction body that calls tx.get() after it has staged a write does not
+// "work a bit differently" against the real Admin SDK -- it throws, every
+// time, before any RPC leaves the process:
+// @google-cloud/firestore/build/src/transaction.js checks `!this._writeBatch.isEmpty`
+// at the top of get() and raises READ_AFTER_WRITE_ERROR_MSG. The transaction
+// never commits, so the caller sees a 500 and NOTHING is written.
+//
+// A permissive mock does not make such a route look slightly optimistic, it
+// makes it look like it works. POST /internal/repayment read the employee doc
+// after updating the loan and setting the repayment row, and every test below
+// passed green against a happy path that could not execute in production for a
+// single real payroll deduction. Enforcing the rule here is what keeps the
+// money routes' tests about what the money routes do.
+const READ_AFTER_WRITE_ERROR_MSG =
+  'Firestore transactions require all reads to be executed before all writes.';
+
 async function runTransaction(fn) {
+  let hasStagedWrite = false;
   const tx = {
     async get(ref) {
+      if (hasStagedWrite) throw new Error(READ_AFTER_WRITE_ERROR_MSG);
       return ref.get();
     },
     update(ref, updates) {
+      hasStagedWrite = true;
       const existing = col(ref._colName).get(ref.id);
       col(ref._colName).set(ref.id, applyFieldValues(existing, updates));
     },
     set(ref, data) {
+      hasStagedWrite = true;
       col(ref._colName).set(ref.id, applyFieldValues({}, data));
     },
   };

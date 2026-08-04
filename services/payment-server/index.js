@@ -420,6 +420,36 @@ app.post('/internal/repayment', requireInternal, async (req, res) => {
   try {
     const outcome = await db.runTransaction(async tx => {
       const loanRef = db.collection('loans').doc(loanId);
+      const employeeRef = db.collection('employees').doc(employeeId);
+
+      // ── read phase: every read below precedes every write ───────────────
+      //
+      // Firestore is not lenient about this and the penalty is not a subtle
+      // one. `Transaction.get()` throws READ_AFTER_WRITE_ERROR_MSG --
+      // "Firestore transactions require all reads to be executed before all
+      // writes." -- the moment the write batch is non-empty
+      // (@google-cloud/firestore/build/src/transaction.js, pinned here at
+      // 7.11.6 via firebase-admin ^12). It throws locally, before any RPC, so
+      // the transaction never commits and NOTHING is written.
+      //
+      // The employee read used to sit below the two writes, at the point where
+      // its result is used. That made this route throw on every single call
+      // that had any money to apply -- the two outcomes that return early,
+      // 'not_found' and 'already_paid', are exactly the two that write nothing
+      // and were therefore the only ones that ever worked. The SoftCrédito
+      // payroll-deduction channel (dailyLoanCheck -> the adapter's
+      // /internal/sync-repayments -> here) is the automated repayment channel
+      // for every employer that does not upload a CSV, and it recorded nothing
+      // at all: the employer withheld the installment from the paycheck, we
+      // 500'd, and the loan stayed 'active' at full balance. The borrower was
+      // then dunned for money already taken from their wages, offered a card
+      // checkout for the whole remaining balance (generatePaymentLink charges
+      // `remainingBalance ?? total`, and neither had moved), and never got
+      // their credit line back.
+      //
+      // The employee is read unconditionally rather than only when it is about
+      // to be credited. A conditional read is what tempts the read back down
+      // into the write phase.
       const doc = await tx.get(loanRef);
       if (!doc.exists) return 'not_found';
       // The SoftCrédito daily sync (dailyLoanCheck -> softcredito-adapter's
@@ -436,10 +466,12 @@ app.post('/internal/repayment', requireInternal, async (req, res) => {
       // REPAID_STATUSES set cardRepayment.js's applyCardRepayment already
       // guards on, for the identical reason.
       if (REPAID_STATUSES.includes(doc.data().status)) return 'already_paid';
+      const emp = await tx.get(employeeRef);
+
+      // ── write phase ─────────────────────────────────────────────────────
       tx.update(loanRef, { status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), paidAmount: amount, repaymentRef: ref });
       tx.set(db.collection('repayments').doc(), { loanId, employeeId, amount, method: method || 'payroll_deduction', externalRef: ref, status: 'completed', paidAt: admin.firestore.FieldValue.serverTimestamp() });
-      const emp = await tx.get(db.collection('employees').doc(employeeId));
-      if (emp.exists) tx.update(db.collection('employees').doc(employeeId), { availableCredit: admin.firestore.FieldValue.increment(doc.data().amount) });
+      if (emp.exists) tx.update(employeeRef, { availableCredit: admin.firestore.FieldValue.increment(doc.data().amount) });
       return 'applied';
     });
 

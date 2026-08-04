@@ -56,6 +56,39 @@ test('happy path: marks the loan paid, records the repayment, credits the employ
   );
 });
 
+// The regression that made every test above green while the route could not
+// settle a single real payroll deduction.
+//
+// The transaction read the employee document AFTER updating the loan and
+// setting the repayment row. Real Firestore rejects that outright --
+// `Transaction.get()` throws "Firestore transactions require all reads to be
+// executed before all writes." as soon as the write batch is non-empty -- so
+// the transaction never committed and the route answered 500 for every call
+// that had money to apply. The only calls that succeeded were the two that
+// write nothing: the 404 and the already-settled replay.
+//
+// The in-memory Firestore stand-in now enforces that rule (see
+// __mocks__/firebase-admin.js), so this asserts it end to end: the loan
+// settles, the repayment row lands, and the credit line comes back, all from
+// one transaction. Revert the read to below the writes and this fails 500,
+// as do the two happy-path tests above.
+test('settles from a single transaction that reads before it writes (real Firestore rejects the reverse)', async () => {
+  admin.__seed('loans', 'loan_ro', { status: 'active', amount: 5000, total: 6500 });
+  admin.__seed('employees', 'emp_ro', { availableCredit: 0 });
+
+  const res = await postRepayment({ loanId: 'loan_ro', employeeId: 'emp_ro', amount: 6500, ref: 'SC-REF-RO' });
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual({ success: true, status: 'applied' });
+
+  // The borrower's payroll deduction is recorded against the debt...
+  expect(admin.__get('loans', 'loan_ro').status).toBe('paid');
+  expect(admin.__all('repayments')).toHaveLength(1);
+  // ...and their credit line is restored by the principal, not the total: the
+  // fee was never held against it at origination.
+  expect(admin.__get('employees', 'emp_ro').availableCredit).toBe(5000);
+});
+
 test('defaults method to payroll_deduction when not supplied', async () => {
   admin.__seed('loans', 'loan_x', { status: 'active', amount: 100 });
   const res = await postRepayment({ loanId: 'loan_x', employeeId: 'emp_x', amount: 100 });
