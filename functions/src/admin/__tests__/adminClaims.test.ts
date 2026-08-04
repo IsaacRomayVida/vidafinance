@@ -1,6 +1,6 @@
 import { setAdminClaim, revokeAdminClaim } from '../adminClaims';
 import { _mockStore, mockDb } from '../../__mocks__/firebase-admin/firestore';
-import { mockSetCustomUserClaims } from '../../__mocks__/firebase-admin/auth';
+import { _mockUsers, mockGetUser, mockSetCustomUserClaims } from '../../__mocks__/firebase-admin/auth';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
 
@@ -21,6 +21,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   _mockStore.users = {};
   _mockStore.auditLog = [];
+  for (const uid of Object.keys(_mockUsers)) delete _mockUsers[uid];
   mockSetCustomUserClaims.mockResolvedValue(undefined);
 });
 
@@ -238,5 +239,143 @@ describe('revokeAdminClaim', () => {
         revokeFn({ auth: adminAuth, data: { targetUid: 'user-1' } })
       ).rejects.toMatchObject({ code: 'internal' });
     });
+  });
+});
+
+// ── super_admin is above admin, and both callables have to know it ────────────
+//
+// Both are gated on ['admin', 'super_admin'] and neither looked at what the
+// TARGET already was, so an `admin` could hand a `super_admin` a
+// `{ role: 'employee' }` claim and the reserve role stopped existing. `admin` is
+// grantable in-product by any other admin, and a stale legacy `admin: true`
+// token resolves to it too — so one compromised admin account was enough to
+// leave the product with no role above the attacker's, recoverable only by an
+// operator running scripts/bootstrap-super-admin.js out of band.
+describe('super_admin targets', () => {
+  const legacyAdminAuth = {
+    uid: 'legacy-uid',
+    // No `role` claim at all — the pre-a23963f grant shape. authMiddleware
+    // resolves it to `admin`, which is exactly what satisfies these gates.
+    token: { admin: true, email: 'legacy@test.com' },
+  };
+
+  /** A super_admin as the bootstrap script leaves them: claim AND mirror. */
+  const seedSuperAdminTarget = (uid: string) => {
+    _mockUsers[uid] = {
+      uid,
+      email: `${uid}@test.com`,
+      emailVerified: true,
+      customClaims: { role: 'super_admin' },
+    };
+    _mockStore.users[uid] = { exists: true, data: { role: 'super_admin' } };
+  };
+
+  it('refuses an admin revoking a super_admin', async () => {
+    seedSuperAdminTarget('super-target');
+
+    await expect(
+      revokeFn({ auth: adminAuth, data: { targetUid: 'super-target' } })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  it('refuses an admin demoting a super_admin through setAdminClaim', async () => {
+    seedSuperAdminTarget('super-target');
+
+    await expect(
+      setFn({ auth: adminAuth, data: { targetUid: 'super-target', role: 'employee' } })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  it('refuses a legacy `admin: true` token demoting a super_admin', async () => {
+    seedSuperAdminTarget('super-target');
+
+    await expect(
+      setFn({ auth: legacyAdminAuth, data: { targetUid: 'super-target', role: 'ops' } })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  // The claim is authoritative, so a target carrying it must be refused even
+  // when the users/{uid} mirror was never written or has gone stale.
+  it('refuses on the custom claim alone, with no users/{uid} mirror', async () => {
+    _mockUsers['super-target'] = {
+      uid: 'super-target',
+      email: 'super-target@test.com',
+      emailVerified: true,
+      customClaims: { role: 'super_admin' },
+    };
+
+    await expect(
+      revokeFn({ auth: adminAuth, data: { targetUid: 'super-target' } })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  // And the other way round: a mirror that says super_admin is enough on its
+  // own. Under-reading the target's role here costs someone their access.
+  it('refuses on the users/{uid} mirror alone, with no custom claim', async () => {
+    _mockStore.users['super-target'] = { exists: true, data: { role: 'super_admin' } };
+
+    await expect(
+      revokeFn({ auth: adminAuth, data: { targetUid: 'super-target' } })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  // A refusal must not leave the console showing a role the claim never lost.
+  it('leaves the users/{uid} mirror untouched when it refuses', async () => {
+    seedSuperAdminTarget('super-target');
+
+    await expect(
+      revokeFn({ auth: adminAuth, data: { targetUid: 'super-target' } })
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    expect(mockDb.runTransaction).not.toHaveBeenCalled();
+    expect(_mockStore.users['super-target'].data).toEqual({ role: 'super_admin' });
+  });
+
+  it('still lets a super_admin revoke another super_admin', async () => {
+    seedSuperAdminTarget('super-target');
+
+    const result = await revokeFn({ auth: superAdminAuth, data: { targetUid: 'super-target' } });
+
+    expect(result).toMatchObject({ success: true, role: 'employee' });
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith('super-target', { role: 'employee' });
+  });
+
+  // The self-guard used to compare against the literal 'admin', so a
+  // super_admin could hand themselves `role: 'admin'` and drop the one role
+  // this API cannot grant back.
+  it('refuses a super_admin self-demoting to admin', async () => {
+    _mockUsers['super-uid'] = {
+      uid: 'super-uid',
+      email: 'super@test.com',
+      emailVerified: true,
+      customClaims: { role: 'super_admin' },
+    };
+
+    await expect(
+      setFn({ auth: superAdminAuth, data: { targetUid: 'super-uid', role: 'admin' } })
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  // Fail closed: an unreadable target role is not an absent one.
+  it('refuses when the target user record cannot be read', async () => {
+    mockGetUser.mockRejectedValueOnce(new Error('auth/user-not-found'));
+
+    await expect(
+      revokeFn({ auth: adminAuth, data: { targetUid: 'ghost' } })
+    ).rejects.toMatchObject({ code: 'not-found' });
+
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
   });
 });
