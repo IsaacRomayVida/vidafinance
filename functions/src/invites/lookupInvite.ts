@@ -1,11 +1,10 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { createHash } from 'crypto';
 import { z } from 'zod';
 
 import { withErrorHandling } from '../utils/errorHandler';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 
 const LookupInviteSchema = z.object({
   token: z.string().min(32).max(32),
@@ -52,21 +51,15 @@ export const lookupInvite = onCall(
       }
       const { token } = parsed.data;
 
+      // Fails CLOSED. The limit is what makes guessing an invite token
+      // infeasible; letting it lapse during an outage hands back exactly the
+      // sweeping capability it exists to deny.
       const appCheckId = request.app?.appId ?? 'anon';
-      try {
-        const allowed = await checkRateLimit(`rl:lookupInvite:${appCheckId}`, 10, 60);
-        if (!allowed) {
-          throw new HttpsError(
-            'resource-exhausted',
-            'Too many lookup attempts. Please wait.'
-          );
-        }
-      } catch (e: unknown) {
-        if (e instanceof HttpsError) throw e;
-        logger.warn('Rate limiter unavailable for lookupInvite', {
-          error: (e as Error).message,
-        });
-      }
+      await enforceRateLimit(`rl:lookupInvite:${appCheckId}`, 10, 60, {
+        onUnavailable: 'closed',
+        message: 'Too many lookup attempts. Please wait.',
+        context: 'lookupInvite',
+      });
 
       const tokenHash = sha256Hex(token);
       const db = getFirestore();

@@ -12,7 +12,7 @@ import { Queue } from 'bullmq';
 
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
-import { checkRateLimit } from './utils/rateLimiter';
+import { checkRateLimit, enforceRateLimit } from './utils/rateLimiter';
 import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
@@ -189,17 +189,15 @@ export const api = onRequest({ cors: true }, async (req, res) => {
 export const checkEmailAvailability = onCall(
   { cors: true, enforceAppCheck: true },
   async (request): Promise<{ available: boolean }> => {
-    // Rate limit: 30 requests/min keyed on App Check token (unauth endpoint)
+    // Rate limit: 30 requests/min keyed on App Check token (unauth endpoint).
+    // Fails CLOSED: this endpoint answers "does an account exist for this
+    // address" to anyone, so the limit is the only thing between a caller and
+    // a bulk membership oracle over an email list.
     const appCheckToken = (request as unknown as { app?: { appId?: string } }).app?.appId ?? 'anonymous';
-    try {
-      const allowed = await checkRateLimit(`rl:checkEmailAvailability:${appCheckToken}`, 30, 60);
-      if (!allowed) {
-        throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-      }
-    } catch (e: unknown) {
-      if (e instanceof HttpsError) throw e;
-      logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-    }
+    await enforceRateLimit(`rl:checkEmailAvailability:${appCheckToken}`, 30, 60, {
+      onUnavailable: 'closed',
+      context: 'checkEmailAvailability',
+    });
 
     const email = (request.data as { email?: string })?.email;
     if (!email || typeof email !== 'string') {
@@ -240,16 +238,15 @@ export const validateCURP = onCall(
   { cors: true, enforceAppCheck: true },
   async (request): Promise<ValidateCURPResult> => {
     // Rate limit: 10/min keyed on App Check token (unauth + expensive external call)
+    // Fails CLOSED: unauthenticated, and every call fans out to a metered
+    // external identity API. A limiter outage here is a billing drain and a
+    // CURP-enumeration surface, which is the same direction #534 settled for
+    // the rest of this handler.
     const appCheckToken = (request as unknown as { app?: { appId?: string } }).app?.appId ?? 'anonymous';
-    try {
-      const allowed = await checkRateLimit(`rl:validateCURP:${appCheckToken}`, 10, 60);
-      if (!allowed) {
-        throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-      }
-    } catch (e: unknown) {
-      if (e instanceof HttpsError) throw e;
-      logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-    }
+    await enforceRateLimit(`rl:validateCURP:${appCheckToken}`, 10, 60, {
+      onUnavailable: 'closed',
+      context: 'validateCURP',
+    });
 
     const { curp, expectedName, email } = (request.data ?? {}) as ValidateCURPData;
 
@@ -441,14 +438,14 @@ export const requestLoan = onCall(
         const term = data.termDays ?? DEFAULT_LOAN_TERM_DAYS;
         const uid = auth.uid;
 
-        // Rate limit: max 3 requests per day via Redis
-        try {
-          const allowed = await checkRateLimit(`rl:loan:${uid}`, 3, 86400);
-          if (!allowed) throw new HttpsError('resource-exhausted', 'Too many loan requests today');
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Redis rate limit unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Rate limit: max 3 requests per day. Fails CLOSED — this is the only
+        // brake on loan-request spam per borrower, so a limiter outage must not
+        // quietly turn "3 per day" into "unbounded".
+        await enforceRateLimit(`rl:loan:${uid}`, 3, 86400, {
+          onUnavailable: 'closed',
+          message: 'Too many loan requests today',
+          context: 'requestLoan',
+        });
 
         if (typeof amount !== 'number' || amount < MIN_LOAN_AMOUNT || amount > MAX_LOAN_AMOUNT)
           throw new HttpsError('invalid-argument', 'El monto debe estar entre $500 y $5,000 MXN');
@@ -1557,15 +1554,15 @@ export const getAdminDashboard = onCall(
     async (_data, auth) =>
       withErrorHandling({ functionName: 'getAdminDashboard', uid: auth.uid }, async () => {
         // Rate limit: 60/min/uid (read-only dashboard)
-        try {
-          const allowed = await checkRateLimit(`rl:getAdminDashboard:${auth.uid}`, 60, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Deliberately fails OPEN. This is a read-only view: the limit is
+        // here to protect capacity, not money or secrets, so a limiter
+        // outage should degrade to an unthrottled dashboard rather than
+        // to a dashboard nobody can open. Contrast the spend- and
+        // enumeration-critical limits, which fail closed.
+        await enforceRateLimit(`rl:getAdminDashboard:${auth.uid}`, 60, 60, {
+          onUnavailable: 'open',
+          context: 'getAdminDashboard',
+        });
 
         const [healthDoc, queueDoc, pendingLoans, activeLoans, employers, employees, allLoans] = await Promise.all([
           db.collection('system_health').doc('current').get(),

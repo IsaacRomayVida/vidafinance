@@ -1,11 +1,10 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { logger } from 'firebase-functions';
+import { onCall } from 'firebase-functions/v2/https';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import { withErrorHandling } from '../utils/errorHandler';
 import { validateInput } from '../utils/validateInput';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 
 const ContactFormSchema = z.object({
   name: z.string().min(2).max(100),
@@ -19,18 +18,15 @@ export const submitContactForm = onCall(
   { cors: true, enforceAppCheck: true },
   async (request) => {
     return withErrorHandling({ functionName: 'submitContactForm' }, async () => {
-      // Rate limit: 30/min keyed on App Check token (unauth endpoint)
+      // Rate limit: 30/min keyed on App Check token (unauth endpoint).
+      // Fails CLOSED: unauthenticated and it writes a Firestore document per
+      // call, so an outage would turn this into an open write endpoint.
       const appCheckToken =
         (request as unknown as { app?: { appId?: string } }).app?.appId ?? 'anonymous';
-      try {
-        const allowed = await checkRateLimit(`rl:submitContactForm:${appCheckToken}`, 30, 60);
-        if (!allowed) {
-          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-        }
-      } catch (e: unknown) {
-        if (e instanceof HttpsError) throw e;
-        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-      }
+      await enforceRateLimit(`rl:submitContactForm:${appCheckToken}`, 30, 60, {
+        onUnavailable: 'closed',
+        context: 'submitContactForm',
+      });
 
       const input = validateInput(ContactFormSchema, request.data);
       const db = getFirestore();

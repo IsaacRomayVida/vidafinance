@@ -71,9 +71,16 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('node-fetch', () => ({ __esModule: true, default: jest.fn() }));
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue(true);
-jest.mock('../utils/rateLimiter', () => ({
-  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
-}));
+jest.mock('../utils/rateLimiter', () => {
+  const mod = { checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args) };
+  return {
+    ...mod,
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    enforceRateLimit: require('../__mocks__/utils/rateLimiter').makeEnforceRateLimit(
+      (...a: unknown[]) => (mod as { checkRateLimit: (...a: unknown[]) => Promise<boolean> }).checkRateLimit(...a)
+    ),
+  };
+});
 
 jest.mock('../utils/notify', () => ({ notifyLoanEvent: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../utils/slackAlert', () => ({ sendSlackAlert: jest.fn().mockResolvedValue(undefined) }));

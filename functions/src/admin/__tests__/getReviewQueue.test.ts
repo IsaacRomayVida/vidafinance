@@ -21,9 +21,16 @@ const mockLogger = { warn: jest.fn(), info: jest.fn(), error: jest.fn() };
 jest.mock('firebase-functions', () => ({ logger: mockLogger }));
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue(true);
-jest.mock('../../utils/rateLimiter', () => ({
-  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
-}));
+jest.mock('../../utils/rateLimiter', () => {
+  const mod = { checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args) };
+  return {
+    ...mod,
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    enforceRateLimit: require('../../__mocks__/utils/rateLimiter').makeEnforceRateLimit(
+      (...a: unknown[]) => (mod as { checkRateLimit: (...a: unknown[]) => Promise<boolean> }).checkRateLimit(...a)
+    ),
+  };
+});
 
 interface FakeDoc {
   id: string;

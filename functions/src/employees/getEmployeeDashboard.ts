@@ -1,10 +1,9 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { logger } from 'firebase-functions';
 import { getFirestore } from 'firebase-admin/firestore';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 import { OUTSTANDING_STATUSES } from '../loans/loanStatus';
 
 export const getEmployeeDashboard = onCall(
@@ -12,15 +11,15 @@ export const getEmployeeDashboard = onCall(
   withAuth(['employee'], async (_data, auth) =>
     withErrorHandling({ functionName: 'getEmployeeDashboard', uid: auth.uid }, async () => {
       // Rate limit: 60/min/uid (read-only dashboard)
-      try {
-        const allowed = await checkRateLimit(`rl:getEmployeeDashboard:${auth.uid}`, 60, 60);
-        if (!allowed) {
-          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-        }
-      } catch (e: unknown) {
-        if (e instanceof HttpsError) throw e;
-        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-      }
+      // Deliberately fails OPEN. This is a read-only view: the limit is
+      // here to protect capacity, not money or secrets, so a limiter
+      // outage should degrade to an unthrottled dashboard rather than
+      // to a dashboard nobody can open. Contrast the spend- and
+      // enumeration-critical limits, which fail closed.
+      await enforceRateLimit(`rl:getEmployeeDashboard:${auth.uid}`, 60, 60, {
+        onUnavailable: 'open',
+        context: 'getEmployeeDashboard',
+      });
 
       const db = getFirestore();
       const uid = auth.uid;

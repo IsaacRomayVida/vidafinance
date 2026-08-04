@@ -106,12 +106,26 @@ async function clearEmulator() {
 }
 
 beforeAll(async () => {
-  // Never let a real network dependency (Redis, the UW/ML services, Slack,
-  // Sentry) leak into this run — requestLoan is written to fail SOFT on all
-  // of these (see functions/src/index.ts's try/catch around each), so
-  // leaving them unset exercises exactly the "everything but Firestore is
-  // down" path that a sandboxed test run actually is.
-  delete process.env['REDIS_URL'];
+  // Never let a real network dependency (the UW/ML services, Slack, Sentry)
+  // leak into this run — requestLoan is written to fail SOFT on all of these
+  // (see functions/src/index.ts's try/catch around each), so leaving them
+  // unset exercises exactly the "everything but Firestore is down" path that
+  // a sandboxed test run actually is.
+  //
+  // REDIS_URL is the deliberate exception and must NOT be deleted. It used to
+  // be, on that same fail-soft premise, but the premise stopped being true:
+  // the loan rate limit is now enforced fail-CLOSED, because it is the only
+  // brake on loan spam. getRedis() throws outright when REDIS_URL is unset,
+  // so deleting it makes every case in this suite fail with "Servicio no
+  // disponible temporalmente" — masking the P0-1/P0-2 assertions rather than
+  // testing them. CI gives this job a real redis:7 service; see ci.yml.
+  if (!process.env['REDIS_URL']) {
+    throw new Error(
+      'This suite needs a real Redis: requestLoan enforces its rate limit fail-closed, ' +
+        'so with REDIS_URL unset every case fails as "unavailable" and proves nothing. ' +
+        'Run `docker run --rm -p 6379:6379 redis:7` and set REDIS_URL=redis://localhost:6379.'
+    );
+  }
   delete process.env['UNDERWRITING_SERVICE_URL'];
   delete process.env['INTERNAL_SECRET'];
   delete process.env['ML_SERVICE_URL'];
@@ -142,6 +156,14 @@ afterEach(async () => {
 
 afterAll(async () => {
   await db.terminate();
+
+  // getRedis() memoises one ioredis client, and the rate limiter now really
+  // connects it (see the REDIS_URL note in beforeAll). Left open it is a live
+  // socket jest will report as an open handle and can hang teardown on, so
+  // close it explicitly. Dynamic import for the same reason beforeAll uses
+  // one — the module must not load before the env vars are set.
+  const { getRedis } = await import('../../functions/src/utils/redis');
+  await getRedis().quit();
 });
 
 describe('happy path — every allowed term succeeds end to end (P0-1 regression)', () => {

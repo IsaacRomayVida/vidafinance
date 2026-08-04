@@ -1,10 +1,10 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { getFirestore } from 'firebase-admin/firestore';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 
 // Every status a review can sit in while it still needs a human — i.e. every status
 // submitReviewDecision will still accept a decision for (DECIDABLE_REVIEW_STATUSES
@@ -266,15 +266,15 @@ export const getReviewQueue = onCall(
     async (data, auth) =>
       withErrorHandling({ functionName: 'getReviewQueue', uid: auth.uid }, async () => {
         // Rate limit: 60/min/uid (read-only list view)
-        try {
-          const allowed = await checkRateLimit(`rl:getReviewQueue:${auth.uid}`, 60, 60);
-          if (!allowed) {
-            throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-          }
-        } catch (e: unknown) {
-          if (e instanceof HttpsError) throw e;
-          logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-        }
+        // Deliberately fails OPEN. This is a read-only view: the limit is
+        // here to protect capacity, not money or secrets, so a limiter
+        // outage should degrade to an unthrottled dashboard rather than
+        // to a dashboard nobody can open. Contrast the spend- and
+        // enumeration-critical limits, which fail closed.
+        await enforceRateLimit(`rl:getReviewQueue:${auth.uid}`, 60, 60, {
+          onUnavailable: 'open',
+          context: 'getReviewQueue',
+        });
 
         const db = getFirestore();
 

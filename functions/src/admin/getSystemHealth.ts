@@ -1,11 +1,10 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { logger } from 'firebase-functions';
+import { onCall } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
 
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
-import { checkRateLimit } from '../utils/rateLimiter';
+import { enforceRateLimit } from '../utils/rateLimiter';
 
 interface ServiceStatus {
   name: string;
@@ -26,15 +25,15 @@ export const getSystemHealth = onCall(
   withAuth(['ops', 'admin', 'super_admin'], async (_data, auth) =>
     withErrorHandling({ functionName: 'getSystemHealth', uid: auth.uid }, async () => {
       // Rate limit: 60/min/uid (read-only dashboard)
-      try {
-        const allowed = await checkRateLimit(`rl:getSystemHealth:${auth.uid}`, 60, 60);
-        if (!allowed) {
-          throw new HttpsError('resource-exhausted', 'Rate limit exceeded, please retry in a minute');
-        }
-      } catch (e: unknown) {
-        if (e instanceof HttpsError) throw e;
-        logger.warn('Rate limiter unavailable', { error: (e as Error).message, service: 'functions' });
-      }
+      // Deliberately fails OPEN. This is a read-only view: the limit is
+      // here to protect capacity, not money or secrets, so a limiter
+      // outage should degrade to an unthrottled dashboard rather than
+      // to a dashboard nobody can open. Contrast the spend- and
+      // enumeration-critical limits, which fail closed.
+      await enforceRateLimit(`rl:getSystemHealth:${auth.uid}`, 60, 60, {
+        onUnavailable: 'open',
+        context: 'getSystemHealth',
+      });
 
       const db = getFirestore();
 

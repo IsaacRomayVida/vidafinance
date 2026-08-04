@@ -45,7 +45,16 @@ jest.mock('firebase-functions', () => ({ logger: mockLogger }));
 
 // The rate limiter reaches Redis; it is not what these tests exercise.
 const mockCheckRateLimit = jest.fn(async () => true);
-jest.mock('../../utils/rateLimiter', () => ({ checkRateLimit: mockCheckRateLimit }));
+jest.mock('../../utils/rateLimiter', () => {
+  const mod = { checkRateLimit: mockCheckRateLimit };
+  return {
+    ...mod,
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    enforceRateLimit: require('../../__mocks__/utils/rateLimiter').makeEnforceRateLimit(
+      (...a: unknown[]) => (mod as { checkRateLimit: (...a: unknown[]) => Promise<boolean> }).checkRateLimit(...a)
+    ),
+  };
+});
 
 const mockNotifications: Array<{ event: string; data: Record<string, unknown> }> = [];
 jest.mock('../../utils/notify', () => ({
