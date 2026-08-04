@@ -443,6 +443,72 @@ interface RequestLoanData {
   termDays?: number;
 }
 
+/** A CURP's first four characters — what an employer allowlist entry matches. */
+const CURP_PREFIX_LENGTH = 4;
+
+/**
+ * Refuses the loan when the employer has restricted who may borrow under its
+ * name and this borrower is not one of them.
+ *
+ * Shape of the control (updateEmployerCurpConfig, and the same normalisation it
+ * applies on write): `curpConfig.mode` is 'allowlist' or 'open', and
+ * `curpConfig.prefixes` is a list of 4-character CURP prefixes. Anything other
+ * than 'allowlist' is 'open' and admits everyone — that is the default and the
+ * behaviour every employer has today, so no existing borrower is newly refused.
+ *
+ * Two edges are deliberate:
+ *
+ *  - A borrower whose employee document carries no readable CURP is REFUSED
+ *    under an allowlist. An allowlist cannot admit an identity it cannot read,
+ *    and admitting on a missing field would make the control trivially evadable
+ *    by omitting one — the borrower supplies that document.
+ *
+ *  - An allowlist with no usable prefixes is treated as UNCONFIGURED, not as
+ *    "deny everyone", and says so in the log. Read strictly it would mean an
+ *    employer is entitled to no borrowers at all, which is not a setting anyone
+ *    would choose on purpose — and until now saving it did literally nothing, so
+ *    an employer may be carrying that state having never been shown what it
+ *    meant. Failing closed on it would take their whole workforce off the
+ *    product on the deploy that starts enforcing this. updateEmployerCurpConfig
+ *    now refuses to WRITE that combination, so this branch covers only documents
+ *    already stored and shrinks to nothing as they are re-saved.
+ */
+function assertBorrowerAdmittedByEmployer(
+  employee: Record<string, unknown>,
+  employer: Record<string, unknown>,
+  uid: string
+): void {
+  const config = employer['curpConfig'] as { mode?: unknown; prefixes?: unknown } | undefined;
+  if (!config || config.mode !== 'allowlist') return;
+
+  const prefixes = (Array.isArray(config.prefixes) ? config.prefixes : [])
+    .filter((p): p is string => typeof p === 'string')
+    .map((p) => p.toUpperCase())
+    .filter((p) => p.length === CURP_PREFIX_LENGTH);
+
+  if (prefixes.length === 0) {
+    logger.warn('Employer CURP allowlist has no usable prefixes — treating as open', {
+      employerId: employee['employerId'],
+      uid,
+      service: 'functions',
+    });
+    return;
+  }
+
+  const curp = typeof employee['curp'] === 'string' ? employee['curp'].toUpperCase() : '';
+  if (curp.length < CURP_PREFIX_LENGTH || !prefixes.includes(curp.slice(0, CURP_PREFIX_LENGTH))) {
+    // The prefixes themselves are NOT echoed back: they are the employer's
+    // configuration, and telling a refused caller which four-character strings
+    // would have worked turns the control into its own oracle.
+    logger.warn('Borrower refused by employer CURP allowlist', {
+      employerId: employee['employerId'],
+      uid,
+      service: 'functions',
+    });
+    throw new HttpsError('permission-denied', VidaErrorCode.EMPLOYER_ENROLLMENT_NOT_PERMITTED);
+  }
+}
+
 export const requestLoan = onCall(
   // Existing rate limit is 3/day/uid — intentionally stricter than the 20/min mutation default.
   { cors: true, enforceAppCheck: true },
@@ -492,6 +558,38 @@ export const requestLoan = onCall(
 
         if (employer['status'] !== 'active' && employer['status'] !== 'pending_verification')
           throw new HttpsError('failed-precondition', VidaErrorCode.EMPLOYER_NOT_APPROVED);
+
+        // The employer's OWN enrolment control, actually enforced.
+        //
+        // The gate immediately above proves the EMPLOYER is one VIDA approved.
+        // It proves nothing about whether this borrower works there — the same
+        // shape of hole #563 closed on updateLoanStatus, one collection over.
+        // `employees/{uid}.employerId` is chosen by the client at registration
+        // (Onboarding.tsx writes it; firestore.rules' employees-create rule only
+        // blocks the credit fields via noSelfAssignedCredit), and nothing on
+        // either side has ever cross-checked it. So any authenticated user who
+        // knows an employer's join code — which lookupEmployerByCode resolves to
+        // its uid, and which is a code the employer hands out, not a secret —
+        // could enrol under that employer and immediately occupy one of its
+        // `maxActiveSlots` with a 'pending' loan. Repeated from a handful of
+        // throwaway accounts that exhausts the cap, and every real employee of
+        // that company is refused with EMPLOYER_SLOT_LIMIT_REACHED.
+        //
+        // `curpConfig` is the control the product already gives an employer for
+        // exactly this — EmployerDashboard's CurpConfigCard, saved through
+        // updateEmployerCurpConfig, described to the employer as "restrict
+        // registration to specific CURP prefixes". It was written to the
+        // employer document and read by NOTHING: not requestLoan, not
+        // firestore.rules, not any service. An employer who switched it to
+        // allowlist mode got a saved setting, a green tick, and no enforcement
+        // whatsoever.
+        //
+        // Enforced here rather than on the employees-create rule because that
+        // would only bind registrations made from today on. Every forged
+        // enrolment already sitting in `employees` stays exactly as it is, and
+        // this is the gate with money behind it. Tightening the create rule is
+        // the complementary follow-up, not a substitute.
+        assertBorrowerAdmittedByEmployer(emp, employer, uid);
 
         // The employer-wide concurrency-cap query, read for real INSIDE the
         // transaction below (tx.get) alongside the write it gates — never
@@ -2390,6 +2488,20 @@ export const updateEmployerCurpConfig = onCall(
               .map((p) => String(p).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))
               .filter((p) => p.length === 4)
           : [];
+
+        // An allowlist that admits nobody is not a setting anyone chooses on
+        // purpose. It used to be saveable and harmless because nothing read
+        // curpConfig at all; now that requestLoan enforces it, storing that
+        // combination would be an employer switching their entire workforce off
+        // the product with a green tick and no warning. Refuse it at the source
+        // — see assertBorrowerAdmittedByEmployer, whose empty-list branch exists
+        // only for documents saved before this guard.
+        if (resolvedMode === 'allowlist' && resolvedPrefixes.length === 0) {
+          throw new HttpsError(
+            'invalid-argument',
+            'Allowlist mode requires at least one valid 4-character CURP prefix'
+          );
+        }
 
         const uid = auth.uid;
         const empDoc = await db.collection('employers').doc(uid).get();

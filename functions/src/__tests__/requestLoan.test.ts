@@ -1499,6 +1499,175 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       expect(await mlPayload(fetchModule)).toMatchObject({ existingLoans: 0, requestsLastHour: 0 });
     });
   });
+
+  // The employer's own enrolment control, which was saveable and enforced
+  // nowhere. `employees/{uid}.employerId` is written by the client at
+  // registration and nothing has ever cross-checked it, so knowing an
+  // employer's join code was enough to enrol under that employer, occupy one of
+  // its maxActiveSlots with a 'pending' loan, and — repeated across throwaway
+  // accounts until the cap is full — lock every real employee of that company
+  // out of the product. curpConfig is the control the employer already has for
+  // this; these tests are the enforcement point.
+  describe('employer CURP allowlist enrolment gate', () => {
+    const ON_LIST = 'GARJ900101HDFRRN01'; // prefix GARJ
+    const OFF_LIST = 'ZZZZ900101HDFRRN01'; // prefix ZZZZ
+
+    function allowlistEmployer(prefixes: string[]) {
+      return { ...mockEmployer, curpConfig: { mode: 'allowlist', prefixes } };
+    }
+
+    function enrolmentError() {
+      return { code: 'permission-denied', message: 'EMPLOYER_ENROLLMENT_NOT_PERMITTED' };
+    }
+
+    it('refuses a borrower whose CURP prefix is not on the employer allowlist', async () => {
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: OFF_LIST },
+        employer: allowlistEmployer(['GARJ']),
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+      await expect(fn({ auth, data: realClientPayload })).rejects.toMatchObject(enrolmentError());
+    });
+
+    it('refuses BEFORE the loan is written and before the credit hold is taken', async () => {
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: OFF_LIST },
+        employer: allowlistEmployer(['GARJ']),
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+      await expect(fn({ auth, data: realClientPayload })).rejects.toMatchObject(enrolmentError());
+      // A refused enrolment must leave no trace on the employer's book: no loan
+      // document, and no slot occupied. Occupying one is the whole harm.
+      expect(mockDb._transactionCalls).toHaveLength(0);
+    });
+
+    it('does not disclose which prefixes would have been admitted', async () => {
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: OFF_LIST },
+        employer: allowlistEmployer(['GARJ', 'MAAB']),
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+      const error = (await fn({ auth, data: realClientPayload }).catch((e: unknown) => e)) as Error;
+      expect(error.message).not.toMatch(/GARJ|MAAB/);
+      // Nor may it read as a credit decline — this is the employer's decision
+      // about this person, not an underwriting verdict.
+      expect(error.message).not.toMatch(/crédito|riesgo|sospechosa/i);
+      expect(error.message).toBe('EMPLOYER_ENROLLMENT_NOT_PERMITTED');
+    });
+
+    it('admits a borrower whose CURP prefix is on the allowlist', async () => {
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: ON_LIST },
+        employer: allowlistEmployer(['GARJ']),
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+      expect((await fn({ auth, data: realClientPayload })).loanId).toBeTruthy();
+    });
+
+    it('matches the allowlist case-insensitively on both sides', async () => {
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: ON_LIST.toLowerCase() },
+        employer: allowlistEmployer(['garj']),
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+      expect((await fn({ auth, data: realClientPayload })).loanId).toBeTruthy();
+    });
+
+    it('refuses a borrower carrying no CURP at all when an allowlist is in force', async () => {
+      // The borrower supplies their own employee document. Admitting on a
+      // missing field would make the control evadable by omitting one.
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee },
+        employer: allowlistEmployer(['GARJ']),
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+
+      await expect(fn({ auth, data: realClientPayload })).rejects.toMatchObject(enrolmentError());
+    });
+
+    it('admits everyone in open mode — the default, so no existing borrower is newly refused', async () => {
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: OFF_LIST },
+        employer: { ...mockEmployer, curpConfig: { mode: 'open', prefixes: ['GARJ'] } },
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+      expect((await fn({ auth, data: realClientPayload })).loanId).toBeTruthy();
+    });
+
+    it('admits everyone when the employer has no curpConfig at all', async () => {
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: OFF_LIST },
+        employer: { ...mockEmployer },
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+      expect((await fn({ auth, data: realClientPayload })).loanId).toBeTruthy();
+    });
+
+    it('treats a stored allowlist with no usable prefixes as unconfigured, and says so', async () => {
+      // Deliberately NOT deny-everyone: that combination was saveable while
+      // curpConfig was inert, so reading it strictly would take a live
+      // employer's whole workforce off the product on the enforcing deploy.
+      mockDb = buildMockDb({
+        employee: { ...mockEmployee, curp: OFF_LIST },
+        employer: allowlistEmployer(['', 'AB']),
+      });
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<{ loanId: string }>;
+
+      expect((await fn({ auth, data: realClientPayload })).loanId).toBeTruthy();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('no usable prefixes'),
+        expect.objectContaining({ uid: auth.uid })
+      );
+    });
+  });
+
+  // The other half of the empty-allowlist decision: it stops being storable, so
+  // the lenient branch above only ever covers documents already on disk.
+  describe('updateEmployerCurpConfig', () => {
+    const employerAuth = { uid: 'employer-abc', token: { role: 'employer_admin' } };
+
+    it('refuses to save allowlist mode with no valid prefixes', async () => {
+      const { updateEmployerCurpConfig } = await import('../index');
+      const fn = updateEmployerCurpConfig as unknown as (
+        req: { auth?: unknown; data: unknown }
+      ) => Promise<unknown>;
+
+      await expect(
+        fn({ auth: employerAuth, data: { mode: 'allowlist', prefixes: ['AB', ''] } })
+      ).rejects.toMatchObject({ code: 'invalid-argument' });
+      // Refused before anything is read or written.
+      expect(mockDb.collection).not.toHaveBeenCalledWith('employers');
+    });
+
+    it('still accepts open mode with no prefixes', async () => {
+      const { updateEmployerCurpConfig } = await import('../index');
+      const fn = updateEmployerCurpConfig as unknown as (
+        req: { auth?: unknown; data: unknown }
+      ) => Promise<unknown>;
+
+      // Reaches the employer read (which the shared mock answers) rather than
+      // being rejected on the prefix list.
+      await expect(
+        fn({ auth: employerAuth, data: { mode: 'open', prefixes: [] } })
+      ).rejects.not.toMatchObject({ code: 'invalid-argument' });
+    });
+  });
 });
 
 // Guards against the exact drift that caused P0-2: the fee rate re-declared as
