@@ -5,7 +5,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 // import { beforeUserCreated } from 'firebase-functions/v2/identity'; // DISABLED
 import * as admin from 'firebase-admin';
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Timestamp, AggregateField } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
 import { nanoid } from 'nanoid';
 
@@ -34,6 +34,9 @@ import {
 } from './loans/loanStatusTransitions';
 import {
   ALL_LOAN_STATUSES,
+  DISBURSED_STATUSES,
+  LOAN_STATUS,
+  REPAID_STATUSES,
   isCreditRestoringRepayment,
   isDisbursedStatus,
   isRepaidStatus,
@@ -1626,7 +1629,19 @@ export const getPortfolioReport = onCall(
           context: 'getPortfolioReport',
         });
 
-        // Use same query pattern as getAdminDashboard (which works)
+        // Same unbounded-read shape getAdminDashboard had (fixed — see the
+        // aggregation queries there): four full status-filtered scans of
+        // 'loans', each downloading every matching document. Left AS UNBOUNDED
+        // here, deliberately, rather than folded into that fix: unlike
+        // getAdminDashboard's plain counts and a single sum, this handler also
+        // builds totalRevenue (needs `fee`/`commission` per doc, which no
+        // aggregation query can read) and a byEmployer breakdown (needs
+        // `employerId` per doc to group by — an aggregate query returns one
+        // number, not a grouping). Neither can be answered by `.count()` or
+        // `.aggregate()` without a maintained per-employer/per-status rollup
+        // collection, which is a real project (backfill + a write-side hook
+        // wherever a loan's status or amount changes), not a query-shape swap.
+        // Tracked as follow-up; not fixed in this pass.
         const [activeSnap, pendingSnap, repaidSnap, allSnap] = await Promise.all([
           db.collection('loans').where('status', '==', 'active').get(),
           db.collection('loans').where('status', '==', 'pending').get(),
@@ -1681,6 +1696,23 @@ export const getPortfolioReport = onCall(
 
 // ── getAdminDashboard — ops/admin only ───────────────────────────────────────
 
+// Every status a loan can be in once money has actually left the building,
+// for the `totalDisbursed` figure below. Mirrors weeklyPortfolioSnapshot's
+// already-fixed totalDisbursedMXN formula (sum(isDisbursedStatus) +
+// sum(overdue) + sum(isRepaidStatus)) — this handler had NOT been fixed and
+// was still filtering on `'active' || 'repaid' || 'status_repaid' ||
+// 'completed'`. 'status_repaid' is a spelling nothing has ever written (it
+// matched zero documents), while the manual-disbursement 'disbursed' status
+// (loanStatus.ts DISBURSED_STATUSES), 'overdue' loans, and the legacy repaid
+// aliases ('paid', 'complete', 'completed' — see LEGACY_REPAID_ALIASES) were
+// all silently excluded. Fixing the query shape is also the moment to fix
+// the filter to the one other report in this file already gets right.
+const ADMIN_DASHBOARD_DISBURSED_STATUSES: readonly string[] = [
+  ...DISBURSED_STATUSES,
+  LOAN_STATUS.OVERDUE,
+  ...REPAID_STATUSES,
+];
+
 export const getAdminDashboard = onCall(
   { cors: true, enforceAppCheck: true },
   withAuth<Record<string, never>, Record<string, unknown>>(
@@ -1698,32 +1730,55 @@ export const getAdminDashboard = onCall(
           context: 'getAdminDashboard',
         });
 
-        const [healthDoc, queueDoc, pendingLoans, activeLoans, employers, employees, allLoans] = await Promise.all([
-          db.collection('system_health').doc('current').get(),
-          db.collection('system_health').doc('queues').get(),
-          db.collection('loans').where('status', '==', 'pending').get(),
-          db.collection('loans').where('status', '==', 'active').get(),
-          db.collection('employers').get(),
-          db.collection('employees').get(),
-          db.collection('loans').get(),
-        ]);
-        let totalDisbursed = 0;
-        allLoans.docs.forEach(d => {
-          const s = d.data()['status'];
-          if (s === 'active' || s === 'repaid' || s === 'status_repaid' || s === 'completed') {
-            totalDisbursed += (d.data()['amount'] as number) || 0;
-          }
-        });
+        // Every number here used to come from reading the FULL employers,
+        // employees, and loans collections into function memory on every
+        // single dashboard open — a Firestore cost bomb and eventual OOM at
+        // the product's 100k-loans/month target (#see PERF audit). None of
+        // these figures need the documents themselves:
+        //  - counts use `.count()`, which Firestore bills and executes as an
+        //    aggregation over index entries, never transferring a document.
+        //  - totalDisbursed uses `.aggregate({ sum: AggregateField.sum(...) }) `,
+        //    same story — Firestore sums server-side and returns one number.
+        // Both scale with the aggregation's cost, not the collection's size.
+        //
+        // The sum below REQUIRES the (status ASC, amount ASC) composite index
+        // added to firestore.indexes.json alongside this change. Firestore
+        // serves a filtered sum/avg only from an index carrying both the
+        // filtered field and the aggregated one; without it the query throws
+        // FAILED_PRECONDITION at runtime and the whole dashboard goes dark.
+        // The `.count()` calls need nothing extra — they run off the automatic
+        // single-field index on `status`. Mocked unit tests cannot catch a
+        // missing index, so that entry is load-bearing: do not drop it while
+        // this aggregation exists.
+        const [healthDoc, queueDoc, pendingLoansAgg, activeLoansAgg, employersAgg, employeesAgg, disbursedAgg] =
+          await Promise.all([
+            db.collection('system_health').doc('current').get(),
+            db.collection('system_health').doc('queues').get(),
+            db.collection('loans').where('status', '==', 'pending').count().get(),
+            db.collection('loans').where('status', '==', 'active').count().get(),
+            db.collection('employers').count().get(),
+            db.collection('employees').count().get(),
+            db
+              .collection('loans')
+              .where('status', 'in', ADMIN_DASHBOARD_DISBURSED_STATUSES)
+              .aggregate({ totalDisbursed: AggregateField.sum('amount') })
+              .get(),
+          ]);
+
+        const pendingLoans = pendingLoansAgg.data().count;
+        const activeLoans = activeLoansAgg.data().count;
+        const totalDisbursed = disbursedAgg.data().totalDisbursed ?? 0;
+
         return {
           systemHealth: healthDoc.data() ?? {},
           queues: queueDoc.data() ?? {},
-          pendingLoans: pendingLoans.size,
-          activeLoans: activeLoans.size,
+          pendingLoans,
+          activeLoans,
           stats: {
-            totalEmployers: employers.size,
-            totalEmployees: employees.size,
-            activeLoans: activeLoans.size,
-            pendingLoans: pendingLoans.size,
+            totalEmployers: employersAgg.data().count,
+            totalEmployees: employeesAgg.data().count,
+            activeLoans,
+            pendingLoans,
             totalDisbursed,
           },
         };
