@@ -277,6 +277,23 @@ export async function performRefresh(
   const efosRows = parseCsv(decodeLatin1(efosBuf));
   const art69Rows = parseCsv(decodeLatin1(art69Buf));
 
+  // A 200 with 0 data rows (empty body, header-only file, or an HTML
+  // placeholder page that happened to contain no "RFC" header cell) must
+  // never reach the write path: the failure-rate check below divides by
+  // rows.length and short-circuits to "0% failure" when there are no rows
+  // at all, which would silently overwrite the last-good blacklist with an
+  // empty one — every employer would pass 69-B/Art.69 screening unflagged.
+  if (efosRows.length === 0) {
+    throw new Error(
+      'EFOS CSV returned 0 data rows (source may be empty, truncated, or an HTML error page) — refusing to overwrite existing blacklist'
+    );
+  }
+  if (art69Rows.length === 0) {
+    throw new Error(
+      'Art. 69 CSV returned 0 data rows (source may be empty, truncated, or an HTML error page) — refusing to overwrite existing blacklist'
+    );
+  }
+
   const efosNormalized = normalizeEfos(efosRows);
   const art69Normalized = normalizeArt69(art69Rows);
 
