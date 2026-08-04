@@ -150,6 +150,102 @@ jobs:
           SENTRY_RELEASE=${{ github.sha }}
           ENVEOF
 
+      # ── WHY THIS STEP EXISTS — DO NOT DELETE AS "REDUNDANT" ──────────────
+      # A `${{ secrets.<NAME> }}` reference interpolates to an EMPTY STRING
+      # when that secret does not exist in this repo — GitHub Actions raises
+      # no error, and neither
+      # does `firebase deploy`: it just ships Cloud Functions whose runtime
+      # config for that key is "". This is exactly how the sibling workflow
+      # (firebase-deploy.yml) shipped a blank config on workflow_dispatch run
+      # 30584991644 (2026-07-30, reported SUCCESS) — it referenced 13 secret
+      # names that had never been provisioned. Nothing upstream of this step
+      # would have caught that; this step reads the functions/.env just
+      # written above and hard-fails BEFORE build/deploy if any key on the
+      # REQUIRED list is empty.
+      #
+      # REQUIRED — each entry below throws or produces a broken result on an
+      # empty value, verified against the actual consumer:
+      #   REDIS_URL          functions/src/utils/redis.ts getRedis() throws
+      #                      synchronously on empty. Every rate-limited
+      #                      callable (~30 call sites, including the loan-
+      #                      request path in index.ts) calls checkRateLimit
+      #                      -> getRedis() with no try/catch, so this is a
+      #                      hard, user-facing outage, not a soft degrade —
+      #                      and with the rate limiter now failing CLOSED
+      #                      when Redis is unreachable, an empty REDIS_URL
+      #                      means every loan request throws.
+      #   PAYMENT_SERVER_URL functions/src/payments/generatePaymentLink.ts
+      #                      throws HttpsError('internal', 'Payment server
+      #                      not configured') immediately when empty, with no
+      #                      fallback — borrowers cannot repay a loan.
+      #   INTERNAL_SECRET    shared secret validated by payment-server,
+      #                      ml-service, registry-service and softcredito-
+      #                      adapter. An empty value can never match any of
+      #                      those services' real secret, so every internal
+      #                      call comes back non-2xx; in
+      #                      generatePaymentLink.ts that non-2xx is NOT
+      #                      swallowed (`if (!response.ok) throw
+      #                      HttpsError(...)`), so this has the same
+      #                      borrower-facing blast radius as
+      #                      PAYMENT_SERVER_URL, just one hop downstream.
+      #
+      # Deliberately NOT required — verified soft-fail or non-critical, so
+      # an empty value here must NOT block a deploy:
+      #   ML_SERVICE_URL           functions/src/index.ts callML() throws,
+      #                            but both call sites (requestLoan,
+      #                            approveEmployer's employer scoring) catch
+      #                            it and log a warning. requestLoan
+      #                            degrades to manual review (see the #544
+      #                            fail-closed fix); the employer-scoring
+      #                            catch is a KNOWN, separately-tracked
+      #                            fail-open (see that catch block's own
+      #                            comment) — not something to paper over by
+      #                            hard-failing deploys here.
+      #   SOFTCREDITO_ADAPTER_URL  functions/src/scheduled/dailyLoanCheck.ts
+      #                            sets a `repaymentSyncError` string and
+      #                            continues; never throws.
+      #   REGISTRY_SERVICE_URL     functions/src/employers/approveEmployer.ts
+      #                            wraps resolveEntity() in try/catch with an
+      #                            explicit comment that a failure "must
+      #                            never affect the approval itself."
+      #   NOTIFICATION_SERVICE_URL,
+      #   PDF_GENERATOR_URL        only referenced by health-check/monitoring
+      #                            code (systemHealthCheck.ts,
+      #                            getSystemHealth.ts) — no business-logic
+      #                            consumer reads these.
+      #   UNDERWRITING_SERVICE_URL functions/src/index.ts guards every use
+      #                            with `if (uwUrl && intSecret)`; this
+      #                            secret is not even provisioned today and
+      #                            the code already treats that as normal.
+      #   SENTRY_DSN,
+      #   VITE_SENTRY_DSN          functions/src/utils/sentry.ts: "No-op
+      #                            when SENTRY_DSN is unset. The callable
+      #                            functions must continue to work without
+      #                            any telemetry backend." Same contract on
+      #                            the frontend (public-v2/src/lib/sentry.ts).
+      #   CONEKTA_API_KEY          not read anywhere under functions/src —
+      #                            consumed only by the separately-deployed
+      #                            services/payment-server, so its value
+      #                            here is inert either way.
+      #
+      # Never echoes secret VALUES, and never `cat`s the .env — only key
+      # names appear in the log, on either the pass or the fail path.
+      - name: Validate functions/.env — fail closed on missing required secrets
+        run: |
+          set -uo pipefail
+          REQUIRED_KEYS="REDIS_URL PAYMENT_SERVER_URL INTERNAL_SECRET"
+          MISSING=""
+          for key in $REQUIRED_KEYS; do
+            if ! grep -qE "^${key}=.+$" functions/.env; then
+              MISSING="${MISSING} ${key}"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::functions/.env is missing a value for:${MISSING} — refusing to build/deploy. A GitHub secret referenced by the 'Write functions .env' step above does not exist (or is empty) in this repo/environment; \`gh secret list --repo IsaacRomayVida/vidafinance\` shows what's actually provisioned."
+            exit 1
+          fi
+          echo "All required functions/.env keys are present: ${REQUIRED_KEYS}"
+
       - name: Build Cloud Functions
         run: cd functions && npm run build
 

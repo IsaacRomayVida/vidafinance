@@ -40,35 +40,71 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
+      # NOTE ON SECRET NAMES: these two steps used to reference a
+      # "_STAGING"/"_PRODUCTION"-suffixed secret for each of REDIS_URL,
+      # SOFTCREDITO_ADAPTER_URL, PAYMENT_SERVER_URL, NOTIFICATION_SERVICE_URL,
+      # PDF_GENERATOR_URL, ML_SERVICE_URL and (staging only)
+      # REGISTRY_SERVICE_URL — none of those 13 suffixed secrets were
+      # ever created in this repo (`gh secret list --repo
+      # IsaacRomayVida/vidafinance`). A GitHub secret reference that doesn't
+      # exist interpolates to an empty string with no error, so every
+      # workflow_dispatch of this workflow (e.g. run 30584991644,
+      # 2026-07-30) wrote a functions/.env with those keys blank and reported
+      # SUCCESS. The real secrets are the unsuffixed names used below —
+      # staging and production deploys now share the same downstream-service
+      # URLs for these, because that is the only version of each secret that
+      # actually exists.
       - name: Write functions .env (Staging)
         if: inputs.environment == 'staging'
         run: |
           cat > functions/.env << ENVEOF
-          REDIS_URL=${{ secrets.REDIS_URL_STAGING }}
+          REDIS_URL=${{ secrets.REDIS_URL }}
           CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
           INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
-          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL_STAGING }}
-          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL_STAGING }}
-          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL_STAGING }}
-          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL_STAGING }}
-          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_STAGING }}
-          REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL_STAGING }}
+          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
+          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
+          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
+          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
+          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
+          REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
           ENVEOF
 
       - name: Write functions .env (Production)
         if: inputs.environment == 'production'
         run: |
           cat > functions/.env << ENVEOF
-          REDIS_URL=${{ secrets.REDIS_URL_PRODUCTION }}
+          REDIS_URL=${{ secrets.REDIS_URL }}
           CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
           INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
-          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL_PRODUCTION }}
-          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL_PRODUCTION }}
-          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL_PRODUCTION }}
-          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL_PRODUCTION }}
-          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL_PRODUCTION }}
+          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
+          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
+          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
+          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
+          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
           REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
           ENVEOF
+
+      # Same required-vs-optional determination as deploy.yml's identical
+      # validation step — see that file for the per-key code evidence
+      # (functions/src/utils/redis.ts, functions/src/payments/
+      # generatePaymentLink.ts). Runs unconditionally: exactly one of the two
+      # steps above ran depending on `inputs.environment`, so functions/.env
+      # exists here either way. Never echoes secret values or `cat`s the file.
+      - name: Validate functions/.env — fail closed on missing required secrets
+        run: |
+          set -uo pipefail
+          REQUIRED_KEYS="REDIS_URL PAYMENT_SERVER_URL INTERNAL_SECRET"
+          MISSING=""
+          for key in $REQUIRED_KEYS; do
+            if ! grep -qE "^${key}=.+$" functions/.env; then
+              MISSING="${MISSING} ${key}"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::functions/.env is missing a value for:${MISSING} — refusing to deploy. A GitHub secret referenced by the 'Write functions .env' step above does not exist (or is empty) in this repo/environment; \`gh secret list --repo IsaacRomayVida/vidafinance\` shows what's actually provisioned."
+            exit 1
+          fi
+          echo "All required functions/.env keys are present: ${REQUIRED_KEYS}"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
