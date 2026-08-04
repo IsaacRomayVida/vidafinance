@@ -55,4 +55,16 @@ class Worker {
 Worker.instances = [];
 Worker.__reset = () => { Worker.instances = []; };
 
-module.exports = { Queue, Worker };
+// Mirrors bullmq's real export (v5.71.0). Not decorative: throwing this from a
+// processor is how BullMQ is told to move the job straight to `failed` without
+// consuming its remaining `attempts`, and the disbursement worker relies on
+// that to refuse a retry it cannot prove is safe. Tests assert on the class
+// itself, so the stand-in has to BE a class with the same name.
+class UnrecoverableError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'UnrecoverableError';
+  }
+}
+
+module.exports = { Queue, Worker, UnrecoverableError };
