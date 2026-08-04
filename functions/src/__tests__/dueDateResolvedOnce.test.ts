@@ -140,7 +140,17 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
   // active loans, so the count is fixed at 0 — well under the Tier-2
   // fallback (3) EMPLOYER's absent riskTier resolves to.
   const employerActiveLoansCountQuery = { _kind: 'employerActiveLoansCountQuery' as const };
-  const loansQuery: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
+  const loansQuery: {
+    _kind: 'loansQuery';
+    where: jest.Mock;
+    limit: jest.Mock;
+    get: jest.Mock;
+    count: jest.Mock;
+  } = {
+    // The per-employee duplicate-application guard is read through `tx.get()`
+    // inside the loan transaction as well as before it, so the query object
+    // has to be recognizable to the transaction mock below.
+    _kind: 'loansQuery',
     where: jest.fn(),
     limit: jest.fn(),
     get: jest.fn().mockResolvedValue({ empty: true, docs: [], size: 0 }),
@@ -172,7 +182,12 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
   const docRef = (collection: string, id: string) => ({
     id,
     _collection: collection,
-    _kind: collection === 'employers' ? ('employerDocRef' as const) : undefined,
+    _kind:
+      collection === 'employers'
+        ? ('employerDocRef' as const)
+        : collection === 'employees'
+          ? ('employeeDocRef' as const)
+          : undefined,
     get: jest.fn(async () => {
       if (collection === 'employees') {
         return { exists: employee !== null, data: () => employee };
@@ -220,6 +235,14 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
             }
             if (refOrQuery?._kind === 'employerActiveLoansCountQuery') {
               return Promise.resolve({ data: () => ({ count: 0 }) });
+            }
+            // The borrower's own record and their open-application query, both
+            // re-read inside the transaction that decrements the credit line.
+            if (refOrQuery?._kind === 'employeeDocRef') {
+              return Promise.resolve({ exists: employee !== null, data: () => employee });
+            }
+            if (refOrQuery?._kind === 'loansQuery') {
+              return loansQuery.get();
             }
             throw new Error('Mock tx.get() called with an unrecognized ref/query');
           }),
