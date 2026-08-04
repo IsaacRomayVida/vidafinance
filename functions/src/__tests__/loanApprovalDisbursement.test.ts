@@ -355,6 +355,72 @@ describe('onLoanApproved — P0-B: idempotency guard against a replayed approval
   });
 });
 
+describe('onLoanApproved — payroll-deduction registration failure must not be silent', () => {
+  // The disbursement call and the deduction-registration call hit the same
+  // adapter for two different purposes; mock both so a test can make one
+  // succeed and the other fail independently.
+  function mockAdapter({ disburseOk = true, deductionOk = true } = {}) {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/internal/disburse')) {
+        return disburseOk
+          ? { ok: true, status: 200, json: async () => ({ ref: 'SPEI-1' }), text: async () => '' }
+          : { ok: false, status: 500, json: async () => ({}), text: async () => 'disburse down' };
+      }
+      if (String(url).endsWith('/internal/register-deduction')) {
+        return deductionOk
+          ? { ok: true, status: 200, json: async () => ({ deductionId: 'DED-1' }), text: async () => '' }
+          : { ok: false, status: 500, json: async () => ({}), text: async () => 'adapter down' };
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
+  }
+
+  it('CONTROL: a healthy adapter registers the deduction and records its id on the loan', async () => {
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    mockAdapter();
+    const { onLoanApproved } = await loadTriggers();
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    expect(mockDb._store.get('loans/loan-1')?.data['softcreditoDeductionId']).toBe('DED-1');
+    expect(mockDb._store.get('loans/loan-1')?.data['payrollDeductionError']).toBeUndefined();
+  });
+
+  it('RED: does not silently drop a failed deduction registration after real funds moved', async () => {
+    mockDb = buildMockDb({
+      loans: { 'loan-1': { ...LOAN_BASE, status: 'approved' } },
+      employees: { 'emp-1': EMPLOYEE },
+    });
+    // Disbursement succeeds — money really did move — but the adapter's
+    // register-deduction endpoint answers with a plain HTTP error, the
+    // ordinary shape of an outage or a bad deploy. No fetch-level throw.
+    mockAdapter({ disburseOk: true, deductionOk: false });
+    const { onLoanApproved } = await loadTriggers();
+    const { sendSlackAlert } = await import('../utils/slackAlert');
+
+    await onLoanApproved(approvalEvent('loan-1', 'under_review', 'approved'));
+
+    // The borrower really was funded...
+    expect(mockDb._store.get('loans/loan-1')?.data['status']).toBe('active');
+
+    // ...but nothing else in the codebase ever reads `softcreditoDeductionId`
+    // to notice it is missing, so ops has to be told directly: an error log,
+    // a Slack page, and a flag on the loan itself. Pre-fix, the handler's
+    // `if (r.ok) {...}` on a `!ok` response does nothing on the else branch —
+    // no throw, so the catch block never runs either, and NONE of the three
+    // assertions below hold.
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Payroll deduction'),
+      expect.objectContaining({ loanId: 'loan-1' })
+    );
+    expect(sendSlackAlert).toHaveBeenCalledWith(expect.stringContaining('loan-1'), 'critical');
+    expect(mockDb._store.get('loans/loan-1')?.data['payrollDeductionError']).toBeDefined();
+  });
+});
+
 describe('updateLoanStatus — P0-B: ops/admin cannot rewind a disbursed loan', () => {
   const opsAuth = { uid: 'ops-1', token: { role: 'ops' } };
 

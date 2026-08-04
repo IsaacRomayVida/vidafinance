@@ -114,6 +114,7 @@ function buildMockDb(seed: Record<string, Record<string, Record<string, unknown>
         const key = `${name}/${id}`;
         return {
           id,
+          _key: key,
           get: jest.fn(async () => {
             const entry = store.get(key);
             return entry
@@ -136,6 +137,30 @@ function buildMockDb(seed: Record<string, Record<string, Record<string, unknown>
         return { id: 'generated' };
       }),
     })),
+    // Bundles a transaction's `tx.update()` calls and applies them to the same
+    // `store` only once the callback returns without throwing — submitReviewDecision
+    // relies on this all-or-nothing commit to keep its review_queue and loans
+    // writes atomic.
+    runTransaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const pending: Array<{ key: string; collection: string; id: string; data: Record<string, unknown> }> = [];
+      const tx = {
+        get: jest.fn(async (ref: { _key: string }) => {
+          const entry = store.get(ref._key);
+          return entry ? { exists: true, data: () => entry.data } : { exists: false, data: () => undefined };
+        }),
+        update: jest.fn((ref: { _key: string; id: string }, data: Record<string, unknown>) => {
+          const [collection] = ref._key.split('/');
+          pending.push({ key: ref._key, collection: collection!, id: ref.id, data });
+        }),
+      };
+      const result = await fn(tx);
+      for (const p of pending) {
+        const prev = store.get(p.key)?.data ?? {};
+        store.set(p.key, { data: { ...prev, ...p.data } });
+        writes.push({ collection: p.collection, id: p.id, op: 'tx.update', data: p.data });
+      }
+      return result;
+    }),
     _writes: writes,
     _store: store,
   };
