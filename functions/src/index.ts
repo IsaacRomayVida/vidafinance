@@ -2389,7 +2389,53 @@ const CLAIM_ELIGIBLE_EMPLOYER_STATUSES = ADMIN_APPROVED_EMPLOYER_STATUSES;
 
 export const onEmployerDocCreated = onDocumentCreated('employers/{uid}', async (event) => {
   const uid = event.params['uid'];
-  const status = event.data?.data()?.['status'] as string | undefined;
+  const created = event.data?.data() ?? {};
+  const status = created['status'] as string | undefined;
+
+  // The join code is minted HERE, at creation, and never by the client.
+  //
+  // It used to be generated in the browser (Onboarding.tsx's
+  // `generateEmployerCode()`) and written straight onto the employer document,
+  // because `isSelfServeEmployerCreate` blocked the credential and slot-ledger
+  // fields but not this one. That made the join-code namespace first-come,
+  // first-served to anyone with an email address, and the code is not a secret:
+  // it is printed on the employer's own roster screen and handed to every
+  // employee they onboard. So an attacker could sign up as an "employer" and
+  // claim a code a real company was already using. `lookupEmployerByCode`
+  // resolves a code with `.where(...).limit(1)`, and a Firestore query with no
+  // explicit order is ordered by document id — so of the two documents now
+  // carrying that code, the lower uid wins, and the attacker can simply
+  // re-register until theirs does.
+  //
+  // From there every employee who typed that company's code at registration
+  // wrote `employerId: <attacker uid>` onto their own `employees/{uid}`
+  // document, and firestore.rules grants
+  // `isEmployerAdminOf(resource.data.employerId)` a read on it — no role claim
+  // required, just a uid match. The attacker lists them and reads full name,
+  // CURP, RFC, date of birth, phone, bank CLABE and monthly salary for the
+  // whole cohort, plus their loan documents through getEmployerDashboard.
+  //
+  // Minted before the claim gate below on purpose: a self-serve employer is
+  // 'pending_verification' and returns early there, and it is precisely the
+  // self-serve employer that used to bring its own code.
+  //
+  // Non-fatal. A mint failure must not abort employer creation or, further
+  // down, the claim grant — EmployeeRoster.tsx's ensureEmployerCode backfill
+  // still covers a document that ends up without one, which is the same state
+  // every pre-#385 employer is already in.
+  const existingCode = created['employerCode'];
+  if (typeof existingCode !== 'string' || existingCode.length === 0) {
+    try {
+      const minted = await mintEmployerCode(db.collection('employers').doc(uid), uid);
+      logger.info('Minted employer join code', { uid, employerCode: minted, service: 'functions' });
+    } catch (err: unknown) {
+      logger.error('Failed to mint employer join code', {
+        uid,
+        error: (err as Error).message,
+        service: 'functions',
+      });
+    }
+  }
 
   if (!status || !CLAIM_ELIGIBLE_EMPLOYER_STATUSES.includes(status)) {
     logger.info('Withholding employer_admin claim pending approval', {
@@ -2666,6 +2712,61 @@ function generateEmployerCodeCandidate(): string {
   return code;
 }
 
+/**
+ * Mints a unique join code onto an employer document and reserves it, in one
+ * transaction. The single writer of `employers/{id}.employerCode`.
+ *
+ * The join code is not decoration: it is the identifier an employee types at
+ * registration, and `lookupEmployerByCode` turns it into the `employerId` that
+ * employee then writes onto their own `employees/{uid}` document. That field
+ * decides who may read the record — firestore.rules grants
+ * `isEmployerAdminOf(resource.data.employerId)` a read on it — so whoever owns
+ * a code owns the identity, CURP, RFC, CLABE and salary of everyone who joins
+ * with it. A namespace like that cannot be client-writable, which is what
+ * `isSelfServeEmployerCreate` now enforces and what this function exists to
+ * serve.
+ *
+ * Uniqueness is checked against BOTH registries, and both reads happen inside
+ * the transaction, before its writes:
+ *
+ *   - `employerCodes/{code}`, the reservation ledger, which is what makes two
+ *     concurrent mints of the same candidate impossible rather than merely
+ *     unlikely;
+ *   - `employers` itself, because every code minted by the old client-side
+ *     generator (Onboarding.tsx) landed on the employer document without ever
+ *     reserving anything. The ledger therefore does not know about the existing
+ *     book, and a candidate cleared against the ledger alone could still be
+ *     issued to a second employer.
+ *
+ * Throws when it cannot find a free candidate; the caller decides whether that
+ * is fatal.
+ */
+async function mintEmployerCode(
+  employerRef: FirebaseFirestore.DocumentReference,
+  employerId: string
+): Promise<string> {
+  for (let attempt = 0; attempt < EMPLOYER_CODE_MAX_ATTEMPTS; attempt++) {
+    const candidate = generateEmployerCodeCandidate();
+    const reservationRef = db.collection('employerCodes').doc(candidate);
+    const inUseQuery = db.collection('employers').where('employerCode', '==', candidate).limit(1);
+
+    const claimed = await db.runTransaction(async (tx) => {
+      const [reservationSnap, inUseSnap] = await Promise.all([
+        tx.get(reservationRef),
+        tx.get(inUseQuery),
+      ]);
+      if (reservationSnap.exists || !inUseSnap.empty) return false;
+      tx.create(reservationRef, { employerId, createdAt: FieldValue.serverTimestamp() });
+      tx.update(employerRef, { employerCode: candidate });
+      return true;
+    });
+
+    if (claimed) return candidate;
+  }
+
+  throw new HttpsError('resource-exhausted', 'Could not mint a unique employer code, please retry');
+}
+
 export const ensureEmployerCode = onCall(
   { cors: true, enforceAppCheck: true },
   withAuth<unknown, { employerCode: string }>(
@@ -2690,31 +2791,19 @@ export const ensureEmployerCode = onCall(
           return { employerCode: existing };
         }
 
-        for (let attempt = 0; attempt < EMPLOYER_CODE_MAX_ATTEMPTS; attempt++) {
-          const candidate = generateEmployerCodeCandidate();
-          const reservationRef = db.collection('employerCodes').doc(candidate);
-          const claimed = await db.runTransaction(async (tx) => {
-            const reservationSnap = await tx.get(reservationRef);
-            if (reservationSnap.exists) return false;
-            tx.create(reservationRef, { employerId: uid, createdAt: FieldValue.serverTimestamp() });
-            tx.update(empRef, { employerCode: candidate });
-            return true;
-          });
-          if (claimed) {
-            try {
-              await auditLog(db, {
-                action: 'employer.codeMinted',
-                actorUid: uid,
-                actorRole: auth.role,
-                targetId: uid,
-                after: { employerCode: candidate },
-              });
-            } catch (_) { /* non-critical */ }
-            return { employerCode: candidate };
-          }
-        }
+        const candidate = await mintEmployerCode(empRef, uid);
 
-        throw new HttpsError('resource-exhausted', 'Could not mint a unique employer code, please retry');
+        try {
+          await auditLog(db, {
+            action: 'employer.codeMinted',
+            actorUid: uid,
+            actorRole: auth.role,
+            targetId: uid,
+            after: { employerCode: candidate },
+          });
+        } catch (_) { /* non-critical */ }
+
+        return { employerCode: candidate };
       })
   )
 );
