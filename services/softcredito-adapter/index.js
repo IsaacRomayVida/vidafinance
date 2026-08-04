@@ -16,13 +16,19 @@ const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { Worker } = require('bullmq');
 const pino = require('pino');
-const { alert5xx, alertRateLimit, alertRedisLost } = require('../shared/alerting');
+const { alert5xx, alertRateLimit, alertRedisLost, alertDisbursementFailed } = require('../shared/alerting');
 const { scTokenRaw } = require('./lib/scToken');
 const { getFetch } = require('./lib/fetchClient');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 const { parseBureauMode, withBureauFallback, classifyError } = require('./lib/bureauFallback');
 const { redactPii } = require('./lib/piiRedact');
 const { markUpstreamFailure, toClientError } = require('./lib/upstreamError');
+const {
+  claimDisbursement,
+  markClaimSent,
+  releaseClaim,
+  isDefiniteUpstreamRejection,
+} = require('./lib/disbursementClaim');
 
 // `formatters.log` runs on every merged log object, which makes it the one
 // choke point PII has to pass through on its way into the log stream. There
@@ -101,11 +107,15 @@ async function scToken() {
 //
 // Opt-in per call site, and deliberately NOT applied to /spei/transfer,
 // /employers/register or /deductions/register: aborting a request that may
-// already have moved money turns one hung call into an ambiguous one, and
-// /internal/disburse has no idempotency guard to make the retry safe (see the
-// pinned test in test/disburse.test.js). Whether the money-moving calls should
-// time out is a question for whoever owns the SoftCrédito integration
-// contract, not something to decide here.
+// already have moved money turns one hung call into an ambiguous one.
+//
+// /internal/disburse is no longer *unsafe* to retry -- lib/disbursementClaim.js
+// now claims the loan's disbursement before dispatch, and an aborted transfer
+// leaves that claim 'in_flight' so every retry refuses rather than re-sends.
+// But refusing is a manual reconciliation, so a timeout here still converts
+// "slow" into "needs a human", which is why one is not being added on the way
+// past. Whether the money-moving calls should time out remains a question for
+// whoever owns the SoftCrédito integration contract.
 const SC_READ_TIMEOUT_MS = () => Number(process.env.SC_HTTP_TIMEOUT_MS) || 15000;
 
 async function scCall(method, path, body, callOpts = {}) {
@@ -202,6 +212,68 @@ app.get('/health', async (req, res) => {
 app.post('/internal/disburse', requireInternal, async (req, res) => {
   const { loanId, clabe, amount, concept, employeeName, employeeId } = req.body;
   if (!loanId || !clabe || !amount) return res.status(400).json({ error: 'Missing fields' });
+
+  // Claim this LOAN's disbursement before anything reaches SoftCrédito. SPEI
+  // has no idempotency key, so this transaction is the only thing standing
+  // between a retried job and a second real payout. See lib/disbursementClaim.js
+  // for why the claim is keyed on loanId rather than a caller-supplied key, and
+  // why in-flight and confirmed-sent are answered differently.
+  //
+  // Wrapped because this await sits outside the try below and express 4 has no
+  // async error handling: an unhandled rejection here would leave the request
+  // with no response at all, so the caller hangs until its own timeout rather
+  // than seeing a failure. Nothing has been dispatched at this point -- a
+  // transaction that throws never committed -- so the retry this 503 invites is
+  // safe, and the borrower is not left unfunded by a transient Firestore blip.
+  let claim;
+  try {
+    claim = await claimDisbursement({ db, admin, loanId, amount, clabe });
+  } catch (err) {
+    log.error({ loanId, error: err.message }, 'disburse aborted — could not claim disbursement, nothing dispatched');
+    return res.status(503).json({
+      error: 'disbursement_claim_unavailable',
+      reason: 'could_not_establish_idempotency_claim',
+      loanId,
+    });
+  }
+
+  if (claim.outcome === 'already_sent') {
+    // 200, not 4xx. The caller is payment-server's disburseWorker
+    // (services/payment-server/index.js:410), which treats any non-2xx as a job
+    // failure and retries to exhaustion before marking the loan
+    // disbursement_error and paging ops. Erroring on a replay would page ops
+    // about a borrower who was in fact paid, correctly, once. Hand back the
+    // original receipt and let the job complete.
+    log.info({ loanId, ref: claim.ref }, 'disburse replay — already sent, no transfer dispatched');
+    return res.json({ success: true, ref: claim.ref, transferId: claim.transferId, idempotentReplay: true });
+  }
+
+  if (claim.outcome === 'indeterminate') {
+    // A previous attempt dispatched and never came back with an answer. We do
+    // not know whether the money left. Re-sending on a guess pays the borrower
+    // twice; refusing costs one reconciliation ticket against SoftCrédito.
+    // Refuse, loudly.
+    log.error({ loanId, amount, claimedAt: claim.claimedAt }, 'disburse refused — previous attempt unconfirmed, needs manual reconciliation');
+    alertDisbursementFailed(SERVICE_NAME, loanId, 'previous disbursement attempt unconfirmed — reconcile with SoftCrédito before retrying');
+    return res.status(409).json({
+      error: 'disbursement_indeterminate',
+      reason: 'previous_attempt_unconfirmed',
+      loanId,
+    });
+  }
+
+  if (claim.outcome === 'conflict') {
+    // Same loanId, different amount or destination CLABE. Not a replay: a
+    // second, different payout against a loan that has already been funded.
+    log.error({ loanId, amount }, 'disburse refused — loan already disbursed with different terms');
+    alertDisbursementFailed(SERVICE_NAME, loanId, 'second disbursement requested with different amount/CLABE');
+    return res.status(409).json({
+      error: 'disbursement_conflict',
+      reason: 'loan_already_disbursed_with_different_terms',
+      loanId,
+    });
+  }
+
   try {
     const r = await scCall('POST', '/spei/transfer', {
       destinationClabe: clabe,
@@ -211,6 +283,14 @@ app.post('/internal/disburse', requireInternal, async (req, res) => {
       reference: loanId.slice(0, 7).toUpperCase(),
       metadata: { loanId, employeeId }
     });
+
+    // Settle the claim FIRST, ahead of the bookkeeping below. Any of those
+    // writes can fail -- .update() on a disbursement_queue doc that was never
+    // created throws NOT_FOUND -- and a confirmed transfer left reading
+    // 'in_flight' would strand a correctly funded loan behind a manual
+    // reconciliation.
+    await markClaimSent({ db, admin, loanId, ref: r.trackingCode || r.reference, transferId: r.transferId });
+
     await db.collection('loans').doc(loanId).update({
       status: 'active',
       disbursedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -230,6 +310,19 @@ app.post('/internal/disburse', requireInternal, async (req, res) => {
     });
     res.json({ success: true, ref: r.trackingCode, transferId: r.transferId });
   } catch (err) {
+    // The claim is released ONLY when SoftCrédito answered with a complete
+    // non-2xx response -- it told us it did not perform the transfer, so a
+    // retry is safe and the borrower can still be funded. Timeouts, aborts,
+    // unparseable bodies and anything else we cannot positively classify leave
+    // the claim 'in_flight', which makes every subsequent retry refuse. That
+    // asymmetry is deliberate: the cost of wrongly refusing is a support
+    // ticket, the cost of wrongly retrying is a duplicate payout.
+    if (isDefiniteUpstreamRejection(err)) {
+      await releaseClaim({ db, admin, loanId, reason: 'upstream_rejected_' + err.status })
+        .catch((relErr) => log.error({ loanId, error: relErr.message }, 'failed to release disbursement claim'));
+    } else {
+      log.error({ loanId }, 'disburse outcome unknown — claim left in_flight, retries will refuse until reconciled');
+    }
     respondUpstreamFailure(res, err, '/internal/disburse');
   }
 });

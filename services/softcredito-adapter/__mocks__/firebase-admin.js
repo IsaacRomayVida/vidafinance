@@ -2,6 +2,7 @@
 
 // Minimal in-memory Firestore stand-in for softcredito-adapter tests. Covers
 // exactly what index.js uses: collection().doc()/.add()/.where().limit().get(),
+// .set() with and without { merge }, runTransaction() with tx.get/set/update,
 // and FieldValue.serverTimestamp(). Not a general Firestore emulator -- do not
 // extend it beyond what the service actually calls.
 //
@@ -52,10 +53,63 @@ function docRef(colName, id) {
       }
       col(colName).set(id, applyFieldValues(existing, updates));
     },
-    async set(data) {
-      col(colName).set(id, applyFieldValues({}, data));
+    async set(data, opts) {
+      const base = opts && opts.merge ? col(colName).get(id) : undefined;
+      col(colName).set(id, applyFieldValues(base, data));
     },
   };
+}
+
+// Serialized transactions.
+//
+// Firestore gives a transaction serializable isolation: two concurrent
+// transactions touching the same document cannot both read a pre-write state
+// and both commit. Node is single-threaded, so without modelling that, two
+// concurrent requests would each `await tx.get()` (yielding), each observe "no
+// claim", and each commit -- which would make the concurrency test in
+// test/disburse.test.js pass against code that is not actually safe.
+//
+// The queue below is what makes that test mean something: callbacks run one at
+// a time, and writes are buffered until the callback returns so a throw leaves
+// nothing behind.
+let txQueue = Promise.resolve();
+
+function runTransaction(fn) {
+  const run = txQueue.then(async () => {
+    const writes = [];
+    const tx = {
+      async get(ref) {
+        const data = col(ref._colName).get(ref.id);
+        return { exists: data !== undefined, id: ref.id, data: () => data };
+      },
+      set(ref, data, opts) {
+        writes.push(() => {
+          const base = opts && opts.merge ? col(ref._colName).get(ref.id) : undefined;
+          col(ref._colName).set(ref.id, applyFieldValues(base, data));
+        });
+        return tx;
+      },
+      update(ref, data) {
+        writes.push(() => {
+          const existing = col(ref._colName).get(ref.id);
+          if (existing === undefined) {
+            const err = new Error(`${ref.id}: No document to update`);
+            err.code = 5;
+            throw err;
+          }
+          col(ref._colName).set(ref.id, applyFieldValues(existing, data));
+        });
+        return tx;
+      },
+    };
+    const result = await fn(tx);
+    for (const w of writes) w();
+    return result;
+  });
+  // Keep the chain alive after a rejected transaction, or every later
+  // transaction in the same test file inherits the failure.
+  txQueue = run.then(() => {}, () => {});
+  return run;
 }
 
 function collection(name) {
@@ -92,7 +146,7 @@ function collection(name) {
 }
 
 function firestore() {
-  return { collection };
+  return { collection, runTransaction };
 }
 firestore.FieldValue = {
   serverTimestamp: () => ({ __type: SERVER_TIMESTAMP }),
