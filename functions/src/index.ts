@@ -2763,91 +2763,15 @@ export const autoVerifyOnEmployeeCreate = onDocumentCreated('employees/{uid}', a
 
 // ── Scheduled functions ──────────────────────────────────────────────────────
 
-export const dailyLoanCheck = onSchedule(
-  { schedule: '0 9 * * *', timeZone: 'America/Mexico_City' },
-  async () => {
-    const now = Timestamp.now();
-
-    const overdueSnap = await db
-      .collection('loans')
-      .where('status', '==', 'active')
-      .where('dueDate', '<', now)
-      .get();
-
-    for (const doc of overdueSnap.docs) {
-      const loan = doc.data();
-      const daysOver = Math.floor((Date.now() - (loan['dueDate'] as FirebaseFirestore.Timestamp).toMillis()) / 86400000);
-
-      await doc.ref.update({ status: 'overdue', overdueDetectedAt: now });
-
-      await db.collection('overdue_log').doc(doc.id).set({
-        loanId: doc.id,
-        employeeId: loan['employeeId'],
-        employerId: loan['employerId'],
-        employeeName: loan['employeeName'],
-        amount: loan['total'],
-        dueDate: loan['dueDate'],
-        daysOverdue: daysOver,
-        detectedAt: now,
-        resolved: false,
-      });
-
-      try {
-        await getQueue('vida-notifications').add('loan_overdue', {
-          type: 'loan_overdue',
-          loanId: doc.id,
-          employeeId: loan['employeeId'],
-          phone: loan['employeePhone'],
-          amount: loan['total'],
-          dueDate: (loan['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
-          daysOverdue: daysOver,
-        });
-      } catch (_) { /* queue unavailable */ }
-
-      try {
-        await auditLog(db, {
-          action: 'loan.overdue_detected',
-          actorUid: 'system',
-          actorRole: 'system',
-          targetId: doc.id,
-        });
-      } catch (_) { /* non-critical */ }
-    }
-
-    if (overdueSnap.size > 0) {
-      sendSlackAlert('New overdue loans detected: ' + overdueSnap.size, 'warning').catch(() => {});
-    }
-
-    const tomorrow = Timestamp.fromMillis(Date.now() + 25 * 60 * 60 * 1000);
-    const remindSnap = await db
-      .collection('loans')
-      .where('status', '==', 'active')
-      .where('dueDate', '<', tomorrow)
-      .get();
-
-    for (const doc of remindSnap.docs) {
-      const loan = doc.data();
-      if ((loan['dueDate'] as FirebaseFirestore.Timestamp).toMillis() < Date.now()) continue;
-      try {
-        await getQueue('vida-notifications').add('loan_reminder_24h', {
-          type: 'loan_reminder_24h',
-          loanId: doc.id,
-          employeeId: loan['employeeId'],
-          phone: loan['employeePhone'],
-          amount: loan['total'],
-          dueDate: (loan['dueDate'] as FirebaseFirestore.Timestamp).toDate().toISOString(),
-        });
-      } catch (_) { /* queue unavailable */ }
-    }
-
-    await db.collection('scheduler_runs').add({
-      job: 'dailyLoanCheck',
-      ranAt: now,
-      overdueFound: overdueSnap.size,
-      status: 'complete',
-    });
-  }
-);
+// ─── Daily arrears sweep (#541) ─────────────────────────────────────────────
+// The fix for D1 (manually-disbursed loans invisible to the sweep) and D2 (a
+// failed/unconfigured SoftCrédito repayment sync letting the sweep run on
+// stale data and dun borrowers who had already paid) lives in
+// functions/src/scheduled/dailyLoanCheck.ts. It was written and tested there
+// but never wired in here — this used to be a second, inline definition that
+// still had both bugs, so the fix shipped in #541 had zero effect in
+// production. See scheduled/__tests__/dailyLoanCheck.test.ts's wiring guard.
+export { dailyLoanCheck } from './scheduled/dailyLoanCheck';
 
 export const weeklyPortfolioSnapshot = onSchedule(
   { schedule: '0 8 * * 1', timeZone: 'America/Mexico_City' },
