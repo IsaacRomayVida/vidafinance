@@ -309,6 +309,38 @@ describe('POST /internal/disburse — replay / idempotency', () => {
     expect(admin.__all('spei_log')).toHaveLength(1);
   });
 
+  test('a retry after a SoftCrédito 5xx REFUSES and never re-sends', async () => {
+    seedLoanAndQueue('loan_8b');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(500, { error_code: 'INTERNAL', message: 'boom' }))
+      // Armed: a regression that treats 5xx as a definite rejection re-sends
+      // here and fails on the call count below rather than on an empty mock.
+      .mockResolvedValue(jsonResponse(200, { trackingCode: 'TRK-DUP', transferId: 'tr_dup' }));
+
+    const body = { ...VALID_BODY, loanId: 'loan_8b' };
+    const first = await postDisburse(body);
+    expect(first.status).toBe(500);
+
+    // A 5xx is NOT the upstream saying "I did not do this". It is what a vendor
+    // returns when it initiated the SPEI and then fell over writing its own
+    // ledger, and what an intermediary returns for a request the origin may
+    // have processed in full. Money may well have moved, so this belongs with
+    // the timeouts in the indeterminate state -- not with the 4xx rejections.
+    // Releasing it would hand disburseWorker's five BullMQ retries a licence to
+    // pay the borrower again.
+    const second = await postDisburse(body);
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({
+      error: 'disbursement_indeterminate',
+      reason: 'previous_attempt_unconfirmed',
+      loanId: 'loan_8b',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__all('spei_log')).toHaveLength(0);
+    expect(admin.__get('loans', 'loan_8b').status).toBe('approved');
+  });
+
   test('a loan already disbursed before this guard existed is not re-sent', async () => {
     // Loans funded before disbursement_claims existed carry no claim doc. The
     // evidence the old code wrote -- loans.disbursedAt/disbursementRef and

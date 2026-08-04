@@ -310,13 +310,15 @@ app.post('/internal/disburse', requireInternal, async (req, res) => {
     });
     res.json({ success: true, ref: r.trackingCode, transferId: r.transferId });
   } catch (err) {
-    // The claim is released ONLY when SoftCrédito answered with a complete
-    // non-2xx response -- it told us it did not perform the transfer, so a
-    // retry is safe and the borrower can still be funded. Timeouts, aborts,
-    // unparseable bodies and anything else we cannot positively classify leave
-    // the claim 'in_flight', which makes every subsequent retry refuse. That
-    // asymmetry is deliberate: the cost of wrongly refusing is a support
-    // ticket, the cost of wrongly retrying is a duplicate payout.
+    // The claim is released ONLY when SoftCrédito answered with a complete 4xx
+    // response -- it refused the request on its face, before any money could
+    // move, so a retry is safe and the borrower can still be funded. Timeouts,
+    // aborts, unparseable bodies, 5xx (a vendor that paid the borrower and then
+    // fell over writing its own ledger still answers 500) and anything else we
+    // cannot positively classify leave the claim 'in_flight', which makes every
+    // subsequent retry refuse. That asymmetry is deliberate: the cost of
+    // wrongly refusing is a support ticket, the cost of wrongly retrying is a
+    // duplicate payout.
     if (isDefiniteUpstreamRejection(err)) {
       await releaseClaim({ db, admin, loanId, reason: 'upstream_rejected_' + err.status })
         .catch((relErr) => log.error({ loanId, error: relErr.message }, 'failed to release disbursement claim'));

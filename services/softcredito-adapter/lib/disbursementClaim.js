@@ -49,10 +49,11 @@
 // ticket. Refuse.
 //
 // 'released' is deliberately distinct from 'in_flight': it means SoftCrédito
-// answered and its answer was "I did not do this" (a non-2xx with a body).
-// That is a *known* outcome, so a legitimate retry may still fund the
-// borrower. Folding definite rejections into the indeterminate state would
-// strand every transient vendor error behind manual reconciliation.
+// answered and its answer was "I did not do this" (a 4xx with a body — see
+// isDefiniteUpstreamRejection for why 5xx does not qualify). That is a *known*
+// outcome, so a legitimate retry may still fund the borrower. Folding definite
+// rejections into the indeterminate state would strand every bad-CLABE typo
+// behind manual reconciliation.
 
 const CLAIMS_COLLECTION = 'disbursement_claims';
 
@@ -234,8 +235,20 @@ async function releaseClaim({ db, admin, loanId, reason }) {
 // Transport errors, aborts and JSON parse failures reach here with no status —
 // and stay indeterminate, which is the safe default for anything we cannot
 // positively classify.
+//
+// 4xx ONLY, deliberately. A 4xx is SoftCrédito refusing the request on its
+// face — bad CLABE, insufficient funds, rate limited — decided before any
+// money could move, so releasing the claim is safe and lets a corrected retry
+// still fund the borrower. A 5xx is not that. "500 Internal Server Error" is
+// exactly what a vendor returns when it initiated the SPEI and then fell over
+// writing its own ledger, and a 502/504 means an intermediary gave up on a
+// request the origin may have processed in full. Treating those as definite
+// would release the claim and let disburseWorker's five BullMQ retries re-send
+// a transfer that already happened — the duplicate payout this module exists
+// to prevent. A 5xx is an unknown outcome, and unknown outcomes are refused
+// rather than guessed at, same as a timeout.
 function isDefiniteUpstreamRejection(err) {
-  return Boolean(err && typeof err.status === 'number' && err.status >= 400);
+  return Boolean(err && typeof err.status === 'number' && err.status >= 400 && err.status < 500);
 }
 
 module.exports = {
