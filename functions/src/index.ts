@@ -39,6 +39,7 @@ import {
   isCreditRestoringRepayment,
   isDisbursedStatus,
   isRepaidStatus,
+  OUTSTANDING_STATUSES,
 } from './loans/loanStatus';
 import { computeEmployerDashboardStats } from './employers/computeEmployerDashboardStats';
 import { allowTestBypass } from './utils/environment';
@@ -677,16 +678,99 @@ export const requestLoan = onCall(
           }
         };
 
+        // Same auditable-record contract as `recordInlineMlDenial` above, for
+        // the OTHER way this gate can fail to protect the applicant: not a
+        // verdict, but an outage. `routedToReview` records whether this
+        // outage actually changed the loan's fate (false when the 6-stage
+        // pipeline had already reached its own verdict — see the override
+        // note where this is called).
+        const recordInlineMlOutage = async (
+          reason: string,
+          routedToReview: boolean
+        ): Promise<void> => {
+          try {
+            await auditLog(db, {
+              action: 'loan.ml_gate_unavailable',
+              actorUid: uid,
+              actorRole: 'employee',
+              targetId: loanId,
+              meta: {
+                gate: 'ml_unavailable',
+                reason,
+                amount,
+                term,
+                routedToReview,
+                uwDecision,
+                uwCorrelationId: (uwResult?.['correlationId'] as string) ?? null,
+              },
+            });
+          } catch (auditErr: unknown) {
+            logger.warn('Failed to record inline ML outage in audit_log', {
+              uid,
+              loanId,
+              error: (auditErr as Error).message,
+              service: 'functions',
+            });
+          }
+        };
+
+        // The two signals below used to be hardcoded to 0 in the ML payload,
+        // which permanently disabled the scorer's existing-debt and
+        // request-frequency checks — every applicant looked debt-free and
+        // first-time no matter their real history.
+        //
+        // `existingLoans` reads OUTSTANDING_STATUSES (loanStatus.ts), not the
+        // narrower ACTIVE_LOAN_STATUSES the duplicate-application guard above
+        // already enforces. That guard guarantees zero ACTIVE_LOAN_STATUSES
+        // loans by the time we get here, so counting that same set would
+        // always read 0 — reproducing the dead-signal bug one layer down.
+        // OUTSTANDING_STATUSES additionally covers 'disbursed', 'overdue' and
+        // 'in_collections', none of which block a new application, so a
+        // borrower who already owes money — the exact case this signal exists
+        // to catch — can still reach this query with a nonzero count.
+        //
+        // `requestsLastHour` is read from `audit_log` (actorUid + timestamp),
+        // not from the `loans` collection: an inline-ML-denied attempt never
+        // creates a loan document (recordInlineMlDenial writes an audit row
+        // and throws before the loan transaction), so a `loans`-only count
+        // would undercount exactly the rapid-fire-denial pattern this signal
+        // is meant to flag. The query is scoped to `actorUid` only (not also
+        // filtered to loan-request actions) because `actorUid + action +
+        // timestamp` would need a composite index this deployment does not
+        // have — see getReviewQueue's index-outage comment (#414) — while
+        // `actorUid + timestamp` is exactly the index already declared in
+        // firestore.indexes.json. A borrower's audit trail outside loan
+        // requests is small enough in practice that this is a reasonable
+        // proxy, not a precise count.
+        const oneHourAgo = Timestamp.fromMillis(Date.now() - 60 * 60 * 1000);
+        const [outstandingLoansSnap, recentRequestsSnap] = await Promise.all([
+          db
+            .collection('loans')
+            .where('employeeId', '==', uid)
+            .where('status', 'in', OUTSTANDING_STATUSES)
+            .get(),
+          db.collection('audit_log').where('actorUid', '==', uid).where('timestamp', '>=', oneHourAgo).get(),
+        ]);
+        const existingLoans = outstandingLoansSnap.size;
+        const requestsLastHour = recentRequestsSnap.size;
+
+        // Set when the inline ML gate itself could not be reached — infra
+        // (ML_SERVICE_URL unset, non-2xx, the 8s timeout, DNS/connection
+        // error, malformed JSON), NOT a genuine fraud/default verdict. Those
+        // still throw above and are unaffected. `null` means the gate ran to
+        // completion (denied, or passed).
+        let mlGateOutageReason: string | null = null;
+
         const loanExtra: Record<string, unknown> = {};
         try {
           const ml = await callML('/underwrite/employee', {
             employeeId: uid,
             monthlySalary: emp['monthlySalary'] ?? 0,
             employerTier: employer['riskTier'] ?? 2,
-            existingLoans: 0,
+            existingLoans,
             bankClabe: emp['bankClabe'] ?? null,
             amount,
-            requestsLastHour: 0,
+            requestsLastHour,
           });
           if (ml['fraud'] && (ml['fraud'] as Record<string, unknown>)['is_fraud']) {
             const fraud = ml['fraud'] as Record<string, unknown>;
@@ -715,7 +799,8 @@ export const requestLoan = onCall(
           });
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
-          logger.warn('ML unavailable', { error: (e as Error).message, service: 'functions' });
+          mlGateOutageReason = (e as Error).message;
+          logger.warn('ML unavailable', { error: mlGateOutageReason, service: 'functions' });
         }
 
         // Apply the underwriting pipeline decision to the loan's initial status.
@@ -740,6 +825,34 @@ export const requestLoan = onCall(
           initialStatus = 'approved';
         } else if (uwDecision === 'pending_review') {
           initialStatus = 'under_review';
+        }
+
+        // Fail CLOSED, not soft: an infra failure of the inline ML gate means
+        // neither gate ran (the 6-stage pipeline is optional/rare-in-pilot —
+        // see the mapping above — and often never configured at all). Letting
+        // `initialStatus` stay at its 'pending' default here is exactly what
+        // silently turned a credit gate into a no-op — 'pending' loans are
+        // eligible for the same ops/employer approval → disbursement path as
+        // any fully-underwritten loan, with nobody, human or model, ever
+        // having looked at this one.
+        //
+        // Routes to the SAME `under_review` state and `review_queue` path
+        // Stage 5 already uses for `pending_review` above — not a new status
+        // — so the loan is reachable through submitReviewDecision like any
+        // other manual review, and stays usable during an ML outage instead
+        // of hard-erroring every applicant.
+        //
+        // Only overrides the 'pending' default: a `uwDecision` of
+        // rejected/approved/pending_review means the 6-stage pipeline already
+        // assessed this applicant, and that verdict is not second-guessed by
+        // this gate's own outage (mirrors the override note on
+        // `recordInlineMlDenial` above — the pipeline is the decision path).
+        const mlGateFellOpen = mlGateOutageReason !== null && initialStatus === 'pending';
+        if (mlGateFellOpen) {
+          initialStatus = 'under_review';
+        }
+        if (mlGateOutageReason !== null) {
+          await recordInlineMlOutage(mlGateOutageReason, mlGateFellOpen);
         }
         const holdCredit = initialStatus !== 'rejected';
 
@@ -1007,6 +1120,34 @@ export const requestLoan = onCall(
               underwritingDetail
             );
           }
+
+          // The loan just landed as 'under_review' because the ML gate that
+          // would have assessed it was unreachable (`mlGateFellOpen` above),
+          // not because Stage 5 put it there. `under_review` is only
+          // resolvable through submitReviewDecision, which acts on a
+          // `review_queue` document, not on the loan directly (#407) — so
+          // without this write the loan would be stranded `under_review`
+          // forever, findable by no ops screen, exactly the dead end #407's
+          // DECIDABLE_REVIEW_STATUSES comment describes. Written in the same
+          // transaction as the loan itself so the two can never land apart.
+          if (mlGateFellOpen) {
+            tx.set(db.collection('review_queue').doc(), {
+              loanId,
+              correlationId: uwResult?.['correlationId'] ?? null,
+              reason: 'ml_gate_unavailable',
+              priority: 3,
+              applicantName: emp['name'] ?? null,
+              applicantRfc: emp['rfc'] ?? null,
+              queuedAt: new Date().toISOString(),
+              assignedTo: null,
+              status: 'pending_review',
+              slaDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              reviewedAt: null,
+              reviewedBy: null,
+              reviewDecision: null,
+              reviewNotes: null,
+            });
+          }
         });
 
         try {
@@ -1231,6 +1372,22 @@ export const approveEmployer = onCall(
           }
         } catch (e: unknown) {
           if (e instanceof HttpsError) throw e;
+          // KNOWN, DELIBERATELY NOT FIXED HERE: this is the same fail-open
+          // defect as requestLoan's inline ML gate above — an infra failure
+          // (ML_SERVICE_URL unset, non-2xx, timeout, DNS, bad JSON) is not a
+          // verdict, yet the `status: 'active'` write a few lines up stays in
+          // force and the employer_admin claim below is still minted, so an
+          // employer nobody assessed ends up fully approved.
+          //
+          // It is left alone in this change because the loan-side fix can
+          // degrade to manual review while this one cannot: employers have no
+          // review queue, so failing closed means refusing the approval
+          // outright, which bricks onboarding end-to-end if ML_SERVICE_URL
+          // turns out to be unreachable from Cloud Functions (the secret is
+          // wired in deploy.yml, but railway-setup-env.yml points it at
+          // `*.railway.internal`, which is not resolvable from GCP). That
+          // reachability question has to be answered before this can fail
+          // closed safely. Tracked separately — do not "fix" it blind.
           logger.warn('ML scoring unavailable', { error: (e as Error).message, service: 'functions' });
         }
 
