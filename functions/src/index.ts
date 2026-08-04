@@ -13,7 +13,6 @@ import { Queue } from 'bullmq';
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
 import { checkRateLimit, enforceRateLimit } from './utils/rateLimiter';
-import { notifyLoanEvent } from './utils/notify';
 import { sendSlackAlert } from './utils/slackAlert';
 import { initSentry } from './utils/sentry';
 import {
@@ -144,6 +143,30 @@ function getQueue(name: string): Queue {
 
 async function auditLog(database: FirebaseFirestore.Firestore, entry: AuditLogEntry): Promise<void> {
   await database.collection(AUDIT_LOG_COLLECTION).add(buildAuditLogDocument(entry));
+}
+
+// A dropped notification job (Redis down, misconfigured REDIS_URL) must not
+// break the loan/employer action that triggered it — same non-fatal contract
+// `.catch(() => {})` gave the direct notifyLoanEvent() calls this replaces —
+// but it also must not vanish into a bare `logger.warn` with nothing ops can
+// query later. Mirrors notify.ts's recordSendFailure, which is the house
+// style for "non-fatal send failure, recorded in audit_log" established
+// alongside this fix.
+async function recordNotificationEnqueueFailure(event: string, targetId: string, err: unknown): Promise<void> {
+  try {
+    await auditLog(db, {
+      action: 'notification.enqueue_failed',
+      actorUid: 'system',
+      actorRole: 'system',
+      targetId,
+      meta: { event, error: err instanceof Error ? err.message : String(err) },
+    });
+  } catch (auditErr: unknown) {
+    logger.warn('Failed to record notification enqueue failure in audit_log', {
+      error: (auditErr as Error).message,
+      service: 'functions',
+    });
+  }
 }
 
 async function callML(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -1464,7 +1487,20 @@ export const approveEmployer = onCall(
           });
         } catch (_) { /* non-critical */ }
 
-        await notifyLoanEvent('employer_approved', { employerEmail: emp['email'], employerName: emp['companyName'] }).catch(() => {});
+        // No separate 'employer_approved' send here (direct or enqueued): the
+        // 'employer_activated' job queued above IS this notification — the
+        // worker's switch statement treats employer_approved and
+        // employer_activated as literally the same case (notificationWorker.ts
+        // case 'employer_approved': case 'employer_activated': — one email,
+        // one SendGrid template, keyed off the same employer['email']). This
+        // used to also call notifyLoanEvent('employer_approved', ...) directly,
+        // which never sent anything in production (SENDGRID_API_KEY is only
+        // ever set on the Railway notification-service worker, never on the
+        // Firebase Functions runtime), so removing it changes nothing observable
+        // today. Enqueueing a second 'employer_approved' job instead of removing
+        // the call would have "fixed" it into a live duplicate-send bug the
+        // moment this ships — the employer would get the same activation email
+        // twice for one approval.
 
         return { success: true, approved: true };
       })
@@ -2355,7 +2391,18 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
         after: { status: 'approved' },
       });
     } catch (_) { /* non-critical */ }
-    await notifyLoanEvent('loan_approved', { employeePhone: afterData['employeePhone'], employeeEmail: afterData['employeeEmail'], employeeName: afterData['employeeName'], loanAmount: afterData['amount'] }).catch(() => {});
+    try {
+      await getQueue('vida-notifications').add('loan_approved', {
+        type: 'loan_approved',
+        loanId,
+        employeeId: afterData['employeeId'],
+        phone: afterData['employeePhone'],
+        amount: afterData['amount'],
+      });
+    } catch (e: unknown) {
+      logger.warn('Notification queue unavailable', { error: (e as Error).message, service: 'functions' });
+      await recordNotificationEnqueueFailure('loan_approved', loanId, e);
+    }
   }
 
   // Gated on the shared predicate, NOT on a hardcoded `pending`. #488 widened
@@ -2377,7 +2424,19 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
         after: { status: 'rejected' },
       });
     } catch (_) { /* non-critical */ }
-    await notifyLoanEvent('loan_rejected', { employeePhone: afterData['employeePhone'], employeeEmail: afterData['employeeEmail'], employeeName: afterData['employeeName'], loanAmount: afterData['amount'] }).catch(() => {});
+    try {
+      await getQueue('vida-notifications').add('loan_rejected', {
+        type: 'loan_rejected',
+        loanId,
+        employeeId: afterData['employeeId'],
+        phone: afterData['employeePhone'],
+        amount: afterData['amount'],
+        rejectionReason: afterData['statusNote'],
+      });
+    } catch (e: unknown) {
+      logger.warn('Notification queue unavailable', { error: (e as Error).message, service: 'functions' });
+      await recordNotificationEnqueueFailure('loan_rejected', loanId, e);
+    }
   }
 
   // Was gated on `beforeData.status === 'approved' && afterData.status === 'paid'`
