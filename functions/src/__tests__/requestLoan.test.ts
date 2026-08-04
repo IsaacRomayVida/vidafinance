@@ -45,6 +45,9 @@ class MockTimestamp {
   static fromDate(date: Date) {
     return new MockTimestamp(Math.floor(date.getTime() / 1000));
   }
+  static fromMillis(ms: number) {
+    return new MockTimestamp(Math.floor(ms / 1000));
+  }
   toDate() {
     return new Date(this.seconds * 1000);
   }
@@ -76,21 +79,54 @@ jest.mock('../utils/notify', () => ({ notifyLoanEvent: jest.fn().mockResolvedVal
 jest.mock('../utils/slackAlert', () => ({ sendSlackAlert: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../utils/sentry', () => ({ initSentry: jest.fn(), captureException: jest.fn() }));
 
-function makeQuery(getResult: { empty: boolean; docs: Array<{ data: () => Record<string, unknown>; id: string }> }) {
-  const query: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
-    where: jest.fn(),
+// `loans` backs THREE distinct queries in requestLoan, all built the same
+// `.where().where()...` way:
+//   1. the per-employee duplicate-application guard (ACTIVE_LOAN_STATUSES,
+//      `.limit(1).get()`)
+//   2. the employer slot-cap count (ACTIVE_LOAN_STATUSES, `.count()`, read
+//      only via `tx.get()` inside the transaction below — never `.get()`
+//      directly)
+//   3. D2's existingLoans signal (OUTSTANDING_STATUSES, `.get()`)
+// A single shared query object (the pre-fix mock) cannot tell these apart —
+// every `.where()` call has to return a FRESH chain that remembers its own
+// clauses, so `.get()`/`.count()` can answer based on what was actually
+// filtered on. Told apart by `status`: OUTSTANDING_STATUSES uniquely
+// includes 'disbursed', which ACTIVE_LOAN_STATUSES does not.
+function makeLoansChain(
+  clauses: Array<{ field: string; value: unknown }>,
+  state: { activeLoans: Array<Record<string, unknown>>; outstandingLoansCount: number },
+  employerActiveLoansCountQuery: { _kind: 'employerActiveLoansCountQuery' }
+): { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } {
+  const chain: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
+    where: jest.fn((field: string, _op: string, value: unknown) =>
+      makeLoansChain([...clauses, { field, value }], state, employerActiveLoansCountQuery)
+    ),
     limit: jest.fn(),
-    get: jest.fn().mockResolvedValue(getResult),
-    // requestLoan's employer-slot-cap check builds `.where().where().count()`
-    // against this same 'loans' collection mock, distinct from the
-    // `.where().where().limit(1).get()` per-employee duplicate check above.
+    get: jest.fn(() => {
+      const statusClause = clauses.find((c) => c.field === 'status');
+      const statuses = (statusClause?.value ?? []) as unknown[];
+      if (Array.isArray(statuses) && statuses.includes('disbursed')) {
+        return Promise.resolve({
+          empty: state.outstandingLoansCount === 0,
+          size: state.outstandingLoansCount,
+          docs: Array.from({ length: state.outstandingLoansCount }, (_, i) => ({
+            data: () => ({}),
+            id: `outstanding-loan-${i}`,
+          })),
+        });
+      }
+      return Promise.resolve({
+        empty: state.activeLoans.length === 0,
+        size: state.activeLoans.length,
+        docs: state.activeLoans.map((d) => ({ data: () => d, id: 'active-loan-id' })),
+      });
+    }),
     // Tagged so the runTransaction mock's `get()` below can recognize it was
     // handed the aggregate query object, not a document reference.
-    count: jest.fn(),
+    count: jest.fn(() => employerActiveLoansCountQuery),
   };
-  query.where.mockReturnValue(query);
-  query.limit.mockReturnValue(query);
-  return query;
+  chain.limit.mockReturnValue(chain);
+  return chain;
 }
 
 const mockEmployee = {
@@ -126,17 +162,19 @@ function buildMockDb({
   // Deliberately independent of `activeLoans` above, which only backs the
   // per-EMPLOYEE duplicate-application guard.
   activeEmployerLoansCount = 0,
+  // D2: how many OUTSTANDING_STATUSES loans this borrower already has —
+  // independent of `activeLoans` (ACTIVE_LOAN_STATUSES), since the two
+  // status sets diverge on disbursed/overdue/in_collections, and a nonzero
+  // `activeLoans` would trip the duplicate-application guard before the ML
+  // gate is ever reached.
+  outstandingLoansCount = 0,
+  // D2: how many audit_log rows this uid has in the last hour — backs
+  // requestsLastHour.
+  recentRequestsCount = 0,
 } = {}) {
-  const loansQuery = makeQuery({
-    empty: activeLoans.length === 0,
-    docs: activeLoans.map((d) => ({ data: () => d, id: 'active-loan-id' })),
-  });
-  // The object requestLoan's `.count()` call returns, and the same object it
-  // then hands to `tx.get()`. Tagged so the transaction mock's `get()` below
-  // can tell it apart from a document reference without depending on the
-  // real Firestore AggregateQuery shape.
   const employerActiveLoansCountQuery = { _kind: 'employerActiveLoansCountQuery' as const };
-  loansQuery.count.mockReturnValue(employerActiveLoansCountQuery);
+  const loansState = { activeLoans, outstandingLoansCount };
+  const loansQuery = makeLoansChain([], loansState, employerActiveLoansCountQuery);
 
   const transactionCalls: Array<{ op: string; ref?: string; data?: unknown }> = [];
   const auditWrites: Array<Record<string, unknown>> = [];
@@ -145,13 +183,21 @@ function buildMockDb({
 
   // One stable object across every collection('audit_log') call, so a test can
   // read what was written. `auditWriteFails` makes the write reject, which is
-  // how the fail-soft guarantee is exercised.
+  // how the fail-soft guarantee is exercised. `.where().where().get()` backs
+  // D2's requestsLastHour signal — a fixed `recentRequestsCount`, independent
+  // of whatever `.add()` has accumulated into `auditWrites` so far.
+  const auditQueryChain: { where: jest.Mock; get: jest.Mock } = {
+    where: jest.fn(),
+    get: jest.fn(() => Promise.resolve({ size: recentRequestsCount })),
+  };
+  auditQueryChain.where.mockReturnValue(auditQueryChain);
   const auditCollection = {
     add: jest.fn(async (doc: Record<string, unknown>) => {
       if (auditWriteFails) throw new Error('audit_log unavailable');
       auditWrites.push(doc);
       return { id: `audit-${auditWrites.length}` };
     }),
+    where: jest.fn().mockReturnValue(auditQueryChain),
   };
 
   // Same tagging idea as the aggregate query above: requestLoan reads the
@@ -195,6 +241,12 @@ function buildMockDb({
       }
       if (name === 'audit_log') {
         return auditCollection;
+      }
+      if (name === 'review_queue') {
+        // Only ever written to via `tx.set()` (D1's ML-outage manual-review
+        // routing) — never read in these tests, so a bare tagged ref is
+        // enough for the transaction mock's `set()` below to record it.
+        return { doc: jest.fn().mockReturnValue({ _kind: 'reviewQueueDocRef' as const }) };
       }
       if (name === 'config') {
         return {
@@ -411,7 +463,14 @@ describe('requestLoan (deployed handler in index.ts)', () => {
     mockDb._setConfigData({ feeRate: 0.32 });
     await fn({ auth, data: realClientPayload });
 
-    const loanWrites = mockDb._transactionCalls.filter((c) => c.op === 'set') as Array<{
+    // Filtered to the loan doc specifically (`ref === 'loanDocRef'`), not just
+    // `op === 'set'`: with ML_SERVICE_URL unset (as in every test in this
+    // file by default) both requests also fall open into `under_review` and
+    // each writes a `review_queue` doc in the same transaction (D1), which is
+    // also a `set` and would otherwise double this count.
+    const loanWrites = mockDb._transactionCalls.filter(
+      (c) => c.op === 'set' && c.ref === 'loanDocRef'
+    ) as Array<{
       data: Record<string, unknown>;
     }>;
     expect(loanWrites).toHaveLength(2);
@@ -617,7 +676,13 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 
       expect(result.loanId).toBeTruthy();
       const loanData = getLoanWrite();
-      expect(loanData['status']).toBe('pending');
+      // `mockUnderwritingResponse(null)` makes node-fetch reject for every
+      // URL, so the inline ML gate (always attempted regardless of the
+      // 6-stage pipeline's availability) fails too. Pre-D1 this silently
+      // fell through to 'pending' — a loan nobody, human or model, had
+      // assessed, eligible for the same approval → disbursement path as a
+      // fully-underwritten one. It must now fail closed to 'under_review'.
+      expect(loanData['status']).toBe('under_review');
       expect(loanData['underwritingDecision']).toBeUndefined();
       expect(getUnderwritingDetailWrite()).toBeUndefined();
     });
@@ -1355,6 +1420,76 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 
       const entry = mockDb._auditWrites.find((w) => w['action'] === 'employer.due_diligence_cap');
       expect(entry).toMatchObject({ meta: { slotGrowth: null } });
+    });
+  });
+
+  // D2: the inline ML gate's payload used to hardcode `existingLoans: 0` and
+  // `requestsLastHour: 0`, which meant the scorer's -30 existing-debt penalty
+  // and its `high_frequency` fraud flag could never fire for ANY applicant —
+  // the gate ran, returned a verdict, and two of its inputs were constants.
+  // These assert the real counts reach the service, so re-hardcoding either
+  // one goes red.
+  describe('inline ML gate is fed real borrower history, not hardcoded zeros', () => {
+    const ML_URL = 'https://ml.internal';
+
+    async function mockMlGate(): Promise<jest.Mock> {
+      process.env['ML_SERVICE_URL'] = ML_URL;
+      process.env['INTERNAL_SECRET'] = 'test-secret';
+      const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
+      // No fraud, no default — the gate passes, so the assertion is purely
+      // about what was SENT, not about the verdict.
+      fetchModule.mockResolvedValue({
+        ok: true,
+        json: async () => ({ fraud: { is_fraud: false }, default_probability: 0.1 }),
+      });
+      return fetchModule;
+    }
+
+    async function mlPayload(fetchModule: jest.Mock): Promise<Record<string, unknown>> {
+      const call = fetchModule.mock.calls.find((c) => String(c[0]).includes('/underwrite/employee'));
+      expect(call).toBeDefined();
+      return JSON.parse((call![1] as { body: string }).body) as Record<string, unknown>;
+    }
+
+    it("sends the borrower's real outstanding-loan count, not 0", async () => {
+      // 2 OUTSTANDING_STATUSES loans (e.g. disbursed/overdue) — none of which
+      // are ACTIVE_LOAN_STATUSES, so the duplicate-application guard upstream
+      // still lets this request through to the gate. That is precisely the
+      // borrower this signal exists to catch: already owing money, still
+      // eligible to apply.
+      mockDb = buildMockDb({ outstandingLoansCount: 2 });
+      const fetchModule = await mockMlGate();
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(await mlPayload(fetchModule)).toMatchObject({ existingLoans: 2 });
+    });
+
+    it("sends the borrower's real last-hour request count, not 0", async () => {
+      mockDb = buildMockDb({ recentRequestsCount: 7 });
+      const fetchModule = await mockMlGate();
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(await mlPayload(fetchModule)).toMatchObject({ requestsLastHour: 7 });
+    });
+
+    it('still sends 0 for a genuinely first-time, debt-free borrower', async () => {
+      // The counts must be MEASURED, not merely nonzero — a fix that always
+      // reported a positive number would pass the two tests above while
+      // being just as wrong.
+      mockDb = buildMockDb({ outstandingLoansCount: 0, recentRequestsCount: 0 });
+      const fetchModule = await mockMlGate();
+
+      const { requestLoan } = await import('../index');
+      const fn = requestLoan as unknown as (req: { auth?: unknown; data: unknown }) => Promise<unknown>;
+      await fn({ auth, data: realClientPayload });
+
+      expect(await mlPayload(fetchModule)).toMatchObject({ existingLoans: 0, requestsLastHour: 0 });
     });
   });
 });

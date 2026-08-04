@@ -69,6 +69,9 @@ class MockTimestamp {
   static fromDate(date: Date) {
     return new MockTimestamp(Math.floor(date.getTime() / 1000));
   }
+  static fromMillis(ms: number) {
+    return new MockTimestamp(Math.floor(ms / 1000));
+  }
   toDate() {
     return new Date(this.seconds * 1000);
   }

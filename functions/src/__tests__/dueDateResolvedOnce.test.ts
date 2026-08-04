@@ -60,6 +60,9 @@ class MockTimestamp {
   static fromDate(date: Date) {
     return new MockTimestamp(Math.floor(date.getTime() / 1000));
   }
+  static fromMillis(ms: number) {
+    return new MockTimestamp(Math.floor(ms / 1000));
+  }
   toDate() {
     return new Date(this.seconds * 1000);
   }
@@ -126,11 +129,31 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
   const loansQuery: { where: jest.Mock; limit: jest.Mock; get: jest.Mock; count: jest.Mock } = {
     where: jest.fn(),
     limit: jest.fn(),
-    get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+    get: jest.fn().mockResolvedValue({ empty: true, docs: [], size: 0 }),
     count: jest.fn().mockReturnValue(employerActiveLoansCountQuery),
   };
   loansQuery.where.mockReturnValue(loansQuery);
   loansQuery.limit.mockReturnValue(loansQuery);
+
+  // A chainable no-result query for collections this file does not otherwise
+  // model — currently `audit_log`, which requestLoan now reads to count the
+  // borrower's requests in the last hour. Without it, `.where()` on such a
+  // collection is `undefined`, and the resulting TypeError surfaces through
+  // handleError as a generic 'internal' HttpsError, i.e. a harness gap that
+  // reads exactly like a product failure. Returning empty keeps these
+  // date-focused tests unaffected by counts they do not care about.
+  const emptyQuery = () => {
+    const q: { where: jest.Mock; limit: jest.Mock; orderBy: jest.Mock; get: jest.Mock } = {
+      where: jest.fn(),
+      limit: jest.fn(),
+      orderBy: jest.fn(),
+      get: jest.fn().mockResolvedValue({ empty: true, docs: [], size: 0 }),
+    };
+    q.where.mockReturnValue(q);
+    q.limit.mockReturnValue(q);
+    q.orderBy.mockReturnValue(q);
+    return q;
+  };
 
   const docRef = (collection: string, id: string) => ({
     id,
@@ -161,6 +184,7 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
     _writes: writes,
     _loans: loans,
     collection: jest.fn((name: string) => ({
+      ...emptyQuery(),
       ...(name === 'loans' ? loansQuery : {}),
       doc: jest.fn((id?: string) => docRef(name, id ?? 'generated-id')),
       add: jest.fn(async () => ({ id: 'generated-id' })),

@@ -79,6 +79,9 @@ class MockTimestamp {
   static fromDate(date: Date) {
     return new MockTimestamp(Math.floor(date.getTime() / 1000));
   }
+  static fromMillis(ms: number) {
+    return new MockTimestamp(Math.floor(ms / 1000));
+  }
   toDate() {
     return new Date(this.seconds * 1000);
   }
@@ -186,7 +189,26 @@ function buildMockDb() {
         };
       }
       if (name === 'audit_log') {
-        return { add: jest.fn().mockResolvedValue({ id: 'audit-1' }) };
+        // `where`/`get` in addition to `add`: requestLoan now counts the
+        // borrower's requests in the last hour off this collection to feed the
+        // ML gate's `requestsLastHour` signal. Empty is the right answer for
+        // this file's single fresh borrower, and without the chain the
+        // TypeError surfaces as a generic 'internal' HttpsError — a harness
+        // gap wearing a product failure's clothes.
+        const q: { where: jest.Mock; get: jest.Mock } = {
+          where: jest.fn(),
+          get: jest.fn().mockResolvedValue({ empty: true, docs: [], size: 0 }),
+        };
+        q.where.mockReturnValue(q);
+        return { ...q, add: jest.fn().mockResolvedValue({ id: 'audit-1' }) };
+      }
+      if (name === 'review_queue') {
+        // Written in requestLoan's transaction when the ML gate is
+        // unreachable, which is the default in this file (no ML_SERVICE_URL),
+        // so the loan lands `under_review` with a queue row instead of a
+        // silently unscored `pending`. Tagged so tx.set below can tell it
+        // apart from the loan write these tests actually assert on.
+        return { doc: jest.fn().mockReturnValue({ _kind: 'reviewQueueDocRef' }) };
       }
       if (name === 'config') {
         // No config document: getLoanConfigValues() returns the ratified seed,
@@ -221,7 +243,15 @@ function buildMockDb() {
           }),
           update: jest.fn(),
           set: jest.fn((ref: { _kind?: string } | undefined, data: unknown) =>
-            writes.push({ op: ref?._kind === 'disbursementQueueDocRef' ? 'queue.set' : 'loan.set', data })
+            writes.push({
+              op:
+                ref?._kind === 'disbursementQueueDocRef'
+                  ? 'queue.set'
+                  : ref?._kind === 'reviewQueueDocRef'
+                    ? 'review.set'
+                    : 'loan.set',
+              data,
+            })
           ),
         };
         return fn(txn);
