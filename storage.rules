@@ -31,13 +31,39 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/loans/$(loanId)).data;
     }
 
-    // ---- 1. Employer signup docs (pre-auth) ----
-    // Unauthenticated writes allowed ONLY during the employer self-signup wizard.
-    // sessionId must have >= 20 chars of entropy to prevent trivial path guessing.
+    // ---- 1. Employer signup docs — CLOSED ----
+    //
+    // This was `allow write: if sessionId.size() >= 20 && sizeUnder(10MB) &&
+    // contentTypeIn(...)`, and that condition never mentions request.auth. Storage
+    // rules are evaluated with request.auth == null for an anonymous caller, so
+    // the rule passed for one: anybody on the internet who knew the bucket name —
+    // which ships in the web bundle — could POST unlimited 10 MB PDFs and images
+    // into this project's Storage bucket with no account, no App Check (Storage
+    // does not enforce it unless it is turned on, and nothing here turns it on)
+    // and no rate limit. They picked the sessionId themselves, so the ">= 20 chars
+    // of entropy" the old comment relied on was entropy the ATTACKER chose; it
+    // stops a stranger guessing someone else's session, not a stranger opening
+    // their own. That is storage and egress billed to VIDA without limit, and
+    // attacker-controlled files served from a firebasestorage.googleapis.com URL
+    // for this project — which ops then opens from the console, because `read` on
+    // this path is granted to isOps() and the files look like employer KYC
+    // documents.
+    //
+    // Closed rather than tightened to isAuth(), because there is no pre-auth
+    // upload flow to preserve: this path is referenced NOWHERE in the repository
+    // outside this rule (verified across public-v2/, public/, services/, scripts/
+    // and tests/). The employer signup wizard creates the Firebase Auth user
+    // FIRST and then uploads (public-v2/src/pages/Onboarding.tsx —
+    // createUserWithEmailAndPassword, then employers/{uid}/docs/...), and the
+    // dashboard's later re-upload goes to onboarding/employer_docs/{uid}/, which
+    // rule 1b below already binds to the caller's own uid. So no client loses an
+    // upload it makes today.
+    //
+    // `read` stays with ops for whatever was deposited here while the rule was
+    // open — evidence of the abuse has to remain reachable by the people who
+    // would clean it up.
     match /onboarding/employer_signup/{sessionId}/{fileName} {
-      allow write: if sessionId.size() >= 20
-                   && sizeUnder(10 * 1024 * 1024)
-                   && contentTypeIn('application/pdf|image/.*');
+      allow write: if false;
       allow read: if isOps();
     }
 

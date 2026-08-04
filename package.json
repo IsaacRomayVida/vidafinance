@@ -2,7 +2,7 @@
   "scripts": {
     "verify": "node scripts/verify-production.js",
     "test": "jest",
-    "test:rules": "jest firestore.rules.test",
+    "test:rules": "jest \"(firestore|storage)\\.rules\\.test\"",
     "test:migrations": "jest --roots scripts/migrations",
     "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
     "load-test": "k6 run tests/load/pipeline-load-test.js",
