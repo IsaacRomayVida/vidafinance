@@ -68,6 +68,7 @@
   "calc_rate": "30% monthly",
   "calc_result_label": "Estimated repayment",
   "calc_note": "Funds available within 24 hours",
+  "calc_note_below_min": "At this salary your line does not yet reach the $500 MXN minimum.",
   "calc_cta": "Request Access",
   "emp_tag": "For Employers",
   "emp_h2": "Offer financial stability without burden.",

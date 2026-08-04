@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { safeSetItem } from '../lib/safeStorage';
 import { PAY_FREQUENCIES } from '../lib/payFrequencies';
+import { testBypassAllowed } from '../lib/testBypass';
 
 
 type Role = 'employer' | 'employee' | null;
@@ -435,8 +436,12 @@ export function Onboarding() {
 
   // -- MetaMap KYC verification --
   const startKYC = () => {
-    // Test-mode bypass: skip MetaMap for @vida-test.com emails
-    if (memData.email.endsWith('@vida-test.com')) {
+    // Test-mode bypass: skip MetaMap for @vida-test.com emails.
+    // Gated on the BUILD, not on the address — the address is typed into the
+    // form above, so on its own it is a self-service way to skip identity
+    // verification on the live site. Same reasoning, and the same fail-closed
+    // default, as allowTestBypass() in functions/src/utils/environment.ts.
+    if (testBypassAllowed(memData.email)) {
       setMetamapVerificationId('test-verification-' + Date.now());
       setMetamapIdentityId('test-identity-' + Date.now());
       setKycStatus('approved');
