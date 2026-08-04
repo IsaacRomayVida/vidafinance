@@ -1,6 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 
+import { startOfDay } from '../loans/calculateNextPayrollDate';
 import { DISBURSED_STATUSES } from '../loans/loanStatus';
 import { auditLog } from '../utils/auditLog';
 import { getQueue } from '../utils/queue';
@@ -10,6 +11,22 @@ export const dailyLoanCheck = onSchedule(
   async () => {
     const db = getFirestore();
     const now = Timestamp.now();
+
+    // A loan is late the day AFTER its due date, not on it.
+    //
+    // `loan.dueDate` is a payday, written by calculateNextPayrollDate as the
+    // midnight that STARTS that day. The borrower is paid, and the SoftCrédito
+    // deduction registered against that same date is collected, at some point
+    // DURING it. This sweep fires at 09:00, so comparing against `now` made
+    // every loan due today overdue this morning — hours before the payroll run
+    // that repays it, and with nothing the borrower could have done differently.
+    // The job's own arithmetic said as much: `daysOver` below came out 0, and
+    // it wrote "0 days overdue" to overdue_log, sent the borrower an SMS
+    // warning of additional fees, and put them on the employer's arrears page.
+    //
+    // The cutoff is the start of today, from the same helper that produced the
+    // due dates, so a loan is only swept once its due day has fully elapsed.
+    const overdueCutoff = Timestamp.fromDate(startOfDay(now.toDate()));
 
     // ── Sync repayments from SoftCrédito payroll deductions ──────────
     let repaymentsSynced = 0;
@@ -61,7 +78,7 @@ export const dailyLoanCheck = onSchedule(
           // went overdue at all. Firestore serves `in` from the same
           // (status, dueDate) composite index as `==`, so no index change.
           .where('status', 'in', DISBURSED_STATUSES)
-          .where('dueDate', '<', now)
+          .where('dueDate', '<', overdueCutoff)
           .get();
 
     for (const doc of overdueSnap.docs) {

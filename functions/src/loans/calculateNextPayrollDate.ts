@@ -33,7 +33,22 @@ export const PAY_FREQUENCY_VALUES = completePayFrequencyList(
   'monthly'
 );
 
-const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+/**
+ * Midnight at the start of the calendar day `d` falls on.
+ *
+ * Exported because every due date in the product is one of these (see the
+ * candidates below — all of them are local midnights), so anything that has to
+ * ask "has that due DAY passed yet?" must build its cutoff the same way, from
+ * the same clock. dailyLoanCheck's arrears sweep is the one that matters: it
+ * derives its cutoff here rather than restating the expression, because a
+ * cutoff that disagrees with how the due date was written by even a few hours
+ * is a borrower marked delinquent on a day they are current.
+ *
+ * Local getters, as everywhere else that reads these dates back
+ * (processPayroll.ts `calendarDay`): the frame the value was written in is the
+ * only frame it means anything in.
+ */
+export const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 const addDays = (d: Date, days: number): Date => {
   const out = new Date(d);
