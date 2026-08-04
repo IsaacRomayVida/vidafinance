@@ -3259,6 +3259,13 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
   const softcreditoUrl = process.env['SOFTCREDITO_ADAPTER_URL'];
   const internalSecret = process.env['INTERNAL_SECRET'] ?? '';
 
+  // Did the borrower actually get the money? The payroll-deduction block at the
+  // bottom of this handler gates on it. It starts false and is only ever set by
+  // a path that has written `disbursedAt` onto the loan, so every failure,
+  // every ambiguous outcome and every unconfigured environment leaves it false
+  // without having to be enumerated here.
+  let disbursementConfirmed = false;
+
   if (softcreditoUrl && internalSecret) {
     // Real SPEI disbursement via SoftCrédito adapter
     try {
@@ -3280,7 +3287,15 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
 
       if (!disburseRes.ok) {
         const errBody = await disburseRes.text();
-        throw new Error(`Adapter returned ${disburseRes.status}: ${errBody}`);
+        const httpErr = new Error(`Adapter returned ${disburseRes.status}: ${errBody}`) as Error & {
+          adapterStatus?: number;
+        };
+        // Carried on the error rather than re-parsed out of the message text
+        // below: the failure handler has to tell "the adapter never dispatched"
+        // apart from "the adapter dispatched and does not know the outcome",
+        // and the status code is the only thing that says which.
+        httpErr.adapterStatus = disburseRes.status;
+        throw httpErr;
       }
 
       const result = (await disburseRes.json()) as { ref?: string; transferId?: string };
@@ -3293,25 +3308,80 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         status: 'completed',
         completedAt: FieldValue.serverTimestamp(),
       });
+      disbursementConfirmed = true;
       logger.info('Loan disbursed via SoftCrédito', { loanId, ref: result.ref, service: 'functions' });
       await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId });
     } catch (e: unknown) {
-      logger.error('SoftCrédito disbursement failed', { error: (e as Error).message, loanId, service: 'functions' });
+      const detail = (e as Error).message;
+      const adapterStatus = (e as { adapterStatus?: number }).adapterStatus;
+
+      // WHICH KIND OF FAILURE IS THIS?
+      //
+      // Only two adapter answers mean "nothing was dispatched": 400 (the route
+      // rejected the body before touching SoftCrédito) and 503
+      // disbursement_claim_unavailable (the idempotency claim transaction threw,
+      // and a transaction that throws never committed, so nothing was sent).
+      //
+      // Everything else is an UNKNOWN outcome, not a clean failure. A 409 is
+      // the adapter refusing because a previous attempt dispatched and never
+      // came back. A 500 is the adapter's own catch, which fires both when
+      // SoftCrédito rejected the transfer AND when SoftCrédito confirmed it and
+      // the adapter's follow-up bookkeeping threw — indistinguishable from out
+      // here, which is exactly why the adapter leaves its claim `in_flight` in
+      // that case. And a fetch-level throw carries no status at all: the request
+      // may have been delivered in full. Writing a bare `disbursement_failed`
+      // for those reads as "no money moved" and invites ops to re-fire.
+      // payment-server's worker already carries this same flag for the same
+      // reason (services/payment-server/index.js:605-607).
+      const dispatchKnownNotSent = adapterStatus === 400 || adapterStatus === 503;
+
+      logger.error('SoftCrédito disbursement failed', { error: detail, loanId, adapterStatus, service: 'functions' });
       sendSlackAlert('Disbursement FAILED for loan ' + loanId + ' — manual intervention required', 'critical').catch(() => {});
+
       // Never mark the loan active on failure: doing so would report funds as sent
-      // when no SPEI transfer occurred. Surface the failure for ops retry instead.
+      // when no SPEI transfer occurred.
+      //
+      // But never mark it FAILED over a transfer that demonstrably happened
+      // either. The adapter writes `disbursedAt` and a real SPEI reference onto
+      // this loan the moment SoftCrédito confirms, BEFORE its remaining
+      // bookkeeping writes (softcredito-adapter/index.js:292-311) — and if one
+      // of those throws it answers 500 having already recorded the transfer.
+      // The unconditional `update()` here then wrote `disbursement_failed`
+      // straight over that: `update` leaves the siblings alone, so the loan kept
+      // a genuine `disbursedAt` and `disbursementRef` under a status meaning no
+      // money moved. `disbursement_failed` is not in DISBURSED_STATUSES, so
+      // dailyLoanCheck never sweeps it, it never goes overdue and nothing ever
+      // collects — real pesos out with no debt on the books. Re-read the loan
+      // inside a transaction and let that evidence win.
       try {
-        await db.collection('loans').doc(loanId).update({
-          status: 'disbursement_failed',
-          disbursementError: (e as Error).message,
-          disbursementFailedAt: FieldValue.serverTimestamp(),
+        const clobberedRealTransfer = await db.runTransaction(async (tx) => {
+          const snap = await tx.get(db.collection('loans').doc(loanId));
+          const alreadyDisbursed = Boolean(snap.exists && snap.data()?.['disbursedAt']);
+          tx.update(
+            db.collection('loans').doc(loanId),
+            alreadyDisbursed
+              ? {
+                  disbursementError: detail,
+                  disbursementFailedAt: FieldValue.serverTimestamp(),
+                  disbursementNeedsReconciliation: true,
+                }
+              : {
+                  status: 'disbursement_failed',
+                  disbursementError: detail,
+                  disbursementFailedAt: FieldValue.serverTimestamp(),
+                  ...(dispatchKnownNotSent ? {} : { disbursementIndeterminate: true }),
+                }
+          );
+          return alreadyDisbursed;
         });
+
         await db.collection('disbursement_queue').doc(loanId).update({
           status: 'failed',
-          error: (e as Error).message,
+          error: detail,
           failedAt: FieldValue.serverTimestamp(),
+          ...(clobberedRealTransfer ? { needsReconciliation: true } : {}),
         });
-        await auditLog(db, { action: 'loan.disbursement_failed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { error: (e as Error).message } });
+        await auditLog(db, { action: 'loan.disbursement_failed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { error: detail, indeterminate: !dispatchKnownNotSent, alreadyDisbursed: clobberedRealTransfer } });
       } catch (markErr: unknown) {
         logger.error('Failed to mark disbursement_failed', { error: (markErr as Error).message, loanId, service: 'functions' });
       }
@@ -3331,6 +3401,7 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           status: 'completed',
           completedAt: FieldValue.serverTimestamp(),
         });
+        disbursementConfirmed = true;
         logger.info('Loan auto-disbursed (stub mode — ALLOW_STUB_DISBURSEMENT)', { loanId, service: 'functions' });
         await auditLog(db, { action: 'loan.disbursed', actorUid: 'system', actorRole: 'system', targetId: loanId, meta: { mode: 'stub' } });
       } catch (e: unknown) {
@@ -3355,6 +3426,47 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
         logger.error('Failed to mark disbursement_failed', { error: (e as Error).message, loanId, service: 'functions' });
       }
     }
+  }
+
+  // ONLY AGAINST A LOAN THAT WAS ACTUALLY FUNDED.
+  //
+  // A payroll deduction is an instruction to SoftCrédito to take money OUT of
+  // the borrower's next paycheck. This block used to run unconditionally,
+  // sitting after the disbursement block with nothing between them — so every
+  // way the disbursement above can fail still registered one: the adapter
+  // 500ing, answering 503 disbursement_claim_unavailable, or answering 409
+  // disbursement_indeterminate because a previous attempt's outcome is unknown.
+  // The loan reads `disbursement_failed`, no SPEI ever left, and the employee
+  // is docked the full installment on their next payroll run for a loan they
+  // never received. sync-repayments then forwards that completed deduction and
+  // applyRepayment books it against the unfunded loan, so it does not even
+  // surface as an unexplained deduction — it looks like a repayment.
+  //
+  // The indeterminate case deliberately skips too. There the money MAY have
+  // moved, and a loan funded with no collection channel is the opposite risk —
+  // but that one is recoverable (ops reconciles against SoftCrédito, the debt
+  // is still owed and still collectible) while a paycheck already docked for
+  // nothing is not. `payrollDeductionSkipped` records what is still owed so
+  // whoever re-disburses after reconciling can see it; a silent skip is how a
+  // re-disbursed loan ends up with nothing collecting against it.
+  if (!disbursementConfirmed) {
+    logger.error('Payroll deduction NOT registered — disbursement was not confirmed', {
+      loanId,
+      service: 'functions',
+    });
+    try {
+      await db.collection('loans').doc(loanId).update({
+        payrollDeductionSkipped: 'disbursement_not_confirmed',
+        payrollDeductionSkippedAt: FieldValue.serverTimestamp(),
+      });
+    } catch (markErr: unknown) {
+      logger.error('Failed to mark payrollDeductionSkipped', {
+        error: (markErr as Error).message,
+        loanId,
+        service: 'functions',
+      });
+    }
+    return null;
   }
 
   // Register payroll deduction with SoftCrédito.
