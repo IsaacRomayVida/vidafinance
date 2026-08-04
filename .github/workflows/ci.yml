@@ -379,6 +379,32 @@ jobs:
   loan-flow-e2e:
     name: "Loan Flow E2E (emulator, HARD gate)"
     runs-on: ubuntu-latest
+    # requestLoan enforces its rate limit fail-CLOSED: that limit is the only
+    # brake on loan spam, so a limiter that cannot answer refuses the request
+    # rather than waving it through. getRedis() throws outright when REDIS_URL
+    # is unset, so without a Redis here every case in this suite dies on
+    # "Servicio no disponible temporalmente" — which is what happened, and it
+    # masked the P0-1/P0-2 assertions rather than failing on them.
+    #
+    # Giving the job a real Redis instead of stubbing the limiter is
+    # deliberate: this is the one suite that proves a borrower can actually
+    # get a loan, so it should exercise the same limiter the deployed handler
+    # does. Mocking it here would leave the fail-closed path — the thing most
+    # able to take loans down in production — untested.
+    #
+    # Safe against the 3-per-86400s per-uid loan limit because every case
+    # seeds its own borrower uid (employee-term-<n>, employee-fee-seed, ...),
+    # so no uid issues more than one request.
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v5
 
@@ -419,6 +445,8 @@ jobs:
       # firebase.e2e.json pins the emulator to 8098 to avoid colliding with
       # firebase.json's 8080.
       - name: Loan flow E2E (Firestore emulator)
+        env:
+          REDIS_URL: redis://localhost:6379
         run: firebase emulators:exec --only firestore --config firebase.e2e.json --project demo-vida-finance-test "npm run test:e2e:loan-flow"
 
   # ─────────────────────────────────────────────────────────────────────
