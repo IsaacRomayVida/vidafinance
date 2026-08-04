@@ -10,6 +10,10 @@
  *    stale data, so a loan repaid by payroll but not yet synced got flipped
  *    to `overdue`, logged, and dunned — an infra hiccup manufacturing an
  *    adverse outcome against a borrower who already paid.
+ *  - D3: the sweep selected `dueDate < now` against due dates that are the
+ *    MIDNIGHT STARTING the payday, so at 09:00 it marked every borrower whose
+ *    payment was due that same day delinquent — before the payroll deduction
+ *    that repays it had run, and with `daysOverdue: 0` on the record.
  *
  * See this file's sibling `export {};` note in loanApprovalDisbursement.test.ts
  * — this file has no top-level `import` before that line either, so it needs
@@ -33,6 +37,9 @@ class MockTimestamp {
   }
   static fromMillis(ms: number) {
     return new MockTimestamp(ms);
+  }
+  static fromDate(d: Date) {
+    return new MockTimestamp(d.getTime());
   }
   toMillis() {
     return this.ms;
@@ -240,6 +247,49 @@ describe('D2 — a stale/failed repayment sync must not dun a borrower who alrea
     await handler();
 
     expect(mockQueueAdd.mock.calls.some((c) => c[0] === 'loan_reminder_24h')).toBe(true);
+  });
+});
+
+describe('D3 — a loan is not late on its own due date', () => {
+  // `calculateNextPayrollDate` writes due dates as LOCAL MIDNIGHTS — the start
+  // of the payday, not the end of it — so these build a due date the same way
+  // the loan document carries one.
+  const localMidnight = (daysFromToday: number): Date => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + daysFromToday);
+  };
+
+  it('leaves a loan due TODAY alone — payroll has not run yet', async () => {
+    mockLoans['loan-due-today'] = {
+      ...LOAN_BASE,
+      status: 'active',
+      dueDate: MockTimestamp.fromDate(localMidnight(0)),
+    };
+
+    const handler = await loadHandler();
+    await handler();
+
+    expect(mockLoans['loan-due-today']!['status']).toBe('active');
+    expect(mockOverdueLog['loan-due-today']).toBeUndefined();
+    expect(mockQueueAdd.mock.calls.some((c) => c[0] === 'loan_overdue')).toBe(false);
+    expect(mockAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('sweeps it the next morning, a whole day late', async () => {
+    mockLoans['loan-due-yesterday'] = {
+      ...LOAN_BASE,
+      status: 'active',
+      dueDate: MockTimestamp.fromDate(localMidnight(-1)),
+    };
+
+    const handler = await loadHandler();
+    await handler();
+
+    expect(mockLoans['loan-due-yesterday']!['status']).toBe('overdue');
+    // Never the "0 days overdue" the old cutoff produced: the sweep only fires
+    // once at least one full day has elapsed, so the dunning message and the
+    // arrears report agree with the record.
+    expect(mockOverdueLog['loan-due-yesterday']!['daysOverdue']).toBeGreaterThanOrEqual(1);
   });
 });
 
