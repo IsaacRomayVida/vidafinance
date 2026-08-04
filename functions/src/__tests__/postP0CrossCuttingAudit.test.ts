@@ -278,6 +278,66 @@ describe('onLoanStatusChange — credit release on rejection (deployed copy in i
   });
 });
 
+// ── A2. credit restoration cap on repaid, when a prior channel already
+//        restored part of it (deployed copy in index.ts) ────────────────────
+
+function repaidEvent(beforeStatus: string, afterExtra: Record<string, unknown> = {}): TriggerEvent {
+  return {
+    params: { loanId: 'loan-1' },
+    data: {
+      before: { data: () => ({ ...LOAN, status: beforeStatus }) },
+      after: { data: () => ({ ...LOAN, status: 'repaid', ...afterExtra }) },
+    },
+  };
+}
+
+describe('onLoanStatusChange — credit restoration cap on repaid (deployed copy in index.ts)', () => {
+  it('restores the full principal when nothing had already been restored (CSV-only loan)', async () => {
+    mockDb = buildMockDb();
+    const trigger = await loadStatusChangeTrigger();
+
+    await trigger(repaidEvent('active'));
+
+    expect(writesFor('employees', 'emp-1')).toContainEqual(
+      expect.objectContaining({ data: { availableCredit: { _increment: 3000 } } })
+    );
+  });
+
+  // applyRepayment.js (services/payment-server) restores credit incrementally
+  // as card/SoftCrédito-sync payments land against a loan it leaves `active`
+  // for a partial payment, tracked cumulatively on loans.creditRestored and
+  // capped at the principal (its rule 3). The employer's CSV upload
+  // (processPayroll.ts) can finish off that SAME loan's remaining balance and
+  // write 'repaid' directly -- it never reads or writes creditRestored.
+  // Restoring the full principal again here on top of what applyRepayment.js
+  // already restored hands the borrower more available credit than they ever
+  // held against this loan.
+  it('restores only what is left of the principal when a partial card payment already restored some credit', async () => {
+    mockDb = buildMockDb();
+    const trigger = await loadStatusChangeTrigger();
+
+    await trigger(repaidEvent('active', { creditRestored: 1800 }));
+
+    expect(writesFor('employees', 'emp-1')).toContainEqual(
+      expect.objectContaining({ data: { availableCredit: { _increment: 1200 } } })
+    );
+  });
+
+  it('restores nothing further when prior partial payments already restored the full principal', async () => {
+    mockDb = buildMockDb();
+    const trigger = await loadStatusChangeTrigger();
+
+    await trigger(repaidEvent('active', { creditRestored: 3000 }));
+
+    expect(writesFor('employees', 'emp-1')).toHaveLength(0);
+    // The employer's slot must still be released even though no further
+    // credit moves.
+    expect(writesFor('employers', 'employer-1')).toContainEqual(
+      expect.objectContaining({ data: { activeLoans: { _increment: -1 } } })
+    );
+  });
+});
+
 // ── B. employer_admin claim on the deployed approval path ────────────────────
 
 type ApproveEmployerFn = (req: { auth?: unknown; data: unknown }) => Promise<{
