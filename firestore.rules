@@ -156,15 +156,43 @@ service cloud.firestore {
     // Absent curpConfig, or an explicit mode: 'open', means the employer never
     // restricted who may enrol under it — mirrors the same fallback
     // updateEmployerCurpConfig itself applies (any mode other than
-    // 'allowlist' resolves to 'open'). Prefixes are validated server-side to
-    // exactly 4 alphanumeric characters (updateEmployerCurpConfig), so joining
-    // them into a regex alternation needs no escaping.
+    // 'allowlist' resolves to 'open').
+    //
+    // The stored prefix list is NOT trusted to be well-formed. Two reasons:
+    //   - updateEmployerCurpConfig only started rejecting an allowlist with no
+    //     usable prefixes in #566, so documents saved while curpConfig was
+    //     inert can still carry an empty or junk list;
+    //   - even today it filters on length == 4 alone, so a four-character
+    //     string of regex metacharacters ('.*ab', '[[[[') survives it, and
+    //     this file interpolates that list straight into a match pattern.
+    //
+    // So the list is enforced only when it is EXACTLY a '|'-joined run of
+    // 4-character alphanumeric prefixes; anything else is treated as
+    // unconfigured. That gives, in one test:
+    //   - regex safety — a metacharacter can never reach the pattern, whether
+    //     it widens the alternation or breaks it into an evaluation error that
+    //     would lock the employer's own new hires out;
+    //   - agreement with requestLoan (index.ts, assertBorrowerAdmittedByEmployer),
+    //     which treats "no usable prefixes" as OPEN and says so in the log.
+    //     Denying here where the money gate admits would take an employer's new
+    //     hires off the product on the enforcing deploy, silently, for a
+    //     malformed setting they were never shown the meaning of — the exact
+    //     outcome #566 declined to ship.
+    // Where the two still differ ('GARJ' alongside a junk entry: requestLoan
+    // enforces the survivor, this treats the config as open) the divergence
+    // falls open at REGISTRATION only. The loan itself is still gated, so a
+    // borrower this admits is one requestLoan can and does still refuse.
     function curpAllowedByEmployer(employer, curp) {
       return !('curpConfig' in employer)
           || employer.curpConfig.mode != 'allowlist'
+          || !curpPrefixListIsEnforceable(employer.curpConfig.prefixes)
           || (curp is string
-              && employer.curpConfig.prefixes.size() > 0
               && curp.upper().matches('^(' + employer.curpConfig.prefixes.join('|') + ').*'));
+    }
+    function curpPrefixListIsEnforceable(prefixes) {
+      return prefixes is list
+          && prefixes.size() > 0
+          && prefixes.join('|').matches('^[A-Za-z0-9]{4}([|][A-Za-z0-9]{4})*$');
     }
 
     match /employees/{employeeId} {
