@@ -77,6 +77,7 @@ async function runFraudGates(applicant, _priorResults, { logger } = {}) {
       .then(r => ({ key: "riskseal", result: r }))
       .catch(err => ({ key: "riskseal", result: { pass: false, skipped: true, error: err.message } }))
   );
+  costItems.push({ api: "riskseal", mxn: 1.5 });
 
   // 4. ML anomaly detection
   checks.push(

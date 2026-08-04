@@ -320,6 +320,10 @@ function determineRiskLevel(aml, llm) {
   const fuzzyAML = (aml.amlLists || []).some(l => l.matchType === "FUZZY");
   if (fuzzyAML) return "high";
 
+  // AML/criminal/PEP screening failed outright — we have no signal either way,
+  // so this cannot default to "medium" as if the screen had come back clean.
+  if (aml.error) return "high";
+
   // Use LLM assessment
   if (llm.risk_level && llm.risk_level !== "unknown") return llm.risk_level;
 
@@ -335,6 +339,10 @@ function calculateQueuePriority(confidence, aml) {
   // AML/criminal flags always highest priority
   if (aml.criminalRecordFound || aml.amlHit) return 1;
   if (aml.isPEP) return 2;
+
+  // The screen itself failed to run — zero AML/criminal/PEP signal is worse
+  // than a screened-but-uncertain case, so it outranks active learning.
+  if (aml.error) return 1;
 
   // Active learning: uncertain cases get priority 3
   if (typeof confidence === "number" &&
@@ -393,6 +401,7 @@ async function writeToReviewQueue(firestore, data) {
 function buildReviewReason(aml, llm) {
   const reasons = [];
 
+  if (aml.error) reasons.push(`AML/criminal screening failed: ${aml.error}`);
   if (aml.criminalRecordFound) reasons.push("Criminal record found");
   if (aml.amlHit) {
     const lists = (aml.amlLists || []).map(l => l.list).join(", ");
@@ -449,6 +458,7 @@ function buildResult({ loanId, correlationId, startedAt, decision, reason, riskL
         amlLists: aml.amlLists || [],
         criminalRecordFound: aml.criminalRecordFound,
         isPEP: aml.isPEP,
+        error: aml.error || null,
       },
       llm: {
         risk_level: llm.risk_level,
