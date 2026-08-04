@@ -1556,22 +1556,36 @@ export const submitReviewDecision = onCall(
           escalate: 'escalated',
         };
 
-        await db.collection('review_queue').doc(reviewId).update({
-          status: statusMap[decision],
-          reviewedBy: auth.uid,
-          reviewedAt: now,
-          reviewNotes: notes || null,
-          ...(decision === 'escalate' ? { escalatedAt: now, escalatedBy: auth.uid } : {}),
-          ...(decision === 'request_info' ? { infoRequestedAt: now, infoRequestedBy: auth.uid } : {}),
-        });
-
-        // If the review is tied to a loan, update the loan status (only for approve/reject)
-        if (review['loanId'] && (decision === 'approved' || decision === 'rejected')) {
-          await db.collection('loans').doc(review['loanId'] as string).update({
-            status: decision,
-            statusNote: notes || null,
+        // The review decision and the loan status it drives are one fact, not
+        // two: two independent `.update()` calls left a window where the
+        // review_queue write could land — moving the review out of
+        // DECIDABLE_REVIEW_STATUSES, so it can never be resubmitted through
+        // this callable again — while the loans write then failed (a
+        // transient Firestore error, contention, an outage). That stranded
+        // the loan in `under_review` forever: the review says decided, the
+        // loan says undecided, and nothing in the product can reconcile the
+        // two without a manual Firestore edit. Bundling both writes in one
+        // transaction makes them land together or not at all, so a failure
+        // here leaves the review exactly as decidable as it was and the
+        // caller sees the error and can simply retry.
+        await db.runTransaction(async (tx) => {
+          tx.update(db.collection('review_queue').doc(reviewId), {
+            status: statusMap[decision],
+            reviewedBy: auth.uid,
+            reviewedAt: now,
+            reviewNotes: notes || null,
+            ...(decision === 'escalate' ? { escalatedAt: now, escalatedBy: auth.uid } : {}),
+            ...(decision === 'request_info' ? { infoRequestedAt: now, infoRequestedBy: auth.uid } : {}),
           });
-        }
+
+          // If the review is tied to a loan, update the loan status (only for approve/reject)
+          if (review['loanId'] && (decision === 'approved' || decision === 'rejected')) {
+            tx.update(db.collection('loans').doc(review['loanId'] as string), {
+              status: decision,
+              statusNote: notes || null,
+            });
+          }
+        });
 
         await auditLog(db, {
           action: `review.${decision}`,
@@ -2360,7 +2374,7 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           (after['term'] as number) ?? DEFAULT_LOAN_TERM_DAYS
         )
       );
-      await fetch(scUrl + '/internal/register-deduction', {
+      const dedRes = await fetch(scUrl + '/internal/register-deduction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
         body: JSON.stringify({
@@ -2370,20 +2384,53 @@ export const onLoanApproved = onDocumentUpdated('loans/{loanId}', async (event) 
           amount: deduction.amount,
           dueDate: deduction.dueDate,
         }),
-
         signal: AbortSignal.timeout(10000),
-      }).then(async (r) => {
-        if (r.ok) {
-          const result = await r.json() as Record<string, unknown>;
-          await db.collection('loans').doc(loanId).update({
-            softcreditoDeductionId: result['deductionId'] ?? null,
-          });
-          logger.info('Payroll deduction registered', { loanId, service: 'functions' });
-        }
       });
+
+      // A non-2xx here used to be swallowed by the caller's `if (r.ok)` doing
+      // nothing on the else branch — no throw, so the catch below never ran
+      // either. Nothing was logged, no alert fired, and `softcreditoDeductionId`
+      // stayed null forever with no other code path ever checking for that.
+      // The loan had already been disbursed by this point (or is being
+      // retried post-disbursement), so the borrower had real money in hand
+      // and no automated repayment channel behind it — invisibly. Throwing
+      // routes this into the same escalation the disbursement failure above
+      // already gets.
+      if (!dedRes.ok) {
+        const errBody = await dedRes.text();
+        throw new Error(`Adapter returned ${dedRes.status}: ${errBody}`);
+      }
+
+      const result = (await dedRes.json()) as Record<string, unknown>;
+      await db.collection('loans').doc(loanId).update({
+        softcreditoDeductionId: result['deductionId'] ?? null,
+      });
+      logger.info('Payroll deduction registered', { loanId, service: 'functions' });
     }
   } catch (e: unknown) {
-    logger.warn('Payroll deduction registration failed', { error: (e as Error).message, loanId, service: 'functions' });
+    logger.error('Payroll deduction registration failed — loan has no automated repayment collection', {
+      error: (e as Error).message,
+      loanId,
+      service: 'functions',
+    });
+    sendSlackAlert(
+      'Payroll deduction registration FAILED for loan ' +
+        loanId +
+        ' — funds were disbursed but repayment collection was not registered; manual follow-up required',
+      'critical'
+    ).catch(() => {});
+    try {
+      await db.collection('loans').doc(loanId).update({
+        payrollDeductionError: (e as Error).message,
+        payrollDeductionErrorAt: FieldValue.serverTimestamp(),
+      });
+    } catch (markErr: unknown) {
+      logger.error('Failed to mark payrollDeductionError', {
+        error: (markErr as Error).message,
+        loanId,
+        service: 'functions',
+      });
+    }
   }
 
   return null;
