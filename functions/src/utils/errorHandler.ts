@@ -16,6 +16,12 @@ export enum VidaErrorCode {
   // underwriting/credit-decision code so the borrower is never told they were
   // declined for credit when the real reason is "try again once a slot frees up".
   EMPLOYER_SLOT_LIMIT_REACHED = 'EMPLOYER_SLOT_LIMIT_REACHED',
+  // The employer restricted who may borrow under its name (the curpConfig
+  // allowlist) and this borrower is not admitted. Deliberately distinct from
+  // EMPLOYER_NOT_APPROVED — that one is about the employer's own standing with
+  // VIDA; this one is the employer's own decision about this person. Neither is
+  // a credit decline, and neither must be shown to the borrower as one.
+  EMPLOYER_ENROLLMENT_NOT_PERMITTED = 'EMPLOYER_ENROLLMENT_NOT_PERMITTED',
 }
 
 interface ErrorContext {
