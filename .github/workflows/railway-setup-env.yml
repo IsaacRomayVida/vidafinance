@@ -30,23 +30,127 @@ jobs:
         with: { node-version: "24" }
       - run: npm install -g @railway/cli
 
+      # Every `railway variables set` below writes STAGING values, hardcoded and
+      # unconditional: NODE_ENV=staging and FIREBASE_PROJECT_ID=
+      # "vida-finance-staging" on all six services. The token therefore has to
+      # be the staging one, but this step used to reach for RAILWAY_TOKEN first
+      # and only fall back to RAILWAY_API_TOKEN — RAILWAY_TOKEN_STAGING exists
+      # in this repository and was never consulted. If RAILWAY_TOKEN points at
+      # the production project, a dispatch pointed production's services at the
+      # staging Firebase project and flipped NODE_ENV under them.
+      #
+      # Staging token first, then the previous chain unchanged so this stays
+      # non-breaking if RAILWAY_TOKEN_STAGING is ever removed. The resolved
+      # source is echoed (its NAME, never its value) because "which project did
+      # this run just write to" should not require reading the workflow file.
       - name: Resolve Railway token
         run: |
-          TOKEN="${{ secrets.RAILWAY_TOKEN }}"
+          TOKEN="${{ secrets.RAILWAY_TOKEN_STAGING }}"
+          SOURCE="RAILWAY_TOKEN_STAGING"
+          if [ -z "$TOKEN" ]; then
+            TOKEN="${{ secrets.RAILWAY_TOKEN }}"
+            SOURCE="RAILWAY_TOKEN"
+            echo "⚠️  RAILWAY_TOKEN_STAGING is empty; falling back to RAILWAY_TOKEN."
+            echo "    This workflow writes staging-only values — confirm that token"
+            echo "    targets the staging project before trusting this run."
+          fi
           if [ -z "$TOKEN" ]; then
             TOKEN="${{ secrets.RAILWAY_API_TOKEN }}"
+            SOURCE="RAILWAY_API_TOKEN"
           fi
           if [ -z "$TOKEN" ]; then
-            echo "❌ RAILWAY_TOKEN secret is not set in this repository."
-            echo "Add it under Settings → Secrets → Actions → RAILWAY_TOKEN"
+            echo "❌ No Railway token is set in this repository."
+            echo "Add RAILWAY_TOKEN_STAGING under Settings → Secrets → Actions"
             exit 1
           fi
+          echo "Railway token resolved from: $SOURCE"
           echo "RAILWAY_TOKEN=$TOKEN" >> $GITHUB_ENV
           REDIS="${{ github.event.inputs.redis_url }}"
           if [ -z "$REDIS" ]; then
             REDIS="redis://vida-redis.railway.internal:6379"
           fi
           echo "REDIS_URL=$REDIS" >> $GITHUB_ENV
+
+      # `railway variables set X=""` does not skip X — it OVERWRITES X with an
+      # empty string on the live service. GitHub Actions substitutes an empty
+      # string for a secret that does not exist, with no warning and no
+      # workflow error, so a secret this file references but that was never
+      # created silently erases a working value the moment anyone dispatches
+      # this workflow. Same defect class as #548, one layer out: #548 fixed the
+      # functions/.env write, this is the Railway service write.
+      #
+      # As of this commit, 9 of the 21 secrets referenced below do not exist in
+      # this repository. The one that matters most is CONEKTA_WEBHOOK_SECRET:
+      # payment-server's /webhooks/conekta handler fails CLOSED on an empty key
+      # (services/payment-server/index.js:166), by deliberate design, because an
+      # empty HMAC key is one the caller can derive too. So pushing an empty
+      # value makes every Conekta card webhook 401 — `order.paid` and
+      # `charge.paid` both stop arriving, applyCardRepayment never runs, and
+      # borrowers' card repayments silently stop settling. The money-in path
+      # turns off, and nothing alerts, because SLACK_WEBHOOK_URL and
+      # PAGERDUTY_ROUTING_KEY are two of the other eight missing secrets.
+      #
+      # REQUIRED = pushing it empty breaks a live flow. Validated here, before
+      # the first `railway variables set` runs, so a misconfigured dispatch
+      # fails without touching any service. Optional-but-absent secrets are
+      # listed as a warning rather than a failure, since several are genuinely
+      # unused today. Key NAMES only — never values, never `env | grep`.
+      - name: Validate required secrets resolve non-empty
+        env:
+          CONEKTA_WEBHOOK_SECRET: ${{ secrets.CONEKTA_WEBHOOK_SECRET }}
+          INTERNAL_SECRET:        ${{ secrets.INTERNAL_SECRET }}
+          SENDGRID_API_KEY:       ${{ secrets.SENDGRID_API_KEY }}
+          TWILIO_ACCOUNT_SID:     ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN:      ${{ secrets.TWILIO_AUTH_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          SLACK_WEBHOOK_URL:      ${{ secrets.SLACK_WEBHOOK_URL }}
+          PAGERDUTY_ROUTING_KEY:  ${{ secrets.PAGERDUTY_ROUTING_KEY }}
+          MIFIEL_APP_ID:          ${{ secrets.MIFIEL_APP_ID }}
+          MIFIEL_APP_SECRET:      ${{ secrets.MIFIEL_APP_SECRET }}
+          VERIFIK_API_KEY:        ${{ secrets.VERIFIK_API_KEY }}
+          SW_USER:                ${{ secrets.SW_USER }}
+          SW_PASSWORD:            ${{ secrets.SW_PASSWORD }}
+          ANTHROPIC_API_KEY:      ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -u
+          # No -x: a trace would print secret values into the job log.
+          REQUIRED="CONEKTA_WEBHOOK_SECRET INTERNAL_SECRET SENDGRID_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN FIREBASE_SERVICE_ACCOUNT_B64"
+          OPTIONAL="SLACK_WEBHOOK_URL PAGERDUTY_ROUTING_KEY MIFIEL_APP_ID MIFIEL_APP_SECRET VERIFIK_API_KEY SW_USER SW_PASSWORD ANTHROPIC_API_KEY"
+
+          MISSING=""
+          for key in $REQUIRED; do
+            eval "value=\${$key}"
+            if [ -z "$value" ]; then
+              MISSING="$MISSING $key"
+            fi
+          done
+
+          ABSENT=""
+          for key in $OPTIONAL; do
+            eval "value=\${$key}"
+            if [ -z "$value" ]; then
+              ABSENT="$ABSENT $key"
+            fi
+          done
+
+          if [ -n "$ABSENT" ]; then
+            echo "⚠️  Optional secrets are empty and WILL be written as empty strings,"
+            echo "    overwriting whatever those services currently hold:"
+            for key in $ABSENT; do echo "      - $key"; done
+          fi
+
+          if [ -n "$MISSING" ]; then
+            echo ""
+            echo "❌ Refusing to run: these REQUIRED secrets resolve empty."
+            for key in $MISSING; do echo "      - $key"; done
+            echo ""
+            echo "Writing them would overwrite live Railway values with empty strings."
+            echo "Create each under Settings → Secrets and variables → Actions,"
+            echo "then re-dispatch. No service has been modified by this run."
+            exit 1
+          fi
+
+          echo "✅ All required secrets resolve non-empty."
 
       - name: Set env vars — vida-payment-server
         if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'vida-payment-server' }}
