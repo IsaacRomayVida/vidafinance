@@ -119,7 +119,14 @@ describe('POST /internal/register-deduction — upstream failure', () => {
     const res = await postRegisterDeduction(VALID_BODY);
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/INVALID_CLABE/);
+    // The vendor's machine code survives; the body it came in -- which echoes
+    // the employee CLABE we sent -- does not. See test/upstreamPiiLeak.test.js.
+    expect(res.body).toEqual({
+      error: 'upstream_error',
+      reason: 'upstream_error_code',
+      code: 'INVALID_CLABE',
+      upstreamStatus: 422,
+    });
     expect(admin.__get('loans', 'loan_1').softcreditoDeductionId).toBeUndefined();
   });
 });

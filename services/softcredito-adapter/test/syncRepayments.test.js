@@ -104,7 +104,14 @@ describe('POST /internal/sync-repayments — upstream failure', () => {
     const res = await postSyncRepayments();
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/^SC API \/deductions\/completed/);
+    // No `code`: the body's only field is `error: 'upstream down'`, and free
+    // text is never promoted to a machine code -- that would reopen the leak
+    // one field over. See lib/upstreamError.js.
+    expect(res.body).toEqual({
+      error: 'upstream_error',
+      reason: 'upstream_error_code',
+      upstreamStatus: 503,
+    });
   });
 
   test('a malformed (non-JSON) SoftCrédito response is a 500', async () => {
@@ -113,7 +120,7 @@ describe('POST /internal/sync-repayments — upstream failure', () => {
     const res = await postSyncRepayments();
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/bad json/);
+    expect(res.body).toEqual({ error: 'upstream_error', reason: 'network_error' });
   });
 
   // DEFECT: the forward call to payment-server's /internal/repayment never
