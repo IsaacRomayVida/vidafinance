@@ -114,6 +114,15 @@ jobs:
           fi
           echo "All required functions/.env keys are present: ${REQUIRED_KEYS}"
 
+      # Presence is not reachability — same gate as deploy.yml, same reasoning.
+      # A non-empty REDIS_URL secret says nothing about whether the Cloud
+      # Functions runtime can resolve the host it names, and the money-path rate
+      # limits fail CLOSED, so an unreachable limiter refuses every loan
+      # approval, disbursement and payroll run. See
+      # scripts/check-redis-reachable.js. Never echoes the URL.
+      - name: Validate REDIS_URL is reachable from outside Railway
+        run: node scripts/check-redis-reachable.js functions/.env
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:

@@ -266,6 +266,18 @@ jobs:
           fi
           echo "All required functions/.env keys are present: ${REQUIRED_KEYS}"
 
+      # Presence is not reachability. The step above proves a REDIS_URL secret
+      # exists; this one proves the host it names can be resolved from outside
+      # Railway's private network, which is the property the Cloud Functions
+      # runtime actually depends on. It matters because the money-path rate
+      # limits fail CLOSED — against an unreachable limiter they refuse every
+      # loan approval, disbursement and payroll run rather than merely stopping
+      # rate limiting. See scripts/check-redis-reachable.js for the full
+      # reasoning and the calibration (hard-fail on structurally unreachable,
+      # warn-only on a resolvable host that won't connect). Never echoes the URL.
+      - name: Validate REDIS_URL is reachable from outside Railway
+        run: node scripts/check-redis-reachable.js functions/.env
+
       - name: Build Cloud Functions
         run: cd functions && npm run build
 
