@@ -3,7 +3,7 @@ const crypto  = require('crypto');
 const helmet  = require('helmet');
 const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
-const { Queue, Worker } = require('bullmq');
+const { Queue, Worker, UnrecoverableError } = require('bullmq');
 const { applyCardRepayment } = require('./cardRepayment');
 const { alert5xx, alertDisbursementFailed, alertQueueDepth, alertRedisLost } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
@@ -65,6 +65,36 @@ app.use((req, res, next) => {
   };
   next();
 });
+
+// ── Deadlines on the two outbound calls that move money ─────────────
+// This service pins node-fetch ^2.7.0 (package.json), whose `timeout` option
+// defaults to 0 -- disabled. Neither the Conekta order call nor the disburse
+// call passed `timeout` or `signal`, so an upstream that accepts the TCP
+// connection and then goes silent stalled them forever, and nothing outside
+// this file bounded it: `app.listen()` below sets no server timeout (Node's
+// `server.timeout` has defaulted to 0 since v13, and `requestTimeout` bounds
+// RECEIVING a request, not producing a response), and BullMQ v5 has no
+// per-job timeout -- `getQueue`'s defaultJobOptions above set only
+// attempts/backoff/removal.
+//
+// What made it expensive is that it was an outage that reads as latency. The
+// 5xx interceptor above hangs off `res.json`, so a request that never
+// responds never alerts; `disburseWorker.on('failed')` needs a throw, and a
+// hang never throws. Same family as #524/#526/#556, here on both money paths.
+//
+// Read at call time rather than frozen into a const at require time, matching
+// SC_READ_TIMEOUT_MS in softcredito-adapter/index.js.
+const CONEKTA_TIMEOUT_MS  = () => Number(process.env.CONEKTA_HTTP_TIMEOUT_MS)  || 15000;
+const DISBURSE_TIMEOUT_MS = () => Number(process.env.DISBURSE_HTTP_TIMEOUT_MS) || 30000;
+
+// node-fetch v2 rejects with `name: 'AbortError'` / `type: 'aborted'` when the
+// signal fires, and destroys the response body stream as it does, so one
+// signal covers the body read as well as the headers. `TimeoutError` is
+// included because that is what a native `fetch` would surface from
+// `AbortSignal.timeout()`, and this predicate must not start lying if a call
+// site is ever moved off node-fetch.
+const isAbortError = (err) =>
+  !!err && (err.name === 'AbortError' || err.name === 'TimeoutError' || err.type === 'aborted');
 
 const requireInternal = (req, res, next) => {
   if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
@@ -303,6 +333,7 @@ app.post('/create-checkout', requireInternal, async (req, res) => {
       metadata: { loanId, employeeId },
     };
 
+    // No idempotency key is sent, deliberately -- see the catch below.
     const conektaRes = await fetch('https://api.conekta.io/orders', {
       method: 'POST',
       headers: {
@@ -311,6 +342,7 @@ app.post('/create-checkout', requireInternal, async (req, res) => {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(orderPayload),
+      signal: AbortSignal.timeout(CONEKTA_TIMEOUT_MS()),
     });
 
     if (!conektaRes.ok) {
@@ -329,6 +361,53 @@ app.post('/create-checkout', requireInternal, async (req, res) => {
 
     res.json({ paymentUrl, orderId });
   } catch (err) {
+    // A client-side abort does not cancel the server side. Conekta may have
+    // created the order after we stopped listening, and we will never learn
+    // its id -- so this is reported as "we gave up waiting", never as "no
+    // order exists", and the incident row carries the loanId so an orphan can
+    // be reconciled against Conekta's side later. 504, not 500: the request
+    // was not malformed and nothing here failed, an upstream simply did not
+    // answer. generatePaymentLink (functions/src/payments/generatePaymentLink.
+    // ts:152) branches on `!response.ok` and nothing finer, so the caller is
+    // unaffected by the distinction.
+    //
+    // No idempotency key is sent to Conekta and no existing order is reused,
+    // and both omissions are deliberate:
+    //
+    //  * The duplicate-ORDER surface this timeout exposes already exists and
+    //    is unchanged in kind. Before this fix the hang simply propagated --
+    //    generatePaymentLink.ts:137 calls us on node-fetch v2 with no timeout
+    //    of its own -- until the callable hit its own deadline, and the
+    //    borrower retried then too (rate-limited 20/min/uid, ibid:45). Every
+    //    such call already mints a fresh order and overwrites
+    //    `loans.conektaOrderId` (ibid:167). Timing out changes how FAST we
+    //    give up, not whether a retry can produce a second order.
+    //  * A duplicate order is not a duplicate settlement. Every repayment row
+    //    is keyed `conekta_<chargeId>` (cardRepayment.js:113-116) and a fresh
+    //    charge landing on an already-settled loan is recorded `unapplied` /
+    //    `loan_already_settled` and moves nothing (ibid:144-151). A second
+    //    payment is a refund case, not a double-forgiven debt or a
+    //    double-restored credit line.
+    //  * Reusing the loan's existing order would be actively WRONG here. The
+    //    amount is recomputed per call from `remainingBalance` precisely
+    //    because a payroll deduction may have landed since
+    //    (generatePaymentLink.ts:95-134); serving a stale order would
+    //    undercharge the borrower -- the exact defect that comment exists to
+    //    prevent.
+    if (isAbortError(err)) {
+      const timeoutMs = CONEKTA_TIMEOUT_MS();
+      await logIncident({
+        source: 'create-checkout',
+        loanId,
+        error: `conekta_timeout after ${timeoutMs}ms — an order may have been created upstream and is unreferenced; reconcile before assuming none exists`,
+        timeoutMs,
+      });
+      return res.status(504).json({
+        error: 'Conekta did not respond in time',
+        reason: 'conekta_timeout',
+        timeoutMs,
+      });
+    }
     await logIncident({ source: 'create-checkout', loanId, error: err.message });
     res.status(500).json({ error: err.message });
   }
@@ -407,11 +486,84 @@ const disburseWorker = new Worker('vida-disbursements', async job => {
     throw new Error('No CLABE for loan ' + loanId);
   }
   const fetch = require('node-fetch');
-  const resp = await fetch(process.env.SOFTCREDITO_ADAPTER_URL + '/internal/disburse', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_SECRET },
-    body: JSON.stringify({ loanId, clabe, amount, concept, employeeName, employeeId })
-  });
+  const timeoutMs = DISBURSE_TIMEOUT_MS();
+  let resp;
+  try {
+    resp = await fetch(process.env.SOFTCREDITO_ADAPTER_URL + '/internal/disburse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_SECRET },
+      body: JSON.stringify({ loanId, clabe, amount, concept, employeeName, employeeId }),
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+  } catch (err) {
+    // Anything that is not our own deadline keeps its retries. A refused
+    // connection delivered nothing, so trying again is free; that is the
+    // pre-existing behaviour and it stays.
+    if (!isAbortError(err)) throw err;
+
+    // A TIMEOUT IS NOT A FAILURE, IT IS AN UNKNOWN, and this is the one place
+    // in this service where that distinction is worth real money.
+    //
+    // `/internal/disburse` has no idempotency guard of any kind -- no key
+    // accepted, no check of loans.status or disbursement_queue.status before
+    // dispatching, no dedup on (loanId, amount, clabe) -- and SPEI itself has
+    // no idempotency key either. softcredito-adapter/index.js:95-109 states
+    // this outright (it is why that service deliberately withholds a timeout
+    // from /spei/transfer), softcredito-adapter/test/disburse.test.js pins it
+    // with a passing test that replaying one request sends a SECOND real
+    // transfer, and functions/src/loans/loanStatusTransitions.ts:90 says the
+    // same from the trigger side.
+    //
+    // So with `attempts: 5` and exponential backoff (getQueue above), letting
+    // this throw a plain Error would pay the borrower's CLABE up to FIVE
+    // times for one loan. That is strictly worse than the hang it replaces: a
+    // hang costs one of three worker slots, a naive timeout costs four extra
+    // disbursements. UnrecoverableError is how BullMQ is told to stop.
+    //
+    // onLoanApproved's transactional claim on `disbursement_queue/{loanId}`
+    // does not help here -- it guards against the job being ENQUEUED twice,
+    // not against BullMQ retrying the job it already has.
+    const detail =
+      `Timed out after ${timeoutMs}ms waiting for the SoftCrédito adapter — the SPEI transfer ` +
+      `MAY already have been sent. Not retried automatically: /internal/disburse is not ` +
+      `idempotent, so a retry would be a second real transfer. Reconcile against SoftCrédito ` +
+      `before re-disbursing.`;
+
+    // Bookkeeping must never be able to change the KIND of failure that
+    // escapes. If an incident write threw, the rejection leaving this
+    // processor would be Firestore's retryable error instead, and the
+    // duplicate transfer just refused would fire anyway. Same stance as
+    // logIncident above: the caller is mid-failure and the logger's own error
+    // must not replace its cause.
+    try {
+      await db.collection('loans').doc(loanId).update({
+        // Kept on the spelling the rest of this worker already writes so
+        // nothing downstream changes behaviour; the ambiguity rides on its own
+        // field instead. A bare 'disbursement_error' reads as "no money moved"
+        // and invites ops to re-fire the transfer -- which is the duplicate
+        // payout this branch exists to prevent.
+        status: 'disbursement_error',
+        disbursementError: detail,
+        disbursementIndeterminate: true
+      });
+    } catch (bookErr) {
+      console.error('[payment-server] could not mark loan indeterminate:', loanId, bookErr.message);
+    }
+    try {
+      await db.collection('incident_log').add({
+        source: 'disbursement-worker', loanId, error: detail, indeterminate: true,
+        ts: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (bookErr) {
+      console.error('[payment-server] could not log disbursement timeout:', loanId, bookErr.message);
+    }
+    // Raised here rather than left to the 'failed' listener below, which only
+    // records at `attemptsMade >= 5` -- an unrecoverable failure never reaches
+    // five, so routing this through that listener would alert nobody at all.
+    alertDisbursementFailed(SERVICE_NAME, loanId, detail);
+
+    throw new UnrecoverableError(detail);
+  }
   if (!resp.ok) throw new Error('SoftCrédito disburse failed: ' + await resp.text());
   return await resp.json();
 }, { connection: redis, concurrency: 3 });
