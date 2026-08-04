@@ -200,6 +200,27 @@ describe('onLoanStatusChange — loan_approved/loan_rejected must reach the borr
     delete process.env['REDIS_URL'];
   });
 
+  it('constructs the queue with retry/backoff defaultJobOptions, not the bare no-retry queue index.ts used to build inline', async () => {
+    mockDb = buildMockDb();
+    process.env['REDIS_URL'] = 'redis://localhost:6379';
+    const onLoanStatusChange = await loadOnLoanStatusChange();
+
+    await onLoanStatusChange(statusChangeEvent('loan-1', { status: 'pending' }, { status: 'approved' }));
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Queue } = require('bullmq') as { Queue: jest.Mock };
+    expect(Queue).toHaveBeenCalledTimes(1);
+    const opts = Queue.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(opts['defaultJobOptions']).toEqual({
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: { count: 1000 },
+      removeOnFail: { count: 5000 },
+    });
+
+    delete process.env['REDIS_URL'];
+  });
+
   it('enqueues a loan_rejected notification job on under_review -> rejected, carrying the rejection reason from statusNote', async () => {
     mockDb = buildMockDb();
     process.env['REDIS_URL'] = 'redis://localhost:6379';
