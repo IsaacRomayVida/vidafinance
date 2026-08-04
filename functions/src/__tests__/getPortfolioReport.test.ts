@@ -159,13 +159,17 @@ describe('getPortfolioReport — money figures', () => {
     mockLoans = [];
   });
 
-  it('excludes pending loans from totalDisbursedMXN but includes overdue and legacy-repaid-alias loans', async () => {
+  it('excludes pending loans from totalDisbursedMXN but includes the whole default ladder and legacy-repaid aliases', async () => {
     mockLoans = [
       { id: 'l-active', status: 'active', amount: 1000, employerId: 'e1' },
       { id: 'l-pending', status: 'pending', amount: 5000, employerId: 'e1' },
       { id: 'l-repaid', status: 'repaid', amount: 2000, fee: 200, employerId: 'e2' },
       { id: 'l-disbursed', status: 'disbursed', amount: 3000, employerId: 'e2' },
       { id: 'l-overdue', status: 'overdue', amount: 4000, employerId: 'e3' },
+      // The other two rungs of DEFAULT_STATUSES. Both are disbursed money and
+      // both are defaults.
+      { id: 'l-collections', status: 'in_collections', amount: 800, employerId: 'e3' },
+      { id: 'l-writtenoff', status: 'written_off', amount: 200, employerId: 'e3' },
       // Legacy repaid aliases: no live write path produces these, but a
       // hand-written or historical doc could still carry them.
       { id: 'l-paid', status: 'paid', amount: 1500, fee: 150, employerId: 'e3' },
@@ -175,30 +179,79 @@ describe('getPortfolioReport — money figures', () => {
     const fn = await loadHandler();
     const result = await fn({ auth: ADMIN_AUTH, data: {} });
 
-    // totalDisbursedMXN = active + disbursed + overdue + repaid(+aliases),
-    // excluding the pending 5000.
-    expect(result.summary.totalDisbursedMXN).toBe(1000 + 3000 + 4000 + 2000 + 1500 + 2500);
+    // totalDisbursedMXN = active + disbursed + the whole default ladder +
+    // repaid(+aliases), excluding the pending 5000.
+    expect(result.summary.totalDisbursedMXN).toBe(1000 + 3000 + 4000 + 800 + 200 + 2000 + 1500 + 2500);
 
     // totalRepaidMXN / totalRevenueMXN must include the legacy aliases.
     expect(result.summary.totalRepaidMXN).toBe(2000 + 1500 + 2500);
     expect(result.summary.totalRevenueMXN).toBe(200 + 150 + 250);
 
-    // Every doc is counted, including the previously-invisible overdue one.
-    expect(result.summary.totalLoans).toBe(7);
+    // Every doc is counted, including the previously-invisible default rungs.
+    expect(result.summary.totalLoans).toBe(9);
 
-    // overdue must show up in byStatus.
+    // Each default rung is reported separately, not collapsed into one bar.
     expect(result.byStatus['overdue']).toBe(1);
+    expect(result.byStatus['in_collections']).toBe(1);
+    expect(result.byStatus['written_off']).toBe(1);
     expect(result.byStatus['active']).toBe(1);
     expect(result.byStatus['pending']).toBe(1);
     expect(result.byStatus['disbursed']).toBe(1);
     // repaid bucket folds in both legacy-alias docs.
     expect(result.byStatus['repaid']).toBe(3);
 
-    // byEmployer must include the overdue loan's employer and volume.
-    expect(result.byEmployer['e3']).toEqual({ count: 2, volume: 4000 + 1500 });
+    // byEmployer is scoped to money-out loans so it reconciles with the
+    // headline: e3's four disbursed loans, NOT e1's pending 5000.
+    expect(result.byEmployer['e3']).toEqual({ count: 4, volume: 4000 + 1500 + 800 + 200 });
+    expect(result.byEmployer['e1']).toEqual({ count: 2, volume: 1000 + 2500 });
 
-    // defaultRate: overdue volume (4000) / total disbursed volume (14000).
-    expect(result.summary.defaultRate).toBe('28.57%');
+    // The per-employer rows must sum to the headline disbursed figure.
+    const employerVolumeTotal = Object.values(result.byEmployer).reduce((s, e) => s + e.volume, 0);
+    expect(employerVolumeTotal).toBe(result.summary.totalDisbursedMXN);
+
+    // defaultRate: default ladder (5000) / total disbursed volume (15000).
+    expect(result.summary.defaultRate).toBe('33.33%');
+  });
+
+  it('does not improve the default rate when a loan deteriorates from overdue to written off', async () => {
+    // The pre-fix handler queried only `status == 'overdue'`, so escalating a
+    // bad loan down the ladder REMOVED it from both the numerator and the
+    // denominator — the book looked healthier the moment a loss was realised.
+    // The rate must be invariant to where on the ladder the loan sits.
+    const book = (badStatus: string): LoanDoc[] => [
+      { id: 'l-good', status: 'active', amount: 9000, employerId: 'e1' },
+      { id: 'l-bad', status: badStatus, amount: 1000, employerId: 'e1' },
+    ];
+
+    const rates: (string | null)[] = [];
+    for (const badStatus of ['overdue', 'in_collections', 'written_off']) {
+      mockLoans = book(badStatus);
+      jest.resetModules();
+      const fn = await loadHandler();
+      const result = await fn({ auth: ADMIN_AUTH, data: {} });
+      rates.push(result.summary.defaultRate);
+      expect(result.summary.totalDisbursedMXN).toBe(10000);
+    }
+
+    expect(rates).toEqual(['10.00%', '10.00%', '10.00%']);
+  });
+
+  it('omits an employer with nothing but pending requests from the volume ranking', async () => {
+    mockLoans = [
+      { id: 'l-active', status: 'active', amount: 1000, employerId: 'e1' },
+      { id: 'l-pending', status: 'pending', amount: 9000, employerId: 'e-pending-only' },
+    ];
+
+    const fn = await loadHandler();
+    const result = await fn({ auth: ADMIN_AUTH, data: {} });
+
+    // The table is "Top Employers by Loan Volume"; an employer that has not
+    // been lent a peso must not outrank one that has.
+    expect(result.byEmployer['e-pending-only']).toBeUndefined();
+    expect(result.byEmployer['e1']).toEqual({ count: 1, volume: 1000 });
+    // ...but the pending loan is still counted in the book as a whole.
+    expect(result.summary.totalLoans).toBe(2);
+    expect(result.byStatus['pending']).toBe(1);
   });
 
   it('returns null (not a fabricated 0%) for defaultRate when no money has been disbursed', async () => {
@@ -211,7 +264,7 @@ describe('getPortfolioReport — money figures', () => {
     expect(result.summary.defaultRate).toBeNull();
   });
 
-  it('returns 0.00% default rate, not null, when there is disbursed volume but nothing overdue', async () => {
+  it('returns 0.00% default rate, not null, when there is disbursed volume but nothing in default', async () => {
     mockLoans = [{ id: 'l-active', status: 'active', amount: 1000, employerId: 'e1' }];
 
     const fn = await loadHandler();
