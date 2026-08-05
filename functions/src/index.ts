@@ -39,6 +39,7 @@ import {
   LOAN_STATUS,
   OUTSTANDING_STATUSES,
   REPAID_STATUSES,
+  creditToRestoreOnRepayment,
   isCreditRestoringRepayment,
   isDisbursedStatus,
   isRepaidStatus,
@@ -3197,17 +3198,18 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
     // capped at the principal (its rule 3) -- while leaving the loan `active`
     // for a partial payment. The employer's CSV upload (processPayroll.ts)
     // can then finish off the SAME loan's remaining balance and write
-    // 'repaid' directly; it never reads or writes creditRestored (see
-    // isCreditRestoringRepayment's docblock in ./loans/loanStatus). Restoring
-    // the FULL principal here unconditionally, on top of whatever
-    // applyRepayment.js already restored, hands the borrower more available
-    // credit than they ever held against this loan. Cap at what is left.
-    const principal = (afterData['amount'] as number) ?? 0;
-    const alreadyRestored = (afterData['creditRestored'] as number) ?? 0;
-    const restoreDelta = Math.max(0, principal - alreadyRestored);
-    if (restoreDelta > 0) {
+    // 'repaid' directly. Restoring the FULL principal here unconditionally, on
+    // top of whatever applyRepayment.js already restored, hands the borrower
+    // more available credit than they ever held against this loan.
+    //
+    // The arithmetic lives in creditToRestoreOnRepayment (./loans/loanStatus)
+    // rather than inline, because this trigger has TWO live copies -- here and
+    // ./loans/onLoanStatusChange.ts -- and duplicating the rule is how one of
+    // them silently keeps the bug.
+    const creditToRestore = creditToRestoreOnRepayment(afterData);
+    if (creditToRestore > 0) {
       await db.collection('employees').doc(afterData['employeeId'] as string).update({
-        availableCredit: FieldValue.increment(restoreDelta),
+        availableCredit: FieldValue.increment(creditToRestore),
       });
     }
     try {

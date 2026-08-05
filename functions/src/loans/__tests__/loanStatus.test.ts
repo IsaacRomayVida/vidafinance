@@ -10,6 +10,7 @@ import {
   isDefaultStatus,
   isKnownLoanStatus,
   isCreditRestoringRepayment,
+  creditToRestoreOnRepayment,
 } from '../loanStatus';
 
 describe('loanStatus — canonical vocabulary', () => {
@@ -77,6 +78,46 @@ describe('loanStatus — canonical vocabulary', () => {
       ['approved', 'paid'], // the dead literal the old gate required
     ])('does not fire when moving from %s to %s', (before, after) => {
       expect(isCreditRestoringRepayment(before, after)).toBe(false);
+    });
+  });
+
+  // `availableCredit` is reduced by the PRINCIPAL at origination, so the
+  // principal is the ceiling on what may ever come back. payment-server
+  // returns some of it early on partial payments and records the running
+  // total on `creditRestored`; only the remainder is owed at 'repaid'.
+  describe('creditToRestoreOnRepayment', () => {
+    it('returns the whole principal when no other channel has restored any', () => {
+      expect(creditToRestoreOnRepayment({ amount: 5000 })).toBe(5000);
+      expect(creditToRestoreOnRepayment({ amount: 5000, creditRestored: 0 })).toBe(5000);
+    });
+
+    it('nets off what payment-server already handed back', () => {
+      expect(creditToRestoreOnRepayment({ amount: 5000, creditRestored: 1500 })).toBe(3500);
+      expect(creditToRestoreOnRepayment({ amount: 5000, creditRestored: 4900 })).toBe(100);
+    });
+
+    it('never returns more than the principal, whatever the fee-inclusive total was', () => {
+      // 6500 was the obligation; only 5000 of it was ever held.
+      expect(creditToRestoreOnRepayment({ amount: 5000, creditRestored: 6500 })).toBe(0);
+      expect(creditToRestoreOnRepayment({ amount: 5000, creditRestored: 5000 })).toBe(0);
+    });
+
+    it('keeps float dust out of the ledger', () => {
+      expect(creditToRestoreOnRepayment({ amount: 5000, creditRestored: 1533.33 })).toBe(3466.67);
+    });
+
+    // A corrupt `amount` must not throw the trigger — the employer counter is
+    // already decremented by the time credit is restored.
+    it.each([[undefined], [null], ['5000'], [0], [-1], [Number.NaN]])(
+      'returns 0 rather than throwing for an unusable principal (%p)',
+      (amount) => {
+        expect(creditToRestoreOnRepayment({ amount })).toBe(0);
+      }
+    );
+
+    it('ignores an unusable creditRestored rather than withholding the hold', () => {
+      expect(creditToRestoreOnRepayment({ amount: 5000, creditRestored: null })).toBe(5000);
+      expect(creditToRestoreOnRepayment({ amount: 5000, creditRestored: 'x' })).toBe(5000);
     });
   });
 });
