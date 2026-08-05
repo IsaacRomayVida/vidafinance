@@ -200,3 +200,64 @@ export function isKnownLoanStatus(status: unknown): status is LoanStatus {
 export function isCreditRestoringRepayment(beforeStatus: unknown, afterStatus: unknown): boolean {
   return beforeStatus !== LOAN_STATUS.REPAID && afterStatus === LOAN_STATUS.REPAID;
 }
+
+/** A peso figure off a loan document, or `null` if the field is not one. */
+function asMoney(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * How much `availableCredit` is still owed back to the borrower at the moment
+ * a loan reaches `repaid` — the principal that was held at origination, LESS
+ * whatever has already been handed back on this loan.
+ *
+ * The two repayment channels share one loan document but only one of them
+ * used to keep a restoration ledger on it:
+ *
+ *  - `services/payment-server/applyRepayment.js` restores credit
+ *    INCREMENTALLY, on every partial payment, and records the running total
+ *    on `loans.creditRestored` (its rule 3: a delta toward
+ *    `min(principal, totalPaid)`). A short SoftCrédito deduction through
+ *    `POST /internal/repayment`, or the first of two Conekta charges on one
+ *    order, leaves the loan `active` with `creditRestored > 0`.
+ *  - the employer-CSV channel (`functions/src/payroll/processPayroll.ts`)
+ *    restores nothing per deduction; the whole hold comes back here, once,
+ *    when a deduction takes the balance to zero and flips the loan to
+ *    `repaid`.
+ *
+ * Those two are individually correct and catastrophic together. This trigger
+ * incremented `availableCredit` by the loan's full `amount` unconditionally,
+ * so a loan that was partly repaid through payment-server and then FINISHED by
+ * a payroll CSV had the already-restored slice handed back a second time. On a
+ * $5,000 principal / $6,500 obligation: SoftCrédito reports a short deduction
+ * of $1,500 (credit +1,500, `creditRestored` = 1,500, loan still `active`),
+ * the employer's next CSV deducts the remaining $5,000 and the loan goes
+ * `repaid`, and this trigger added another $5,000 — $6,500 of borrowing power
+ * restored against a $5,000 hold. The overshoot is the size of the other
+ * channel's contribution, so a borrower who paid $4,900 by card and $1,600 by
+ * payroll walked away with $9,900 of credit against that same $5,000 hold:
+ * nearly double the line, minted out of a fee they had merely paid.
+ *
+ * Netting `creditRestored` off makes this the same delta-toward-the-principal
+ * rule payment-server already applies, which is what makes the two channels
+ * commutative: whichever one settles the loan, exactly the principal comes
+ * back, once.
+ *
+ * Returns 0 — no write at all — for a loan carrying no usable principal,
+ * rather than letting a corrupt `amount` throw the trigger and strand the
+ * employer counter the caller has already decremented.
+ */
+export function creditToRestoreOnRepayment(loan: Record<string, unknown>): number {
+  // `typeof`, not `Number()`: a numeric STRING on a money field is a corrupt
+  // document, not a quantity, and coercing it would push a value into
+  // `FieldValue.increment` that the caller's own `as number` cast has always
+  // pretended could not be there.
+  const principal = asMoney(loan['amount']);
+  if (principal === null || principal <= 0) return 0;
+
+  const alreadyRestored = asMoney(loan['creditRestored']);
+  if (alreadyRestored === null || alreadyRestored <= 0) return principal;
+
+  // Pesos-and-centavos, like every other balance in the ledger.
+  return Math.max(0, Math.round((principal - alreadyRestored) * 100) / 100);
+}

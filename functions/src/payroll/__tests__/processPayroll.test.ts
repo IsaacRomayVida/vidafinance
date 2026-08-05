@@ -899,3 +899,93 @@ describe('E7 — the fallback deduction comes from the loan\'s repayment schedul
     expect(res.results?.[0]?.newBalance).toBe(4333.32);
   });
 });
+
+// ─── The cross-channel repayment ledger ──────────────────────────────────────
+
+/**
+ * `loans.paidAmount` is the cumulative-repaid figure the OTHER repayment
+ * channel settles against: `services/payment-server/applyRepayment.js` reads
+ * it as `priorPaidCents` and aims its credit restoration at
+ * `min(principal, totalPaid)`. This path moved `remainingBalance` and never
+ * touched it, so every peso it collected was invisible to that calculation
+ * and a loan repaid partly here and then finished by card restored less
+ * credit than the borrower was owed — with the 'paid' spelling the trigger
+ * deliberately ignores, nothing was left to release the rest.
+ */
+describe('the shared paidAmount ledger', () => {
+  /** A second pay period, so the batch id (and its per-row keys) differ. */
+  const window = (start: string, end: string, rows: Array<Record<string, unknown>>) => ({
+    employerId: EMPLOYER_UID,
+    payPeriodStart: start,
+    payPeriodEnd: end,
+    rows,
+  });
+
+  it('records what it collected so the card channel can see it', async () => {
+    seedLoan('loan-1', { remainingBalance: 6500 });
+
+    await processPayroll(employerRequest(payload([row({ deductionAmount: 3000 })])));
+
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(3500);
+    expect(mockStore.loans['loan-1']?.['paidAmount']).toBe(3000);
+  });
+
+  it('accumulates onto repayments another channel already booked', async () => {
+    // applyRepayment.js took 1,500 by card and left the loan `active`.
+    seedLoan('loan-1', { remainingBalance: 5000, paidAmount: 1500 });
+
+    await processPayroll(employerRequest(payload([row({ deductionAmount: 2000 })])));
+
+    expect(mockStore.loans['loan-1']?.['paidAmount']).toBe(3500);
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(3000);
+  });
+
+  it('accumulates across two pay periods of its own', async () => {
+    seedLoan('loan-1', { remainingBalance: 6500 });
+
+    await processPayroll(employerRequest(payload([row({ deductionAmount: 2000 })])));
+    await processPayroll(
+      employerRequest(window('2026-07-16', '2026-07-31', [row({ deductionAmount: 2500 })])),
+    );
+
+    expect(mockStore.loans['loan-1']?.['paidAmount']).toBe(4500);
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(2000);
+  });
+
+  it('starts from zero for the `paidAmount: null` requestLoan writes at origination', async () => {
+    seedLoan('loan-1', { remainingBalance: 6500, paidAmount: null });
+
+    await processPayroll(employerRequest(payload([row({ deductionAmount: 1000 })])));
+
+    expect(mockStore.loans['loan-1']?.['paidAmount']).toBe(1000);
+  });
+
+  it('keeps the running total at cents', async () => {
+    seedLoan('loan-1', { remainingBalance: 1000.1, paidAmount: 0.005 });
+
+    await processPayroll(employerRequest(payload([row({ deductionAmount: 333.33 })])));
+
+    expect(mockStore.loans['loan-1']?.['paidAmount']).toBe(333.34);
+  });
+
+  it('books nothing on a row that was skipped or refused', async () => {
+    seedLoan('loan-1', { remainingBalance: 6500 });
+
+    await processPayroll(employerRequest(payload([row({ deductionAmount: 65000 })])));
+
+    expect(mockStore.loans['loan-1']?.['paidAmount']).toBeUndefined();
+  });
+
+  it('does not book a replayed row twice', async () => {
+    seedLoan('loan-1', { remainingBalance: 6500 });
+    const rows = [row({ deductionAmount: 1000 })];
+
+    await processPayroll(employerRequest(payload(rows)));
+    // Same batch id (same employer, same window) — a browser double-submit.
+    mockStore.payrollBatches = {};
+    await processPayroll(employerRequest(payload(rows)));
+
+    expect(mockStore.loans['loan-1']?.['paidAmount']).toBe(1000);
+    expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(5500);
+  });
+});

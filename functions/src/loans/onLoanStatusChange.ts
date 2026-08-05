@@ -2,7 +2,7 @@ import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 import { auditLog } from '../utils/auditLog';
-import { isCreditRestoringRepayment } from './loanStatus';
+import { creditToRestoreOnRepayment, isCreditRestoringRepayment } from './loanStatus';
 import { isCreditReleasingRejection } from './loanStatusTransitions';
 
 // NOT DEPLOYED — the live onLoanStatusChange is the copy inline in index.ts
@@ -57,22 +57,13 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
     await db.collection('employers').doc(afterData['employerId'] as string).update({
       activeLoans: FieldValue.increment(-1),
     });
-    // A loan does not have to be settled by one channel. applyRepayment.js
-    // (services/payment-server) restores credit incrementally as card /
-    // SoftCrédito-sync payments land -- tracked on loans.creditRestored,
-    // capped at the principal (its rule 3) -- while leaving the loan `active`
-    // for a partial payment. The employer's CSV upload (processPayroll.ts)
-    // can then finish off the SAME loan's remaining balance and write
-    // 'repaid' directly; it never reads or writes creditRestored. Restoring
-    // the FULL principal here unconditionally, on top of whatever
-    // applyRepayment.js already restored, hands the borrower more available
-    // credit than they ever held against this loan. Cap at what is left.
-    const principal = (afterData['amount'] as number) ?? 0;
-    const alreadyRestored = (afterData['creditRestored'] as number) ?? 0;
-    const restoreDelta = Math.max(0, principal - alreadyRestored);
-    if (restoreDelta > 0) {
+    // Only the slice of the hold payment-server has NOT already handed back
+    // (`loans.creditRestored`) is owed here — the same rule the live copy in
+    // index.ts applies. See creditToRestoreOnRepayment in ./loanStatus.
+    const creditToRestore = creditToRestoreOnRepayment(afterData);
+    if (creditToRestore > 0) {
       await db.collection('employees').doc(afterData['employeeId'] as string).update({
-        availableCredit: FieldValue.increment(restoreDelta),
+        availableCredit: FieldValue.increment(creditToRestore),
       });
     }
     try {

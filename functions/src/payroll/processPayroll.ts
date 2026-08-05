@@ -426,6 +426,26 @@ export const processPayroll = onCall(
           const loanFullyRepaid = newBalance === 0;
           const newStatus = loanFullyRepaid ? LOAN_STATUS.REPAID : String(loan['status']);
 
+          // `paidAmount` is the cumulative-repaid ledger the OTHER repayment
+          // channel settles against: `services/payment-server/
+          // applyRepayment.js` reads it as `priorPaidCents` and aims its
+          // credit restoration at `min(principal, totalPaid)` (its rule 3).
+          // This path moved `remainingBalance` and never touched it, so every
+          // peso collected here was invisible to that calculation, and a loan
+          // repaid partly by payroll and then FINISHED by card came up short:
+          // on a $5,000 principal / $6,500 obligation, a $3,000 payroll
+          // deduction followed by a $3,500 card payment settled the loan as
+          // 'paid' having only ever seen $3,500 of repayment, restored $3,500
+          // of credit, and — because the trigger deliberately ignores the
+          // 'paid' spelling — left $1,500 of the borrower's credit line held
+          // against a debt they had paid in full, with nothing left to
+          // release it. Writing the running total here is what makes the
+          // ledger whole whichever channel lands last.
+          const priorPaid = Number(loan['paidAmount']);
+          const paidAmount = roundToCents(
+            (Number.isFinite(priorPaid) && priorPaid > 0 ? priorPaid : 0) + deductionAmount,
+          );
+
           // `create`, not `set`: a replay of this row must fail the write
           // rather than record a second deduction.
           tx.create(deductionRef, {
@@ -445,6 +465,7 @@ export const processPayroll = onCall(
 
           tx.update(loanRef, {
             remainingBalance: newBalance,
+            paidAmount,
             lastDeductionAt: FieldValue.serverTimestamp(),
             lastDeductionAmount: deductionAmount,
             ...(loanFullyRepaid ? {
