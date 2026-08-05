@@ -178,10 +178,54 @@ export const markLoanDisbursed = onCall(
           const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
 
           await db.runTransaction(async (txn) => {
+            // The `status === 'approved'` guard above is decided from a read
+            // taken before the transaction (`loanRef.get()`), and everything
+            // between that read and this commit is time the loan can move
+            // under us: the rate-limit round trip, and on the legacy branch a
+            // second Firestore read inside resolvePayFrequency.
+            //
+            // Re-read it here, which is also the only thing that gives this
+            // transaction a read set at all. That matters more than the
+            // re-check itself: a transaction that reads NOTHING has nothing
+            // for Firestore's optimistic concurrency to conflict on, so two
+            // concurrent markLoanDisbursed calls for the same loan — an ops
+            // double-click, or a client retry after a timed-out response —
+            // both passed the guard and both committed unconditionally.
+            //
+            // The cost of that is not a duplicated no-op. `currentOutstanding
+            // Balance` is a FieldValue.increment, which is commutative and
+            // therefore immune to contention by design: the employer's
+            // outstanding book is credited TWICE for one loan. The second
+            // commit also overwrites `stpTransactionId`/`stpClaveRastreo`,
+            // losing the reference to the first real SPEI transfer — the same
+            // way of losing a transfer that happened as #578, reached from the
+            // other side.
+            //
+            // With loanRef in the read set the loser of the race retries,
+            // sees 'disbursed', and refuses here instead of double-crediting.
+            const loanTxSnap = await txn.get(loanRef);
+            const txStatus = loanTxSnap.exists
+              ? (loanTxSnap.data()?.['status'] as string | undefined)
+              : undefined;
+            if (txStatus !== 'approved') {
+              throw new HttpsError(
+                'failed-precondition',
+                `Loan must be in 'approved' status to disburse. Current: ${txStatus ?? 'missing'}`
+              );
+            }
+
+            // Taken from the snapshot this transaction read, not the one the
+            // handler opened with, so the figure credited to the employer is
+            // the figure the loan carries at commit time.
+            const txPrincipal =
+              (loanTxSnap.data()?.['principalAmount'] as number | undefined) ??
+              (loanTxSnap.data()?.['amount'] as number | undefined) ??
+              principalAmount;
+
             txn.update(loanRef, loanUpdate);
 
             txn.update(db.collection('employers').doc(employerId), {
-              currentOutstandingBalance: FieldValue.increment(principalAmount),
+              currentOutstandingBalance: FieldValue.increment(txPrincipal),
               updatedAt: now,
             });
 

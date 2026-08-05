@@ -187,7 +187,9 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
         ? ('employerDocRef' as const)
         : collection === 'employees'
           ? ('employeeDocRef' as const)
-          : undefined,
+          : collection === 'loans'
+            ? ('loanDocRef' as const)
+            : undefined,
     get: jest.fn(async () => {
       if (collection === 'employees') {
         return { exists: employee !== null, data: () => employee };
@@ -229,9 +231,20 @@ function buildMockDb(employee: Doc | null = BASE_EMPLOYEE) {
             });
           });
         const txn = {
-          get: jest.fn((refOrQuery: { _kind?: string } | undefined) => {
+          get: jest.fn((refOrQuery: { _kind?: string; id?: string } | undefined) => {
             if (refOrQuery?._kind === 'employerDocRef') {
               return Promise.resolve({ exists: true, data: () => EMPLOYER });
+            }
+            // markLoanDisbursed re-reads the loan inside its transaction to
+            // re-assert `status === 'approved'` against the state at commit
+            // time. Served from the same `loans` store the plain doc ref
+            // reads, so a test that moves a loan mid-flight is visible here.
+            if (refOrQuery?._kind === 'loanDocRef') {
+              const loan = refOrQuery.id ? loans[refOrQuery.id] : undefined;
+              return Promise.resolve({
+                exists: loan !== undefined,
+                data: () => loan ?? null,
+              });
             }
             if (refOrQuery?._kind === 'employerActiveLoansCountQuery') {
               return Promise.resolve({ data: () => ({ count: 0 }) });
