@@ -15,7 +15,7 @@ import { _mockStore } from '../../__mocks__/firebase-admin/firestore';
 type TriggerHandler = (event: unknown) => Promise<unknown>;
 const handler = onLoanStatusChange as unknown as TriggerHandler;
 
-function buildEvent(beforeStatus: string, afterStatus: string) {
+function buildEvent(beforeStatus: string, afterStatus: string, afterExtra: Record<string, unknown> = {}) {
   return {
     params: { loanId: 'loan-test-1' },
     data: {
@@ -26,6 +26,7 @@ function buildEvent(beforeStatus: string, afterStatus: string) {
           employerId: 'employer-1',
           employeeId: 'employee-1',
           amount: 1000,
+          ...afterExtra,
         }),
       },
     },
@@ -89,5 +90,32 @@ describe('onLoanStatusChange repayment counters', () => {
     await handler(buildEvent('repaid', 'repaid'));
     expect(updatesFor('employers', 'employer-1').length).toBe(0);
     expect(updatesFor('employees', 'employee-1').length).toBe(0);
+  });
+
+  // applyRepayment.js (services/payment-server) restores credit incrementally
+  // as card/SoftCrédito-sync payments land against a loan it leaves `active`
+  // for a partial payment, tracked cumulatively on loans.creditRestored and
+  // capped at the principal. The employer's CSV upload (processPayroll.ts)
+  // can finish off that SAME loan's remaining balance and write 'repaid'
+  // directly -- it never reads or writes creditRestored. Restoring the full
+  // principal again here on top of what applyRepayment.js already restored
+  // hands the borrower more available credit than they ever held.
+  it('restores only what is left of the principal when a partial card payment already restored some credit', async () => {
+    await handler(buildEvent('active', 'repaid', { creditRestored: 400 }));
+
+    expect(updatesFor('employees', 'employee-1')).toContainEqual(
+      expect.objectContaining({ collection: 'employees', id: 'employee-1', data: { availableCredit: { _increment: 600 } } })
+    );
+  });
+
+  it('restores nothing further when prior partial payments already restored the full principal', async () => {
+    await handler(buildEvent('active', 'repaid', { creditRestored: 1000 }));
+
+    expect(updatesFor('employees', 'employee-1').length).toBe(0);
+    // The employer's active-loan slot must still be released even though no
+    // further credit moves.
+    expect(updatesFor('employers', 'employer-1')).toContainEqual(
+      expect.objectContaining({ collection: 'employers', id: 'employer-1', data: { activeLoans: { _increment: -1 } } })
+    );
   });
 });

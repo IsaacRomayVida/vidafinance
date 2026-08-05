@@ -3191,9 +3191,25 @@ export const onLoanStatusChange = onDocumentUpdated('loans/{loanId}', async (eve
     await db.collection('employers').doc(afterData['employerId'] as string).update({
       activeLoans: FieldValue.increment(-1),
     });
-    await db.collection('employees').doc(afterData['employeeId'] as string).update({
-      availableCredit: FieldValue.increment(afterData['amount'] as number),
-    });
+    // A loan does not have to be settled by one channel. applyRepayment.js
+    // (services/payment-server) restores credit incrementally as card /
+    // SoftCrédito-sync payments land -- tracked on loans.creditRestored,
+    // capped at the principal (its rule 3) -- while leaving the loan `active`
+    // for a partial payment. The employer's CSV upload (processPayroll.ts)
+    // can then finish off the SAME loan's remaining balance and write
+    // 'repaid' directly; it never reads or writes creditRestored (see
+    // isCreditRestoringRepayment's docblock in ./loans/loanStatus). Restoring
+    // the FULL principal here unconditionally, on top of whatever
+    // applyRepayment.js already restored, hands the borrower more available
+    // credit than they ever held against this loan. Cap at what is left.
+    const principal = (afterData['amount'] as number) ?? 0;
+    const alreadyRestored = (afterData['creditRestored'] as number) ?? 0;
+    const restoreDelta = Math.max(0, principal - alreadyRestored);
+    if (restoreDelta > 0) {
+      await db.collection('employees').doc(afterData['employeeId'] as string).update({
+        availableCredit: FieldValue.increment(restoreDelta),
+      });
+    }
     try {
       await auditLog(db, {
         action: 'loan.repaid',
