@@ -2425,7 +2425,67 @@ export const submitReviewDecision = onCall(
         // here leaves the review exactly as decidable as it was and the
         // caller sees the error and can simply retry.
         await db.runTransaction(async (tx) => {
-          tx.update(db.collection('review_queue').doc(reviewId), {
+          // Both guards above — "this review is still decidable" and the #488
+          // rewind guard "this loan has not started disbursing" — were decided
+          // from reads taken before this transaction, and neither was in its
+          // read set. Re-read both here, before any write.
+          //
+          // The loan one is the one that costs money. `request_info` and
+          // `escalated` reviews stay decidable indefinitely by design, so the
+          // gap between that read and this commit is not a few milliseconds of
+          // contention — it is however long the decision takes, while
+          // onLoanApproved may be queueing the real SoftCrédito transfer for
+          // the same loan. Losing that race wrote 'rejected' over a funded
+          // loan, which takes it out of DEDUCTIBLE_STATUSES so processPayroll
+          // silently stops collecting on money already paid out; 'approved'
+          // reproduces the approval-trigger diff on an already-disbursed loan,
+          // the SPEI replay #488 exists to refuse. The sequential path was
+          // closed; the concurrent one was still open.
+          //
+          // Putting the review doc in the read set matters too: it is what
+          // makes two ops deciding the same review at once serialize, instead
+          // of one approving and one rejecting and the loan keeping whichever
+          // write landed last.
+          const reviewRef = db.collection('review_queue').doc(reviewId);
+          const touchesLoan = Boolean(
+            review['loanId'] && (decision === 'approved' || decision === 'rejected')
+          );
+          const loanRef = touchesLoan
+            ? db.collection('loans').doc(review['loanId'] as string)
+            : null;
+
+          const [reviewTxSnap, loanTxSnap] = await Promise.all([
+            tx.get(reviewRef),
+            loanRef ? tx.get(loanRef) : Promise.resolve(null),
+          ]);
+
+          if (!reviewTxSnap.exists) throw new HttpsError('not-found', 'Review not found');
+          const txReviewStatus = reviewTxSnap.data()!['status'] as string;
+          if (txReviewStatus === 'escalated') {
+            if (!ESCALATED_DECIDER_ROLES.includes(auth.role))
+              throw new HttpsError(
+                'permission-denied',
+                'Esta revisión fue escalada y solo un administrador puede resolverla'
+              );
+            if (decision === 'escalate')
+              throw new HttpsError('failed-precondition', 'Review is already escalated');
+          } else if (!DECIDABLE_REVIEW_STATUSES.includes(txReviewStatus)) {
+            throw new HttpsError('failed-precondition', 'Review has already been resolved');
+          }
+
+          if (loanTxSnap) {
+            const txLoanStatus = loanTxSnap.exists
+              ? (loanTxSnap.data()!['status'] as string)
+              : null;
+            if (txLoanStatus && DISBURSEMENT_INITIATED_STATUSES.includes(txLoanStatus)) {
+              throw new HttpsError(
+                'failed-precondition',
+                `Loan is already '${txLoanStatus}' — disbursement has started, so this review can no longer change it`
+              );
+            }
+          }
+
+          tx.update(reviewRef, {
             status: statusMap[decision],
             reviewedBy: auth.uid,
             reviewedAt: now,
@@ -2435,8 +2495,8 @@ export const submitReviewDecision = onCall(
           });
 
           // If the review is tied to a loan, update the loan status (only for approve/reject)
-          if (review['loanId'] && (decision === 'approved' || decision === 'rejected')) {
-            tx.update(db.collection('loans').doc(review['loanId'] as string), {
+          if (loanRef) {
+            tx.update(loanRef, {
               status: decision,
               statusNote: notes || null,
             });
