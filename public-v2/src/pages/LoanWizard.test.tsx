@@ -18,7 +18,58 @@
  * short-circuits the render.
  */
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, beforeAll, afterAll } from 'vitest';
+
+/**
+ * The clock is PINNED for this whole file, and that is a correctness fix, not tidiness.
+ *
+ * `Frontend Lint, Typecheck & Build` is one of main's four required status checks,
+ * so anything in here that moves with wall-clock time can block every PR in the
+ * repo on a date nobody chose. That was not hypothetical: it was scheduled.
+ *
+ * The deduction-date test asserts two things about the same rendered text — that
+ * it CONTAINS the server fixture (`2026-09-15` → "15 de septiembre de 2026") and
+ * that it does NOT contain `Date.now() + 30d` formatted the same way. Those two
+ * requirements contradict each other on exactly the day when `now + 30d` IS the
+ * fixture date:
+ *
+ *   2026-08-06  now+30d = "5 de septiembre de 2026"   → substring false-positive,
+ *                                                       fixed by the `(?<!\d)` lookbehind
+ *   2026-08-16  now+30d = "15 de septiembre de 2026"  → the negative assertion forbids
+ *                                                       the exact string the positive one
+ *                                                       requires. UNSATISFIABLE.
+ *
+ * No lookbehind can fix the second one: on that day the string is genuinely
+ * present, not accidentally matched. Widening the regex would only hide the
+ * assertion. The defect is that a required gate's expected value depends on when
+ * it happens to run, so the fix removes the dependency: `toFake: ['Date']` pins
+ * the clock and leaves timers real, because faking setTimeout/setInterval breaks
+ * Testing Library's `waitFor` and every async assertion below would hang.
+ *
+ * Reproduced against this suite before fixing, at three dates: 08-15 27/27 pass,
+ * **08-16 1 failed / 26 passed**, 08-17 27/27 pass. A probe that failed on every
+ * date would have proven nothing.
+ *
+ * Second thing the pin buys, and the reason it sits at file scope rather than in
+ * that one test: `READY_CONFIG.estimatedDeductionDate` is a hardcoded 2026-09-15.
+ * Under a real clock that date silently becomes the past, and any future
+ * "don't render an elapsed deduction date" behaviour would fail this file for a
+ * third unrelated calendar reason. Pinned, the fixture's relationship to "now" is
+ * fixed forever.
+ */
+const PINNED_NOW = new Date('2026-06-01T12:00:00.000Z');
+
+beforeAll(() => {
+  // Deliberately a date where `now + 30d` ("1 de julio de 2026") is neither the
+  // fixture nor a substring of it — the negative assertion must still be able to
+  // fail if the screen regresses to deriving the date from the clock.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(PINNED_NOW);
+});
+
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const getLoanConfigMock = vi.fn();
 const navigateMock = vi.fn();
@@ -414,11 +465,16 @@ describe('LoanWizard — the deduction date comes from the server', () => {
     const text = screenText();
     expect(text).toMatch(/15 de septiembre de 2026|September 15, 2026/i);
 
-    // The date the old code would have produced, computed the same way it did.
-    // Asserting its absence rather than a fixed string keeps this honest no
-    // matter when the suite runs. Guarded with a digit lookbehind so a
-    // single-digit day (e.g. "5 de septiembre") can't false-positive-match
-    // as a substring of an unrelated two-digit day (e.g. "15 de septiembre").
+    // The date the old code would have produced, computed the same way it did —
+    // from `Date.now()`, which the file-scope pin makes a constant, so this
+    // expected value no longer depends on the day CI runs. See the pin's comment:
+    // under a real clock this assertion forbade the fixture date itself on
+    // 2026-08-16 and the required context became unsatisfiable.
+    //
+    // The digit lookbehind stays and is still load-bearing: it stops a
+    // single-digit day ("5 de septiembre") false-positive-matching as a substring
+    // of a two-digit one ("15 de septiembre"), which is a separate defect from the
+    // clock dependency and was the 2026-08-06 red.
     const localOffset = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const localOffsetText = localOffset.toLocaleDateString('es', {
       day: 'numeric',
