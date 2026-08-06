@@ -214,6 +214,32 @@ function literalPrefix(src) {
  * before `npm ci`. It is strict about what it will accept: anything it is not
  * certain it has read correctly is reported, never guessed at.
  */
+/**
+ * The value of a top-level `env:` key in a workflow, or null if absent.
+ *
+ * Same deliberately-small parser as `pathsFilter` below, for the same reason:
+ * this check runs before `npm ci` so it can fail in seconds, which rules out a
+ * YAML dependency. It reads one scalar under one block and gives up loudly on
+ * anything it does not recognize, rather than guessing.
+ */
+function workflowEnvValue(yaml, key) {
+  const lines = yaml.split('\n');
+  const start = lines.findIndex((l) => /^env:\s*$/.test(l));
+  if (start < 0) return null;
+
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    // Dedent to column 0 ends the top-level env block.
+    if (!/^\s/.test(line)) break;
+    const match = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/);
+    if (match && match[1] === key) {
+      return match[2].trim().replace(/^['"]|['"]$/g, '') || null;
+    }
+  }
+  return null;
+}
+
 function pathsFilter(yaml) {
   const lines = yaml.split('\n');
   const problems = [];
@@ -304,6 +330,28 @@ function checkTarget(target, dockerfilePath, workflowPath) {
       `${workflowPath} does not exist. If the deploy workflow was deleted because a Railway ` +
         'deployment trigger was finally added, delete this check with it — otherwise the ' +
         'service is deploying from something neither this check nor the workflow describes.'
+    );
+  }
+  if (problems.length) return { problems, missing, paths: null };
+
+  // `EXPECTED_DOCKERFILE` in the workflow and `target.dockerfile` here are the
+  // same string in two files. Neither drift direction is silent — a stale value
+  // here fails the existsSync above, and a stale one there fails the deploy
+  // workflow's own build-premise guard — but that is two indirect failures
+  // where one direct message will do, and "these must match" living only in a
+  // comment is the arrangement that cost us the instance watchPatterns.
+  const declared = workflowEnvValue(readFileSync(workflowPath, 'utf8'), 'EXPECTED_DOCKERFILE');
+  if (declared === null) {
+    problems.push(
+      `${workflowPath} declares no \`EXPECTED_DOCKERFILE\`. The deploy workflow asserts ` +
+        'against that value that Railway still builds this service from the Dockerfile ' +
+        'this check reads. Without it, nothing checks the premise at deploy time.'
+    );
+  } else if (declared !== target.dockerfile) {
+    problems.push(
+      `${workflowPath} declares \`EXPECTED_DOCKERFILE: ${declared}\`, but this check derives ` +
+        `coverage from ${target.dockerfile}. One of the two moved and the other did not, so ` +
+        'the deploy guard and this check are describing different builds. Make them equal.'
     );
   }
   if (problems.length) return { problems, missing, paths: null };

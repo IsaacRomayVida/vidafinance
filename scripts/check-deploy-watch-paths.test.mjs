@@ -44,6 +44,9 @@ on:
       - '.dockerignore'
       - '.github/workflows/deploy-registry-funpay.yml'
   workflow_dispatch: {}
+env:
+  RAILWAY_SERVICE_ID: 0cf12987-4aba-4b20-942f-c8436d956723
+  EXPECTED_DOCKERFILE: services/registry-service/Dockerfile
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -127,6 +130,67 @@ describe('check-deploy-watch-paths', () => {
         assert.match(out, /uncovered: services\/somethingelse\//);
         // The message has to carry the fix, not just the complaint.
         assert.match(out, /add "services\/somethingelse\/\*\*"/);
+      }
+    );
+  });
+
+  it('FAILS when the filter is narrowed so services/shared stops being covered', () => {
+    // The six-day incident, reproduced. Nothing about the Dockerfile changes —
+    // the filter is what shrinks. #556 edited services/shared/registry/pool.js,
+    // it merged, and under a filter like this one it deployed nothing: no failed
+    // run, no alert, the service quietly serving its previous container for six
+    // days while carrying the bug that fix closed.
+    //
+    // Distinct from the uncovered-COPY case above and worth both: that one is a
+    // build input arriving, this one is coverage leaving. The filter is the side
+    // a person edits by hand, so it is the side that shrinks by accident.
+    withFixture(
+      {
+        '.github/workflows/deploy-registry-funpay.yml': GOOD_WORKFLOW.replace(
+          "      - 'services/shared/**'\n",
+          ''
+        ),
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        assert.match(out, /uncovered: services\/shared\//);
+        assert.match(out, /required by `COPY services\/shared\//);
+      }
+    );
+  });
+
+  it('FAILS when the workflow and this script name different Dockerfiles', () => {
+    // The two hand-maintained copies of one path. Neither drift direction was
+    // silent before this assertion existed, but both were indirect; this turns
+    // them into one message that says which two things disagree.
+    withFixture(
+      {
+        '.github/workflows/deploy-registry-funpay.yml': GOOD_WORKFLOW.replace(
+          'EXPECTED_DOCKERFILE: services/registry-service/Dockerfile',
+          'EXPECTED_DOCKERFILE: services/registry-service/Dockerfile.new'
+        ),
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        assert.match(out, /declares `EXPECTED_DOCKERFILE: services\/registry-service\/Dockerfile\.new`/);
+        assert.match(out, /describing different builds/);
+      }
+    );
+  });
+
+  it('FAILS when the workflow declares no EXPECTED_DOCKERFILE at all', () => {
+    // Deleting the variable would otherwise leave the deploy-time build-premise
+    // guard comparing against an empty string, which nothing would report.
+    withFixture(
+      {
+        '.github/workflows/deploy-registry-funpay.yml': GOOD_WORKFLOW.replace(
+          '  EXPECTED_DOCKERFILE: services/registry-service/Dockerfile\n',
+          ''
+        ),
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        assert.match(out, /declares no `EXPECTED_DOCKERFILE`/);
       }
     );
   });

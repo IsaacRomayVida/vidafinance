@@ -217,6 +217,15 @@ jobs:
               query: "query($p: String!, $e: String!, $s: String!) { variables(projectId: $p, environmentId: $e, serviceId: $s) }",
               variables: { p: $p, e: $e, s: $s }
             }')
+          # Removed on EXIT, not on the happy path alone. `railway_call` can fail
+          # under `set -e` and the two guards below `exit 1`, each of which would
+          # step over a trailing `rm` and leave all 21 variables — INTERNAL_SECRET
+          # and REGISTRY_DATABASE_URL among them — sitting in RUNNER_TEMP.
+          #
+          # Not a log-leak fix: `railway_call` only ever prints `.errors[].message`
+          # and never a body, so nothing reaches the run log either way. This is
+          # about not leaving the file on the runner.
+          trap 'rm -f "${RUNNER_TEMP}/vars.json"' EXIT
           railway_call "$payload" "${RUNNER_TEMP}/vars.json"
 
           dockerfile_path=$(jq -r '.data.variables.RAILWAY_DOCKERFILE_PATH // ""' "${RUNNER_TEMP}/vars.json")
