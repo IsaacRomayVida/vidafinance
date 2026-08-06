@@ -8,7 +8,9 @@ This runbook covers how a normal production deploy flows, what to watch during a
 
 ## TL;DR
 
-Every push to `main` automatically deploys **Firebase Hosting + Cloud Functions + Firestore rules + Storage rules** to production. No manual step. Railway services (payment-server, softcredito, notifications, pdf-generator, ml-service) deploy separately from their own GitHub pushes, gated on Railway's own build.
+Every push to `main` automatically deploys **Firebase Hosting + Cloud Functions + Firestore rules + Storage rules** to production. No manual step. Most Railway services (payment-server, softcredito, notifications, pdf-generator, ml-service) deploy separately from their own GitHub pushes, gated on Railway's own build.
+
+**`registry-service-funpay` is the exception: it has no Railway trigger and is deployed by CI instead — see §1.1.** Do not assume a Railway service redeploys itself. "It's a Railway service, so Railway deploys it" is the sentence that let that one run six-day-old code.
 
 A deploy takes ~6–8 minutes. During that window, the app is in a zero-downtime rolling state: Hosting flips atomically at the end, Cloud Functions each flip individually as each finishes rebuilding.
 
@@ -22,8 +24,35 @@ A deploy takes ~6–8 minutes. During that window, the app is in a zero-downtime
 | Push/merge to `develop` | Staging (`vida-finance-staging`) | same workflow, different branch branch |
 | Manual retry | Same | `gh run rerun <run-id>` |
 | Manual `firebase deploy` from a dev laptop | **Forbidden on production** | See "Emergency hotfix" below |
+| Push to `main` touching `services/registry-service/**` or `services/shared/**` | `registry-service-funpay` (Railway) | `.github/workflows/deploy-registry-funpay.yml` — see §1.1 |
 
 There is no "promote staging → prod" mechanism — each environment deploys from its own branch.
+
+### 1.1 registry-service-funpay deploys from CI, not from Railway
+
+`registry-service-funpay` (Railway project `vida-backend`) **has no Railway deployment trigger.** The
+project has exactly five triggers and every one of them points at `vidatravel/main`; none watches this
+repo for this service. `.github/workflows/deploy-registry-funpay.yml` exists to fill that gap.
+
+Why it was built rather than left to Railway: with no trigger, the service ran commit `e431dbd`
+(2026-07-30) in production for six days. #524 and #556 — the fixes for the DB-outage write hang and the
+pool-exhaustion resolve hang the running code still had — merged 2026-08-04 and never shipped. There was
+no failed run and no alert, because nothing ran at all. It was redeployed by hand to `160ebb9` on
+2026-08-06.
+
+Two things to know when touching it:
+
+- **The workflow's `paths` list mirrors the Dockerfile's `COPY` set, not the npm dependency graph.**
+  `services/shared/**` is load-bearing — the service requires `../shared/registry/pool`,
+  `../shared/registry/resolver`, `../shared/alerting` and `../shared/metrics`, and #556 edited
+  `services/shared/registry/pool.js` directly. If you change the Dockerfile's `COPY` lines, change the
+  `paths` list in the same PR.
+- **The service instance has `watchPatterns` set. They do nothing on their own** — watch patterns filter
+  a trigger, they do not create one. They are staged for the day a trigger exists.
+
+> **If a deployment trigger is ever added in the Railway dashboard, delete
+> `.github/workflows/deploy-registry-funpay.yml` in the same change.** Otherwise every qualifying push
+> deploys twice and two builds of one service race each other.
 
 ---
 
