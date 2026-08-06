@@ -142,12 +142,24 @@ function buildMockDb() {
     employers: EMPLOYER_DOC,
   };
 
+  // `loans/{loanId}/underwritingDetail/detail` resolves as absent here: these
+  // tests are about the employee/employer response boundary, and a loan with no
+  // Stage 3 breakdown is the fail-soft path the detail handler must survive.
+  // See getReviewDetail.underwriting.test.ts for that document's own coverage.
+  const missingSubdoc = {
+    doc: jest.fn((subId: string) => ({
+      id: subId,
+      get: jest.fn().mockResolvedValue({ exists: false, id: subId, data: () => undefined }),
+    })),
+  };
+
   return {
     collection: jest.fn((name: string) => ({
       ...emptyQuery,
       where: jest.fn(() => emptyQuery),
       doc: jest.fn((id: string) => ({
         id,
+        collection: jest.fn(() => missingSubdoc),
         get: jest.fn().mockResolvedValue({
           exists: dataFor[name] !== undefined,
           id,

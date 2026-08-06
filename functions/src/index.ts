@@ -48,6 +48,7 @@ import { computeEmployerDashboardStats } from './employers/computeEmployerDashbo
 import { allowTestBypass } from './utils/environment';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
 import { getQueue } from './utils/queue';
+import { conditionSource } from './admin/underwritingProvenance';
 
 initSentry();
 
@@ -2524,12 +2525,55 @@ interface GetReviewDetailData {
   reviewId: string;
 }
 
+// One row of the 12-condition auto-approve gate, as
+// services/underwriting-service/src/stages/stage3-autoapprove.js writes it.
+interface UnderwritingConditionRow {
+  id: number | null;
+  name: string | null;
+  // boolean | null, NOT a truthiness coercion. A condition whose `pass` was
+  // never written is unknown, and the panel must render it as "—". Coercing it
+  // to `false` would show a human deciding a loan a red row for a check that
+  // was never run — the same fabrication `bool()` in getReviewQueue avoids.
+  pass: boolean | null;
+  // Passed through untouched, and deliberately NOT defaulted: conditions 11 and
+  // 12 (dias_atraso_zero, cartera_vencida_false) legitimately persist `null`
+  // when the bureau block ran without those fields. `null` here means "the
+  // bureau did not report it", which is exactly what ops needs to see; a 0 or a
+  // `false` in its place would read as a clean bureau record.
+  value: unknown;
+  // The bound the value was tested against ("> 600", "<= 25%", "18-65"), which
+  // is the half of the row that makes the value mean anything.
+  required: string | null;
+  // "read" | "assumed" | "unknown" — see ./admin/underwritingProvenance.
+  source: string;
+}
+
+// `loans/{loanId}/underwritingDetail/detail`, unsummarized.
+//
+// The queue deliberately collapses this to counts (`{passed, total}` plus the
+// failed names) because a list row has no space for twelve rows of evidence.
+// The detail panel is the screen that shows every condition, so summarizing
+// here would leave no screen in the product that can answer "which check
+// failed, on what value, against what bound" — the question the reviewer is
+// actually being asked to answer.
+interface UnderwritingDetailResult {
+  decision: string | null;
+  reason: string | null;
+  allPass: boolean | null;
+  conditions: UnderwritingConditionRow[];
+  evaluatedAt: unknown;
+}
+
 interface ReviewDetailResult {
   review: Record<string, unknown>;
   loan: Record<string, unknown> | null;
   employee: Record<string, unknown> | null;
   employer: Record<string, unknown> | null;
   mlDecision: Record<string, unknown> | null;
+  // Null when the loan has no `underwritingDetail/detail` doc — an early
+  // rejection that never reached Stage 3, a loan predating #393/#509, or a
+  // review with no `loanId` at all. Never an error: see `projectUnderwriting`.
+  underwritingDetail: UnderwritingDetailResult | null;
   auditHistory: Record<string, unknown>[];
 }
 
@@ -2571,6 +2615,48 @@ function projectDoc(
   return projected;
 }
 
+// Fail-soft on the whole document, same contract as getReviewQueue's
+// `summarizeUnderwriting`: a loan with no `underwritingDetail/detail` doc
+// yields null rather than throwing. Loans rejected before Stage 3 ran, and
+// loans predating #393/#509, legitimately have none — an ops reviewer opening
+// one of those must get the rest of the screen, not a 500.
+//
+// Field-by-field rather than a spread, matching `projectDoc` above: the source
+// document is written by an external pipeline, so a field added there next
+// quarter stays off the wire until someone names it here. Every one of the six
+// condition keys the gate writes IS named, so this is a projection of shape,
+// not of content — all 12 rows survive, none of their evidence is dropped.
+function projectUnderwriting(
+  snap: FirebaseFirestore.DocumentSnapshot | null
+): UnderwritingDetailResult | null {
+  if (!snap?.exists) return null;
+  const data = snap.data()!;
+
+  const rawConditions = Array.isArray(data['conditions'])
+    ? (data['conditions'] as unknown[])
+    : [];
+  const conditions: UnderwritingConditionRow[] = rawConditions
+    .filter((c): c is Record<string, unknown> =>
+      typeof c === 'object' && c !== null && !Array.isArray(c)
+    )
+    .map((c) => ({
+      id: typeof c['id'] === 'number' && Number.isFinite(c['id']) ? (c['id'] as number) : null,
+      name: typeof c['name'] === 'string' ? (c['name'] as string) : null,
+      pass: typeof c['pass'] === 'boolean' ? (c['pass'] as boolean) : null,
+      value: c['value'] ?? null,
+      required: typeof c['required'] === 'string' ? (c['required'] as string) : null,
+      source: conditionSource(c['source']),
+    }));
+
+  return {
+    decision: typeof data['decision'] === 'string' ? (data['decision'] as string) : null,
+    reason: typeof data['reason'] === 'string' ? (data['reason'] as string) : null,
+    allPass: typeof data['allPass'] === 'boolean' ? (data['allPass'] as boolean) : null,
+    conditions,
+    evaluatedAt: data['evaluatedAt'] ?? null,
+  };
+}
+
 export const getReviewDetail = onCall(
   { cors: true, enforceAppCheck: true },
   withAuth<GetReviewDetailData, ReviewDetailResult>(
@@ -2594,12 +2680,27 @@ export const getReviewDetail = onCall(
 
         // Fetch associated loan, employee, employer, ML decision in parallel
         const loanId = reviewData['loanId'] as string | undefined;
-        const [loanSnap, mlSnap, auditSnap] = await Promise.all([
+        const [loanSnap, mlSnap, auditSnap, underwritingSnap] = await Promise.all([
           loanId ? db.collection('loans').doc(loanId).get() : Promise.resolve(null),
           loanId
             ? db.collection('ml_decisions').where('loanId', '==', loanId).orderBy('decidedAt', 'desc').limit(1).get()
             : Promise.resolve(null),
           db.collection('audit_log').where('targetId', '==', reviewId).orderBy('timestamp', 'desc').limit(20).get(),
+          // `loans/{loanId}/underwritingDetail/detail` — the ops-only
+          // subcollection (firestore.rules), read here with the Admin SDK,
+          // which bypasses those rules. The gate that matters for this
+          // response is therefore the callable's own: `withAuth(['ops',
+          // 'admin', 'super_admin'])` above, which is exactly the audience
+          // `isOps()` admits in the rule (ops | admin | super_admin). Nothing
+          // is widened by reading it here — the two gates already agree, and
+          // this endpoint must not be the place they stop agreeing.
+          //
+          // Joined into this existing batch rather than awaited after it: the
+          // loan doc is not needed to address the subcollection, only the
+          // `loanId` already in hand, so a second round trip would buy nothing.
+          loanId
+            ? db.collection('loans').doc(loanId).collection('underwritingDetail').doc('detail').get()
+            : Promise.resolve(null),
         ]);
 
         const loanData = loanSnap?.exists ? loanSnap.data()! : null;
@@ -2620,8 +2721,9 @@ export const getReviewDetail = onCall(
           ? { id: mlSnap.docs[0].id, ...mlSnap.docs[0].data() }
           : null;
         const auditHistory = auditSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const underwritingDetail = projectUnderwriting(underwritingSnap);
 
-        return { review, loan, employee, employer, mlDecision, auditHistory };
+        return { review, loan, employee, employer, mlDecision, underwritingDetail, auditHistory };
       })
   )
 );
