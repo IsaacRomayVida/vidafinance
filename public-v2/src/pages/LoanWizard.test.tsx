@@ -416,14 +416,20 @@ describe('LoanWizard — the deduction date comes from the server', () => {
 
     // The date the old code would have produced, computed the same way it did.
     // Asserting its absence rather than a fixed string keeps this honest no
-    // matter when the suite runs.
+    // matter when the suite runs. Guarded with a digit lookbehind so a
+    // single-digit day (e.g. "5 de septiembre") can't false-positive-match
+    // as a substring of an unrelated two-digit day (e.g. "15 de septiembre").
     const localOffset = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const localOffsetText = localOffset.toLocaleDateString('es', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
     });
-    expect(text).not.toMatch(new RegExp(localOffsetText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+    const localOffsetPattern = new RegExp(
+      `(?<!\\d)${localOffsetText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+      'i',
+    );
+    expect(text).not.toMatch(localOffsetPattern);
   });
 
   it('qualifies the date when the cadence was assumed rather than read', async () => {
