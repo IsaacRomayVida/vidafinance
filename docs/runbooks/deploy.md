@@ -46,9 +46,16 @@ Two things to know when touching it:
   `services/shared/**` is load-bearing — the service requires `../shared/registry/pool`,
   `../shared/registry/resolver`, `../shared/alerting` and `../shared/metrics`, and #556 edited
   `services/shared/registry/pool.js` directly. If you change the Dockerfile's `COPY` lines, change the
-  `paths` list in the same PR.
-- **The service instance has `watchPatterns` set. They do nothing on their own** — watch patterns filter
-  a trigger, they do not create one. They are staged for the day a trigger exists.
+  `paths` list in the same PR. `scripts/check-deploy-watch-paths.mjs` enforces this in CI (a step of the
+  required **Lint, Typecheck & Test** job): it re-derives the `COPY` set and fails the build naming any
+  uncovered path. It also fails loudly — rather than passing quietly — if its own premise breaks, i.e. if
+  the Dockerfile disappears or a `railway.toml`/`railway.json` appears and the build may no longer be
+  defined by that Dockerfile.
+- **That `paths` list is the only copy of the closure.** The service instance's `watchPatterns` were
+  cleared to `[]` on 2026-08-06. They were inert — watch patterns filter a trigger, they do not create
+  one — and keeping them meant maintaining the same closure by hand in two places, where a divergence
+  would be invisible in the direction that matters. **Do not re-add them.** If a trigger is ever added,
+  an empty pattern set deploys on every push, which is noisy rather than silent.
 
 > **If a deployment trigger is ever added in the Railway dashboard, delete
 > `.github/workflows/deploy-registry-funpay.yml` in the same change.** Otherwise every qualifying push

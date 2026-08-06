@@ -24,6 +24,27 @@ jobs:
           cache: "npm"
           cache-dependency-path: '**/package-lock.json'
 
+      # registry-service-funpay has no Railway deployment trigger; CI deploys it
+      # (deploy-registry-funpay.yml), and that workflow's `paths:` filter decides
+      # what counts as "this service changed". Too narrow a filter fails silently
+      # — no deploy, no failed run, no alert, service pinned to an old container
+      # — which is the six-day staleness that workflow exists to end. This
+      # recomputes the build's real inputs from the Dockerfile's COPY set and
+      # fails if the filter has drifted behind them.
+      #
+      # It lives in THIS job, rather than the topically-closer deploy-readiness
+      # job, because "Lint, Typecheck & Test" is one of the four required status
+      # checks on main's branch protection and deploy-readiness is not. A drift
+      # check that cannot block a merge is documentation. If it later earns its
+      # own context, split it out and add that context to branch protection in
+      # the same change — not before.
+      #
+      # Before `npm ci` on purpose: it has no dependencies, so it should fail in
+      # seconds rather than behind two installs that can break for unrelated
+      # reasons.
+      - name: Deploy paths cover the Docker build context — hard gate
+        run: node scripts/check-deploy-watch-paths.mjs
+
       - name: Install root deps (includes ESLint)
         run: npm ci
 

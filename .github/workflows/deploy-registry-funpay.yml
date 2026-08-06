@@ -14,8 +14,13 @@ name: Deploy registry-service-funpay (Railway)
 # failed run and no alert, because nothing ran at all. It was redeployed by hand
 # to `160ebb9` on 2026-08-06; this workflow is what stops that recurring.
 #
-# The service instance already carries `watchPatterns`, but watch patterns
-# filter a trigger — they do not create one, so they fire nothing today.
+# The service instance carried `watchPatterns` for a while. They were cleared to
+# `[]` on 2026-08-06, deliberately: watch patterns filter a trigger and there is
+# no trigger, so they fired nothing, while duplicating this file's `paths:` list
+# in a second hand-maintained place that could drift out of sync silently. THE
+# `paths:` LIST BELOW IS NOW THE ONLY COPY. Do not re-add the instance patterns.
+# (The deletion also fails safe: if a trigger is ever added in the dashboard, an
+# empty pattern set deploys on every push — noisy, not silent.)
 #
 # IF A DEPLOYMENT TRIGGER IS EVER ADDED IN THE RAILWAY DASHBOARD, DELETE THIS
 # WORKFLOW IN THE SAME CHANGE. Otherwise every qualifying push deploys twice,
@@ -38,6 +43,9 @@ on:
     # and say nothing — the same silent staleness, rebuilt.
     #
     # If you change the Dockerfile's COPY set, change this list in the same PR.
+    # `scripts/check-deploy-watch-paths.mjs` enforces that in CI rather than
+    # trusting this comment — it re-derives the COPY set and fails the build on
+    # an uncovered path.
     paths:
       - 'services/registry-service/**'
       - 'services/shared/**'
@@ -60,6 +68,10 @@ env:
   RAILWAY_PROJECT_ID: e1334895-9fdc-4cab-9a3c-73416719c553
   RAILWAY_SERVICE_ID: 0cf12987-4aba-4b20-942f-c8436d956723
   RAILWAY_ENVIRONMENT_ID: 524fdbc8-c800-4c0a-bc0f-c962a0fb7ef4
+  # Must match the TARGETS entry in scripts/check-deploy-watch-paths.mjs. That
+  # script derives the `paths:` list's required coverage from this Dockerfile's
+  # COPY set; the guard below confirms Railway still builds from it.
+  EXPECTED_DOCKERFILE: services/registry-service/Dockerfile
 
 jobs:
   deploy:
@@ -141,6 +153,76 @@ jobs:
             done
           }
           SH
+
+      # The other half of scripts/check-deploy-watch-paths.mjs, which runs in CI
+      # on every PR and asserts that this workflow's `paths:` filter covers the
+      # Dockerfile's COPY set.
+      #
+      # That check can only see the repo. The premise it rests on — that Railway
+      # builds this service FROM that Dockerfile — is held by API state the repo
+      # cannot observe, and the obvious signal is misleading: the service
+      # instance reports `builder: RAILPACK`, and it is Dockerfile-built anyway
+      # only because the service variable `RAILWAY_DOCKERFILE_PATH` overrides it.
+      # Delete that one variable and the build silently becomes a Railpack build
+      # with entirely different inputs — while the on-disk check goes on passing,
+      # because the Dockerfile is still sitting there and `railwayConfigFile` is
+      # still null. A green check on a dead premise is worse than no check, so
+      # the part that needs credentials is asserted here, where they exist.
+      #
+      # Fail-closed on purpose: if this is wrong, the `paths:` filter is wrong,
+      # and a wrong filter is the silent staleness this whole workflow exists to
+      # end. A blocked deploy is loud and fixable; a filter nobody knows is stale
+      # is neither.
+      - name: Confirm Railway still builds this service the way the paths filter assumes
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+        run: |
+          set -euo pipefail
+          . "${RUNNER_TEMP}/railway.sh"
+
+          payload=$(jq -n --arg id "$RAILWAY_SERVICE_ID" '{
+            query: "query($id: String!) { service(id: $id) { serviceInstances { edges { node { environmentId railwayConfigFile rootDirectory } } } } }",
+            variables: { id: $id }
+          }')
+          railway_call "$payload" "${RUNNER_TEMP}/instance.json"
+
+          node_json=$(jq -c --arg e "$RAILWAY_ENVIRONMENT_ID" \
+            '[.data.service.serviceInstances.edges[].node | select(.environmentId == $e)][0] // {}' \
+            "${RUNNER_TEMP}/instance.json")
+
+          config_file=$(printf '%s' "$node_json" | jq -r '.railwayConfigFile // "null"')
+          root_dir=$(printf '%s' "$node_json" | jq -r '.rootDirectory // ""')
+
+          if [ "$config_file" != "null" ]; then
+            echo "::error::railwayConfigFile is now \"${config_file}\", not null. A Railway config file can redefine the builder and carry its own watch patterns, so ${EXPECTED_DOCKERFILE}'s COPY set is no longer the whole build. Re-derive the paths filter and scripts/check-deploy-watch-paths.mjs before deploying."
+            exit 1
+          fi
+
+          if [ -n "$root_dir" ] && [ "$root_dir" != "/" ]; then
+            echo "::error::rootDirectory is now \"${root_dir}\". The COPY lines in ${EXPECTED_DOCKERFILE} are repo-root-relative and the paths filter is written against a repo-root build context. Re-derive both before deploying."
+            exit 1
+          fi
+
+          # NOTE: this response body contains EVERY service variable, including
+          # INTERNAL_SECRET and REGISTRY_DATABASE_URL. It is written to a file and
+          # read with jq. Do not cat it, do not echo it, do not add it to any
+          # diagnostic output. Only the Dockerfile path — not a secret — is printed.
+          payload=$(jq -n \
+            --arg p "$RAILWAY_PROJECT_ID" --arg e "$RAILWAY_ENVIRONMENT_ID" --arg s "$RAILWAY_SERVICE_ID" '{
+              query: "query($p: String!, $e: String!, $s: String!) { variables(projectId: $p, environmentId: $e, serviceId: $s) }",
+              variables: { p: $p, e: $e, s: $s }
+            }')
+          railway_call "$payload" "${RUNNER_TEMP}/vars.json"
+
+          dockerfile_path=$(jq -r '.data.variables.RAILWAY_DOCKERFILE_PATH // ""' "${RUNNER_TEMP}/vars.json")
+          rm -f "${RUNNER_TEMP}/vars.json"
+
+          if [ "$dockerfile_path" != "$EXPECTED_DOCKERFILE" ]; then
+            echo "::error::RAILWAY_DOCKERFILE_PATH is \"${dockerfile_path:-<unset>}\", expected \"${EXPECTED_DOCKERFILE}\". Unset, this service builds with Railpack instead, whose inputs are not the COPY set the paths filter is derived from — so the filter would be wrong and pushes would silently stop deploying. Restore the variable, or re-derive the filter and scripts/check-deploy-watch-paths.mjs against whatever now defines the build."
+            exit 1
+          fi
+
+          echo "✓ Dockerfile build confirmed: RAILWAY_DOCKERFILE_PATH=${dockerfile_path}, railwayConfigFile=null, repo-root context"
 
       - name: Record the deployment that is live before we trigger
         env:
