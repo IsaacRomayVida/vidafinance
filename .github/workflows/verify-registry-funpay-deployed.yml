@@ -3,13 +3,21 @@ name: Verify registry-service-funpay is actually deployed
 # Reconciles Railway's LIVE deployment against `main`, because
 # `deploy-registry-funpay.yml` cannot detect its own non-firing.
 #
-# THE THING THIS CATCHES, which already happened: `680d018b` touched
+# THE SHAPE THIS CATCHES, stated precisely: `680d018b` touched
 # `.github/workflows/deploy-registry-funpay.yml` — a path inside that workflow's
-# own `paths:` filter — on a push to `main`, and drew ZERO push runs during the
-# 2026-08-06 webhook throttle. What reached production was a hand-run
-# `workflow_dispatch`, and that masked the miss: the service happened to be
-# current, so nothing looked wrong, while the auto-trigger had still never fired
-# in production even once.
+# own `paths:` filter — on a push to `main`, so it was a genuinely eligible
+# trial, and it drew ZERO push runs. A hand-run `workflow_dispatch` is what
+# reached production.
+#
+# That is NOT proof the trigger is broken: webhooks were throttled to ~15%, and
+# one eligible push drawing nothing is the ~85% outcome. The honest statement is
+# that we have never OBSERVED the push trigger fire in production — a gap in
+# evidence, not a defect. Settling it needs one more eligible push to `main`
+# after Actions is `operational`.
+#
+# This check does not depend on the answer. A deploy that does not happen is
+# silent whatever the cause, and the dispatch masked the outcome here only
+# because the service ended up current anyway.
 #
 # A deploy that never starts produces no failed run and no alert. That is the
 # deploy workflow's own header sentence, and it is exactly why it cannot be the

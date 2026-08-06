@@ -7,12 +7,25 @@
  * "nothing ran at all", which is the exact sentence in its own header and the
  * six-day staleness it was built to end.
  *
- * It happened immediately. `680d018b` touched
+ * The shape showed up immediately, and it is worth stating precisely rather than
+ * dramatically. `680d018b` touched
  * `.github/workflows/deploy-registry-funpay.yml` — a path in its own filter — on
- * a push to `main`, and drew **zero** push runs during the 2026-08-06 webhook
- * throttle. What reached production was a hand-run `workflow_dispatch`, which
- * masked the miss: the service was current, so nothing looked wrong, and the
- * auto-trigger had still never fired in production.
+ * a push to `main`, so it was a genuinely ELIGIBLE trial, and it drew zero push
+ * runs. What reached production was a hand-run `workflow_dispatch`.
+ *
+ * That is NOT evidence the trigger is broken. GitHub was throttling webhooks to
+ * ~15% at the time, and one eligible push drawing nothing is the ~85% outcome —
+ * concluding "the trigger never fires" from a single throttled draw is the same
+ * absence-as-evidence error this fleet spent the evening retracting in both
+ * directions. What is true: **we have never OBSERVED the push trigger fire in
+ * production.** That is a gap in evidence, not a defect.
+ *
+ * The reconciler does not depend on which it is, and that is the point. A deploy
+ * that does not happen is silent whatever the cause — dropped webhook, drifted
+ * filter, deleted trigger. The dispatch masked the outcome here precisely
+ * because the service ended up current: nothing looked wrong, and nothing would
+ * have looked wrong if it had not. Detecting the SILENCE is the job; diagnosing
+ * why is a separate question this check deliberately does not try to answer.
  *
  * So this check is deliberately built to share no failure mode with the thing it
  * checks:
