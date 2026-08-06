@@ -15,6 +15,29 @@ jobs:
     # check permanently unsatisfied and block all future merges.
     name: Lint, Typecheck & Test
     runs-on: ubuntu-latest
+    # Every job in this file carries this, and 15 is not arbitrary — see below.
+    # The rationale lives here once rather than thirteen times.
+    #
+    # WHY AT ALL: with no `timeout-minutes` a hung job runs to the runner's
+    # 360-minute default and is then reported as **cancelled, not failed** —
+    # which raises no alert. deploy.yml:117 already carries this lesson, from
+    # the 2026-08-02 incident where three consecutive main deploys burned 6h
+    # each on a non-retryable 403 and nobody was told. ci.yml never got it.
+    # Observed live on 2026-08-06: `Security Rules Tests (HARD gate)` sat
+    # `in_progress` for ~55 minutes with no steps completing, holding its run
+    # open — and a run cannot be cleanly re-run while it is still in progress,
+    # so one hung gate blocks the PR until the 6h default expires. A gate that
+    # hangs for six hours is indistinguishable from a gate that is still working.
+    #
+    # WHY 15: the slowest job observed across six green `main` runs was
+    # `ML Service Tests` at 159s; every other job finished under two minutes.
+    # 15 minutes is ~5.7x the slowest real run and 15-30x the typical one, so it
+    # cannot fire on a slow-but-healthy runner — it only fires on a hang.
+    #
+    # Queue time is NOT counted: `timeout-minutes` measures execution once a
+    # runner picks the job up. Sitting queued during an Actions incident, as
+    # these jobs did for hours on 2026-08-06, does not consume it.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -104,6 +127,7 @@ jobs:
   underwriting-service:
     name: "Underwriting Service Tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -159,6 +183,7 @@ jobs:
   softcredito-adapter:
     name: "Softcredito Adapter Tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -183,6 +208,7 @@ jobs:
   payment-server:
     name: "Payment Server Tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -206,6 +232,7 @@ jobs:
   notification-service:
     name: "Notification Service Tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -241,6 +268,7 @@ jobs:
   pdf-generator:
     name: "PDF Generator Tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -265,6 +293,7 @@ jobs:
   ml-service:
     name: "ML Service Tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -308,6 +337,7 @@ jobs:
   frontend:
     name: Frontend Lint, Typecheck & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -332,6 +362,7 @@ jobs:
   registry-ledger:
     name: Registry & Ledger (Postgres)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -376,6 +407,7 @@ jobs:
   firestore-rules:
     name: "Security Rules Tests (Firestore + Storage emulator, HARD gate)"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -418,6 +450,7 @@ jobs:
   loan-flow-e2e:
     name: "Loan Flow E2E (emulator, HARD gate)"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # requestLoan enforces its rate limit fail-CLOSED: that limit is the only
     # brake on loan spam, so a limiter that cannot answer refuses the request
     # rather than waving it through. getRedis() throws outright when REDIS_URL
@@ -525,6 +558,7 @@ jobs:
   deploy-readiness:
     name: "Deploy Readiness Check (build + export drift, no credentials) — #376"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # Full history: the trigger-kind step below diffs against the merge-base
       # with main, which the default depth-1 checkout cannot resolve.
@@ -688,6 +722,7 @@ jobs:
   health-check:
     name: Verify production endpoints
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.ref == 'refs/heads/main'
     needs: test
     steps:
