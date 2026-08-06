@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { enforceRateLimit } from '../utils/rateLimiter';
+import { conditionSource } from './underwritingProvenance';
 
 // Every status a review can sit in while it still needs a human — i.e. every status
 // submitReviewDecision will still accept a decision for (DECIDABLE_REVIEW_STATUSES
@@ -235,15 +236,13 @@ function summarizeUnderwriting(detail: Record<string, unknown> | null): Underwri
     typeof c['name'] === 'string' ? (c['name'] as string) : 'unknown'
   );
 
-  // `source` was added by #458/#459 and is only "read"/"assumed" going forward.
-  // Loans written before that PR have no `source` key at all — that is silence,
-  // not an outage signal, so it gets its own "unknown" state rather than being
-  // folded into "assumed". Collapsing it into "assumed" would tell ops a legacy
-  // loan was escalated by a provider outage when the pipeline simply predates
-  // provenance tracking, which is a fabricated claim about data it never had.
+  // Provenance rule lives in `conditionSource` (./underwritingProvenance) —
+  // shared with getReviewDetail's per-condition rows so the two screens cannot
+  // disagree about what a missing `source` key means. See that module for why
+  // absent is "unknown" and not "assumed".
   const failedConditionDetails: FailedConditionDetail[] = failed.map((c) => ({
     name: typeof c['name'] === 'string' ? (c['name'] as string) : 'unknown',
-    source: typeof c['source'] === 'string' ? (c['source'] as string) : 'unknown',
+    source: conditionSource(c['source']),
   }));
   const unreadFailures = failedConditionDetails
     .filter((c) => c.source === 'assumed')

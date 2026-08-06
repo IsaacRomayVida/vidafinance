@@ -153,15 +153,58 @@ transaction as the loan.
 
 | Doc | Written by | Contents |
 |---|---|---|
-| `detail` | 6-stage pipeline (Stage 3) | `decision`, `reason`, `allPass`, `conditions[]` — bureau score, LTI, RiskSeal fraud score and ML default probability, each with the bound it was tested against |
+| `detail` | 6-stage pipeline (Stage 3) | `decision`, `reason`, `allPass`, `conditions[]`, `evaluatedAt` — see below |
 | `inlineMl` | inline ML gate (`requestLoan`) | `decisionId`, `creditScore`, `defaultProbability`, `defaultProbabilityBound` |
 
-**Indexes:**
+##### `detail` document
+
+| Field | Type | Description |
+|---|---|---|
+| `decision` | string | Stage 3 verdict (`approve` \| `review` \| `reject`) |
+| `reason` | string | Free-text explanation of the verdict |
+| `allPass` | boolean | Whether all conditions passed |
+| `conditions` | array | The 12-condition auto-approve gate, one entry each (below) |
+| `evaluatedAt` | timestamp | When Stage 3 ran |
+
+Each `conditions[]` entry, as written by
+`services/underwriting-service/src/stages/stage3-autoapprove.js`:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | number | 1–12, stable per condition |
+| `name` | string | `employer_tier`, `imss_tenure`, `bureau_score`, `lti`, `no_competitor_loans`, `riskseal_score`, `fraud_risk`, `ml_default_prob`, `no_active_defaults`, `age_range`, `dias_atraso_zero`, `cartera_vencida_false` |
+| `pass` | boolean | Whether this condition held |
+| `value` | any | The observed value. **Legitimately `null`** on `dias_atraso_zero` / `cartera_vencida_false` when the bureau block ran without those fields — null means "not reported", and must not be read or rendered as `0`/`false` |
+| `required` | string | The bound the value was tested against (`"> 600"`, `"<= 25%"`, `"18-65"`) |
+| `source` | string | Provenance — see below |
+
+**`source` is three-valued, not two.** The pipeline writes `"read"` (the
+provider answered) or `"assumed"` (it did not, so the condition fails closed).
+Conditions written before #458/#459 carry **no `source` key at all**; readers
+normalize that absence to `"unknown"` and must NOT fold it into `"assumed"` —
+absence means the pipeline predates provenance tracking, whereas `"assumed"`
+asserts a provider outage at decision time. Both `getReviewQueue`
+(`unreadFailures`) and `getReviewDetail` (per-condition rows) apply this rule
+through the single shared `conditionSource()` in
+`functions/src/admin/underwritingProvenance.ts`, so the two screens cannot
+drift.
+
+**Readers:** `getReviewQueue` (batched `getAll`, summarized to
+`{passed, total}` + failed names) and `getReviewDetail` (full 12-row
+passthrough for the ops detail panel). Both treat a missing `detail` document
+as `null` rather than an error — early-rejected loans never reach Stage 3, and
+loans predating #393/#509 have no document.
+
+**Indexes (on `loans`, not on the subcollection above):**
 - `employerId` + `createdAt` desc
 - `employerId` + `status` + `createdAt` desc
 - `employeeId` + `createdAt` desc
 - `status` + `dueDate`
+- `status` + `amount`
 - `status` + `overdueDetectedAt` desc
+
+`underwritingDetail` has no composite indexes: it is only ever addressed by
+document path (`.../underwritingDetail/detail`), never queried.
 
 ---
 
