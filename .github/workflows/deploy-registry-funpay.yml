@@ -142,7 +142,12 @@ jobs:
                 return 0
               fi
               if [ "$attempt" -ge "$max" ]; then
-                echo "$err"
+                # Deliberately strips the `::error::` prefix `railway_call` adds.
+                # Exhausting retries is no longer fatal — the poll loop continues
+                # and the run may still pass — so this must not leave a red
+                # annotation on a green run. The caller owns the annotation
+                # level; this only reports what went wrong.
+                echo "${err#::error::}"
                 return 1
               fi
               # ::warning:: not ::error:: — a retried blip must not leave a red
@@ -300,13 +305,27 @@ jobs:
           deadline=$(( $(date +%s) + 600 ))
           last_status="none"
           new_id=""
+          reads_ok=0
+          read_failures=0
 
           while [ "$(date +%s)" -lt "$deadline" ]; do
-            # Retrying: a status read that does not land is not a failed deploy.
+            # A status read that does not land is not a failed deploy — it is a
+            # missing observation. `railway_call_retry` already absorbed three
+            # attempts; exhausting them still only means we are blind right now,
+            # so the loop goes round again and spends the poll window rather than
+            # spending the deploy. A run whose reads fail for 40s and then
+            # recover should pass, because the deploy did.
+            #
+            # Persistence is still red: if the window closes without a terminal
+            # status, the timeout below fails the job and says which of the two
+            # things happened.
             if ! railway_call_retry "$payload" "${RUNNER_TEMP}/poll.json"; then
-              echo "::error::Could not read deployment status from Railway after 3 attempts. THE DEPLOY MAY STILL BE RUNNING — this job could not confirm it either way. Check Railway before re-running: https://railway.app/project/${RAILWAY_PROJECT_ID}/service/${RAILWAY_SERVICE_ID}"
-              exit 1
+              read_failures=$(( read_failures + 1 ))
+              echo "::warning::Could not read deployment status (read failure #${read_failures}); the deploy is unaffected and the poll window has time left. Retrying."
+              sleep 15
+              continue
             fi
+            reads_ok=$(( reads_ok + 1 ))
 
             id=$(jq -r '.data.deployments.edges[0].node.id // ""' "${RUNNER_TEMP}/poll.json")
             status=$(jq -r '.data.deployments.edges[0].node.status // "none"' "${RUNNER_TEMP}/poll.json")
@@ -349,7 +368,15 @@ jobs:
             esac
           done
 
-          echo "::error::Timed out after 10m waiting for deployment ${new_id:-<never appeared>} (last status: ${last_status}). The deploy may still be running — check Railway before retrying."
+          # Two different failures, told apart on purpose. "We watched it build
+          # for ten minutes and it never finished" and "we never once reached
+          # Railway" call for different actions, and collapsing them into one
+          # message sends whoever reads it to the wrong place.
+          if [ "$reads_ok" -eq 0 ]; then
+            echo "::error::Never read deployment status from Railway in 10m (${read_failures} failed reads). The deploy was accepted and MAY HAVE SUCCEEDED — this job never saw it either way. Check Railway before re-running: https://railway.app/project/${RAILWAY_PROJECT_ID}/service/${RAILWAY_SERVICE_ID}"
+          else
+            echo "::error::Timed out after 10m waiting for deployment ${new_id:-<never appeared>} (last status: ${last_status}; ${read_failures} reads also failed). The deploy may still be running — check Railway before retrying."
+          fi
           exit 1
 
       - name: Summary
