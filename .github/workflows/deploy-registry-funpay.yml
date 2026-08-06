@@ -127,7 +127,7 @@ jobs:
               # moved.
               case "$messages" in
                 *"Not Authorized"*)
-                  echo "::error::Check the IDs before the token. Railway answers a nonexistent serviceId/environmentId/projectId with this exact message and code. serviceId=${RAILWAY_SERVICE_ID} environmentId=${RAILWAY_ENVIRONMENT_ID} projectId=${RAILWAY_PROJECT_ID} — if the service was recreated, its id changed and these need updating here and in scripts/check-deploy-watch-paths.mjs."
+                  echo "::error::Check the IDs before the token. Railway answers a nonexistent serviceId/environmentId/projectId with this exact message and code. serviceId=${RAILWAY_SERVICE_ID} environmentId=${RAILWAY_ENVIRONMENT_ID} projectId=${RAILWAY_PROJECT_ID} — if the service was recreated its id changed, and the only place to fix it is the \`env:\` block at the top of this file. scripts/check-deploy-watch-paths.mjs reads RAILWAY_SERVICE_ID from here rather than keeping its own copy, so there is nothing else to update."
                   ;;
               esac
               return 1

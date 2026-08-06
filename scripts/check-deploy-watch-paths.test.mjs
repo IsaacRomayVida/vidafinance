@@ -195,6 +195,47 @@ describe('check-deploy-watch-paths', () => {
     );
   });
 
+  it('FAILS when the workflow declares no RAILWAY_SERVICE_ID', () => {
+    // The id has one definition — the workflow's `env:` block — because that is
+    // where a wrong value fails loudly. This check reports which instance to go
+    // and inspect, so with the id absent it has nothing to report.
+    withFixture(
+      {
+        '.github/workflows/deploy-registry-funpay.yml': GOOD_WORKFLOW.replace(
+          '  RAILWAY_SERVICE_ID: 0cf12987-4aba-4b20-942f-c8436d956723\n',
+          ''
+        ),
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        assert.match(out, /declares no `RAILWAY_SERVICE_ID`/);
+      }
+    );
+  });
+
+  it('reports the service instance id it read from the workflow, not a copy of its own', () => {
+    // The point of deleting the second copy: prove the value actually flows from
+    // the workflow. A distinctive id in the fixture must appear verbatim in the
+    // message, which it cannot do if the script is quoting a hardcoded constant.
+    //
+    // A `railway.toml` is what surfaces that message — its presence means the
+    // Dockerfile may no longer be the authoritative build definition.
+    withFixture(
+      {
+        '.github/workflows/deploy-registry-funpay.yml': GOOD_WORKFLOW.replace(
+          '0cf12987-4aba-4b20-942f-c8436d956723',
+          'deadbeef-1111-2222-3333-444444444444'
+        ),
+        'railway.toml': '[build]\nbuilder = "NIXPACKS"\n',
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        assert.match(out, /service instance deadbeef-1111-2222-3333-444444444444/);
+        assert.doesNotMatch(out, /0cf12987/);
+      }
+    );
+  });
+
   it('refuses to report coverage when a COPY source does not resolve from the repo root', () => {
     // Either the path is stale or the build context moved. Both mean the check
     // is measuring the wrong thing, and a green result would be a lie about a

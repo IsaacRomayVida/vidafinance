@@ -98,7 +98,12 @@ const TARGETS = [
     workflow: '.github/workflows/deploy-registry-funpay.yml',
     // The Railway service instance whose `railwayConfigFile` must stay null for
     // the Dockerfile to be the authoritative build definition.
-    serviceInstanceId: '0cf12987-4aba-4b20-942f-c8436d956723',
+    // NOTE: the service id is deliberately NOT here. It is read from the
+    // workflow's `env: RAILWAY_SERVICE_ID` at check time — see `checkTarget`.
+    // A second copy in this file had exactly one consumer, a message string,
+    // and nothing ever compared it: on the day the service is recreated the
+    // workflow's copy breaks deploys loudly while this one rots in silence,
+    // and the silent one is the half that names which instance to go inspect.
     // Directories a Railway config file would live in for this service. Its
     // appearance means the build definition may have moved out of the
     // Dockerfile — see the premise note above.
@@ -340,7 +345,22 @@ function checkTarget(target, dockerfilePath, workflowPath) {
   // workflow's own build-premise guard — but that is two indirect failures
   // where one direct message will do, and "these must match" living only in a
   // comment is the arrangement that cost us the instance watchPatterns.
-  const declared = workflowEnvValue(readFileSync(workflowPath, 'utf8'), 'EXPECTED_DOCKERFILE');
+  const workflowYaml = readFileSync(workflowPath, 'utf8');
+
+  // The one definition of the service id lives in the workflow, because that is
+  // where a wrong id fails loudly — the deploy stops. Reading it from there
+  // rather than keeping a copy here means there is no invariant to maintain and
+  // no silent half to rot.
+  const serviceInstanceId = workflowEnvValue(workflowYaml, 'RAILWAY_SERVICE_ID');
+  if (serviceInstanceId === null) {
+    problems.push(
+      `${workflowPath} declares no \`RAILWAY_SERVICE_ID\`. This check reports which Railway ` +
+        'service instance to inspect when the build premise breaks, and takes that id from ' +
+        'the workflow so the two cannot disagree. With it absent there is no id to report.'
+    );
+  }
+
+  const declared = workflowEnvValue(workflowYaml, 'EXPECTED_DOCKERFILE');
   if (declared === null) {
     problems.push(
       `${workflowPath} declares no \`EXPECTED_DOCKERFILE\`. The deploy workflow asserts ` +
@@ -362,7 +382,7 @@ function checkTarget(target, dockerfilePath, workflowPath) {
       if (existsSync(candidate)) {
         problems.push(
           `${candidate} exists. The Dockerfile is only authoritative because ` +
-            `\`railwayConfigFile\` is null on service instance ${target.serviceInstanceId}. ` +
+            `\`railwayConfigFile\` is null on service instance ${serviceInstanceId}. ` +
             'A Railway config file can redefine the builder and carry its own watch ' +
             'patterns, so the COPY set would no longer be the whole story. Confirm what ' +
             'the service actually builds from and update this check.'
