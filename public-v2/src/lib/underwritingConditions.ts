@@ -165,6 +165,10 @@ function parseQuantity(value: unknown): Quantity | null {
  * would be read as evidence. Both sides must agree on what is being measured.
  */
 export function conditionMargin(row: UnderwritingConditionRow): ConditionMargin | null {
+  // A non-read value is a fallback constant, not a measurement. Measuring a
+  // distance from a bound to a number nobody read would print a precise-looking
+  // lie one layer below the value itself.
+  if (row.source !== 'read') return null;
   const bound = parseBound(row.required);
   const value = parseQuantity(row.value);
   if (!bound || !value || bound.unit !== value.unit) return null;
@@ -301,9 +305,25 @@ export function formatConditionValue(value: unknown): string {
   return '—';
 }
 
+/**
+ * The value as the panel prints it — provenance-aware.
+ *
+ * `formatConditionValue` only knows about the value itself, so it renders a
+ * `??` fallback constant (riskseal's `100`, the competitor check's `0`) as if
+ * it had been measured. A row whose `source` is not `'read'` was never
+ * measured, so it is suppressed here regardless of what the value holds — the
+ * provenance badge, not this field, carries the explanation. Deliberately a
+ * separate function rather than a branch inside `formatConditionValue`, which
+ * stays a pure, tested value formatter reused elsewhere.
+ */
+export function conditionValueDisplay(row: UnderwritingConditionRow): string {
+  if (row.source !== 'read') return '—';
+  return formatConditionValue(row.value);
+}
+
 /** Whether the row carries a value at all — decides `✕` against `–`. */
 export function hasReadableValue(row: UnderwritingConditionRow): boolean {
-  return formatConditionValue(row.value) !== '—';
+  return conditionValueDisplay(row) !== '—';
 }
 
 /**

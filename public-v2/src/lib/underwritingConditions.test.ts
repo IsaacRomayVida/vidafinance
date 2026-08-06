@@ -14,6 +14,7 @@ import {
   classifyCondition,
   conditionHint,
   conditionMargin,
+  conditionValueDisplay,
   formatConditionValue,
   hasReadableValue,
   isNearThreshold,
@@ -335,5 +336,131 @@ describe('row display', () => {
     expect(sourceBadge(row({ source: 'read' }))).toBeNull();
     expect(sourceBadge(row({ source: 'assumed' }))).toBe('asumido');
     expect(sourceBadge(row({ source: 'unknown' }))).toBe('desconocido');
+  });
+
+  it('treats a non-read row as having no readable value, whatever its value holds', () => {
+    // hasReadableValue drives rowIcon's ✕-vs-– choice. A fallback constant is
+    // not a measurement, so the row cannot claim to have been "actually
+    // tested" just because `value` happens to be non-null.
+    expect(hasReadableValue(row({ value: 100, source: 'assumed' }))).toBe(false);
+    expect(hasReadableValue(row({ value: 0, source: 'assumed' }))).toBe(false);
+    expect(hasReadableValue(row({ value: 580, source: 'read' }))).toBe(true);
+  });
+});
+
+/*
+ * E5c follow-up — a `??` fallback constant is not a measurement.
+ *
+ * `formatConditionValue` only knows the value; it has no notion of provenance,
+ * so a row the pipeline never read (riskseal's fallback `100`, the competitor
+ * check's fallback `0`) printed that constant as if it had been measured. A
+ * reviewer reading "Valor: 100 · Requerido: > 60" sees a fraud score that
+ * visibly clears its own bound, when nobody ran the check.
+ *
+ * `conditionValueDisplay` is the provenance-aware read; `formatConditionValue`
+ * stays a pure, tested value formatter and is not overloaded.
+ */
+describe('conditionValueDisplay', () => {
+  it('suppresses a non-null value on an assumed row — the constant never prints', () => {
+    expect(conditionValueDisplay(row({ value: 42, source: 'assumed' }))).toBe('—');
+  });
+
+  it('suppresses the riskseal fallback exactly as it reaches the panel', () => {
+    // riskseal block absent or skipped: source:'assumed', value:100 (the
+    // fallback constant), required:'> 60', pass:false. `100` visibly clears
+    // its own bound — printing it reads as a fraud check that passed cleanly.
+    const riskseal = row({
+      name: 'Riskseal score',
+      pass: false,
+      value: 100,
+      required: '> 60',
+      source: 'assumed',
+    });
+    expect(conditionValueDisplay(riskseal)).toBe('—');
+  });
+
+  it('suppresses the competitor-loans fallback exactly as it reaches the panel', () => {
+    // Bureau block absent: source:'assumed', value:0 (the fallback constant),
+    // required:'0', pass:true. A fabricated zero that clears its bound.
+    const competitor = row({
+      name: 'Sin préstamos con la competencia',
+      pass: true,
+      value: 0,
+      required: '0',
+      source: 'assumed',
+    });
+    expect(conditionValueDisplay(competitor)).toBe('—');
+  });
+
+  it('still renders a real zero and a real false from a read row — the #458 distinction', () => {
+    // This must not regress: a genuinely-tested 0/false is a finding, not a
+    // gap, and is exactly what provenance suppression must leave alone.
+    expect(conditionValueDisplay(row({ value: 0, source: 'read' }))).toBe('0');
+    expect(conditionValueDisplay(row({ value: false, source: 'read' }))).toBe('No');
+  });
+
+  it('falls through to formatConditionValue for a read row', () => {
+    expect(conditionValueDisplay(row({ value: 650, source: 'read' }))).toBe('650');
+  });
+
+  it('suppresses a null value the same as any other non-read row', () => {
+    // Already `—` via formatConditionValue, but must stay `—` for the same
+    // reason a non-null assumed value does: source, not the value, decides.
+    expect(conditionValueDisplay(row({ value: null, source: 'unknown' }))).toBe('—');
+  });
+});
+
+describe('provenance suppression does not move a row between buckets', () => {
+  it('leaves the riskseal-shaped row in NO CUMPLEN with its value suppressed', () => {
+    const riskseal = row({
+      id: 6,
+      pass: false,
+      value: 100,
+      required: '> 60',
+      source: 'assumed',
+    });
+    expect(classifyCondition(riskseal)).toBe('failed');
+    expect(bucketConditions(detail([riskseal])).failed).toEqual([riskseal]);
+    expect(conditionValueDisplay(riskseal)).toBe('—');
+  });
+
+  it('leaves the competitor-shaped row passing, only its printed value changes', () => {
+    const competitor = row({
+      id: 5,
+      pass: true,
+      value: 0,
+      required: '0',
+      source: 'assumed',
+    });
+    expect(classifyCondition(competitor)).toBe('passed');
+    expect(bucketConditions(detail([competitor])).passed).toEqual([competitor]);
+    expect(conditionValueDisplay(competitor)).toBe('—');
+  });
+
+  it('leaves pass:null + source:assumed in NO CUMPLEN — bucketing is unchanged by this delta', () => {
+    const assumed = row({ pass: null, value: null, required: '< 0.15', source: 'assumed' });
+    const buckets = bucketConditions(detail([assumed]));
+    expect(buckets.failed).toEqual([assumed]);
+    expect(buckets.unevaluated).toEqual([]);
+  });
+});
+
+describe('margin and hint stay silent on a suppressed value', () => {
+  it('does not compute a margin for an assumed value, even one that parses cleanly', () => {
+    // 100 against "> 60" would parse and produce a margin if value alone were
+    // consulted — that margin is the same fabricated evidence one layer down.
+    expect(conditionMargin(row({ value: 100, required: '> 60', source: 'assumed' }))).toBeNull();
+  });
+
+  it('does not tag an assumed pass as near-threshold', () => {
+    expect(
+      isNearThreshold(row({ pass: true, value: 63, required: '> 60', source: 'assumed' }))
+    ).toBe(false);
+  });
+
+  it('does not print a distance hint beside a suppressed value', () => {
+    expect(
+      conditionHint(row({ pass: false, value: 100, required: '> 60', source: 'assumed' }))
+    ).toBeNull();
   });
 });

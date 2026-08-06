@@ -21,7 +21,7 @@ import {
   bucketConditions,
   classifyCondition,
   conditionHint,
-  formatConditionValue,
+  conditionValueDisplay,
   hasReadableValue,
   isNearThreshold,
   sourceBadge,
@@ -149,7 +149,7 @@ function ConditionRow({
       </span>
       {tag ? <span style={annotationStyle}>{tag}</span> : null}
       <span style={{ ...metaStyle, fontWeight: failed ? 700 : 400 }}>
-        Valor: {formatConditionValue(row.value)}
+        Valor: {conditionValueDisplay(row)}
       </span>
       <span style={metaStyle}>
         {/* Verbatim from the backend: reformatting a bound is how the panel
