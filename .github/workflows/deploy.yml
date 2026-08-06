@@ -8,6 +8,22 @@ on:
   pull_request:
     branches:
       - main
+  # Manual escape hatch — see the same block in ci.yml for the measurement.
+  # `workflow_dispatch` is an API call rather than a webhook, so it kept working
+  # through the 2026-08-06 incident while `pull_request` delivery was throttled
+  # to ~15% and this workflow's required contexts could not be reached at all.
+  #
+  # SAFE BY AN EXISTING GUARD, verified rather than assumed: `deploy-firebase`
+  # is `if: github.event_name == 'push'`, so a dispatch runs `test` and
+  # `integration-test` — the two required contexts this workflow owns — and
+  # CANNOT deploy anything, from any ref. That guard was written for a different
+  # reason and is now load-bearing for this one.
+  #
+  # So before adding a job here, or relaxing that condition: a job without an
+  # event-name guard becomes dispatchable by anyone who can click Run workflow,
+  # against any ref. That is the whole risk this trigger introduces, and today
+  # exactly one line contains it.
+  workflow_dispatch: {}
 
 env:
   NODE_VERSION: '24'

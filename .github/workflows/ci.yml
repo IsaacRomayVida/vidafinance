@@ -5,6 +5,24 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # Manual escape hatch for the day webhook delivery is the thing that is broken.
+  #
+  # Measured during the 2026-08-06 Actions incident: GitHub throttled webhook
+  # triggers to ~15% ("many events such as pushes and pull requests are not
+  # triggering workflow runs"), and `pull_request` jobs on an open PR were being
+  # cancelled before step 1 — while a `workflow_dispatch` in this same repo ran
+  # 8 steps green in 67 seconds. `workflow_dispatch` is an API call, not a
+  # webhook, so it is structurally exempt from that throttle.
+  #
+  # With only `push` + `pull_request`, the one trigger that demonstrably still
+  # worked could not reach a single one of main's four required status checks,
+  # and two PRs sat unmergeable for hours with nothing wrong in them.
+  #
+  # Note the circularity, so nobody expects this to help mid-incident:
+  # `workflow_dispatch` only becomes dispatchable once the file carrying it is on
+  # the DEFAULT branch. It cannot be dispatched from the PR that adds it. This is
+  # for the next outage, not the one that prompted it.
+  workflow_dispatch: {}
 
 jobs:
   test:
