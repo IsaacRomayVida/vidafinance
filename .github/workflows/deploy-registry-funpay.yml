@@ -102,6 +102,44 @@ jobs:
               return 1
             fi
           }
+
+          # Retrying wrapper, for the poll loop ONLY.
+          #
+          # Once a deploy has been triggered, a failed status read says nothing
+          # about the deploy — it says the API call did not land. Failing the job
+          # on one transient 5xx during a ten-minute poll reports red over a
+          # deploy that is still running and very likely to succeed, which is the
+          # mirror image of the misleading green `railway_call` exists to prevent,
+          # and it teaches people to re-run a workflow whose deploy already
+          # worked.
+          #
+          # Deliberately NOT used for the trigger call or the pre-trigger read:
+          # if those fail, nothing was started, so a clean immediate red is both
+          # honest and safe to re-run.
+          #
+          # Retries every failure rather than only transport-level ones. By the
+          # time this runs the trigger has already succeeded, so auth is known
+          # good and a failure here is almost certainly transient — and Railway
+          # is not a reliable classifier anyway: it returned "Not Authorized"
+          # under `extensions.code = INTERNAL_SERVER_ERROR`. Three attempts on a
+          # genuinely permanent fault costs 20s before the job fails.
+          railway_call_retry() {
+            local payload="$1" out="$2" attempt=1 max=3 err
+            while :; do
+              if err=$(railway_call "$payload" "$out" 2>&1); then
+                return 0
+              fi
+              if [ "$attempt" -ge "$max" ]; then
+                echo "$err"
+                return 1
+              fi
+              # ::warning:: not ::error:: — a retried blip must not leave a red
+              # annotation on a run that goes on to pass.
+              echo "::warning::Railway status read failed (attempt ${attempt}/${max}), retrying in 10s: ${err#::error::}"
+              attempt=$(( attempt + 1 ))
+              sleep 10
+            done
+          }
           SH
 
       - name: Record the deployment that is live before we trigger
@@ -182,7 +220,11 @@ jobs:
           new_id=""
 
           while [ "$(date +%s)" -lt "$deadline" ]; do
-            railway_call "$payload" "${RUNNER_TEMP}/poll.json"
+            # Retrying: a status read that does not land is not a failed deploy.
+            if ! railway_call_retry "$payload" "${RUNNER_TEMP}/poll.json"; then
+              echo "::error::Could not read deployment status from Railway after 3 attempts. THE DEPLOY MAY STILL BE RUNNING — this job could not confirm it either way. Check Railway before re-running: https://railway.app/project/${RAILWAY_PROJECT_ID}/service/${RAILWAY_SERVICE_ID}"
+              exit 1
+            fi
 
             id=$(jq -r '.data.deployments.edges[0].node.id // ""' "${RUNNER_TEMP}/poll.json")
             status=$(jq -r '.data.deployments.edges[0].node.status // "none"' "${RUNNER_TEMP}/poll.json")
@@ -235,9 +277,18 @@ jobs:
             echo "## registry-service-funpay deploy"
             echo ""
             echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
-            echo "- Deployment: \`${DEPLOYMENT_ID:-not created}\`"
+            echo "- Previously live deployment: \`${BEFORE_DEPLOYMENT_ID:-<none>}\`"
+            echo "- Deployment waited on: \`${DEPLOYMENT_ID:-not created}\`"
             echo "- Deployed commit: \`${DEPLOYMENT_COMMIT:-unknown}\`"
             echo "- Result: \`${DEPLOYMENT_STATUS:-FAILED}\`"
+            echo ""
+            # Printed so the stale-SUCCESS guard is checkable from the run's own
+            # output: these two ids being different IS the guard working.
+            if [ -n "${DEPLOYMENT_ID:-}" ] && [ "${DEPLOYMENT_ID:-}" != "${BEFORE_DEPLOYMENT_ID:-}" ]; then
+              echo "✓ Waited on a NEW deployment (id differs from the one live at trigger time)."
+            else
+              echo "⚠ Did not observe a new deployment id."
+            fi
             echo ""
             echo "This workflow exists because the service has no Railway deployment trigger."
             echo "If one is added in the dashboard, delete this workflow in the same change."
