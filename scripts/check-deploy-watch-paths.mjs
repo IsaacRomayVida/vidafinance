@@ -84,7 +84,7 @@
  *
  * No dependencies, so CI can run it before any install.
  */
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -452,6 +452,30 @@ function checkTarget(target, dockerfilePath, workflowPath) {
   return { problems, missing, paths };
 }
 
+const WORKFLOW_DIR = '.github/workflows';
+
+/**
+ * Every workflow that deploys a Railway service, found rather than declared.
+ *
+ * `TARGETS` is hand-maintained and one row long. Nothing made it agree with
+ * reality, so the day a second CI-deployed service is added this check would go
+ * green while saying nothing whatsoever about it — and print "Every CI-deployed
+ * service watches everything its build reads" as it did. Under-coverage wearing
+ * full coverage's output, which is the same silent direction as a too-narrow
+ * `paths:` filter, one level up.
+ *
+ * Matched on the mutation name rather than the endpoint: a workflow that merely
+ * reads Railway (`sync-registry-funpay-secret.yml` upserts variables) is not
+ * deploying from a build context and has no `paths:` closure to check.
+ */
+function railwayDeployWorkflows() {
+  if (!existsSync(WORKFLOW_DIR)) return [];
+  return readdirSync(WORKFLOW_DIR)
+    .filter((name) => /\.ya?ml$/.test(name))
+    .map((name) => join(WORKFLOW_DIR, name))
+    .filter((path) => readFileSync(path, 'utf8').includes('serviceInstanceDeploy'));
+}
+
 const [argDockerfile, argWorkflow] = process.argv.slice(2);
 const targets =
   argDockerfile && argWorkflow
@@ -459,6 +483,33 @@ const targets =
     : TARGETS;
 
 let failed = false;
+
+// Run before the per-target loop: if TARGETS does not cover everything that
+// deploys, no per-target result can be trusted to mean what it says.
+// Skipped under the two-argument negative-test override, where `targets` is
+// deliberately a fixture rather than this repo's real deploy set.
+if (!argDockerfile) {
+  const uncovered = railwayDeployWorkflows().filter(
+    (path) => !TARGETS.some((t) => t.workflow === path)
+  );
+  if (uncovered.length) {
+    failed = true;
+    console.error(
+      '\nthis check does not cover every workflow that deploys a Railway service.\n\n' +
+        'TARGETS is hand-maintained, so a new deploy workflow is invisible to it — the check ' +
+        'would keep printing a clean result while saying nothing at all about the new service, ' +
+        'including whether its `paths:` filter covers its build context.\n'
+    );
+    for (const path of uncovered) {
+      console.error(`  uncovered: ${path}`);
+      console.error('    it calls `serviceInstanceDeploy` but has no TARGETS entry');
+      console.error(
+        '    fix: add a { service, dockerfile, workflow, configDirs } row to TARGETS in ' +
+          'scripts/check-deploy-watch-paths.mjs\n'
+      );
+    }
+  }
+}
 
 for (const target of targets) {
   const { problems, missing, paths } = checkTarget(

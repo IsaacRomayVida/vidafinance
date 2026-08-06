@@ -236,6 +236,55 @@ describe('check-deploy-watch-paths', () => {
     );
   });
 
+  it('FAILS when a second workflow deploys a Railway service and TARGETS does not know', () => {
+    // TARGETS is hand-maintained and one row long. Without this, adding a second
+    // CI-deployed service leaves the check green and silent about it — while
+    // still printing "Every CI-deployed service watches everything its build
+    // reads". Under-coverage wearing full coverage's output, which is the
+    // too-narrow `paths:` filter one level up.
+    withFixture(
+      {
+        '.github/workflows/deploy-second-service.yml':
+          'name: Deploy some other service\n' +
+          'on: { workflow_dispatch: {} }\n' +
+          'jobs:\n' +
+          '  deploy:\n' +
+          '    runs-on: ubuntu-latest\n' +
+          '    steps:\n' +
+          '      - run: |\n' +
+          '          curl "$RAILWAY_API" --data \'{"query":"mutation { serviceInstanceDeploy(serviceId: \\"x\\", environmentId: \\"y\\", latestCommit: true) }"}\'\n',
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        assert.match(out, /does not cover every workflow that deploys a Railway service/);
+        assert.match(out, /uncovered: \.github\/workflows\/deploy-second-service\.yml/);
+        assert.match(out, /add a \{ service, dockerfile, workflow, configDirs \} row/);
+      }
+    );
+  });
+
+  it('does not flag a workflow that merely reads Railway', () => {
+    // sync-registry-funpay-secret.yml upserts variables against the same API and
+    // deploys nothing. Matching the endpoint rather than the mutation would drag
+    // it in and demand a build closure it does not have.
+    withFixture(
+      {
+        '.github/workflows/sync-some-secret.yml':
+          'name: Sync a variable\n' +
+          'on: { workflow_dispatch: {} }\n' +
+          'jobs:\n' +
+          '  sync:\n' +
+          '    runs-on: ubuntu-latest\n' +
+          '    steps:\n' +
+          '      - run: curl https://backboard.railway.app/graphql/v2 --data \'{"query":"mutation { variableCollectionUpsert(input: $i) }"}\'\n',
+      },
+      ({ code, out }) => {
+        assert.equal(code, 0, `expected pass, got:\n${out}`);
+        assert.doesNotMatch(out, /uncovered/);
+      }
+    );
+  });
+
   it('refuses to report coverage when a COPY source does not resolve from the repo root', () => {
     // Either the path is stale or the build context moved. Both mean the check
     // is measuring the wrong thing, and a green result would be a lie about a
