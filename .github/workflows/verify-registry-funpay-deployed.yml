@@ -91,5 +91,17 @@ jobs:
       # checker that silently fixes what it finds cannot be trusted to report
       # how often it fires. If this fails, a human decides whether to dispatch
       # the deploy workflow.
+      #
+      # EXIT CODES ARE A CONTRACT — read the log before acting on a red run:
+      #   0  the running deployment contains the newest watched-path commit
+      #   1  STALE — a merged change to this service's build inputs is not live.
+      #      Dispatching `deploy-registry-funpay.yml` is the likely fix.
+      #   2  UNKNOWN — the state could NOT be observed (nothing active on
+      #      Railway, an active deploy with no commit hash, or a commit this
+      #      clone cannot resolve). This is NOT a staleness claim and says
+      #      nothing about the deploy trigger. Dispatching a deploy in response
+      #      to a 2 is acting on an observation that was never made.
+      # Both 1 and 2 fail the job on purpose: a check that cannot see is not a
+      # check that passes.
       - name: Is the running service current with main?
         run: node scripts/check-registry-funpay-deployed.mjs

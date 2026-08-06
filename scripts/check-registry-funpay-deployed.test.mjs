@@ -10,7 +10,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { reconcile, pathsToPathspecs } from './check-registry-funpay-deployed.mjs';
+import {
+  reconcile,
+  pathsToPathspecs,
+  liveDeployment,
+  classifyContainment,
+} from './check-registry-funpay-deployed.mjs';
 
 const A = 'aaaaaaaa11111111111111111111111111111111';
 const B = 'bbbbbbbb22222222222222222222222222222222';
@@ -23,8 +28,9 @@ describe('reconcile', () => {
     const v = reconcile({
       deployedCommit: A,
       requiredCommit: B,
-      deployedContainsRequired: false,
+      containment: 'not-contained',
     });
+    assert.equal(v.status, 'stale');
     assert.equal(v.ok, false);
     assert.match(v.reason, /STALE/);
     assert.match(v.reason, /bbbbbbbb/);
@@ -42,16 +48,16 @@ describe('reconcile', () => {
     const v = reconcile({
       deployedCommit: A,
       requiredCommit: B,
-      deployedContainsRequired: true,
+      containment: 'contained',
     });
-    assert.equal(v.ok, true);
+    assert.equal(v.status, 'ok');
     assert.match(v.reason, /contains/);
   });
 
   it('FAILS when Railway reports no deployment at all', () => {
     // A recreated service gets a new id, and the old id then returns nothing.
     // Reporting that as "nothing to check" would be the silent direction.
-    const v = reconcile({ deployedCommit: null, requiredCommit: B, deployedContainsRequired: false });
+    const v = reconcile({ deployedCommit: null, requiredCommit: B, containment: 'not-contained' });
     assert.equal(v.ok, false);
     assert.match(v.reason, /no deployment/i);
   });
@@ -59,9 +65,84 @@ describe('reconcile', () => {
   it('passes vacuously, and says so, when nothing has ever touched the paths', () => {
     // Genuinely fine — but it must not read as a verified pass, because the
     // check did not verify anything.
-    const v = reconcile({ deployedCommit: A, requiredCommit: null, deployedContainsRequired: false });
-    assert.equal(v.ok, true);
+    const v = reconcile({ deployedCommit: A, requiredCommit: null, containment: 'not-contained' });
+    assert.equal(v.status, 'ok');
     assert.match(v.reason, /No commit on main has touched/);
+  });
+
+  it('says UNKNOWN, not STALE, when the deployed commit cannot be resolved', () => {
+    // The loud-but-wrong-cause defect. rc=128 ("not a valid commit name") used to
+    // collapse into `false` and print "the deploy workflow did not fire" — sending
+    // someone to fix a trigger that is fine, over what is really a git problem.
+    const v = reconcile({ deployedCommit: A, requiredCommit: B, containment: 'unresolvable' });
+    assert.equal(v.status, 'unknown');
+    assert.equal(v.ok, false);
+    assert.doesNotMatch(v.reason, /STALE/);
+    assert.doesNotMatch(v.reason, /did not fire/);
+    assert.match(v.reason, /UNKNOWN/);
+    assert.match(v.reason, /NOT a staleness claim/);
+    // The remedies must be named, or the reader has a verdict and no next step.
+    assert.match(v.reason, /shallow/);
+  });
+
+  it('refuses to answer when liveness is not established, whatever the commits say', () => {
+    // Precedence matters: a containment result computed from a commit that is not
+    // running is not evidence, so liveness is checked FIRST. If this branch fell
+    // through to the containment branch it would report a confident OK about a
+    // deployment that is not serving traffic.
+    const v = reconcile({
+      deployedCommit: A,
+      requiredCommit: B,
+      containment: 'contained',
+      liveness: { status: 'none', reason: 'Railway reports NO active deployment' },
+    });
+    assert.equal(v.status, 'unknown');
+    assert.match(v.reason, /NO active deployment/);
+  });
+});
+
+describe('liveDeployment — running, not newest', () => {
+  it('refuses when nothing is running', () => {
+    for (const actives of [[], null, undefined]) {
+      const l = liveDeployment(actives);
+      assert.equal(l.status, 'none');
+      assert.match(l.reason, /not a pass/i);
+    }
+  });
+
+  it('refuses when an active deployment carries no commit hash', () => {
+    // Image-based or manually-uploaded deploys look like this. Treating a missing
+    // commit as "no required commit" would pass vacuously on a live service.
+    const l = liveDeployment([{ id: 'dddddddd', status: 'SUCCESS', commit: null }]);
+    assert.equal(l.status, 'no-commit');
+    assert.match(l.reason, /commitHash/);
+  });
+
+  it('returns EVERY active deployment, so a lagging replica cannot be hidden', () => {
+    // During a rolling deploy two deployments can be active. "One of the two is
+    // current" is not current — traffic can land on either.
+    const l = liveDeployment([
+      { id: 'newer', status: 'SUCCESS', commit: A },
+      { id: 'older', status: 'SUCCESS', commit: B },
+    ]);
+    assert.equal(l.status, 'live');
+    assert.equal(l.deployments.length, 2);
+  });
+});
+
+describe('classifyContainment', () => {
+  it('discriminates the three exit codes git actually returns', () => {
+    // Measured live on this repo: 0 contained, 1 not contained, 128 bad object.
+    assert.equal(classifyContainment(0), 'contained');
+    assert.equal(classifyContainment(1), 'not-contained');
+    assert.equal(classifyContainment(128), 'unresolvable');
+  });
+
+  it('treats a spawn failure (no exit code at all) as unresolvable, not as not-contained', () => {
+    // git missing from PATH throws with no `status`. Folding that into `false`
+    // would report the service stale because the checker is broken.
+    assert.equal(classifyContainment(null), 'unresolvable');
+    assert.equal(classifyContainment(undefined), 'unresolvable');
   });
 });
 

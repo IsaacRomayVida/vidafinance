@@ -66,9 +66,32 @@ const ENVIRONMENT_ID = '524fdbc8-c800-4c0a-bc0f-c962a0fb7ef4';
  * commit. If it does not, a change to this service's build inputs was merged and
  * never reached production — which is the condition that is otherwise silent.
  */
-export function reconcile({ deployedCommit, requiredCommit, deployedContainsRequired }) {
+/**
+ * THREE verdicts, not two. `status` is `'ok' | 'stale' | 'unknown'`.
+ *
+ * `unknown` exists because the two-verdict version had to answer even when its
+ * inputs were unanswerable, and a forced answer is wrong in whichever direction
+ * it defaults. Both directions actually occurred in review:
+ *
+ *   - silent: reading a FAILED deployment as "what is running" and reporting OK;
+ *   - loud-but-wrong-cause: an unresolvable commit reported as "the deploy
+ *     workflow did not fire", which sends someone to fix a trigger that is fine.
+ *
+ * `unknown` is NOT a pass — it fails the job (exit 2, distinct from stale's 1) —
+ * but it claims only "I could not observe the state", which is what a missing
+ * observation is. This is the same distinction as the deploy workflow's own
+ * lesson: a read that does not land is a missing observation, not a failed deploy.
+ */
+export function reconcile({ deployedCommit, requiredCommit, containment, liveness }) {
+  // Liveness is decided before anything else: every later branch is a claim about
+  // "the running deployment", so if we don't know which deployment is running,
+  // no such claim is available. See `liveDeployment()` for the states.
+  if (liveness && liveness.status !== 'live') {
+    return { status: 'unknown', ok: false, reason: liveness.reason };
+  }
   if (!deployedCommit) {
     return {
+      status: 'unknown',
       ok: false,
       reason:
         'Railway reports no deployment for this service. Either the service was ' +
@@ -80,15 +103,34 @@ export function reconcile({ deployedCommit, requiredCommit, deployedContainsRequ
     // Nothing in history has touched the build closure, so there is nothing this
     // check can be stale relative to. Vacuously fine, and said out loud rather
     // than reported as a pass.
-    return { ok: true, reason: 'No commit on main has touched the watched paths yet.' };
+    return { status: 'ok', ok: true, reason: 'No commit on main has touched the watched paths yet.' };
   }
-  if (deployedContainsRequired) {
+  if (containment === 'unresolvable') {
+    // `git merge-base --is-ancestor` exits 1 for "not contained" and 128 for
+    // "I cannot resolve that object". Collapsing them into `false` produced a
+    // confident claim about the deploy workflow from what is really a git
+    // problem: a rewritten history, a shallow clone, a deployment predating the
+    // repo link, or a commit from a deleted branch.
     return {
+      status: 'unknown',
+      ok: false,
+      reason:
+        `Cannot resolve the deployed commit ${deployedCommit.slice(0, 8)} in this clone, so ` +
+        `containment of ${requiredCommit.slice(0, 8)} is UNKNOWN — this is NOT a staleness ` +
+        'claim and says nothing about whether the deploy fired. Likely: history rewritten, ' +
+        'a shallow fetch (this job needs `fetch-depth: 0`), a deployment built before the ' +
+        'repo link, or a commit from a deleted branch. Resolve the commit, then re-run.',
+    };
+  }
+  if (containment === 'contained') {
+    return {
+      status: 'ok',
       ok: true,
       reason: `Deployed ${deployedCommit.slice(0, 8)} contains ${requiredCommit.slice(0, 8)}.`,
     };
   }
   return {
+    status: 'stale',
     ok: false,
     reason:
       `STALE: commit ${requiredCommit.slice(0, 8)} touched this service's build inputs on ` +
@@ -96,6 +138,66 @@ export function reconcile({ deployedCommit, requiredCommit, deployedContainsRequ
       'The deploy workflow did not fire, or fired and did not finish. Nothing else ' +
       'would have told you — that workflow cannot report its own non-firing.',
   };
+}
+
+/**
+ * Which deployment is actually RUNNING — not which is newest.
+ *
+ * `deployments(first: 1)` is ordered by `createdAt` and includes deployments
+ * that are not running. Measured on this very service: between 21:37:51Z and
+ * 21:40:52Z on 2026-07-30 the newest deployment was FAILED at `065691bd`, while
+ * the live one was an older deployment. A check keyed on "newest" reads the
+ * FAILED commit as deployed and, if it happens to contain the required commit,
+ * reports OK — the silent direction, in the check built to end silence.
+ *
+ * `status === 'SUCCESS'` is NOT the fix. Status is a lifecycle marker, not an
+ * is-live flag: `e431dbdd` and `160ebb97` were each live in their turn and both
+ * now read REMOVED. So this asks Railway for the pointer instead —
+ * `serviceInstance.activeDeployments`, which returned exactly the running
+ * deployment (1 entry, SUCCESS `680d018b`) when the deployment list's newest
+ * happened to agree.
+ *
+ * Multiple actives (a rolling deploy) is a real state, so the invariant is that
+ * EVERY active deployment must contain the required commit — traffic can be
+ * served by any of them, and "one of the two is current" is not current.
+ */
+export function liveDeployment(actives) {
+  if (!Array.isArray(actives) || actives.length === 0) {
+    return {
+      status: 'none',
+      reason:
+        'Railway reports NO active deployment for this service instance — nothing is ' +
+        'running, so "is the running code current" has no answer. This is not a pass: ' +
+        'the service may be torn down, sleeping, or never deployed. Check Railway ' +
+        'before dismissing.',
+    };
+  }
+  const withoutCommit = actives.filter((d) => !d.commit);
+  if (withoutCommit.length) {
+    return {
+      status: 'no-commit',
+      reason:
+        `An active deployment (${withoutCommit[0].id?.slice(0, 8) ?? '?'}, ` +
+        `${withoutCommit[0].status ?? '?'}) carries no \`meta.commitHash\`, so what it was ` +
+        'built from is unknown. Image-based or manually-uploaded deploys look like this. ' +
+        'Not a staleness claim — an unobservable one.',
+    };
+  }
+  // The laggard decides: if any running deployment is behind, the service is not
+  // fully current, and reporting the newest of them would hide that.
+  return { status: 'live', deployments: actives };
+}
+
+/**
+ * `git merge-base --is-ancestor` as three states.
+ *
+ * rc 0 contained · rc 1 NOT contained · anything else (128, ENOENT, ...) means
+ * the question could not be asked. Verified live: 0, 1 and 128 respectively.
+ */
+export function classifyContainment(rc) {
+  if (rc === 0) return 'contained';
+  if (rc === 1) return 'not-contained';
+  return 'unresolvable';
 }
 
 /**
@@ -135,14 +237,26 @@ function railway(query, variables, token) {
   return parsed.data;
 }
 
-function newestDeployedCommit(serviceId, token) {
+/** The RUNNING deployment(s). See `liveDeployment()` for why not `deployments(first: 1)`. */
+function activeDeployments(serviceId, token) {
   const data = railway(
-    'query($input: DeploymentListInput!) { deployments(first: 1, input: $input) { edges { node { id status meta } } } }',
-    { input: { projectId: PROJECT_ID, serviceId, environmentId: ENVIRONMENT_ID } },
+    'query($sid: String!, $eid: String!) { serviceInstance(serviceId: $sid, environmentId: $eid) ' +
+      '{ activeDeployments { id status meta } } }',
+    { sid: serviceId, eid: ENVIRONMENT_ID },
     token
   );
-  const node = data?.deployments?.edges?.[0]?.node;
-  return node ? { id: node.id, status: node.status, commit: node.meta?.commitHash ?? null } : null;
+  const actives = data?.serviceInstance?.activeDeployments;
+  if (!Array.isArray(actives)) {
+    // Distinguish "no actives" (a state) from "the field is absent" (a broken
+    // read). Returning [] for both would report a torn-down service on an API
+    // change — loud, but about the wrong thing.
+    throw new Error(
+      'Railway returned no `serviceInstance.activeDeployments` array (got ' +
+        `${JSON.stringify(actives)}). The query or the ids are wrong, or the schema moved — ` +
+        'this is a failed read, not evidence about the service.'
+    );
+  }
+  return actives.map((d) => ({ id: d.id, status: d.status, commit: d.meta?.commitHash ?? null }));
 }
 
 function newestCommitTouching(pathspecs) {
@@ -154,12 +268,16 @@ function newestCommitTouching(pathspecs) {
   return out || null;
 }
 
-function contains(ancestor, descendant) {
+/** Exit code of `git merge-base --is-ancestor`, or null if git could not run at all. */
+function isAncestorExitCode(ancestor, descendant) {
   try {
     execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
+    return 0;
+  } catch (err) {
+    // `status` is the process exit code (1 = not contained, 128 = bad object).
+    // A spawn failure (git missing) has no status; that is unresolvable too, and
+    // must not be silently folded into "not contained".
+    return typeof err?.status === 'number' ? err.status : null;
   }
 }
 
@@ -188,26 +306,47 @@ function main() {
     process.exit(1);
   }
 
-  const deployment = newestDeployedCommit(serviceId, token);
+  const actives = activeDeployments(serviceId, token);
   const requiredCommit = newestCommitTouching(pathsToPathspecs(paths));
-  const deployedCommit = deployment?.commit ?? null;
+  const liveness = liveDeployment(actives);
 
-  const verdict = reconcile({
-    deployedCommit,
-    requiredCommit,
-    deployedContainsRequired:
-      deployedCommit && requiredCommit ? contains(requiredCommit, deployedCommit) : false,
-  });
-
-  console.log(`watched paths:     ${paths.join(', ')}`);
+  console.log(`watched paths:      ${paths.join(', ')}`);
   console.log(`newest such commit: ${requiredCommit ?? '<none>'}`);
-  console.log(`live deployment:    ${deployment?.id?.slice(0, 8) ?? '<none>'} (${deployment?.status ?? '-'}) commit ${deployedCommit ?? '<none>'}`);
-
-  if (!verdict.ok) {
-    console.error(`::error::${verdict.reason}`);
-    process.exit(1);
+  for (const d of actives) {
+    console.log(`active deployment:  ${d.id?.slice(0, 8) ?? '?'} (${d.status ?? '-'}) commit ${d.commit ?? '<none>'}`);
   }
-  console.log(`✓ ${verdict.reason}`);
+  if (!actives.length) console.log('active deployment:  <none>');
+
+  // Every RUNNING deployment must contain the required commit; the laggard
+  // decides. With one active this is the ordinary case, and a rolling deploy
+  // where only the newer replica is current is genuinely not-yet-current.
+  const verdicts =
+    liveness.status === 'live' && requiredCommit
+      ? liveness.deployments.map((d) =>
+          reconcile({
+            deployedCommit: d.commit,
+            requiredCommit,
+            containment: classifyContainment(isAncestorExitCode(requiredCommit, d.commit)),
+          })
+        )
+      : [reconcile({ deployedCommit: actives[0]?.commit ?? null, requiredCommit, liveness })];
+
+  // Worst verdict wins, and `unknown` outranks `ok` — a missing observation must
+  // never be outvoted by a replica that happened to be readable.
+  const verdict =
+    verdicts.find((v) => v.status === 'stale') ??
+    verdicts.find((v) => v.status === 'unknown') ??
+    verdicts[0];
+
+  if (verdict.status === 'ok') {
+    console.log(`✓ ${verdict.reason}`);
+    return;
+  }
+  console.error(`::error::${verdict.reason}`);
+  // Exit 2 for `unknown` so "I could not observe this" is distinguishable from
+  // "the service is stale" by anything reading the exit code, not just by a human
+  // reading the log. Both are loud; only one is a claim about the deploy.
+  process.exit(verdict.status === 'unknown' ? 2 : 1);
 }
 
 const invokedDirectly = process.argv[1]?.endsWith('check-registry-funpay-deployed.mjs');
