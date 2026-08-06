@@ -382,6 +382,12 @@ function checkTarget(target, dockerfilePath, workflowPath) {
       if (existsSync(candidate)) {
         problems.push(
           `${candidate} exists. The Dockerfile is only authoritative because ` +
+            // `serviceInstanceId` is non-null here by control flow, not by
+            // luck: an absent RAILWAY_SERVICE_ID pushes a problem above, and
+            // `if (problems.length) return` sits between that and this loop. A
+            // "service instance null" line was reported as a defect; it is
+            // unreachable, and a guard for it would be dead code with a test
+            // that passes either way.
             `\`railwayConfigFile\` is null on service instance ${serviceInstanceId}. ` +
             'A Railway config file can redefine the builder and carry its own watch ' +
             'patterns, so the COPY set would no longer be the whole story. Confirm what ' +
@@ -473,7 +479,31 @@ function railwayDeployWorkflows() {
   return readdirSync(WORKFLOW_DIR)
     .filter((name) => /\.ya?ml$/.test(name))
     .map((name) => join(WORKFLOW_DIR, name))
-    .filter((path) => readFileSync(path, 'utf8').includes('serviceInstanceDeploy'));
+    .filter((path) => callsDeployMutation(readFileSync(path, 'utf8')));
+}
+
+/**
+ * Whether a workflow actually calls the deploy mutation, as opposed to merely
+ * mentioning it.
+ *
+ * Comment lines are stripped first. A raw substring search would fail the build
+ * on a workflow whose comment says "we deliberately do NOT call
+ * serviceInstanceDeploy" — a false positive that blocks a merge over prose,
+ * which is a fast way to teach people that this check is noise. It is meant to
+ * be believed.
+ *
+ * Only whole-line comments are removed: a trailing `#` inside a GraphQL string
+ * is legal and stripping it would corrupt the payload we are trying to detect.
+ * A mutation hidden in a trailing comment would still false-positive, which is
+ * a shape nobody writes; a deploy call sitting in a real workflow body is the
+ * one this has to catch, and it does.
+ */
+function callsDeployMutation(yaml) {
+  return yaml
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n')
+    .includes('serviceInstanceDeploy');
 }
 
 const [argDockerfile, argWorkflow] = process.argv.slice(2);

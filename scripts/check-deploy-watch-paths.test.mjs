@@ -304,6 +304,57 @@ describe('check-deploy-watch-paths', () => {
     );
   });
 
+  it('does not flag a workflow whose COMMENT mentions the deploy mutation', () => {
+    // The previous matcher searched raw file text, so a comment saying "we
+    // deliberately do NOT call serviceInstanceDeploy" failed the build over
+    // prose. A check that blocks a merge on a sentence teaches people it is
+    // noise, and this one only works if it is believed.
+    //
+    // Distinct from the variable-upsert case below: that proves endpoint-vs-
+    // mutation discrimination, this proves comment-vs-code.
+    withFixture(
+      {
+        '.github/workflows/notes-only.yml':
+          '# This service is deployed by a Railway trigger, so we deliberately\n' +
+          '# do NOT call serviceInstanceDeploy from CI. See docs/runbooks/deploy.md.\n' +
+          'name: Something else entirely\n' +
+          'on: { workflow_dispatch: {} }\n' +
+          'jobs:\n' +
+          '  noop:\n' +
+          '    runs-on: ubuntu-latest\n' +
+          '    steps:\n' +
+          '      - run: echo hello\n',
+      },
+      ({ code, out }) => {
+        assert.equal(code, 0, `expected pass, got:\n${out}`);
+        assert.doesNotMatch(out, /uncovered/);
+      }
+    );
+  });
+
+  it('still flags a real deploy call in a workflow that also has comments', () => {
+    // The positive control for the comment-stripping above: stripping must not
+    // be so eager that it hides a genuine call sitting beside prose.
+    withFixture(
+      {
+        '.github/workflows/deploy-commented.yml':
+          '# Deploys the thing. Related: serviceInstanceDeploy notes in the runbook.\n' +
+          'name: Deploy with commentary\n' +
+          'on: { workflow_dispatch: {} }\n' +
+          'jobs:\n' +
+          '  deploy:\n' +
+          '    runs-on: ubuntu-latest\n' +
+          '    steps:\n' +
+          '      # fire it\n' +
+          '      - run: curl "$API" --data \'{"query":"mutation { serviceInstanceDeploy(serviceId: \\"x\\") }"}\'\n',
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        assert.match(out, /uncovered: \.github\/workflows\/deploy-commented\.yml/);
+      }
+    );
+  });
+
   it('does not flag a workflow that merely reads Railway', () => {
     // sync-registry-funpay-secret.yml upserts variables against the same API and
     // deploys nothing. Matching the endpoint rather than the mutation would drag
