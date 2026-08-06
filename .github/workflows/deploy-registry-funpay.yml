@@ -1,0 +1,432 @@
+name: Deploy registry-service-funpay (Railway)
+
+# ⚠️ THIS WORKFLOW EXISTS BECAUSE THE SERVICE HAS NO RAILWAY DEPLOYMENT TRIGGER.
+#
+# `registry-service-funpay` (Railway project `vida-backend`) is not wired to any
+# deployment trigger: the project has exactly 5 triggers and all of them point at
+# `vidatravel/main`. Nothing in Railway watches this repo for this service.
+#
+# What that cost, measured rather than hypothesised: the service ran commit
+# `e431dbd` (2026-07-30) in production for six days. #524 (a DB outage hung every
+# write instead of failing) and #556 (a Postgres restart killed the service; a
+# full pool hung every resolve) merged 2026-08-04 and never shipped — the two
+# fixes for exactly the failure modes the running code still had. There was no
+# failed run and no alert, because nothing ran at all. It was redeployed by hand
+# to `160ebb9` on 2026-08-06; this workflow is what stops that recurring.
+#
+# The service instance carried `watchPatterns` for a while. They were cleared to
+# `[]` on 2026-08-06, deliberately: watch patterns filter a trigger and there is
+# no trigger, so they fired nothing, while duplicating this file's `paths:` list
+# in a second hand-maintained place that could drift out of sync silently. THE
+# `paths:` LIST BELOW IS NOW THE ONLY COPY. Do not re-add the instance patterns.
+# (The deletion also fails safe: if a trigger is ever added in the dashboard, an
+# empty pattern set deploys on every push — noisy, not silent.)
+#
+# IF A DEPLOYMENT TRIGGER IS EVER ADDED IN THE RAILWAY DASHBOARD, DELETE THIS
+# WORKFLOW IN THE SAME CHANGE. Otherwise every qualifying push deploys twice,
+# and two concurrent builds of the same service race each other.
+#
+# See docs/runbooks/deploy.md §1.
+
+on:
+  push:
+    branches: [main]
+    # This list mirrors the Dockerfile's COPY set, NOT the npm dependency graph.
+    #
+    # `services/registry-service/Dockerfile` builds from the repo root and copies
+    # `services/shared/` as well as its own directory — `index.js` requires
+    # `../shared/registry/pool`, `../shared/registry/resolver`, `../shared/alerting`
+    # and `../shared/metrics`. #556 edited `services/shared/registry/pool.js` and
+    # `resolver.js` directly, and `pool.js` has its own test file, so a
+    # shared-only commit is an ordinary event rather than a corner case. Filtered
+    # on `services/registry-service/**` alone, such a commit would deploy nothing
+    # and say nothing — the same silent staleness, rebuilt.
+    #
+    # If you change the Dockerfile's COPY set, change this list in the same PR.
+    # `scripts/check-deploy-watch-paths.mjs` enforces that in CI rather than
+    # trusting this comment — it re-derives the COPY set and fails the build on
+    # an uncovered path.
+    paths:
+      - 'services/registry-service/**'
+      - 'services/shared/**'
+      - '.dockerignore'
+      - '.github/workflows/deploy-registry-funpay.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  # Never race two deploys of one service. Not cancel-in-progress: a cancelled
+  # deploy still leaves whatever Railway had already started, and the point of
+  # this workflow is to know what is running.
+  group: deploy-registry-funpay
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RAILWAY_API: https://backboard.railway.app/graphql/v2
+  RAILWAY_PROJECT_ID: e1334895-9fdc-4cab-9a3c-73416719c553
+  RAILWAY_SERVICE_ID: 0cf12987-4aba-4b20-942f-c8436d956723
+  RAILWAY_ENVIRONMENT_ID: 524fdbc8-c800-4c0a-bc0f-c962a0fb7ef4
+  # Must match the TARGETS entry in scripts/check-deploy-watch-paths.mjs. That
+  # script derives the `paths:` list's required coverage from this Dockerfile's
+  # COPY set; the guard below confirms Railway still builds from it.
+  EXPECTED_DOCKERFILE: services/registry-service/Dockerfile
+
+jobs:
+  deploy:
+    name: Deploy registry-service-funpay
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+
+    steps:
+      # Railway answers an auth failure with HTTP 200 and an `{"errors":[...]}`
+      # body. `curl -f` reads that as success, which is how a broken deploy
+      # reports green. Every call below goes through this helper, which treats a
+      # non-200 AND an error body as failure.
+      #
+      # Unlike sync-registry-funpay-secret.yml, the error messages ARE printed
+      # here: that workflow withholds bodies because a variable upsert echoes the
+      # secret back, whereas nothing in these payloads carries a secret. The
+      # token travels in a header and never appears in a response, so withholding
+      # here would only make a failure undiagnosable.
+      - name: Write the Railway API helper
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/railway.sh" <<'SH'
+          railway_call() {
+            local payload="$1" out="$2" http
+            http=$(curl -sS --max-time 60 -o "$out" -w '%{http_code}' \
+              "$RAILWAY_API" \
+              -H "Project-Access-Token: ${RAILWAY_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "$payload") || { echo "::error::curl failed talking to Railway"; return 1; }
+
+            if [ "$http" != "200" ]; then
+              echo "::error::Railway returned HTTP $http"
+              return 1
+            fi
+
+            # HTTP 200 with an errors array is the failure mode this guards.
+            if jq -e 'has("errors")' "$out" >/dev/null 2>&1; then
+              local messages
+              messages=$(jq -r '[.errors[].message] | join("; ")' "$out")
+              echo "::error::Railway returned a GraphQL error body (HTTP 200): ${messages}"
+
+              # "Not Authorized" is NOT a reliable statement about the token.
+              # Railway returns the identical message, under the identical
+              # extensions.code = INTERNAL_SERVER_ERROR, for an id that does not
+              # exist — reproduced against this project with a known-good token
+              # and one fabricated serviceId. An operator handed "Not Authorized"
+              # will go and rotate a credential that was never the problem.
+              #
+              # The ids below are hardcoded, so the realistic trigger is a
+              # service being deleted and recreated: same name, new id, and this
+              # job then reports a permissions failure for a service that simply
+              # moved.
+              case "$messages" in
+                *"Not Authorized"*)
+                  echo "::error::Check the IDs before the token. Railway answers a nonexistent serviceId/environmentId/projectId with this exact message and code. serviceId=${RAILWAY_SERVICE_ID} environmentId=${RAILWAY_ENVIRONMENT_ID} projectId=${RAILWAY_PROJECT_ID} — if the service was recreated its id changed, and the only place to fix it is the \`env:\` block at the top of this file. scripts/check-deploy-watch-paths.mjs reads RAILWAY_SERVICE_ID from here rather than keeping its own copy, so there is nothing else to update."
+                  ;;
+              esac
+              return 1
+            fi
+          }
+
+          # Retrying wrapper, for the poll loop ONLY.
+          #
+          # Once a deploy has been triggered, a failed status read says nothing
+          # about the deploy — it says the API call did not land. Failing the job
+          # on one transient 5xx during a ten-minute poll reports red over a
+          # deploy that is still running and very likely to succeed, which is the
+          # mirror image of the misleading green `railway_call` exists to prevent,
+          # and it teaches people to re-run a workflow whose deploy already
+          # worked.
+          #
+          # Deliberately NOT used for the trigger call or the pre-trigger read:
+          # if those fail, nothing was started, so a clean immediate red is both
+          # honest and safe to re-run.
+          #
+          # Retries every failure rather than only transport-level ones. By the
+          # time this runs the trigger has already succeeded, so auth is known
+          # good and a failure here is almost certainly transient — and Railway
+          # is not a reliable classifier anyway: it returned "Not Authorized"
+          # under `extensions.code = INTERNAL_SERVER_ERROR`. Three attempts on a
+          # genuinely permanent fault costs 20s before the job fails.
+          railway_call_retry() {
+            local payload="$1" out="$2" attempt=1 max=3 err
+            while :; do
+              if err=$(railway_call "$payload" "$out" 2>&1); then
+                return 0
+              fi
+              if [ "$attempt" -ge "$max" ]; then
+                # Deliberately strips the `::error::` prefix `railway_call` adds.
+                # Exhausting retries is no longer fatal — the poll loop continues
+                # and the run may still pass — so this must not leave a red
+                # annotation on a green run. The caller owns the annotation
+                # level; this only reports what went wrong.
+                echo "${err#::error::}"
+                return 1
+              fi
+              # ::warning:: not ::error:: — a retried blip must not leave a red
+              # annotation on a run that goes on to pass.
+              echo "::warning::Railway status read failed (attempt ${attempt}/${max}), retrying in 10s: ${err#::error::}"
+              attempt=$(( attempt + 1 ))
+              sleep 10
+            done
+          }
+          SH
+
+      # The other half of scripts/check-deploy-watch-paths.mjs, which runs in CI
+      # on every PR and asserts that this workflow's `paths:` filter covers the
+      # Dockerfile's COPY set.
+      #
+      # That check can only see the repo. The premise it rests on — that Railway
+      # builds this service FROM that Dockerfile — is held by API state the repo
+      # cannot observe, and the obvious signal is misleading: the service
+      # instance reports `builder: RAILPACK`, and it is Dockerfile-built anyway
+      # only because the service variable `RAILWAY_DOCKERFILE_PATH` overrides it.
+      # Delete that one variable and the build silently becomes a Railpack build
+      # with entirely different inputs — while the on-disk check goes on passing,
+      # because the Dockerfile is still sitting there and `railwayConfigFile` is
+      # still null. A green check on a dead premise is worse than no check, so
+      # the part that needs credentials is asserted here, where they exist.
+      #
+      # Fail-closed on purpose: if this is wrong, the `paths:` filter is wrong,
+      # and a wrong filter is the silent staleness this whole workflow exists to
+      # end. A blocked deploy is loud and fixable; a filter nobody knows is stale
+      # is neither.
+      - name: Confirm Railway still builds this service the way the paths filter assumes
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+        run: |
+          set -euo pipefail
+          . "${RUNNER_TEMP}/railway.sh"
+
+          payload=$(jq -n --arg id "$RAILWAY_SERVICE_ID" '{
+            query: "query($id: String!) { service(id: $id) { serviceInstances { edges { node { environmentId railwayConfigFile rootDirectory } } } } }",
+            variables: { id: $id }
+          }')
+          railway_call "$payload" "${RUNNER_TEMP}/instance.json"
+
+          node_json=$(jq -c --arg e "$RAILWAY_ENVIRONMENT_ID" \
+            '[.data.service.serviceInstances.edges[].node | select(.environmentId == $e)][0] // {}' \
+            "${RUNNER_TEMP}/instance.json")
+
+          config_file=$(printf '%s' "$node_json" | jq -r '.railwayConfigFile // "null"')
+          root_dir=$(printf '%s' "$node_json" | jq -r '.rootDirectory // ""')
+
+          if [ "$config_file" != "null" ]; then
+            echo "::error::railwayConfigFile is now \"${config_file}\", not null. A Railway config file can redefine the builder and carry its own watch patterns, so ${EXPECTED_DOCKERFILE}'s COPY set is no longer the whole build. Re-derive the paths filter and scripts/check-deploy-watch-paths.mjs before deploying."
+            exit 1
+          fi
+
+          if [ -n "$root_dir" ] && [ "$root_dir" != "/" ]; then
+            echo "::error::rootDirectory is now \"${root_dir}\". The COPY lines in ${EXPECTED_DOCKERFILE} are repo-root-relative and the paths filter is written against a repo-root build context. Re-derive both before deploying."
+            exit 1
+          fi
+
+          # NOTE: this response body contains EVERY service variable, including
+          # INTERNAL_SECRET and REGISTRY_DATABASE_URL. It is written to a file and
+          # read with jq. Do not cat it, do not echo it, do not add it to any
+          # diagnostic output. Only the Dockerfile path — not a secret — is printed.
+          payload=$(jq -n \
+            --arg p "$RAILWAY_PROJECT_ID" --arg e "$RAILWAY_ENVIRONMENT_ID" --arg s "$RAILWAY_SERVICE_ID" '{
+              query: "query($p: String!, $e: String!, $s: String!) { variables(projectId: $p, environmentId: $e, serviceId: $s) }",
+              variables: { p: $p, e: $e, s: $s }
+            }')
+          # Removed on EXIT, not on the happy path alone. `railway_call` can fail
+          # under `set -e` and the two guards below `exit 1`, each of which would
+          # step over a trailing `rm` and leave all 21 variables — INTERNAL_SECRET
+          # and REGISTRY_DATABASE_URL among them — sitting in RUNNER_TEMP.
+          #
+          # Not a log-leak fix: `railway_call` only ever prints `.errors[].message`
+          # and never a body, so nothing reaches the run log either way. This is
+          # about not leaving the file on the runner.
+          trap 'rm -f "${RUNNER_TEMP}/vars.json"' EXIT
+          railway_call "$payload" "${RUNNER_TEMP}/vars.json"
+
+          dockerfile_path=$(jq -r '.data.variables.RAILWAY_DOCKERFILE_PATH // ""' "${RUNNER_TEMP}/vars.json")
+          rm -f "${RUNNER_TEMP}/vars.json"
+
+          if [ "$dockerfile_path" != "$EXPECTED_DOCKERFILE" ]; then
+            echo "::error::RAILWAY_DOCKERFILE_PATH is \"${dockerfile_path:-<unset>}\", expected \"${EXPECTED_DOCKERFILE}\". Unset, this service builds with Railpack instead, whose inputs are not the COPY set the paths filter is derived from — so the filter would be wrong and pushes would silently stop deploying. Restore the variable, or re-derive the filter and scripts/check-deploy-watch-paths.mjs against whatever now defines the build."
+            exit 1
+          fi
+
+          echo "✓ Dockerfile build confirmed: RAILWAY_DOCKERFILE_PATH=${dockerfile_path}, railwayConfigFile=null, repo-root context"
+
+      - name: Record the deployment that is live before we trigger
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+        run: |
+          set -euo pipefail
+          . "${RUNNER_TEMP}/railway.sh"
+
+          payload=$(jq -n \
+            --arg p "$RAILWAY_PROJECT_ID" --arg s "$RAILWAY_SERVICE_ID" --arg e "$RAILWAY_ENVIRONMENT_ID" '{
+              query: "query($input: DeploymentListInput!) { deployments(first: 1, input: $input) { edges { node { id status createdAt } } } }",
+              variables: { input: { projectId: $p, serviceId: $s, environmentId: $e } }
+            }')
+
+          railway_call "$payload" "${RUNNER_TEMP}/before.json"
+
+          before_id=$(jq -r '.data.deployments.edges[0].node.id // ""' "${RUNNER_TEMP}/before.json")
+          before_status=$(jq -r '.data.deployments.edges[0].node.status // "none"' "${RUNNER_TEMP}/before.json")
+
+          # Why this step exists at all: the newest deployment right now is
+          # usually SUCCESS. A poll that just asked "is the latest deployment
+          # green?" would read THAT one and pass in milliseconds, without the
+          # new deploy having started — fire-and-forget wearing a poll's
+          # clothing. The wait below keys on the id changing.
+          echo "BEFORE_DEPLOYMENT_ID=${before_id}" >> "$GITHUB_ENV"
+          echo "Currently live: ${before_id:-<none>} (${before_status})"
+
+      - name: Trigger the deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+        run: |
+          set -euo pipefail
+          . "${RUNNER_TEMP}/railway.sh"
+
+          # `Project-Access-Token`, not `Authorization: Bearer`, and deliberately
+          # not the Railway CLI: the CLI rejects project-scoped tokens outright,
+          # which is what killed vidatravel run 30593326618.
+          #
+          # `latestCommit: true` rather than `commitSha: $GITHUB_SHA`, even though
+          # the mutation accepts both and the service is linked to this same repo
+          # (IsaacRomayVida/vidafinance). On workflow_dispatch from a branch,
+          # $GITHUB_SHA is that branch's head — pinning it would let a dispatch
+          # from any branch ship unmerged code to production. `latestCommit`
+          # always resolves to the linked branch's head instead.
+          payload=$(jq -n \
+            --arg s "$RAILWAY_SERVICE_ID" --arg e "$RAILWAY_ENVIRONMENT_ID" '{
+              query: "mutation($serviceId: String!, $environmentId: String!) { serviceInstanceDeploy(serviceId: $serviceId, environmentId: $environmentId, latestCommit: true) }",
+              variables: { serviceId: $s, environmentId: $e }
+            }')
+
+          railway_call "$payload" "${RUNNER_TEMP}/deploy.json"
+
+          # The mutation returns Boolean!. Anything other than a literal true —
+          # including null — is a failure, and `jq -e` exits non-zero on both.
+          if ! jq -e '.data.serviceInstanceDeploy == true' "${RUNNER_TEMP}/deploy.json" >/dev/null; then
+            echo "::error::serviceInstanceDeploy did not return true: $(jq -c '.data' "${RUNNER_TEMP}/deploy.json")"
+            exit 1
+          fi
+
+          echo "✓ Deploy accepted by Railway (serviceInstanceDeploy: true)"
+
+      - name: Wait for the new deployment to reach a terminal state
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+        run: |
+          set -euo pipefail
+          . "${RUNNER_TEMP}/railway.sh"
+
+          payload=$(jq -n \
+            --arg p "$RAILWAY_PROJECT_ID" --arg s "$RAILWAY_SERVICE_ID" --arg e "$RAILWAY_ENVIRONMENT_ID" '{
+              query: "query($input: DeploymentListInput!) { deployments(first: 1, input: $input) { edges { node { id status createdAt meta } } } }",
+              variables: { input: { projectId: $p, serviceId: $s, environmentId: $e } }
+            }')
+
+          deadline=$(( $(date +%s) + 600 ))
+          last_status="none"
+          new_id=""
+          reads_ok=0
+          read_failures=0
+
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            # A status read that does not land is not a failed deploy — it is a
+            # missing observation. `railway_call_retry` already absorbed three
+            # attempts; exhausting them still only means we are blind right now,
+            # so the loop goes round again and spends the poll window rather than
+            # spending the deploy. A run whose reads fail for 40s and then
+            # recover should pass, because the deploy did.
+            #
+            # Persistence is still red: if the window closes without a terminal
+            # status, the timeout below fails the job and says which of the two
+            # things happened.
+            if ! railway_call_retry "$payload" "${RUNNER_TEMP}/poll.json"; then
+              read_failures=$(( read_failures + 1 ))
+              echo "::warning::Could not read deployment status (read failure #${read_failures}); the deploy is unaffected and the poll window has time left. Retrying."
+              sleep 15
+              continue
+            fi
+            reads_ok=$(( reads_ok + 1 ))
+
+            id=$(jq -r '.data.deployments.edges[0].node.id // ""' "${RUNNER_TEMP}/poll.json")
+            status=$(jq -r '.data.deployments.edges[0].node.status // "none"' "${RUNNER_TEMP}/poll.json")
+            commit=$(jq -r '.data.deployments.edges[0].node.meta.commitHash // "unknown"' "${RUNNER_TEMP}/poll.json")
+
+            if [ -z "$id" ] || [ "$id" = "$BEFORE_DEPLOYMENT_ID" ]; then
+              echo "waiting for the new deployment to appear (still showing ${id:-<none>})"
+              sleep 15
+              continue
+            fi
+
+            if [ -z "$new_id" ]; then
+              new_id="$id"
+              echo "New deployment: ${new_id} (commit ${commit:0:8})"
+              echo "DEPLOYMENT_ID=${new_id}" >> "$GITHUB_ENV"
+              echo "DEPLOYMENT_COMMIT=${commit}" >> "$GITHUB_ENV"
+            fi
+
+            last_status="$status"
+            case "$status" in
+              SUCCESS)
+                echo "✓ Deployment ${new_id} SUCCESS (commit ${commit:0:8})"
+                echo "DEPLOYMENT_STATUS=SUCCESS" >> "$GITHUB_ENV"
+                exit 0
+                ;;
+              # SKIPPED and REMOVED are failures here even though they are not
+              # errors in Railway's sense: both mean the code in this commit is
+              # not what is running, which is the condition this workflow exists
+              # to detect. NEEDS_APPROVAL will never clear unattended.
+              FAILED|CRASHED|REMOVED|SKIPPED|NEEDS_APPROVAL)
+                echo "::error::Deployment ${new_id} ended ${status} (commit ${commit:0:8}). Railway logs: https://railway.app/project/${RAILWAY_PROJECT_ID}/service/${RAILWAY_SERVICE_ID}"
+                exit 1
+                ;;
+              *)
+                # BUILDING / DEPLOYING / INITIALIZING / QUEUED / WAITING / SLEEPING,
+                # or a state added to the enum after this was written.
+                echo "  ${status}…"
+                sleep 15
+                ;;
+            esac
+          done
+
+          # Two different failures, told apart on purpose. "We watched it build
+          # for ten minutes and it never finished" and "we never once reached
+          # Railway" call for different actions, and collapsing them into one
+          # message sends whoever reads it to the wrong place.
+          if [ "$reads_ok" -eq 0 ]; then
+            echo "::error::Never read deployment status from Railway in 10m (${read_failures} failed reads). The deploy was accepted and MAY HAVE SUCCEEDED — this job never saw it either way. Check Railway before re-running: https://railway.app/project/${RAILWAY_PROJECT_ID}/service/${RAILWAY_SERVICE_ID}"
+          else
+            echo "::error::Timed out after 10m waiting for deployment ${new_id:-<never appeared>} (last status: ${last_status}; ${read_failures} reads also failed). The deploy may still be running — check Railway before retrying."
+          fi
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## registry-service-funpay deploy"
+            echo ""
+            echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
+            echo "- Previously live deployment: \`${BEFORE_DEPLOYMENT_ID:-<none>}\`"
+            echo "- Deployment waited on: \`${DEPLOYMENT_ID:-not created}\`"
+            echo "- Deployed commit: \`${DEPLOYMENT_COMMIT:-unknown}\`"
+            echo "- Result: \`${DEPLOYMENT_STATUS:-FAILED}\`"
+            echo ""
+            # Printed so the stale-SUCCESS guard is checkable from the run's own
+            # output: these two ids being different IS the guard working.
+            if [ -n "${DEPLOYMENT_ID:-}" ] && [ "${DEPLOYMENT_ID:-}" != "${BEFORE_DEPLOYMENT_ID:-}" ]; then
+              echo "✓ Waited on a NEW deployment (id differs from the one live at trigger time)."
+            else
+              echo "⚠ Did not observe a new deployment id."
+            fi
+            echo ""
+            echo "This workflow exists because the service has no Railway deployment trigger."
+            echo "If one is added in the dashboard, delete this workflow in the same change."
+          } >> "$GITHUB_STEP_SUMMARY"
