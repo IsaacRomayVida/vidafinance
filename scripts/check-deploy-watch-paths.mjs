@@ -545,7 +545,14 @@ for (const target of targets) {
     continue;
   }
 
-  if (paths !== null) {
+  // Gated on `failed`, so a run that is going to exit 1 never prints a green
+  // tick — least of all as its last line, which is the part a human scanning a
+  // log tail actually reads. Per-target FAILURES above are still printed; it is
+  // only the reassurance that is withheld once something has gone wrong.
+  //
+  // The exit code was always right. This is about not telling the reader the
+  // opposite of it in the one line they are most likely to see.
+  if (paths !== null && !failed) {
     console.log(
       `✓ ${target.service}: ${paths.length} paths entries cover every build input of ${target.dockerfile}`
     );

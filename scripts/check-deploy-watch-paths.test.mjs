@@ -80,15 +80,27 @@ function fixture(files = {}) {
   return root;
 }
 
-/** Runs the real script against a fixture. Never throws — the exit code is the assertion. */
+/**
+ * Runs the real script against a fixture. Never throws — the exit code is the
+ * assertion.
+ *
+ * Goes through a shell with `2>&1` so stdout and stderr interleave in real
+ * time, exactly as they do in a terminal or a CI log. Capturing the two streams
+ * separately and concatenating them looks equivalent and is not: it re-orders
+ * the output by stream instead of by time, which silently destroys any
+ * assertion about what a run says LAST. The green-tick-on-failure test below
+ * was inert for precisely that reason until this was fixed — it passed against
+ * the bug it was written to catch.
+ */
 function run(root) {
+  const command = `${JSON.stringify(process.execPath)} ${JSON.stringify(SCRIPT)} 2>&1`;
   try {
-    const stdout = execFileSync(process.execPath, [SCRIPT], {
+    const merged = execFileSync('/bin/sh', ['-c', command], {
       cwd: root,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    return { code: 0, out: stdout };
+    return { code: 0, out: merged };
   } catch (err) {
     return { code: err.status ?? 1, out: `${err.stdout ?? ''}${err.stderr ?? ''}` };
   }
@@ -259,6 +271,35 @@ describe('check-deploy-watch-paths', () => {
         assert.match(out, /does not cover every workflow that deploys a Railway service/);
         assert.match(out, /uncovered: \.github\/workflows\/deploy-second-service\.yml/);
         assert.match(out, /add a \{ service, dockerfile, workflow, configDirs \} row/);
+      }
+    );
+  });
+
+  it('never signs off with a green tick on a run that fails', () => {
+    // The exit code was always correct here; the log tail was not. On an
+    // uncovered-workflow failure the per-target ✓ printed after the error
+    // block, so the LAST line of a failing run read as success — and the last
+    // line is what someone scanning a CI log actually sees.
+    //
+    // Asserted on the tail specifically, not just on absence anywhere: this is
+    // a fact about ordering, and a test that only checked "no ✓ in the output"
+    // would still pass if the tick moved somewhere else equally misleading.
+    withFixture(
+      {
+        '.github/workflows/deploy-second-service.yml':
+          'name: Deploy some other service\n' +
+          'on: { workflow_dispatch: {} }\n' +
+          'jobs:\n' +
+          '  deploy:\n' +
+          '    runs-on: ubuntu-latest\n' +
+          '    steps:\n' +
+          '      - run: echo serviceInstanceDeploy\n',
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        const lastLine = out.split('\n').filter((l) => l.trim()).pop();
+        assert.doesNotMatch(lastLine ?? '', /✓/, `failing run ended on: ${lastLine}`);
+        assert.doesNotMatch(out, /Every CI-deployed service watches everything/);
       }
     );
   });
