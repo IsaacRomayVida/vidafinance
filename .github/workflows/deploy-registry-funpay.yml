@@ -110,7 +110,26 @@ jobs:
 
             # HTTP 200 with an errors array is the failure mode this guards.
             if jq -e 'has("errors")' "$out" >/dev/null 2>&1; then
-              echo "::error::Railway returned a GraphQL error body (HTTP 200): $(jq -r '[.errors[].message] | join("; ")' "$out")"
+              local messages
+              messages=$(jq -r '[.errors[].message] | join("; ")' "$out")
+              echo "::error::Railway returned a GraphQL error body (HTTP 200): ${messages}"
+
+              # "Not Authorized" is NOT a reliable statement about the token.
+              # Railway returns the identical message, under the identical
+              # extensions.code = INTERNAL_SERVER_ERROR, for an id that does not
+              # exist — reproduced against this project with a known-good token
+              # and one fabricated serviceId. An operator handed "Not Authorized"
+              # will go and rotate a credential that was never the problem.
+              #
+              # The ids below are hardcoded, so the realistic trigger is a
+              # service being deleted and recreated: same name, new id, and this
+              # job then reports a permissions failure for a service that simply
+              # moved.
+              case "$messages" in
+                *"Not Authorized"*)
+                  echo "::error::Check the IDs before the token. Railway answers a nonexistent serviceId/environmentId/projectId with this exact message and code. serviceId=${RAILWAY_SERVICE_ID} environmentId=${RAILWAY_ENVIRONMENT_ID} projectId=${RAILWAY_PROJECT_ID} — if the service was recreated, its id changed and these need updating here and in scripts/check-deploy-watch-paths.mjs."
+                  ;;
+              esac
               return 1
             fi
           }
