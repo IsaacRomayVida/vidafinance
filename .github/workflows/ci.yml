@@ -45,6 +45,18 @@ jobs:
       - name: Deploy paths cover the Docker build context — hard gate
         run: node scripts/check-deploy-watch-paths.mjs
 
+      # The check above guards a silent condition: too narrow a filter deploys
+      # nothing, with no failed run and no alert. So if the check itself ever
+      # stops firing, nothing tells us either — it would just keep printing ✓.
+      # These run the real script against fixture repos that SHOULD fail, which
+      # is the only evidence that a green tick above still means something.
+      #
+      # Same job, same reason: it is only worth having where it can block a
+      # merge. Node's built-in runner, no dependencies, so it stays ahead of
+      # `npm ci` with the check it covers.
+      - name: The drift check still fails when it should — hard gate
+        run: node --test scripts/check-deploy-watch-paths.test.mjs
+
       - name: Install root deps (includes ESLint)
         run: npm ci
 
