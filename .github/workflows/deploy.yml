@@ -8,6 +8,22 @@ on:
   pull_request:
     branches:
       - main
+  # Manual escape hatch — see the same block in ci.yml for the measurement.
+  # `workflow_dispatch` is an API call rather than a webhook, so it kept working
+  # through the 2026-08-06 incident while `pull_request` delivery was throttled
+  # to ~15% and this workflow's required contexts could not be reached at all.
+  #
+  # SAFE BY AN EXISTING GUARD, verified rather than assumed: `deploy-firebase`
+  # is `if: github.event_name == 'push'`, so a dispatch runs `test` and
+  # `integration-test` — the two required contexts this workflow owns — and
+  # CANNOT deploy anything, from any ref. That guard was written for a different
+  # reason and is now load-bearing for this one.
+  #
+  # So before adding a job here, or relaxing that condition: a job without an
+  # event-name guard becomes dispatchable by anyone who can click Run workflow,
+  # against any ref. That is the whole risk this trigger introduces, and today
+  # exactly one line contains it.
+  workflow_dispatch: {}
 
 env:
   NODE_VERSION: '24'
@@ -20,6 +36,16 @@ jobs:
   test:
     name: Lint, Type-check & Unit Tests
     runs-on: ubuntu-latest
+    # WHY 15, and why this job matters more than the ci.yml ones: this is a
+    # REQUIRED context on `main` (`.../branches/main/protection` →
+    # required_status_checks.contexts). Unbounded, a hang here burns the 360-minute
+    # default and blocks *every* PR for six hours, not just this one.
+    #
+    # Measured, not guessed: 24 green runs of this job over 08-04→08-06 ran
+    # 80-86s, max 86s. 15 minutes is ~10x the slowest real run, so it cannot fire
+    # on a slow-but-healthy runner. Same number as ci.yml on purpose — one bound
+    # to reason about, not eight.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -49,6 +75,15 @@ jobs:
     name: Integration Tests (Decision Engine)
     runs-on: ubuntu-latest
     needs: test
+    # Also a REQUIRED context on `main`. Slower and more variable than the others
+    # because it installs Python deps and runs both JS and Python suites: 24 green
+    # runs over 08-04→08-06 ran 143-403s, max 403s (6m43s, 08-06 12:23Z). 15
+    # minutes is ~2.2x that slowest observed run — the tightest ratio in either
+    # workflow, and deliberately still 15 rather than a snugger 10: this job gates
+    # every merge, so a spurious timeout costs more here than a slow one.
+    #
+    # If this suite grows, RE-MEASURE rather than nudging the number up on feel.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
