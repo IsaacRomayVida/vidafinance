@@ -1,0 +1,87 @@
+name: Verify registry-service-funpay is actually deployed
+
+# Reconciles Railway's LIVE deployment against `main`, because
+# `deploy-registry-funpay.yml` cannot detect its own non-firing.
+#
+# THE THING THIS CATCHES, which already happened: `680d018b` touched
+# `.github/workflows/deploy-registry-funpay.yml` — a path inside that workflow's
+# own `paths:` filter — on a push to `main`, and drew ZERO push runs during the
+# 2026-08-06 webhook throttle. What reached production was a hand-run
+# `workflow_dispatch`, and that masked the miss: the service happened to be
+# current, so nothing looked wrong, while the auto-trigger had still never fired
+# in production even once.
+#
+# A deploy that never starts produces no failed run and no alert. That is the
+# deploy workflow's own header sentence, and it is exactly why it cannot be the
+# thing that notices.
+
+on:
+  # TRIGGER, stated deliberately — this is the part that decides whether the
+  # check is independent of what it checks.
+  #
+  # `schedule` is the right shape: it asks the question on a clock rather than
+  # in reaction to the event that might have been dropped. But be clear-eyed —
+  # **`schedule` is UNPROVEN in the 2026-08-06 ledger.** During that incident we
+  # confirmed `push` and `pull_request` were throttled and `workflow_dispatch`
+  # was exempt; the only `schedule` sample we have (13:32Z) fired hours BEFORE
+  # the failure window, so it says nothing about behaviour under load.
+  #
+  # `workflow_dispatch` is therefore carried as the proven manual fallback: it is
+  # an API call rather than a webhook, and it was the one trigger observed
+  # working throughout that outage.
+  #
+  # What makes this independent is not the trigger alone but that NEITHER path
+  # depends on the push webhook that delivers the deploy. If both were dropped
+  # together the check would be as silent as the thing it watches.
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch: {}
+
+# DELIBERATELY NO `paths:` FILTER.
+#
+# A `paths:`-filtered self-check shares the failure mode of its subject: the same
+# dropped event that stops the deploy would stop the check, and it would go quiet
+# at precisely the moment it was needed. This runs regardless of what changed.
+
+concurrency:
+  group: verify-registry-funpay-deployed
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    name: Reconcile live deployment against main
+    runs-on: ubuntu-latest
+    # Bounded for the reason ci.yml was not: an unbounded hung job runs to the
+    # 360-minute default and is reported as `cancelled`, which raises no alert —
+    # a monitoring job that fails silently is worse than no monitoring job.
+    timeout-minutes: 10
+    environment: production
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+      RAILWAY_SERVICE_ID: 0cf12987-4aba-4b20-942f-c8436d956723
+
+    steps:
+      # Full history: the check asks whether one commit contains another, and
+      # `git merge-base --is-ancestor` cannot answer that on a shallow clone. A
+      # shallow fetch would make containment unresolvable and the check would
+      # fail closed on every run — loud, but for the wrong reason.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # The decision is a pure function; these pin every branch of it, including
+      # the two that must report OK. Run before the reconciler so a broken
+      # decision is caught here rather than as a confusing verdict below.
+      - name: The reconciler's decision is still correct — hard gate
+        run: node --test scripts/check-registry-funpay-deployed.test.mjs
+
+      # READ-ONLY. This job never calls `serviceInstanceDeploy` and must not:
+      # detecting staleness and repairing it are separate decisions, and a
+      # checker that silently fixes what it finds cannot be trusted to report
+      # how often it fires. If this fails, a human decides whether to dispatch
+      # the deploy workflow.
+      - name: Is the running service current with main?
+        run: node scripts/check-registry-funpay-deployed.mjs
