@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useAuth } from '../hooks/useAuth';
 import { availableDecisions, blockedReason, canDecideReview } from '../lib/reviewStatus';
+import { Stage3ConditionsPanel } from '../components/ops/Stage3ConditionsPanel';
+import type { UnderwritingDetail } from '../lib/underwritingConditions';
 
 /* ── types ────────────────────────────────────────────────────────────────── */
 
@@ -12,6 +14,10 @@ interface ReviewDetailData {
   employee: Record<string, unknown> | null;
   employer: Record<string, unknown> | null;
   mlDecision: Record<string, unknown> | null;
+  // Null for a loan that never reached Stage 3, one predating #393/#509, or a
+  // review with no loanId. The panel renders its own empty state for all three
+  // — this is never an error and must never gate the rest of the screen.
+  underwritingDetail: UnderwritingDetail | null;
   auditHistory: Record<string, unknown>[];
 }
 
@@ -213,7 +219,7 @@ export function ReviewDetail() {
     );
   }
 
-  const { review, loan, employee, employer, mlDecision, auditHistory } = data;
+  const { review, loan, employee, employer, mlDecision, underwritingDetail, auditHistory } = data;
   const signals = review['signals'] as Record<string, Record<string, unknown>> | undefined;
   const llm = review['llm_narrative'] as { summary?: string; key_signals?: string[]; recommendation?: string; confidence?: number } | undefined;
   const aml = review['aml_result'] as Record<string, unknown> | undefined;
@@ -443,6 +449,11 @@ export function ReviewDetail() {
           </div>
         ) : null}
       </div>
+
+      {/* Stage 3 — the auto-approve gate, row by row. Sits directly under the
+          stage summaries it explains, and renders unconditionally: its own
+          empty state is the answer when no breakdown was recorded. */}
+      <Stage3ConditionsPanel detail={underwritingDetail ?? null} cardStyle={cardStyle} />
 
       {/* SHAP Features (from ML decision) */}
       {mlDecision ? (
