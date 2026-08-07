@@ -84,14 +84,15 @@
  *
  * No dependencies, so CI can run it before any install.
  */
-import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, readdirSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 /**
  * Services deployed by a CI workflow rather than a Railway trigger. One entry
  * today; add a row when a second service gets the same treatment.
  */
-const TARGETS = [
+export const TARGETS = [
   {
     service: 'registry-service-funpay',
     dockerfile: 'services/registry-service/Dockerfile',
@@ -227,7 +228,7 @@ function literalPrefix(src) {
  * YAML dependency. It reads one scalar under one block and gives up loudly on
  * anything it does not recognize, rather than guessing.
  */
-function workflowEnvValue(yaml, key) {
+export function workflowEnvValue(yaml, key) {
   const lines = yaml.split('\n');
   const start = lines.findIndex((l) => /^env:\s*$/.test(l));
   if (start < 0) return null;
@@ -245,7 +246,7 @@ function workflowEnvValue(yaml, key) {
   return null;
 }
 
-function pathsFilter(yaml) {
+export function pathsFilter(yaml) {
   const lines = yaml.split('\n');
   const problems = [];
 
@@ -506,6 +507,14 @@ function callsDeployMutation(yaml) {
     .includes('serviceInstanceDeploy');
 }
 
+// Everything above is importable; everything below runs only when this file is
+// executed directly. Without the guard, a sibling check that reuses the parsers
+// would run this entire check as a side effect of `import`.
+const isMain = process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) main();
+
+function main() {
 const [argDockerfile, argWorkflow] = process.argv.slice(2);
 const targets =
   argDockerfile && argWorkflow
@@ -591,3 +600,4 @@ for (const target of targets) {
 
 if (failed) process.exit(1);
 console.log('\nEvery CI-deployed service watches everything its build reads.');
+}
