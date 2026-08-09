@@ -100,6 +100,16 @@ async function seedAuditLog(logId: string) {
   });
 }
 
+async function seedOperationalLog(collectionName: 'overdue_log' | 'incident_log', logId: string) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `${collectionName}/${logId}`), {
+      resolved: false,
+      message: 'test alert',
+      severity: 'warning',
+    });
+  });
+}
+
 // ── loans collection ─────────────────────────────────────────────────────────
 
 describe('loans collection', () => {
@@ -1044,6 +1054,34 @@ describe('employees collection', () => {
 });
 
 // ── audit_log collection ──────────────────────────────────────────────────────
+
+describe('operational alert logs', () => {
+  for (const collectionName of ['overdue_log', 'incident_log'] as const) {
+    it(`ops can toggle resolved on ${collectionName}`, async () => {
+      await seedOperationalLog(collectionName, 'alert1');
+      const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+      await assertSucceeds(
+        updateDoc(doc(ctx.firestore(), `${collectionName}/alert1`), { resolved: true })
+      );
+    });
+
+    it(`ops cannot change other fields on ${collectionName}`, async () => {
+      await seedOperationalLog(collectionName, 'alert1');
+      const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), `${collectionName}/alert1`), { severity: 'critical' })
+      );
+    });
+
+    it(`non-ops cannot update ${collectionName}`, async () => {
+      await seedOperationalLog(collectionName, 'alert1');
+      const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), `${collectionName}/alert1`), { resolved: true })
+      );
+    });
+  }
+});
 
 describe('audit_log collection', () => {
   it('auditLog write is always denied from client SDK', async () => {

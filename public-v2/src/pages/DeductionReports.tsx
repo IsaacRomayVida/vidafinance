@@ -32,6 +32,7 @@ export function DeductionReports() {
 
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Real-time loans listener — every status with a live or completed deduction
   useEffect(() => {
@@ -44,11 +45,20 @@ export function DeductionReports() {
       orderBy('createdAt', 'desc'),
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan));
-      setLoans(data);
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan));
+        setLoans(data);
+        setLoading(false);
+        setError(null);
+      },
+      (listenError) => {
+        console.error('Firestore listen error:', listenError);
+        setLoading(false);
+        setError('Error al cargar los datos. Intenta de nuevo.');
+      },
+    );
 
     return unsub;
   }, [user]);
@@ -118,7 +128,9 @@ export function DeductionReports() {
       </div>
 
       {/* Grouped tables */}
-      {loading ? (
+      {error ? (
+        <div className="text-red-600" style={{ marginTop: 24 }}>{error}</div>
+      ) : loading ? (
         <div className="card" style={{ marginTop: 24 }}>
           <div style={{ padding: 40, textAlign: 'center' }}>
             <span className="spinner" style={{ borderColor: 'rgba(25,68,69,0.1)', borderTopColor: 'var(--brand)' }} />
