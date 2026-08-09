@@ -142,6 +142,7 @@ export function EmployeeRoster() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   /* filters */
   const [search, setSearch] = useState('');
@@ -187,11 +188,20 @@ export function EmployeeRoster() {
       collection(db, 'employees'),
       where('employerId', '==', user.uid),
     );
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee));
-      setEmployees(data);
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee));
+        setEmployees(data);
+        setLoading(false);
+        setError(null);
+      },
+      (listenError) => {
+        console.error('Firestore listen error:', listenError);
+        setLoading(false);
+        setError('Error al cargar los datos. Intenta de nuevo.');
+      },
+    );
     return unsub;
   }, [user]);
 
@@ -202,9 +212,18 @@ export function EmployeeRoster() {
       collection(db, 'loans'),
       where('employerId', '==', user.uid),
     );
-    const unsub = onSnapshot(q, (snap) => {
-      setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
+        setError(null);
+      },
+      (listenError) => {
+        console.error('Firestore listen error:', listenError);
+        setLoading(false);
+        setError('Error al cargar los datos. Intenta de nuevo.');
+      },
+    );
     return unsub;
   }, [user]);
 
@@ -553,7 +572,9 @@ export function EmployeeRoster() {
 
       {/* ── Employee list ───────────────────────────────── */}
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        {loading ? (
+        {error ? (
+          <div className="text-red-600" style={{ padding: '48px 28px', textAlign: 'center' }}>{error}</div>
+        ) : loading ? (
           <div style={{ padding: '48px 28px', textAlign: 'center' }}>
             <p style={{ fontSize: 14, color: 'var(--t3)' }}>
               {t('roster_loading', 'Cargando empleados…')}

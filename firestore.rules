@@ -397,10 +397,20 @@ service cloud.firestore {
     // audit_log). Records written before the consolidation still live here and
     // are the only copy of that role grant/revoke history, so ops keeps read.
     match /auditLogs/{docId}         { allow read: if isOps();    allow write: if false; }
-    match /overdue_log/{d}           { allow read: if isAdmin();  allow write: if false; }
+    match /overdue_log/{docId} {
+      allow read: if isOps();
+      allow update: if isOps() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved']);
+      allow create: if false;
+      allow delete: if false;
+    }
     match /spei_log/{d}              { allow read: if isAdmin();  allow write: if false; }
     match /payment_failures/{d}      { allow read: if isAdmin();  allow write: if false; }
-    match /incident_log/{d}          { allow read: if isAdmin();  allow write: if false; }
+    match /incident_log/{docId} {
+      allow read: if isOps();
+      allow update: if isOps() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved']);
+      allow create: if false;
+      allow delete: if false;
+    }
     match /notification_log/{d}      { allow read: if isAdmin();  allow write: if false; }
     match /softcredito_employers/{d} { allow read: if isAdmin();  allow write: if false; }
     match /ml_decisions/{d}          { allow read: if isOps();    allow write: if false; }

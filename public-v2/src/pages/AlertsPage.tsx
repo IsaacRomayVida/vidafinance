@@ -167,6 +167,7 @@ const severityConfig: Record<
 export function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<AlertType>('all');
   const [dismissing, setDismissing] = useState<string | null>(null);
 
@@ -250,8 +251,10 @@ export function AlertsPage() {
     try {
       const col = alert.kind === 'overdue' ? 'overdue_log' : 'incident_log';
       await updateDoc(doc(db, col, alert.id), { resolved: true });
+      setError(null);
     } catch (e) {
       console.error('Failed to dismiss alert:', e);
+      setError('No se pudo resolver la alerta. Intenta de nuevo.');
     } finally {
       setDismissing(null);
     }
@@ -409,6 +412,11 @@ export function AlertsPage() {
       </div>
 
       {/* Loading */}
+      {error && (
+        <div role="alert" className="text-red-600" style={{ marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
       {loading && (
         <div
           style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}
