@@ -168,7 +168,10 @@ def export_artifacts(
     gate: dict[str, Any],
     output_dir: str | Path,
 ) -> dict[str, Any]:
-    """Write candidate artifacts atomically enough for local/offline use."""
+    """Write candidate artifacts atomically enough for local/offline use.
+
+    Shadow artifacts MUST NEVER be deserialized by live underwriting code.
+    """
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     manifest = {
