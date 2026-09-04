@@ -1,0 +1,157 @@
+name: Verify production is actually alive
+
+# The gap this closes, stated precisely: ci.yml's "Verify production endpoints"
+# job recorded HTTP 404 for ALL FIVE Railway service health probes on every
+# main run for over a month (runs 31335990563 → 32069677859) and stayed green,
+# because that job is diagnostic-only BY DESIGN — its own log says to "rely on
+# uptime monitoring for real production gating", and that uptime monitoring
+# (docs/runbooks/uptime-monitoring.md) was never stood up (launch checklist
+# v1.8, item B7). The nightly E2E smoke only exercises Firebase Hosting's
+# public routes, so the entire money-moving backend had no live health
+# evidence from any source.
+#
+# Two jobs, two independent questions, deliberately NOT merged:
+#
+#   health     — outside-in, credential-free: do the canonical public URLs
+#                (scripts/production-endpoints.json) answer 200 + status ok,
+#                does hosting serve the app shell, and do the *_URL repo
+#                secrets (what the deployed Functions actually call) agree?
+#   reconcile  — inside-out, credentialed: what do our Railway tokens see —
+#                which projects/services/domains exist, is each watched
+#                service actively deployed, and does any live domain serve
+#                each canonical URL?
+#
+# When the chronic 404s recur, the PAIR is what diagnoses them: health red +
+# reconcile green ⇒ stale URLs/secrets; health red + reconcile red ⇒ the
+# services themselves are down; both green ⇒ fixed. A single merged job would
+# report one bit and keep the ambiguity.
+#
+# Like verify-registry-funpay-deployed.yml, both jobs are READ-ONLY: they
+# never deploy and never mutate. Detecting a problem and repairing it are
+# separate decisions.
+
+on:
+  # A clock, not a webhook: this check must not share a failure mode with the
+  # push events whose non-delivery it would otherwise inherit (see the trigger
+  # essay in verify-registry-funpay-deployed.yml). Every 2 hours is enough for
+  # a tripwire — the registry check already runs hourly, and the runbook's
+  # 1-minute paging tier remains an external monitor's job, not CI's.
+  schedule:
+    - cron: '31 */2 * * *'
+  # The proven manual fallback (an API call, exempt from webhook throttling),
+  # and the way to get an answer RIGHT NOW during an incident.
+  workflow_dispatch: {}
+
+# DELIBERATELY NO `paths:` FILTER — a filtered self-check goes quiet at
+# exactly the moment it is needed.
+
+concurrency:
+  group: verify-production-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    name: Public endpoints answer (no credentials)
+    runs-on: ubuntu-latest
+    # Bounded: an unbounded hung monitoring job dies at the 360-minute default
+    # as `cancelled`, which raises no alert.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      # The checker's own decision function is gated before the checker runs:
+      # a green tick from a rotted decision is the silence this workflow
+      # exists to end.
+      - name: The health checker's decisions are still correct — hard gate
+        run: node --test scripts/check-production-health.test.mjs
+
+      # EXIT CODES ARE A CONTRACT:
+      #   0  every canonical URL healthy, hosting serves the app, secrets
+      #      match or (when drifted) are themselves healthy
+      #   1  something OBSERVED broken — read the per-row log above the
+      #      verdict; each row names exactly which claim failed
+      - name: Probe canonical URLs, hosting, and secret drift
+        run: node scripts/check-production-health.mjs
+        env:
+          PAYMENT_SERVER_URL: ${{ secrets.PAYMENT_SERVER_URL }}
+          SOFTCREDITO_ADAPTER_URL: ${{ secrets.SOFTCREDITO_ADAPTER_URL }}
+          NOTIFICATION_SERVICE_URL: ${{ secrets.NOTIFICATION_SERVICE_URL }}
+          PDF_GENERATOR_URL: ${{ secrets.PDF_GENERATOR_URL }}
+          ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL }}
+          UNDERWRITING_SERVICE_URL: ${{ secrets.UNDERWRITING_SERVICE_URL }}
+          REGISTRY_SERVICE_URL: ${{ secrets.REGISTRY_SERVICE_URL }}
+
+      # Best-effort page. Guarded so an unconfigured webhook is a LOGGED gap,
+      # not a silent one and not a failure of the check itself (#555's rule:
+      # unconfigured alerts log loudly instead of vanishing).
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::Production health check FAILED and SLACK_WEBHOOK_URL is not set as a repo secret — nobody was paged. Add it under Settings → Secrets → Actions."
+            exit 0
+          fi
+          curl -sS --max-time 15 -X POST -H 'Content-Type: application/json' \
+            --data "{\"text\":\"🔴 FunPay production health check FAILED: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "$SLACK_WEBHOOK_URL" || echo "::warning::Slack notification itself failed — check the webhook."
+
+  reconcile:
+    name: Railway inventory matches our documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Same environment as the registry reconciler, where the proven
+    # RAILWAY_TOKEN_VIDA_BACKEND lives.
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: The reconciler's decisions are still correct — hard gate
+        run: node --test scripts/check-railway-live.test.mjs
+
+      # EXIT CODES ARE A CONTRACT — read the log before acting on a red run:
+      #   0  every canonical endpoint is served by a live, actively-deployed
+      #      Railway service
+      #   1  MISMATCH — a watched service is not running, or a canonical
+      #      domain is served by nothing any token can see. The full inventory
+      #      (every visible project/service/domain) is printed above the
+      #      verdict, so "where IS it then" is already answered.
+      #   2  UNKNOWN — the state could not be observed (no token could
+      #      enumerate, or a read failed). NOT a claim about production; the
+      #      token-strategy log names which secret to fix. Only
+      #      RAILWAY_TOKEN_VIDA_BACKEND is proven in-tree — if the wider
+      #      tokens turn out unusable, expect a 2 here on the first run and
+      #      fix the secret rather than the check.
+      # Both 1 and 2 fail the job on purpose: a check that cannot see is not
+      # a check that passes.
+      - name: What is Railway actually running?
+        run: node scripts/check-railway-live.mjs
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN_VIDA_BACKEND: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::Railway reconciliation FAILED and SLACK_WEBHOOK_URL is not set as a repo secret — nobody was paged. Add it under Settings → Secrets → Actions."
+            exit 0
+          fi
+          curl -sS --max-time 15 -X POST -H 'Content-Type: application/json' \
+            --data "{\"text\":\"🔴 FunPay Railway reconciliation FAILED: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "$SLACK_WEBHOOK_URL" || echo "::warning::Slack notification itself failed — check the webhook."

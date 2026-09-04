@@ -54,6 +54,13 @@ redis.railway.internal:6379
 All services expose `GET /health` returning HTTP 200 + JSON
 (`{ "status": "ok", "service": "<name>", "redis": true, "ts": "..." }`).
 
+> **The canonical URL list lives in [`scripts/production-endpoints.json`](scripts/production-endpoints.json)** —
+> this table mirrors it for readability, but that file is what the checkers read.
+> If a domain changes, change it THERE; three hand-maintained copies of these
+> URLs (this file, the uptime runbook, and the `*_URL` repo secrets) once
+> drifted apart badly enough that a month of failing health probes could not
+> be diagnosed from the logs.
+
 ```bash
 curl https://payment-server-production-b9b8.up.railway.app/health
 curl https://softcredito-adapter-production.up.railway.app/health
@@ -62,6 +69,29 @@ curl https://pdf-generator-production-1a31.up.railway.app/health
 curl https://ml-service-production-f949.up.railway.app/health
 curl https://underwriting-service-production.up.railway.app/health
 ```
+
+Live verification (no local env needed):
+
+- `node scripts/check-production-health.mjs` — probes every canonical URL,
+  hosting, and (when `*_URL` env vars are present) secret drift.
+- `.github/workflows/verify-production-live.yml` runs that probe **plus a
+  Railway-API reconciliation** (`scripts/check-railway-live.mjs`) every 2
+  hours and on manual dispatch, and fails loudly. Health red + reconcile
+  green ⇒ stale URLs/secrets; both red ⇒ the services are down.
+- `registry-service-funpay` has its own reconciler
+  (`verify-registry-funpay-deployed.yml`, hourly); its public URL is only
+  recorded in the `REGISTRY_SERVICE_URL` secret.
+
+## Staging — honest status
+
+There is **no live staging environment** as of 2026-09-04. The deploy
+pipeline's staging path triggers on the `develop` branch, which is hundreds of
+commits behind `main`; no staging service URLs are recorded in-tree; and
+`RAILWAY_TOKEN_STAGING` is never exercised by any green run.
+`scripts/verify-staging.sh` now probes only URLs passed in via
+`STAGING_*_URL` env vars and **fails when none are configured** (it previously
+probed the production URLs under a staging banner). Stand staging up or remove
+the staging path from `deploy.yml` — either ends the ambiguity.
 
 ## Deployment
 

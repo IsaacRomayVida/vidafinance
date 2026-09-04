@@ -98,6 +98,14 @@ jobs:
       - name: The drift check still fails when it should — hard gate
         run: node --test scripts/check-deploy-watch-paths.test.mjs
 
+      # Same reasoning for the production-liveness checkers that
+      # verify-production-live.yml runs on a schedule: their decision
+      # functions are pure, and a rotted decision keeps printing ✓ — so a PR
+      # that breaks one must go red HERE, not two hours later in a
+      # monitoring run nobody is watching.
+      - name: The production health + Railway reconcile decisions are still correct — hard gate
+        run: node --test scripts/check-production-health.test.mjs scripts/check-railway-live.test.mjs
+
       - name: Install root deps (includes ESLint)
         run: npm ci
 
@@ -753,13 +761,18 @@ jobs:
       - run: npm install
       - run: npm run verify
         env:
-          # CI mode falls back to known public Railway URLs and skips
-          # env-var-only checks so the job stays green when repo secrets
-          # aren't configured. Run locally with functions/.env for the
-          # full launch-readiness gate.
+          # CI mode probes the secret URLs when set, falls back to the
+          # canonical URLs in scripts/production-endpoints.json when not, and
+          # flags any secret that drifts from canonical. Still diagnostic-only
+          # here (this job stays green): the check that GATES on these probes
+          # and pages on failure is verify-production-live.yml, which runs on
+          # a schedule instead of only on pushes to main — this repo went
+          # a month with every probe below reading HTTP 404 because main went
+          # quiet and nothing else was looking.
           VERIFY_MODE: ci
           PAYMENT_SERVER_URL: ${{ secrets.PAYMENT_SERVER_URL }}
           SOFTCREDITO_ADAPTER_URL: ${{ secrets.SOFTCREDITO_ADAPTER_URL }}
           NOTIFICATION_SERVICE_URL: ${{ secrets.NOTIFICATION_SERVICE_URL }}
           PDF_GENERATOR_URL: ${{ secrets.PDF_GENERATOR_URL }}
           ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL }}
+          UNDERWRITING_SERVICE_URL: ${{ secrets.UNDERWRITING_SERVICE_URL }}
