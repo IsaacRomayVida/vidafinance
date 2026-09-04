@@ -18,14 +18,29 @@ Total budget: **$7–10/mo**. Setup time: **~20 minutes**.
 
 ## 1. What to monitor
 
+> **URLs below are read from [`scripts/production-endpoints.json`](../../scripts/production-endpoints.json), the single source of truth.**
+> An earlier revision of this runbook listed `vida-payment-server.railway.app`-style
+> domains that never matched the deployed services — a monitor stood up from that
+> table would have paged on 404s forever (or worse, been "fixed" by deletion).
+> If this table and that file ever disagree, the file wins.
+
 | # | Service | URL | Expected response | Why it matters |
 |---|---|---|---|---|
 | 1 | Firebase Hosting (public site) | `https://vida-finance.web.app/` | HTTP 200, HTML contains `<div id="root">` | If this is down, marketing funnel + app are both dead |
-| 2 | Payment server | `https://vida-payment-server.railway.app/health` | HTTP 200, body contains `"status":"ok"` | Payment link generation + Softcredito webhook relay |
-| 3 | Softcredito adapter | `https://vida-softcredito.railway.app/health` | HTTP 200 | Loan disbursement funnel; downtime blocks origination |
-| 4 | Notifications | `https://vida-notifications.railway.app/health` | HTTP 200 | SMS + email; failure is silent (no user-facing error) |
-| 5 | PDF generator | `https://vida-pdf-generator.railway.app/health` | HTTP 200 | Contract PDFs for legal compliance |
-| 6 | ML service | `https://vida-ml-service.railway.app/health` | HTTP 200 | Credit scoring; failure falls back to rules engine |
+| 2 | Payment server | `https://payment-server-production-b9b8.up.railway.app/health` | HTTP 200, body contains `"status":"ok"` | Payment link generation + Softcredito webhook relay |
+| 3 | Softcredito adapter | `https://softcredito-adapter-production.up.railway.app/health` | HTTP 200 | Loan disbursement funnel; downtime blocks origination |
+| 4 | Notifications | `https://notification-service-production-f49e.up.railway.app/health` | HTTP 200 | SMS + email; failure is silent (no user-facing error) |
+| 5 | PDF generator | `https://pdf-generator-production-1a31.up.railway.app/health` | HTTP 200 | Contract PDFs for legal compliance |
+| 6 | ML service | `https://ml-service-production-f949.up.railway.app/health` | HTTP 200 | Credit scoring; failure falls back to rules engine |
+| 7 | Underwriting service | `https://underwriting-service-production.up.railway.app/health` | HTTP 200 | 7-stage credit pipeline; downtime blocks every new application |
+
+**Interim monitor, live today:** until the external monitors above are stood
+up, `.github/workflows/verify-production-live.yml` probes every canonical URL
+(plus a Railway-API inventory reconciliation) every 2 hours and on manual
+dispatch, failing loudly and posting to Slack when `SLACK_WEBHOOK_URL` is set
+as a repo secret. That is a tripwire, not a pager — it does not replace the
+1-minute external monitors this runbook specifies, and this section should
+shrink to a pointer once they exist.
 
 **Not monitored externally** (these have better native telemetry):
 - Cloud Functions — covered by GCP Cloud Monitoring + the Sentry wiring shipped in #354

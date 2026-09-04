@@ -9,11 +9,14 @@
  *
  *  2. CI      — run from `.github/workflows/ci.yml` on every push to main.
  *               Diagnostic-only: prints findings but never fails the
- *               workflow. Production gating is handled by Railway/Firebase
- *               dashboards and (once wired) Sentry + external uptime
- *               monitoring, not by this script. Missing secrets → SKP.
- *               Network-level probe failures (wrong URL, wrong region,
- *               transient Railway edge 404s) → recorded but not fatal.
+ *               workflow. Production GATING lives in
+ *               `.github/workflows/verify-production-live.yml`, which runs
+ *               the same probes on a schedule and fails loudly.
+ *               Missing URL secrets → fall back to the canonical URLs in
+ *               scripts/production-endpoints.json; a secret that DIFFERS
+ *               from canonical is flagged as drift. Missing non-URL
+ *               secrets → SKP. Network-level probe failures → recorded but
+ *               not fatal here.
  *
  * CI mode is auto-detected via `process.env.CI === 'true'` (set by GitHub
  * Actions). Can be overridden with `VERIFY_MODE=ci|local`.
@@ -26,13 +29,33 @@ require("dotenv").config({ path: "functions/.env" });
 
 const isCI = (process.env.VERIFY_MODE || (process.env.CI === "true" ? "ci" : "local")) === "ci";
 
-const SERVICES = {
+// Canonical public URLs — the single source of truth shared with
+// verify-production-live.yml and SERVICES.md. ci.yml's comment always claimed
+// this script "falls back to known public Railway URLs" in CI mode; it never
+// did, so an unset URL secret silently skipped the probe and a STALE one
+// probed the wrong host with nothing to compare against. Now CI mode really
+// does fall back, and a secret that DIFFERS from canonical is flagged so the
+// drift is visible in the same log as the probe result. Local mode is
+// unchanged: an operator's functions/.env is authoritative there, and a
+// missing entry stays an ERR.
+const CANONICAL = require("./production-endpoints.json").services;
+
+const SECRET_URLS = {
   "payment-server":       process.env.PAYMENT_SERVER_URL,
   "softcredito-adapter":  process.env.SOFTCREDITO_ADAPTER_URL,
   "notification-service": process.env.NOTIFICATION_SERVICE_URL,
   "pdf-generator":        process.env.PDF_GENERATOR_URL,
   "ml-service":           process.env.ML_SERVICE_URL,
+  "underwriting-service": process.env.UNDERWRITING_SERVICE_URL,
 };
+
+const norm = (u) => String(u || "").trim().replace(/\/+$/, "");
+
+const SERVICES = {};
+for (const [name, canonicalUrl] of Object.entries(CANONICAL)) {
+  const fromSecret = SECRET_URLS[name];
+  SERVICES[name] = fromSecret || (isCI ? canonicalUrl : undefined);
+}
 
 const results = [];
 const ok   = (n, d) => results.push({ s: "OK ", n, d });
@@ -80,6 +103,18 @@ async function run() {
 
   for (const [name, url] of Object.entries(SERVICES)) {
     await checkHealth(name, url);
+    // A secret that disagrees with the canonical URL is exactly how five
+    // health probes 404'd for a month with no explanation in the log: the
+    // probe reported the failure, nothing reported WHICH url it probed or
+    // that a known-good one existed. Warn, never fail — the drift verdict
+    // belongs to verify-production-live.yml, which probes both sides.
+    const fromSecret = SECRET_URLS[name];
+    if (fromSecret && norm(fromSecret) !== norm(CANONICAL[name])) {
+      warn(
+        `drift:${name}`,
+        `URL secret differs from scripts/production-endpoints.json (probed the secret's URL)`
+      );
+    }
   }
 
   checkEnv(
@@ -120,15 +155,15 @@ async function run() {
   } else if (errs > 0 && !isCI) {
     console.log(`BLOCKED: ${errs} error(s)${warns ? `, ${warns} warning(s)` : ""} must be fixed before launch.`);
   } else if (errs > 0 && isCI) {
-    console.log(`DIAGNOSTIC: ${errs} probe failure(s), ${warns + skips} other — CI mode is non-gating, not treated as CI failure. Run locally or rely on uptime monitoring for real production gating.`);
+    console.log(`DIAGNOSTIC: ${errs} probe failure(s), ${warns + skips} other — CI mode is non-gating, not treated as CI failure. The gating check is .github/workflows/verify-production-live.yml (scheduled + dispatchable); run this locally with functions/.env for the launch-readiness gate.`);
   } else if (warns > 0) {
     console.log(`REVIEW: ${warns} warning(s)${skips ? `, ${skips} skip(s)` : ""} — review before accepting live payments.`);
   } else {
     console.log(`SKIPPED: ${skips} check(s) skipped (CI mode); run locally for full verification.`);
   }
   // CI mode is diagnostic-only — prints findings but never fails the run.
-  // Production health is monitored by the Railway/Firebase dashboards and
-  // (once wired) Sentry + uptime alerting, not by this script.
+  // The check that DOES gate on these probes (and pages on failure) is
+  // .github/workflows/verify-production-live.yml.
   process.exit(isCI ? 0 : (errs > 0 ? 1 : 0));
 }
 
