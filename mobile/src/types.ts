@@ -3,3 +3,8 @@ export type RootStackParamList = {
   Loans: undefined;
   RequestLoan: undefined;
 };
+
+export type AuthStackParamList = {
+  Login: undefined;
+  Onboarding: undefined;
+};
