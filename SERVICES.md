@@ -128,17 +128,26 @@ Authoritative env contracts live in each `services/<name>/.env.example`. Highlig
     SAT-taxpayer check (covered by MetaMap government check in Stage 4).
 - **pdf-generator:** `FIREBASE_STORAGE_BUCKET`, `API_BASE_URL`, MetaMap signing creds.
 
-## Firebase Functions → services (set in `functions/.env` at deploy, from GitHub secrets)
+## Firebase Functions → services (set in `functions/.env` at deploy)
+
+The six `*_URL` values are written by `deploy.yml` **from
+[`scripts/production-endpoints.json`](scripts/production-endpoints.json)** —
+they are public endpoints, not credentials. They lived in GitHub secrets until
+2026-09-04, when the live check proved all five set ones pointed at hosts
+answering 404 (masked in every log, drifted with nothing comparing them) and
+`UNDERWRITING_SERVICE_URL` was empty. The leftover secrets feed nothing and
+can be deleted; `verify-production-live.yml` reports them until they are.
 
 ```
-SOFTCREDITO_ADAPTER_URL    # https://softcredito-adapter-production.up.railway.app
-UNDERWRITING_SERVICE_URL   # https://underwriting-service-production.up.railway.app
-PAYMENT_SERVER_URL         # https://payment-server-production-b9b8.up.railway.app
-NOTIFICATION_SERVICE_URL   # https://notification-service-production-f49e.up.railway.app
-PDF_GENERATOR_URL          # https://pdf-generator-production-1a31.up.railway.app
-ML_SERVICE_URL             # https://ml-service-production-f949.up.railway.app
-INTERNAL_SECRET            # shared inter-service auth token
-REDIS_URL                  # BullMQ queues
+SOFTCREDITO_ADAPTER_URL,          # ← scripts/production-endpoints.json
+UNDERWRITING_SERVICE_URL,         #   (canonical, Railway-verified 2-hourly)
+PAYMENT_SERVER_URL,
+NOTIFICATION_SERVICE_URL,
+PDF_GENERATOR_URL,
+ML_SERVICE_URL
+REGISTRY_SERVICE_URL       # still a GitHub secret (domain not in the file)
+INTERNAL_SECRET            # secret: shared inter-service auth token
+REDIS_URL                  # secret: BullMQ queues
 ALLOW_STUB_DISBURSEMENT    # 'true' ONLY in local/dev/test — never in production
 ```
 

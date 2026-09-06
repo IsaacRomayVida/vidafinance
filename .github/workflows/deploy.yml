@@ -168,18 +168,30 @@ jobs:
       - name: Install functions deps
         run: cd functions && npm ci
 
-      - name: Write functions .env
+      # SERVICE URLS COME FROM scripts/production-endpoints.json, NOT FROM
+      # SECRETS. They are public endpoints, not credentials, and keeping them
+      # as secrets is what made a month-long outage undiagnosable: the values
+      # were masked (***) in every log, they drifted from the real Railway
+      # domains with nothing comparing them, and on 2026-09-04 the live check
+      # proved ALL FIVE pointed at hosts answering 404 while
+      # UNDERWRITING_SERVICE_URL was empty — so the deployed Functions called
+      # dead URLs on every service hop. The canonical file is verified against
+      # Railway's own domain records every 2h by verify-production-live.yml.
+      # REGISTRY_SERVICE_URL stays a secret only because its domain is not
+      # recorded in the canonical file (see that file's header).
+      - name: Write functions .env (service URLs from the canonical endpoints file)
         run: |
-          cat > functions/.env << ENVEOF
+          node -e '
+            const e = require("./scripts/production-endpoints.json");
+            for (const [svc, key] of Object.entries(e.secretNames)) {
+              if (!e.services[svc]) { console.error("no canonical URL for " + svc); process.exit(1); }
+              console.log(key + "=" + e.services[svc]);
+            }
+          ' > functions/.env
+          cat >> functions/.env << ENVEOF
           REDIS_URL=${{ secrets.REDIS_URL }}
           CONEKTA_API_KEY=${{ secrets.CONEKTA_API_KEY }}
           INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
-          SOFTCREDITO_ADAPTER_URL=${{ secrets.SOFTCREDITO_ADAPTER_URL }}
-          UNDERWRITING_SERVICE_URL=${{ secrets.UNDERWRITING_SERVICE_URL }}
-          PAYMENT_SERVER_URL=${{ secrets.PAYMENT_SERVER_URL }}
-          NOTIFICATION_SERVICE_URL=${{ secrets.NOTIFICATION_SERVICE_URL }}
-          PDF_GENERATOR_URL=${{ secrets.PDF_GENERATOR_URL }}
-          ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}
           REGISTRY_SERVICE_URL=${{ secrets.REGISTRY_SERVICE_URL }}
           # METAMAP_WEBHOOK_SECRET was read by functions/src/webhooks/metamap.ts
           # but written by NO workflow, so it could never reach the deployed
@@ -886,4 +898,3 @@ jobs:
         run: |
           echo "::error::Deploy shipped functions, rules and hosting, but Firestore indexes were REFUSED (403). Grant roles/datastore.indexAdmin to the deploy service account and re-run. Failing the run so this does not go unnoticed."
           exit 1
-
