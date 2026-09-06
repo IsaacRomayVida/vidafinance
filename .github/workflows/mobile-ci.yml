@@ -1,0 +1,43 @@
+name: Mobile CI
+
+# Gates for mobile/ (the Expo borrower app). Separate from ci.yml on purpose:
+# mobile has its own dependency tree and cadence, and none of ci.yml's twelve
+# jobs read anything under mobile/ — so this filters on paths where ci.yml
+# deliberately doesn't. The hard-gate philosophy is the same: typecheck and
+# the pure-logic suite (loan status vocabulary, money rendering, error
+# mapping) must pass, and `npm test` fails the job on a single failing test.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-ci.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-ci.yml"
+  workflow_dispatch: {}
+
+jobs:
+  mobile:
+    name: Mobile Typecheck & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install deps
+        run: cd mobile && npm ci --no-audit --no-fund
+
+      - name: Typecheck — hard gate
+        run: cd mobile && npm run typecheck
+
+      - name: Unit tests (loan status, money, errors) — hard gate
+        run: cd mobile && npm test
