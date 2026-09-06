@@ -1,0 +1,87 @@
+name: Recover fully-down production services
+
+# The repair half of the pair whose detection half is
+# verify-production-live.yml. That workflow found (run 33918482954,
+# 2026-09-04): softcredito-adapter and underwriting-service with ZERO active
+# deployments in observant-miracle/production, and the shared Redis NONE
+# ACTIVE — SPEI disbursement, payroll deductions, the credit pipeline and
+# every BullMQ queue offline. The only fix path was the Railway dashboard;
+# this makes it a workflow instead, per this repo's working model. Isaac
+# explicitly authorized this automation in-session on 2026-09-06.
+#
+# SAFETY CONTRACT (enforced in scripts/recover-production-services.mjs and
+# pinned by its tests, which run as a hard gate below):
+#   - a service with ANY active deployment is NEVER touched;
+#   - only services serving the canonical domains in
+#     scripts/production-endpoints.json (plus the Redis in their own
+#     environment) are ever considered;
+#   - unobservable state → reported as MANUAL, never guessed at;
+#   - the mutations used are `serviceInstanceDeploy(latestCommit: true)`
+#     (proven in production by deploy-registry-funpay.yml) and, for the
+#     image-based Redis, `serviceInstanceRedeploy`.
+# Redeploying something that is fully down cannot make it more down, and
+# cannot move money: every money mutation behind these services carries its
+# own idempotency guard (#561, #562, #578).
+#
+# TRIGGER: push to main (no paths filter — the same reasoning as the
+# verify workflows: a filtered self-heal goes quiet exactly when needed) plus
+# workflow_dispatch as the proven manual fallback. On a healthy production
+# this is a read-only no-op that costs a few API reads per merge. Detection
+# stays in verify-production-live.yml, which never repairs; keeping the two
+# in separate workflows means a repair failure can never mask a detection.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: recover-production-services
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    name: Redeploy only what Railway reports as fully down
+    runs-on: ubuntu-latest
+    # The script's own polling window is 12 minutes; a hung job past that is
+    # reported loudly rather than burning to the 360-minute default.
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      # The never-touch-a-running-service rule is the entire safety case, so
+      # its tests gate every run — a repairer with a rotted guard doesn't
+      # print a wrong tick, it redeploys healthy money services.
+      - name: The recovery planner's guard rails still hold — hard gate
+        run: node --test scripts/recover-production-services.test.mjs
+
+      # EXIT CODES ARE A CONTRACT:
+      #   0  nothing needed, or every needed recovery confirmed live
+      #   1  a recovery was refused or did not come up — per-service state is
+      #      in the log; the Railway dashboard is the fallback for those rows
+      #   2  Railway unobservable — nothing was done
+      - name: Recover
+        run: node scripts/recover-production-services.mjs
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::Production recovery FAILED and SLACK_WEBHOOK_URL is not set as a repo secret — nobody was paged. Add it under Settings → Secrets → Actions."
+            exit 0
+          fi
+          curl -sS --max-time 15 -X POST -H 'Content-Type: application/json' \
+            --data "{\"text\":\"🔴 FunPay production recovery FAILED (manual Railway action needed): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "$SLACK_WEBHOOK_URL" || echo "::warning::Slack notification itself failed — check the webhook."
