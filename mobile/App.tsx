@@ -13,6 +13,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import './src/i18n';
+import { BrandIntro } from './src/components/BrandIntro';
 import { FunpayMark } from './src/components/FunpayLogo';
 import { AuthProvider, useAuth } from './src/hooks/useAuth';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -69,7 +70,12 @@ function Root() {
   if (!user || onboardingHold) {
     return (
       <AuthStack.Navigator
-        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.bg },
+          animation: 'fade_from_bottom',
+          animationDuration: 220,
+        }}
       >
         <AuthStack.Screen name="Login" component={LoginScreen} />
         <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -78,7 +84,14 @@ function Root() {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.bg },
+        animation: 'fade_from_bottom',
+        animationDuration: 220,
+      }}
+    >
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="Loans" component={LoansScreen} />
       <Stack.Screen name="RequestLoan" component={RequestLoanScreen} />
@@ -95,6 +108,7 @@ export default function App() {
     DMSans_700Bold,
     DMSerifDisplay_400Regular,
   });
+  const [introDone, setIntroDone] = React.useState(false);
   if (!fontsLoaded) return <Splash />;
 
   return (
@@ -103,6 +117,9 @@ export default function App() {
         <NavigationContainer theme={navTheme}>
           <StatusBar style="dark" />
           <Root />
+          {/* Brand moment on cold start, laid over the already-mounted app so
+              the handoff is a fade, never a blank frame. */}
+          {!introDone ? <BrandIntro onDone={() => setIntroDone(true)} /> : null}
         </NavigationContainer>
       </AuthProvider>
     </SafeAreaProvider>

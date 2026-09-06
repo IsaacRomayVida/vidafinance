@@ -4,6 +4,7 @@
  * Every screen used to hand-roll this Pressable+LinearGradient pair; this is
  * that pattern extracted so the eight call sites stay identical.
  */
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
@@ -29,7 +30,10 @@ export function PrimaryButton({
   const blocked = disabled || busy;
   return (
     <PressableScale
-      onPress={onPress}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        onPress();
+      }}
       disabled={blocked}
       accessibilityRole="button"
       accessibilityLabel={label}

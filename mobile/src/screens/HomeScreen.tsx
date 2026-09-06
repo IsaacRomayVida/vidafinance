@@ -9,7 +9,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FunpayMark, FunpayWordmark } from '../components/FunpayLogo';
 import { Backdrop, GlassCard } from '../components/Glass';
+import { CountUpMxn } from '../components/CountUp';
 import { FadeSlideIn, PressableScale } from '../components/motion';
+import { TrackFill } from '../components/TrackFill';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Skeleton } from '../components/Skeleton';
 import { useAuth } from '../hooks/useAuth';
@@ -135,7 +137,7 @@ export function HomeScreen({
               <Text style={styles.cardLabel}>{t('home.creditLine')}</Text>
               <View style={styles.cardDot} />
             </View>
-            <Text style={styles.cardAmount}>{formatMxn(creditLimit)}</Text>
+            <CountUpMxn value={creditLimit} style={styles.cardAmount} />
             {/* Quiet usage track: how much of the line is in use. Purely
                 informational — no numbers repeated, the bar says it. */}
             {creditLimit > 0 ? (
@@ -143,7 +145,7 @@ export function HomeScreen({
                 style={styles.track}
                 accessibilityLabel={`${Math.round(usedRatio * 100)}% utilizado`}
               >
-                <View style={[styles.trackFill, { width: `${Math.max(usedRatio * 100, 2)}%` }]} />
+                <TrackFill ratio={Math.max(usedRatio, 0.02)} color={colors.gold} height={4} />
               </View>
             ) : null}
             <View style={styles.cardBottomRow}>
