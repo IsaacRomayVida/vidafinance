@@ -18,6 +18,8 @@ import { fetchLoanConfig, submitLoanRequest, type LoanConfig } from '../api/call
 import { FunpayMark } from '../components/FunpayLogo';
 import { Backdrop, GlassCard } from '../components/Glass';
 import { GlassHeader } from '../components/GlassHeader';
+import { FadeSlideIn, PressableScale } from '../components/motion';
+import { PrimaryButton } from '../components/PrimaryButton';
 import { useAuth } from '../hooks/useAuth';
 import { friendlyError } from '../lib/errors';
 import { auth, db } from '../lib/firebase';
@@ -122,11 +124,7 @@ export function RequestLoanScreen({
       <Backdrop>
         <View style={styles.center}>
           <Text style={styles.error}>{t('request.priceUnavailable')}</Text>
-          <Pressable onPress={() => setRetryToken((n) => n + 1)}>
-            <LinearGradient colors={gradient} style={styles.retryButton}>
-              <Text style={styles.buttonText}>{t('common.retry')}</Text>
-            </LinearGradient>
-          </Pressable>
+          <PrimaryButton label={t('common.retry')} onPress={() => setRetryToken((n) => n + 1)} />
         </View>
       </Backdrop>
     );
@@ -136,23 +134,20 @@ export function RequestLoanScreen({
     return (
       <Backdrop>
         <View style={styles.center}>
+          <FadeSlideIn>
           <GlassCard>
             <View style={styles.successInner}>
               <FunpayMark size={56} />
               <Text style={styles.successTitle}>{t('request.successTitle')}</Text>
               <Text style={styles.successBody}>{t('request.successBody', { ref: successRef })}</Text>
-              <Pressable onPress={() => navigation.navigate('Loans')} style={{ alignSelf: 'stretch' }}>
-                <LinearGradient
-                  colors={gradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.button}
-                >
-                  <Text style={styles.buttonText}>{t('loans.title')}</Text>
-                </LinearGradient>
-              </Pressable>
+              <PrimaryButton
+                label={t('loans.title')}
+                onPress={() => navigation.navigate('Loans')}
+                style={{ alignSelf: 'stretch', marginTop: spacing.s }}
+              />
             </View>
           </GlassCard>
+          </FadeSlideIn>
         </View>
       </Backdrop>
     );
@@ -182,16 +177,18 @@ export function RequestLoanScreen({
               {QUICK_AMOUNTS.map((quick) => {
                 const active = amountText === String(quick);
                 return (
-                  <Pressable
+                  <PressableScale
                     key={quick}
                     onPress={() => setAmountText(String(quick))}
                     disabled={submitting}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     style={[styles.quickPill, active && styles.quickPillActive]}
                   >
                     <Text style={[styles.quickText, active && styles.quickTextActive]}>
                       {formatMxn(quick)}
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -225,24 +222,14 @@ export function RequestLoanScreen({
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable
+        <PrimaryButton
+          label={t('request.submit')}
           onPress={() => void submit()}
-          disabled={!amountValid || submitting}
+          disabled={!amountValid}
+          busy={submitting}
+          style={{ marginTop: spacing.l }}
           testID="request-submit"
-        >
-          <LinearGradient
-            colors={gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.button, (!amountValid || submitting) && styles.buttonDisabled]}
-          >
-            {submitting ? (
-              <ActivityIndicator color={colors.onBrand} />
-            ) : (
-              <Text style={styles.buttonText}>{t('request.submit')}</Text>
-            )}
-          </LinearGradient>
-        </Pressable>
+        />
       </ScrollView>
     </Backdrop>
   );
@@ -259,6 +246,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     color: colors.text,
     paddingVertical: spacing.s,
+    fontVariant: ['tabular-nums'],
   },
   quickRow: { flexDirection: 'row', gap: spacing.s, marginTop: spacing.s, flexWrap: 'wrap' },
   quickPill: {

@@ -56,6 +56,42 @@ export async function submitLoanRequest(input: RequestLoanInput): Promise<Reques
   return result.data;
 }
 
+export interface EmployerLookup {
+  found: boolean;
+  employerId?: string;
+  companyName?: string;
+}
+
+/**
+ * Step-1 employer lookup. Unauthenticated, rate-limited server-side
+ * (10/min, fails closed). Legacy code collisions surface as a
+ * failed-precondition throw — the caller maps any throw to "not found",
+ * same as the web wizard.
+ */
+export async function lookupEmployerByCode(code: string): Promise<EmployerLookup> {
+  const call = httpsCallable<{ code: string }, EmployerLookup>(functions, 'lookupEmployerByCode');
+  const result = await call({ code });
+  return result.data;
+}
+
+/**
+ * Email availability is a courtesy, not a gate: any failure reports
+ * available (the web wizard's explicit fail-open), and the real uniqueness
+ * check is createUserWithEmailAndPassword itself.
+ */
+export async function checkEmailAvailability(email: string): Promise<boolean> {
+  try {
+    const call = httpsCallable<{ email: string }, { available: boolean }>(
+      functions,
+      'checkEmailAvailability'
+    );
+    const result = await call({ email });
+    return result.data?.available !== false;
+  } catch {
+    return true;
+  }
+}
+
 export async function fetchPaymentUrl(loanId: string): Promise<string> {
   const call = httpsCallable<{ loanId: string }, { paymentUrl: string }>(
     functions,
