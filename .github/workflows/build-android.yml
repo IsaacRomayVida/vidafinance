@@ -1,0 +1,68 @@
+name: Build Android app (EAS)
+
+# On-demand Android build of mobile/ via Expo's EAS cloud builders.
+# `preview` produces an installable .apk (internal distribution, no store);
+# `production` produces a Play Store .aab. The build itself runs on Expo's
+# infrastructure — this job just validates, submits, and links to it.
+#
+# Requires the EXPO_TOKEN repo secret (expo.dev → Account settings → Access
+# tokens). Fails with a clear message when it is missing rather than a
+# cryptic 401 mid-submit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile"
+        required: true
+        default: "preview"
+        type: choice
+        options:
+          - preview
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Submit EAS Android build (${{ github.event.inputs.profile }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      # No npm cache: mobile/ has no committed package-lock.json yet (the
+      # scaffold predates a machine that can run npm install; the first local
+      # `npm install` should commit one, and then this gains cache + npm ci).
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Require EXPO_TOKEN
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::EXPO_TOKEN is not set as a repo secret. Create an access token at expo.dev (Account settings → Access tokens) and add it under Settings → Secrets → Actions, then re-run."
+            exit 1
+          fi
+          echo "EXPO_TOKEN present."
+
+      - name: Install deps
+        run: cd mobile && npm install --no-audit --no-fund
+
+      # The same gates ci.yml runs — a build of code that doesn't typecheck
+      # wastes an EAS build slot and 20 minutes.
+      - name: Typecheck + tests
+        run: cd mobile && npm run typecheck && npm test
+
+      - name: Submit build to EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          cd mobile
+          npx eas-cli@latest build --platform android \
+            --profile "${{ github.event.inputs.profile }}" \
+            --non-interactive --no-wait
+          echo "Build submitted. Track it (and download the artifact) at https://expo.dev — it appears under the funpay project's builds."

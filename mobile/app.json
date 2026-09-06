@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "FunPay",
+    "slug": "funpay",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "funpay",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#ffffff",
+    "android": {
+      "package": "mx.funpay.app",
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "ios": {
+      "bundleIdentifier": "mx.funpay.app",
+      "supportsTablet": false
+    }
+  }
+}
