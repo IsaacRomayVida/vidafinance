@@ -31,7 +31,9 @@ export function PrimaryButton({
   return (
     <PressableScale
       onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        // Medium, not Light: mid-range Android motors (Galaxy A-series) render
+        // Light as imperceptible; Medium reads as a tap on both platforms.
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         onPress();
       }}
       disabled={blocked}

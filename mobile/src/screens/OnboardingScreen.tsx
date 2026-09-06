@@ -634,7 +634,8 @@ export function OnboardingScreen({
             onPress={() => {
               if (step === 4) void submit();
               else {
-                Haptics.selectionAsync().catch(() => {});
+                // impact, not selection — selectionAsync is near-silent on Android
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                 setStep((s) => s + 1);
               }
             }}
