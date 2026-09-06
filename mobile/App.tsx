@@ -4,13 +4,13 @@ import {
   DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
 import { DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
-import { NavigationContainer } from '@react-navigation/native';
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import './src/i18n';
 import { FunpayMark } from './src/components/FunpayLogo';
@@ -19,10 +19,24 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { LoansScreen } from './src/screens/LoansScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { RequestLoanScreen } from './src/screens/RequestLoanScreen';
-import { colors, fonts } from './src/theme';
+import { colors } from './src/theme';
 import type { RootStackParamList } from './src/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// Screens own their full canvas (Backdrop + glass headers), so the
+// navigator chrome is invisible; the theme only sets the underlying wash.
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: colors.bg,
+    card: colors.bg,
+    text: colors.text,
+    primary: colors.brand,
+    border: 'transparent',
+  },
+};
 
 function Splash() {
   return (
@@ -42,7 +56,6 @@ function Splash() {
 }
 
 function Root() {
-  const { t } = useTranslation();
   const { user, ready } = useAuth();
 
   // Until persistence answers, show the brand splash — never flash the login
@@ -52,34 +65,10 @@ function Root() {
   if (!user) return <LoginScreen />;
 
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShadowVisible: false,
-        headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.brand,
-        headerTitleStyle: { fontFamily: fonts.sansBold, fontSize: 17, color: colors.text },
-        headerBackButtonDisplayMode: 'minimal',
-        contentStyle: { backgroundColor: colors.bg },
-      }}
-    >
-      <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          title: t('common.appName'),
-          headerTitle: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <FunpayMark size={28} />
-            </View>
-          ),
-        }}
-      />
-      <Stack.Screen name="Loans" component={LoansScreen} options={{ title: t('loans.title') }} />
-      <Stack.Screen
-        name="RequestLoan"
-        component={RequestLoanScreen}
-        options={{ title: t('request.title') }}
-      />
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="Loans" component={LoansScreen} />
+      <Stack.Screen name="RequestLoan" component={RequestLoanScreen} />
     </Stack.Navigator>
   );
 }
@@ -96,11 +85,13 @@ export default function App() {
   if (!fontsLoaded) return <Splash />;
 
   return (
-    <AuthProvider>
-      <NavigationContainer>
-        <StatusBar style="dark" />
-        <Root />
-      </NavigationContainer>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <NavigationContainer theme={navTheme}>
+          <StatusBar style="dark" />
+          <Root />
+        </NavigationContainer>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

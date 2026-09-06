@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -13,9 +14,10 @@ import {
 } from 'react-native';
 
 import { FunpayMark, FunpayWordmark } from '../components/FunpayLogo';
+import { Backdrop, GlassCard } from '../components/Glass';
 import { friendlyError } from '../lib/errors';
 import { auth } from '../lib/firebase';
-import { colors, fonts, microLabel, radii, spacing } from '../theme';
+import { colors, fonts, gradient, microLabel, radii, spacing } from '../theme';
 
 // v1 is sign-in only, on purpose: account creation runs through the web
 // onboarding (identity verification via MetaMap has no Expo Go path — it
@@ -43,65 +45,75 @@ export function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.brandBlock}>
-        <FunpayMark size={56} />
-        <FunpayWordmark size={26} />
-      </View>
-      <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
-
-      <Text style={styles.label}>{t('login.email')}</Text>
-      <TextInput
-        style={[styles.input, focused === 'email' && styles.inputFocused]}
-        autoCapitalize="none"
-        autoComplete="email"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        onFocus={() => setFocused('email')}
-        onBlur={() => setFocused(null)}
-        editable={!submitting}
-        testID="login-email"
-      />
-
-      <Text style={styles.label}>{t('login.password')}</Text>
-      <TextInput
-        style={[styles.input, focused === 'password' && styles.inputFocused]}
-        secureTextEntry
-        autoComplete="password"
-        value={password}
-        onChangeText={setPassword}
-        onFocus={() => setFocused('password')}
-        onBlur={() => setFocused(null)}
-        editable={!submitting}
-        testID="login-password"
-      />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <Pressable
-        style={[styles.button, submitting && styles.buttonDisabled]}
-        onPress={submit}
-        disabled={submitting}
-        testID="login-submit"
+    <Backdrop>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {submitting ? (
-          <ActivityIndicator color={colors.onBrand} />
-        ) : (
-          <Text style={styles.buttonText}>{t('login.submit')}</Text>
-        )}
-      </Pressable>
+        <View style={styles.brandBlock}>
+          <FunpayMark size={60} />
+          <FunpayWordmark size={27} />
+        </View>
+        <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
 
-      <Text style={styles.hint}>{t('login.noAccount')}</Text>
-    </KeyboardAvoidingView>
+        <GlassCard>
+          <View style={styles.form}>
+            <Text style={styles.label}>{t('login.email')}</Text>
+            <TextInput
+              style={[styles.input, focused === 'email' && styles.inputFocused]}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+              onFocus={() => setFocused('email')}
+              onBlur={() => setFocused(null)}
+              editable={!submitting}
+              selectionColor={colors.brandLight}
+              testID="login-email"
+            />
+
+            <Text style={[styles.label, { marginTop: spacing.l }]}>{t('login.password')}</Text>
+            <TextInput
+              style={[styles.input, focused === 'password' && styles.inputFocused]}
+              secureTextEntry
+              autoComplete="password"
+              value={password}
+              onChangeText={setPassword}
+              onFocus={() => setFocused('password')}
+              onBlur={() => setFocused(null)}
+              editable={!submitting}
+              selectionColor={colors.brandLight}
+              testID="login-password"
+            />
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Pressable onPress={submit} disabled={submitting} testID="login-submit">
+              <LinearGradient
+                colors={gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.button, submitting && styles.buttonDisabled]}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={colors.onBrand} />
+                ) : (
+                  <Text style={styles.buttonText}>{t('login.submit')}</Text>
+                )}
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </GlassCard>
+
+        <Text style={styles.hint}>{t('login.noAccount')}</Text>
+      </KeyboardAvoidingView>
+    </Backdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: spacing.l, justifyContent: 'center' },
+  container: { flex: 1, padding: spacing.l, justifyContent: 'center' },
   brandBlock: { alignItems: 'center', gap: spacing.m },
   subtitle: {
     fontFamily: fonts.sans,
@@ -109,27 +121,30 @@ const styles = StyleSheet.create({
     color: colors.subtle,
     textAlign: 'center',
     marginTop: spacing.m,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.l,
   },
-  label: { ...microLabel, marginBottom: spacing.xs, marginTop: spacing.l },
-  // The web app's underline-input idiom (.form-group input): no box, a
-  // hairline below that turns brand-teal on focus.
+  form: { padding: spacing.l },
+  label: { ...microLabel, marginBottom: spacing.s },
+  // A lighter glass within the glass: near-opaque white field so the text
+  // stays crisp, with a brand ring on focus.
   input: {
-    borderBottomWidth: 1.5,
-    borderBottomColor: colors.hairline,
-    paddingVertical: 14,
+    backgroundColor: colors.glassStrong,
+    borderRadius: radii.m,
+    borderWidth: 1.5,
+    borderColor: colors.glassBorder,
+    paddingHorizontal: spacing.m,
+    paddingVertical: 13,
     fontFamily: fonts.sans,
     fontSize: 16,
     color: colors.text,
   },
-  inputFocused: { borderBottomColor: colors.brand },
+  inputFocused: { borderColor: colors.brandLight },
   error: { fontFamily: fonts.sans, color: colors.danger, marginTop: spacing.m },
   button: {
-    backgroundColor: colors.brand,
-    borderRadius: radii.m,
-    padding: spacing.m,
+    borderRadius: radii.pill,
+    padding: spacing.m + 2,
     alignItems: 'center',
-    marginTop: spacing.xl,
+    marginTop: spacing.l,
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { fontFamily: fonts.sansBold, color: colors.onBrand, fontSize: 16 },

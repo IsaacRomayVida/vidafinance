@@ -1,36 +1,55 @@
 /**
- * FunPay design tokens — the mobile mirror of public-v2's brand system
- * (src/styles/legacy.css :root). Same deep teal, aqua, and gold; same
- * DM Serif Display / DM Sans pairing; same soft radii. If the web tokens
- * change, change these to match — the brand has exactly one source.
+ * FunPay design tokens — the brand's own palette (public-v2
+ * styles/legacy.css :root + public/favicon.svg) composed in the
+ * light-glassmorphism language of the reference fintech interfaces:
+ * a light aqua-lit ground, frosted translucent surfaces floating over
+ * soft color, and the deep brand teal as the DARK element on top — the
+ * hero card and the CTAs — never as the ground.
  */
 export const colors = {
   // Brand core (web: --brand / --brand-mid / --brand-light)
   brand: '#194445',
   brandMid: '#1d5253',
   brandLight: '#247a6e',
-  // Supporting palette (web: --aqua / --aqua-soft / --gold)
+  // Accents (web: --aqua / --aqua-soft / --gold)
   aqua: '#a8d5d0',
   aquaSoft: '#dceeed',
   gold: '#a28657',
   goldSoft: '#f4ede1',
-  // Surfaces (web: --bg / --bg2)
-  bg: '#ffffff',
-  bg2: '#f5f8f7',
+  // Light ground (web: --bg / --bg2) — the gradient backdrop runs
+  // bgTop → bgBottom with color blobs behind the glass.
+  bg: '#f7fbfa',
+  bgTop: '#f7fbfa',
+  bgBottom: '#e3f0ee',
+  // Glass surfaces: translucent white over the lit ground.
+  glass: 'rgba(255,255,255,0.58)',
+  glassStrong: 'rgba(255,255,255,0.78)',
+  glassBorder: 'rgba(255,255,255,0.70)',
+  hairline: 'rgba(25,68,69,0.10)',
   // Text scale (web: --t1 / --t2 / --t3)
   text: '#0c1e1f',
   subtle: '#4a6364',
   faint: '#93aaa9',
-  border: 'rgba(25,68,69,0.10)',
-  hairline: 'rgba(25,68,69,0.08)',
   danger: '#b3261e',
-  dangerSoft: '#f9e9e7',
+  dangerSoft: 'rgba(179,38,30,0.12)',
   onBrand: '#ffffff',
-  // Aliases kept for existing styles: primary IS the brand teal.
+  // Tinted chip fills over glass
+  aquaTint: 'rgba(36,122,110,0.14)',
+  goldTint: 'rgba(162,134,87,0.16)',
+  neutralTint: 'rgba(25,68,69,0.08)',
+  // Aliases kept for existing styles
   primary: '#194445',
   primaryText: '#ffffff',
   chipBg: '#dceeed',
+  bg2: '#eef5f3',
+  border: 'rgba(25,68,69,0.10)',
 };
+
+/** The dark hero-card / CTA gradient: brand teal into its living green. */
+export const gradient = ['#194445', '#247a6e'] as [string, string];
+
+/** The backdrop wash behind everything. */
+export const backdropGradient = ['#f7fbfa', '#e3f0ee'] as [string, string];
 
 // expo-google-fonts family names — use fontFamily alone, never with
 // fontWeight (Android would substitute a synthetic weight).
@@ -41,7 +60,7 @@ export const fonts = {
   sansBold: 'DMSans_700Bold',
 };
 
-export const radii = { s: 8, m: 12, l: 16, xl: 20 } as const;
+export const radii = { s: 10, m: 14, l: 20, xl: 28, pill: 999 } as const;
 
 export const spacing = { xs: 4, s: 8, m: 16, l: 24, xl: 32 } as const;
 
