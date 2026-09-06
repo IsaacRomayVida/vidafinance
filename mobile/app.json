@@ -12,12 +12,12 @@
     "orientation": "portrait",
     "scheme": "funpay",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#ffffff",
+    "backgroundColor": "#f2f9f7",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#eaf5f1"
     },
     "android": {
       "package": "mx.funpay.app",

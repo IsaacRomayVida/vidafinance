@@ -5,9 +5,8 @@
  * motion it collapses to a quick opacity-only fade so nobody is made to wait
  * on decoration.
  */
-import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Image, StyleSheet, View } from 'react-native';
 
 import { colors } from '../theme';
 import { FunpayMark, FunpayWordmark } from './FunpayLogo';
@@ -15,24 +14,16 @@ import { Backdrop } from './Glass';
 import { useReducedMotion } from './motion';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const loop = require('../../assets/brand-loop.mp4');
+const artwork = require('../../assets/splash-artwork.png');
 
-/** The papalote, full-bleed and washed, under the blooming mark. */
-function IntroVideo() {
-  const player = useVideoPlayer(loop, (p) => {
-    p.loop = true;
-    p.muted = true;
-    p.play();
-  });
+/** The opening frame: papalote dawn artwork full-bleed under the mark.
+ * Android 12+ only allows icon-on-color for the NATIVE splash, so this is
+ * where the epic frame actually lives — the first thing JS paints. */
+function IntroArtwork() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <VideoView
-        player={player}
-        style={[StyleSheet.absoluteFill, { opacity: 0.65 }]}
-        contentFit="cover"
-        nativeControls={false}
-      />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(247,251,250,0.35)' }]} />
+      <Image source={artwork} style={styles.artwork} resizeMode="cover" />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(247,251,250,0.12)' }]} />
     </View>
   );
 }
@@ -88,7 +79,7 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
   return (
     <Animated.View style={[StyleSheet.absoluteFill, styles.layer, { opacity: curtain }]} pointerEvents="none">
       <Backdrop>
-        {!reduced ? <IntroVideo /> : null}
+        <IntroArtwork />
         <Animated.View
           style={[
             styles.center,
@@ -119,5 +110,6 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
 
 const styles = StyleSheet.create({
   layer: { zIndex: 10, backgroundColor: colors.bg },
+  artwork: { width: '100%', height: '100%' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });
