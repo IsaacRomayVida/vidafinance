@@ -7,10 +7,20 @@
     "scheme": "funpay",
     "userInterfaceStyle": "light",
     "backgroundColor": "#ffffff",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "android": {
       "package": "mx.funpay.app",
       "versionCode": 1,
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#194445"
+      }
     },
     "ios": {
       "bundleIdentifier": "mx.funpay.app",
