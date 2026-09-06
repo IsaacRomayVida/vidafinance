@@ -7,7 +7,8 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-na
 import { Field } from '../components/Field';
 import { FunpayMark, FunpayWordmark } from '../components/FunpayLogo';
 import { Backdrop, GlassCard } from '../components/Glass';
-import { FadeSlideIn } from '../components/motion';
+import { LoginVideoBackdrop } from '../components/LoginVideoBackdrop';
+import { FadeSlideIn, useReducedMotion } from '../components/motion';
 import { GhostButton, PrimaryButton } from '../components/PrimaryButton';
 import { friendlyError } from '../lib/errors';
 import { auth } from '../lib/firebase';
@@ -56,8 +57,13 @@ export function LoginScreen({
     }
   };
 
+  const reduced = useReducedMotion();
+
   return (
     <Backdrop>
+      {/* The freedom loop — atmosphere only; static gradient under reduced
+          motion or while the first frame loads. */}
+      {!reduced ? <LoginVideoBackdrop /> : null}
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
