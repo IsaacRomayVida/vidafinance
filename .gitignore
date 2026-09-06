@@ -37,3 +37,6 @@ Instructions for Cursor/
 .venv/
 .venv_*/
 venv/
+
+# graphify machine-local graph output (rebuilt via `graphify update .`)
+graphify-out/
