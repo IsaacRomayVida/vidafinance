@@ -33,10 +33,17 @@ export type LookupEmployerByCodeResult =
   | { found: true; employerId: string; companyName: string };
 
 export const lookupEmployerByCode = onCall(
-  { cors: true, enforceAppCheck: true },
+  // enforceAppCheck deliberately OFF (was on): the mobile app cannot attest
+  // until Play Integrity is registered for mx.funpay.app (VID3-676), and this
+  // endpoint is anonymous-by-design with its own defenses — zod-bounded input,
+  // a fail-closed rate limit, and a two-field response. Re-enable once the
+  // mobile App Check story lands; the limiter below already keys on IP for
+  // unattested callers so enforcement can flip back without other changes.
+  { cors: true, enforceAppCheck: false },
   async (request: {
     data: unknown;
     app?: { appId?: string };
+    rawRequest?: { ip?: string };
   }): Promise<LookupEmployerByCodeResult> =>
     withErrorHandling({ functionName: 'lookupEmployerByCode' }, async () => {
       const parsed = LookupEmployerByCodeSchema.safeParse(request.data);
@@ -48,7 +55,10 @@ export const lookupEmployerByCode = onCall(
       // 10/min per App Check app id — enough for a user typing a code with
       // debounce, far too slow to sweep the code space. Fails CLOSED: "far too
       // slow to sweep" is only true while the limiter is answering.
-      const appCheckId = request.app?.appId ?? 'anon';
+      // Unattested callers (mobile, pre-App-Check) key on client IP instead of
+      // sharing one global 'anon' bucket, which would let any one caller
+      // exhaust the limit for everyone.
+      const appCheckId = request.app?.appId ?? request.rawRequest?.ip ?? 'anon';
       await enforceRateLimit(`rl:lookupEmployerByCode:${appCheckId}`, 10, 60, {
         onUnavailable: 'closed',
         message: 'Too many lookup attempts. Please wait.',
