@@ -32,12 +32,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # No npm cache: mobile/ has no committed package-lock.json yet (the
-      # scaffold predates a machine that can run npm install; the first local
-      # `npm install` should commit one, and then this gains cache + npm ci).
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Require EXPO_TOKEN
         env:
@@ -50,7 +49,7 @@ jobs:
           echo "EXPO_TOKEN present."
 
       - name: Install deps
-        run: cd mobile && npm install --no-audit --no-fund
+        run: cd mobile && npm ci --no-audit --no-fund
 
       # The same gates ci.yml runs — a build of code that doesn't typecheck
       # wastes an EAS build slot and 20 minutes.

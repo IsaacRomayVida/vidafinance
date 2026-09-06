@@ -27,15 +27,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # No npm cache: mobile/ has no committed package-lock.json yet. Once one
-      # is committed from a machine that ran `npm install`, switch this to
-      # `npm ci` with cache like every other job in this repo.
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Install deps
-        run: cd mobile && npm install --no-audit --no-fund
+        run: cd mobile && npm ci --no-audit --no-fund
 
       - name: Typecheck — hard gate
         run: cd mobile && npm run typecheck
