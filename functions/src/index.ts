@@ -205,13 +205,19 @@ export const api = onRequest({ cors: true }, async (req, res) => {
 // ── checkEmailAvailability — unauthenticated (used during registration) ──────
 
 export const checkEmailAvailability = onCall(
-  { cors: true, enforceAppCheck: true },
+  // enforceAppCheck deliberately OFF (was on): the mobile app cannot attest
+  // until Play Integrity is registered (VID3-676). Same reasoning and same
+  // re-enable path as lookupEmployerByCode.ts — the limiter keys on IP for
+  // unattested callers.
+  { cors: true, enforceAppCheck: false },
   async (request): Promise<{ available: boolean }> => {
     // Rate limit: 30 requests/min keyed on App Check token (unauth endpoint).
     // Fails CLOSED: this endpoint answers "does an account exist for this
     // address" to anyone, so the limit is the only thing between a caller and
-    // a bulk membership oracle over an email list.
-    const appCheckToken = (request as unknown as { app?: { appId?: string } }).app?.appId ?? 'anonymous';
+    // a bulk membership oracle over an email list. Unattested callers key on
+    // client IP rather than sharing one global bucket.
+    const req = request as unknown as { app?: { appId?: string }; rawRequest?: { ip?: string } };
+    const appCheckToken = req.app?.appId ?? req.rawRequest?.ip ?? 'anonymous';
     await enforceRateLimit(`rl:checkEmailAvailability:${appCheckToken}`, 30, 60, {
       onUnavailable: 'closed',
       context: 'checkEmailAvailability',
