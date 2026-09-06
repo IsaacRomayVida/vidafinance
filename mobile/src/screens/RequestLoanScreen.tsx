@@ -13,11 +13,12 @@ import {
 } from 'react-native';
 
 import { fetchLoanConfig, submitLoanRequest, type LoanConfig } from '../api/callables';
+import { FunpayMark } from '../components/FunpayLogo';
 import { useAuth } from '../hooks/useAuth';
 import { friendlyError } from '../lib/errors';
 import { auth, db } from '../lib/firebase';
 import { formatMxn, previewTotal } from '../lib/money';
-import { colors, spacing } from '../theme';
+import { colors, fonts, microLabel, radii, spacing } from '../theme';
 import type { RootStackParamList } from '../types';
 
 const MIN_AMOUNT = 500;
@@ -103,7 +104,7 @@ export function RequestLoanScreen({
   if (status === 'loading') {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator color={colors.brand} size="large" />
       </View>
     );
   }
@@ -122,9 +123,10 @@ export function RequestLoanScreen({
   if (successRef) {
     return (
       <View style={styles.center}>
+        <FunpayMark size={56} />
         <Text style={styles.successTitle}>{t('request.successTitle')}</Text>
         <Text style={styles.successBody}>{t('request.successBody', { ref: successRef })}</Text>
-        <Pressable style={styles.button} onPress={() => navigation.navigate('Loans')}>
+        <Pressable style={[styles.button, styles.buttonWide]} onPress={() => navigation.navigate('Loans')}>
           <Text style={styles.buttonText}>{t('loans.title')}</Text>
         </Pressable>
       </View>
@@ -148,14 +150,22 @@ export function RequestLoanScreen({
         {t('request.amountHelp', { min: formatMxn(MIN_AMOUNT), max: formatMxn(MAX_AMOUNT) })}
       </Text>
 
-      {feePercent !== null ? (
-        <Text style={styles.priceLine}>{t('request.feeLine', { feePercent })}</Text>
-      ) : null}
-      {total !== null ? (
-        <>
-          <Text style={styles.priceLine}>{t('request.totalLine', { total: formatMxn(total) })}</Text>
-          <Text style={styles.help}>{t('request.totalNote')}</Text>
-        </>
+      {/* Pricing summary in the soft-surface card idiom — the rate the
+          server approved, never one computed only client-side (#424). */}
+      {feePercent !== null || total !== null ? (
+        <View style={styles.summary}>
+          {feePercent !== null ? (
+            <Text style={styles.priceLine}>{t('request.feeLine', { feePercent })}</Text>
+          ) : null}
+          {total !== null ? (
+            <>
+              <Text style={styles.priceTotal}>
+                {t('request.totalLine', { total: formatMxn(total) })}
+              </Text>
+              <Text style={styles.help}>{t('request.totalNote')}</Text>
+            </>
+          ) : null}
+        </View>
       ) : null}
 
       <Text style={styles.terms}>{t('request.terms')}</Text>
@@ -169,7 +179,7 @@ export function RequestLoanScreen({
         testID="request-submit"
       >
         {submitting ? (
-          <ActivityIndicator color={colors.primaryText} />
+          <ActivityIndicator color={colors.onBrand} />
         ) : (
           <Text style={styles.buttonText}>{t('request.submit')}</Text>
         )}
@@ -181,29 +191,53 @@ export function RequestLoanScreen({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.l },
-  label: { fontSize: 14, color: colors.text, marginBottom: spacing.xs },
+  label: { ...microLabel, marginBottom: spacing.s },
+  // The amount is the screen's hero: big brand-weight numerals over the
+  // underline idiom, like the web form fields grown up for touch.
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: spacing.m,
-    fontSize: 22,
-    fontWeight: '700',
+    borderBottomWidth: 1.5,
+    borderBottomColor: colors.hairline,
+    paddingVertical: spacing.s,
+    fontFamily: fonts.sansBold,
+    fontSize: 36,
+    letterSpacing: -0.5,
     color: colors.text,
   },
-  help: { color: colors.subtle, fontSize: 13, marginTop: spacing.xs },
-  priceLine: { color: colors.text, fontSize: 16, marginTop: spacing.m },
-  terms: { color: colors.subtle, fontSize: 13, marginTop: spacing.l },
-  error: { color: colors.danger, marginTop: spacing.m, textAlign: 'center' },
+  help: { fontFamily: fonts.sans, color: colors.faint, fontSize: 13, marginTop: spacing.s, lineHeight: 19 },
+  summary: {
+    backgroundColor: colors.bg2,
+    borderRadius: radii.l,
+    padding: spacing.l,
+    marginTop: spacing.l,
+  },
+  priceLine: { fontFamily: fonts.sansMedium, color: colors.subtle, fontSize: 15 },
+  priceTotal: { fontFamily: fonts.sansBold, color: colors.text, fontSize: 17, marginTop: spacing.s },
+  terms: { fontFamily: fonts.sans, color: colors.faint, fontSize: 13, marginTop: spacing.l, lineHeight: 19 },
+  error: { fontFamily: fonts.sans, color: colors.danger, marginTop: spacing.m, textAlign: 'center' },
   button: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
+    backgroundColor: colors.brand,
+    borderRadius: radii.m,
     padding: spacing.m,
     alignItems: 'center',
     marginTop: spacing.l,
   },
+  buttonWide: { alignSelf: 'stretch' },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: colors.primaryText, fontSize: 16, fontWeight: '600' },
-  successTitle: { fontSize: 24, fontWeight: '700', color: colors.primary, marginBottom: spacing.m },
-  successBody: { fontSize: 15, color: colors.text, textAlign: 'center', marginBottom: spacing.l },
+  buttonText: { fontFamily: fonts.sansBold, color: colors.onBrand, fontSize: 16 },
+  successTitle: {
+    fontFamily: fonts.display,
+    fontSize: 30,
+    color: colors.brand,
+    marginTop: spacing.l,
+    marginBottom: spacing.m,
+    textAlign: 'center',
+  },
+  successBody: {
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    color: colors.subtle,
+    textAlign: 'center',
+    marginBottom: spacing.l,
+    lineHeight: 22,
+  },
 });

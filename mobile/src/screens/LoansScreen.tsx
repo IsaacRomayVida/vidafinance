@@ -16,7 +16,7 @@ import { useAuth } from '../hooks/useAuth';
 import { db } from '../lib/firebase';
 import { isPayableStatus, statusLabelKey } from '../lib/loanStatus';
 import { formatDate, formatMxn } from '../lib/money';
-import { colors, spacing } from '../theme';
+import { colors, fonts, radii, spacing } from '../theme';
 
 interface LoanDoc {
   id: string;
@@ -27,6 +27,28 @@ interface LoanDoc {
   total?: number;
   createdAt?: { seconds: number };
   loanRef?: string;
+}
+
+// Chip tint per status family — gold while money is in flight, aqua/teal
+// while a loan is live, quiet gray once settled, red when something needs
+// attention. Unknown statuses get the quiet gray: never alarming by default.
+function chipTint(status?: string): { bg: string; fg: string } {
+  switch (status) {
+    case 'active':
+    case 'disbursed':
+      return { bg: colors.aquaSoft, fg: colors.brand };
+    case 'pending':
+    case 'under_review':
+    case 'approved':
+    case 'disbursement_queued':
+      return { bg: colors.goldSoft, fg: colors.gold };
+    case 'overdue':
+    case 'in_collections':
+    case 'disbursement_failed':
+      return { bg: colors.dangerSoft, fg: colors.danger };
+    default:
+      return { bg: colors.bg2, fg: colors.subtle };
+  }
 }
 
 export function LoansScreen() {
@@ -74,7 +96,7 @@ export function LoansScreen() {
   if (status === 'loading') {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator color={colors.brand} size="large" />
       </View>
     );
   }
@@ -98,33 +120,38 @@ export function LoansScreen() {
       keyExtractor={(loan) => loan.id}
       ListEmptyComponent={<Text style={styles.empty}>{t('loans.empty')}</Text>}
       ListHeaderComponent={payError ? <Text style={styles.error}>{payError}</Text> : null}
-      renderItem={({ item }) => (
-        <View style={styles.card}>
-          <View style={styles.cardTop}>
-            <Text style={styles.amount}>{formatMxn(item.principalAmount ?? item.amount)}</Text>
-            <View style={styles.chip}>
-              <Text style={styles.chipText}>{t(statusLabelKey(item.status))}</Text>
+      renderItem={({ item }) => {
+        const tint = chipTint(item.status);
+        return (
+          <View style={styles.card}>
+            <View style={styles.cardTop}>
+              <Text style={styles.amount}>{formatMxn(item.principalAmount ?? item.amount)}</Text>
+              <View style={[styles.chip, { backgroundColor: tint.bg }]}>
+                <Text style={[styles.chipText, { color: tint.fg }]}>
+                  {t(statusLabelKey(item.status))}
+                </Text>
+              </View>
             </View>
+            <Text style={styles.meta}>
+              {t('loans.total')}: {formatMxn(item.totalRepaymentAmount ?? item.total)}
+            </Text>
+            <Text style={styles.meta}>
+              {t('loans.requested')}: {formatDate(item.createdAt)}
+            </Text>
+            {isPayableStatus(item.status) ? (
+              <Pressable
+                style={[styles.payButton, payingId === item.id && styles.payButtonDisabled]}
+                onPress={() => void pay(item.id)}
+                disabled={payingId !== null}
+              >
+                <Text style={styles.payButtonText}>
+                  {payingId === item.id ? t('loans.paying') : t('loans.pay')}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
-          <Text style={styles.meta}>
-            {t('loans.total')}: {formatMxn(item.totalRepaymentAmount ?? item.total)}
-          </Text>
-          <Text style={styles.meta}>
-            {t('loans.requested')}: {formatDate(item.createdAt)}
-          </Text>
-          {isPayableStatus(item.status) ? (
-            <Pressable
-              style={[styles.payButton, payingId === item.id && styles.payButtonDisabled]}
-              onPress={() => void pay(item.id)}
-              disabled={payingId !== null}
-            >
-              <Text style={styles.payButtonText}>
-                {payingId === item.id ? t('loans.paying') : t('loans.pay')}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      )}
+        );
+      }}
     />
   );
 }
@@ -132,27 +159,33 @@ export function LoansScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.l },
-  empty: { color: colors.subtle, textAlign: 'center', marginTop: spacing.xl },
+  empty: { fontFamily: fonts.sans, color: colors.faint, textAlign: 'center', marginTop: spacing.xl },
   card: {
+    backgroundColor: colors.bg,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: spacing.m,
+    borderColor: colors.hairline,
+    borderRadius: radii.l,
+    padding: spacing.l,
     marginBottom: spacing.m,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  amount: { fontSize: 22, fontWeight: '700', color: colors.text },
-  chip: { backgroundColor: colors.chipBg, borderRadius: 999, paddingHorizontal: spacing.m, paddingVertical: spacing.xs },
-  chipText: { color: colors.primary, fontSize: 12, fontWeight: '600' },
-  meta: { color: colors.subtle, fontSize: 14, marginTop: spacing.xs },
+  amount: { fontFamily: fonts.sansBold, fontSize: 24, color: colors.text, letterSpacing: -0.3 },
+  chip: { borderRadius: 999, paddingHorizontal: spacing.m, paddingVertical: 6 },
+  chipText: { fontFamily: fonts.sansBold, fontSize: 12 },
+  meta: { fontFamily: fonts.sans, color: colors.subtle, fontSize: 14, marginTop: spacing.xs },
   payButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
+    backgroundColor: colors.brand,
+    borderRadius: radii.m,
     padding: spacing.m,
     alignItems: 'center',
     marginTop: spacing.m,
   },
   payButtonDisabled: { opacity: 0.6 },
-  payButtonText: { color: colors.primaryText, fontSize: 15, fontWeight: '600' },
-  error: { color: colors.danger, marginBottom: spacing.m, textAlign: 'center' },
+  payButtonText: { fontFamily: fonts.sansBold, color: colors.onBrand, fontSize: 15 },
+  error: { fontFamily: fonts.sans, color: colors.danger, marginBottom: spacing.m, textAlign: 'center' },
 });
