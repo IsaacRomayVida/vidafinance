@@ -13,7 +13,7 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { Skeleton } from '../components/Skeleton';
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../lib/firebase';
-import { isPayableStatus, statusLabelKey } from '../lib/loanStatus';
+import { daysUntilDue, isPayableStatus, statusLabelKey } from '../lib/loanStatus';
 import { formatDate, formatMxn } from '../lib/money';
 import { colors, fonts, radii, spacing } from '../theme';
 
@@ -25,7 +25,16 @@ interface LoanDoc {
   totalRepaymentAmount?: number;
   total?: number;
   createdAt?: { seconds: number };
+  dueDate?: { seconds: number };
   loanRef?: string;
+}
+
+// Countdown look: calm aqua while far, gold as the date nears, red when due
+// or past — the same status vocabulary the chips already speak.
+function dueLook(days: number): { bg: string; fg: string } {
+  if (days > 7) return { bg: colors.aquaTint, fg: colors.brandLight };
+  if (days > 2) return { bg: colors.goldTint, fg: colors.gold };
+  return { bg: colors.dangerSoft, fg: colors.danger };
 }
 
 // Tint + icon per status family — gold while money is in flight, brand
@@ -168,6 +177,25 @@ export function LoansScreen() {
                       </Text>
                     </View>
                   </View>
+                  {(() => {
+                    const days = isPayableStatus(item.status) ? daysUntilDue(item.dueDate) : null;
+                    if (days === null) return null;
+                    const look = dueLook(days);
+                    const label =
+                      days > 1
+                        ? t('loans.dueIn', { days })
+                        : days === 1
+                          ? t('loans.dueTomorrow')
+                          : days === 0
+                            ? t('loans.dueToday')
+                            : t('loans.overdueDays', { days: Math.abs(days) });
+                    return (
+                      <View style={[styles.dueChip, { backgroundColor: look.bg }]}>
+                        <Ionicons name="time-outline" size={13} color={look.fg} />
+                        <Text style={[styles.dueText, { color: look.fg }]}>{label}</Text>
+                      </View>
+                    );
+                  })()}
                   {isPayableStatus(item.status) ? (
                     <PrimaryButton
                       label={payingId === item.id ? t('loans.paying') : t('loans.pay')}
@@ -228,6 +256,17 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   chip: { borderRadius: radii.pill, paddingHorizontal: spacing.m, paddingVertical: 6 },
+  dueChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.m,
+    paddingVertical: 5,
+    marginTop: spacing.m,
+  },
+  dueText: { fontFamily: fonts.sansBold, fontSize: 12.5, fontVariant: ['tabular-nums'] },
   chipText: { fontFamily: fonts.sansBold, fontSize: 12 },
   error: { fontFamily: fonts.sans, color: colors.danger, marginBottom: spacing.m, textAlign: 'center' },
 });

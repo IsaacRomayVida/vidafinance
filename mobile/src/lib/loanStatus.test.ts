@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  daysUntilDue,
   isPayableStatus,
   isRepaidStatus,
   LOAN_STATUS,
@@ -55,5 +56,19 @@ describe('statusLabelKey', () => {
     for (const status of Object.values(LOAN_STATUS)) {
       expect(statusLabelKey(status)).toBe(`loanStatus.${status}`);
     }
+  });
+});
+
+
+describe('daysUntilDue', () => {
+  const now = 1_700_000_000_000;
+  it('ceils partial days the way borrowers count', () => {
+    expect(daysUntilDue({ seconds: (now + 20 * 3600 * 1000) / 1000 }, now)).toBe(1);
+    expect(daysUntilDue({ seconds: (now + 5 * 86400000) / 1000 }, now)).toBe(5);
+  });
+  it('returns 0 today, negatives when overdue, null when absent', () => {
+    expect(daysUntilDue({ seconds: now / 1000 }, now)).toBe(0);
+    expect(daysUntilDue({ seconds: (now - 2 * 86400000) / 1000 }, now)).toBe(-2);
+    expect(daysUntilDue(undefined, now)).toBeNull();
   });
 });

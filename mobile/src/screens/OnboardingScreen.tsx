@@ -33,6 +33,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { checkEmailAvailability, lookupEmployerByCode } from '../api/callables';
 import { CountUpMxn } from '../components/CountUp';
 import { Field } from '../components/Field';
+import { GoldBurst } from '../components/GoldBurst';
 import { Backdrop, GlassCard } from '../components/Glass';
 import { KycWebView, type KycResult } from '../components/KycWebView';
 import { FadeSlideIn, PressableScale } from '../components/motion';
@@ -292,6 +293,7 @@ export function OnboardingScreen({
     return (
       <Backdrop>
         <View style={[styles.center, { paddingTop: insets.top }]}>
+          <GoldBurst />
           <FadeSlideIn>
             <GlassCard>
               <View style={styles.successInner}>

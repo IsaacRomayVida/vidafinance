@@ -22,9 +22,10 @@ export const colors = {
   bgTop: '#f7fbfa',
   bgBottom: '#e3f0ee',
   // Glass surfaces: translucent white over the lit ground.
-  glass: 'rgba(255,255,255,0.58)',
-  glassStrong: 'rgba(255,255,255,0.78)',
-  glassBorder: 'rgba(255,255,255,0.70)',
+  glass: 'rgba(255,255,255,0.48)',
+  glassStrong: 'rgba(255,255,255,0.72)',
+  glassBorder: 'rgba(255,255,255,0.65)',
+  glassHighlight: 'rgba(255,255,255,0.95)',
   hairline: 'rgba(25,68,69,0.10)',
   // Text scale (web: --t1 / --t2 / --t3)
   text: '#0c1e1f',
@@ -60,7 +61,9 @@ export const fonts = {
   sansBold: 'DMSans_700Bold',
 };
 
-export const radii = { s: 10, m: 14, l: 20, xl: 28, pill: 999 } as const;
+// Minimal rounding, per Isaac: cards are panes, not pebbles. Only pills stay
+// fully round.
+export const radii = { s: 4, m: 6, l: 10, xl: 12, pill: 999 } as const;
 
 export const spacing = { xs: 4, s: 8, m: 16, l: 24, xl: 32 } as const;
 

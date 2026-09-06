@@ -30,7 +30,7 @@ export function Backdrop({ children }: { children: React.ReactNode }) {
 export function GlassCard({
   children,
   style,
-  intensity = 28,
+  intensity = 40,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -39,7 +39,11 @@ export function GlassCard({
   return (
     <View style={[styles.cardShadow, style]}>
       <BlurView intensity={intensity} tint="light" style={styles.cardClip}>
-        <View style={styles.cardFill}>{children}</View>
+        <View style={styles.cardFill}>
+          {/* The pane's light-catching top edge — what sells glass over tint. */}
+          <View style={styles.topEdge} />
+          {children}
+        </View>
       </BlurView>
     </View>
   );
@@ -88,5 +92,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.l,
     borderWidth: 1,
     borderColor: colors.glassBorder,
+    overflow: 'hidden',
+  },
+  topEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: colors.glassHighlight,
   },
 });

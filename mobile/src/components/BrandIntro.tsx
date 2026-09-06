@@ -5,13 +5,37 @@
  * motion it collapses to a quick opacity-only fade so nobody is made to wait
  * on decoration.
  */
+import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 import { colors } from '../theme';
 import { FunpayMark, FunpayWordmark } from './FunpayLogo';
 import { Backdrop } from './Glass';
 import { useReducedMotion } from './motion';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const loop = require('../../assets/brand-loop.mp4');
+
+/** The papalote, full-bleed and washed, under the blooming mark. */
+function IntroVideo() {
+  const player = useVideoPlayer(loop, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <VideoView
+        player={player}
+        style={[StyleSheet.absoluteFill, { opacity: 0.65 }]}
+        contentFit="cover"
+        nativeControls={false}
+      />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(247,251,250,0.35)' }]} />
+    </View>
+  );
+}
 
 const bloom = Easing.bezier(0.23, 1, 0.32, 1);
 
@@ -46,7 +70,7 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
 
     Animated.sequence([
       show,
-      Animated.delay(reduced ? 120 : 420),
+      Animated.delay(reduced ? 120 : 900),
       Animated.timing(curtain, {
         toValue: 0,
         duration: reduced ? 160 : 300,
@@ -64,6 +88,7 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
   return (
     <Animated.View style={[StyleSheet.absoluteFill, styles.layer, { opacity: curtain }]} pointerEvents="none">
       <Backdrop>
+        {!reduced ? <IntroVideo /> : null}
         <Animated.View
           style={[
             styles.center,
