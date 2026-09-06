@@ -13,9 +13,18 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const KEY = readFileSync(join(homedir(), '.fal', 'key'), 'utf8').trim();
+// Key sources, in order: FAL_KEY env (CI uses the FAL_AI repo secret), then
+// ~/.fal/key for local runs. Never argv, never the repo.
+let KEY = (process.env.FAL_KEY || '').trim();
+if (!KEY) {
+  try {
+    KEY = readFileSync(join(homedir(), '.fal', 'key'), 'utf8').trim();
+  } catch {
+    KEY = '';
+  }
+}
 if (!KEY || KEY.includes('PASTE_YOUR')) {
-  console.error('No real fal.ai key in ~/.fal/key');
+  console.error('No fal.ai key: set FAL_KEY or put the key in ~/.fal/key');
   process.exit(1);
 }
 
