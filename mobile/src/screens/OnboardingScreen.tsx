@@ -123,16 +123,21 @@ export function OnboardingScreen({
   }, [setHold]);
 
   // Employer-code lookup: 500ms debounce, skipped below 4 chars, any throw
-  // reads as not-found (same collapse the web makes).
+  // reads as not-found (same collapse the web makes). The `stale` flag kills
+  // responses that arrive after the input changed — without it, a slow
+  // "not found" for a prefix (FUNQA) can land after and overwrite the real
+  // answer for the full code (FUNQA1).
   useEffect(() => {
     if (code.length < 4) {
       setCodeStatus('idle');
       return;
     }
+    let stale = false;
     setCodeStatus('searching');
     const timer = setTimeout(() => {
       lookupEmployerByCode(code)
         .then((result) => {
+          if (stale) return;
           if (result.found && result.employerId) {
             setEmployerId(result.employerId);
             setEmployerName(result.companyName ?? '');
@@ -141,9 +146,14 @@ export function OnboardingScreen({
             setCodeStatus('not_found');
           }
         })
-        .catch(() => setCodeStatus('not_found'));
+        .catch(() => {
+          if (!stale) setCodeStatus('not_found');
+        });
     }, 500);
-    return () => clearTimeout(timer);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
   }, [code]);
 
   // Email availability: 800ms debounce, only for well-formed emails,
