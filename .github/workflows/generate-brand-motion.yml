@@ -1,0 +1,43 @@
+name: Generate brand motion (fal.ai)
+
+# On-demand: generates the Seedance ambient brand loop with the FAL_AI repo
+# secret and uploads it as an artifact for review — nothing is committed.
+# See mobile/scripts/generate-brand-motion.mjs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Override the default brand prompt"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Generate
+        env:
+          FAL_KEY: ${{ secrets.FAL_AI }}
+        run: |
+          if [ -n "${{ github.event.inputs.prompt }}" ]; then
+            node mobile/scripts/generate-brand-motion.mjs --prompt "${{ github.event.inputs.prompt }}"
+          else
+            node mobile/scripts/generate-brand-motion.mjs
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brand-loop
+          path: mobile/assets/brand-loop.mp4
+          retention-days: 7
