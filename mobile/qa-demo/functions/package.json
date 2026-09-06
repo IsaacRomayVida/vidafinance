@@ -1,0 +1,11 @@
+{
+  "name": "funpay-qa-demo-functions",
+  "private": true,
+  "description": "Stub callables for the mobile QA demo — fixtures only, no payment rails, runs exclusively in the local Functions emulator under the demo-funpay project.",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1"
+  }
+}

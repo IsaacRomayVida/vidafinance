@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// QA-demo rules: the same ACCESS SHAPE the app exercises in production
+// (a borrower reads their own employee doc and their own loans; all writes
+// go through callables), without production's full rule set — this file
+// guards fixture data in a local emulator, nothing more. The production
+// rules at the repo root remain the security boundary that matters.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /employees/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /loans/{loanId} {
+      allow read: if request.auth != null && resource.data.employeeId == request.auth.uid;
+      allow write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
