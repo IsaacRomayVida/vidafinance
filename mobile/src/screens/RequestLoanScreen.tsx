@@ -18,6 +18,7 @@ import { fetchLoanConfig, submitLoanRequest, type LoanConfig } from '../api/call
 import { FunpayMark } from '../components/FunpayLogo';
 import { Backdrop, GlassCard } from '../components/Glass';
 import { GlassHeader } from '../components/GlassHeader';
+import { GoldBurst } from '../components/GoldBurst';
 import { FadeSlideIn, PressableScale } from '../components/motion';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { useAuth } from '../hooks/useAuth';
@@ -134,6 +135,7 @@ export function RequestLoanScreen({
     return (
       <Backdrop>
         <View style={styles.center}>
+          <GoldBurst />
           <FadeSlideIn>
           <GlassCard>
             <View style={styles.successInner}>

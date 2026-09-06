@@ -17,6 +17,7 @@
  */
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -30,7 +31,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { checkEmailAvailability, lookupEmployerByCode } from '../api/callables';
+import { CountUpMxn } from '../components/CountUp';
 import { Field } from '../components/Field';
+import { GoldBurst } from '../components/GoldBurst';
 import { Backdrop, GlassCard } from '../components/Glass';
 import { KycWebView, type KycResult } from '../components/KycWebView';
 import { FadeSlideIn, PressableScale } from '../components/motion';
@@ -121,16 +124,21 @@ export function OnboardingScreen({
   }, [setHold]);
 
   // Employer-code lookup: 500ms debounce, skipped below 4 chars, any throw
-  // reads as not-found (same collapse the web makes).
+  // reads as not-found (same collapse the web makes). The `stale` flag kills
+  // responses that arrive after the input changed — without it, a slow
+  // "not found" for a prefix (FUNQA) can land after and overwrite the real
+  // answer for the full code (FUNQA1).
   useEffect(() => {
     if (code.length < 4) {
       setCodeStatus('idle');
       return;
     }
+    let stale = false;
     setCodeStatus('searching');
     const timer = setTimeout(() => {
       lookupEmployerByCode(code)
         .then((result) => {
+          if (stale) return;
           if (result.found && result.employerId) {
             setEmployerId(result.employerId);
             setEmployerName(result.companyName ?? '');
@@ -139,9 +147,14 @@ export function OnboardingScreen({
             setCodeStatus('not_found');
           }
         })
-        .catch(() => setCodeStatus('not_found'));
+        .catch(() => {
+          if (!stale) setCodeStatus('not_found');
+        });
     }, 500);
-    return () => clearTimeout(timer);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
   }, [code]);
 
   // Email availability: 800ms debounce, only for well-formed emails,
@@ -259,8 +272,10 @@ export function OnboardingScreen({
         metamapVerificationId: kycIds.verificationId,
         metamapIdentityId: kycIds.identityId,
       });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setDone(true);
     } catch (err) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       setError(friendlyError(err));
     } finally {
       setCreating(false);
@@ -278,6 +293,7 @@ export function OnboardingScreen({
     return (
       <Backdrop>
         <View style={[styles.center, { paddingTop: insets.top }]}>
+          <GoldBurst />
           <FadeSlideIn>
             <GlassCard>
               <View style={styles.successInner}>
@@ -285,7 +301,7 @@ export function OnboardingScreen({
                   <Text style={styles.successBadgeText}>{t('onboarding.stepDone.badge')}</Text>
                 </View>
                 <Text style={styles.successTitle}>{t('onboarding.stepDone.title')}</Text>
-                <Text style={styles.successAmount}>{formatMxn(preview)}</Text>
+                <CountUpMxn value={preview} style={styles.successAmount} duration={900} />
                 <Text style={styles.subtitleCenter}>{t('onboarding.stepDone.subtitle')}</Text>
                 <PrimaryButton
                   label={t('onboarding.stepDone.cta')}
@@ -524,7 +540,7 @@ export function OnboardingScreen({
                     <View style={styles.previewInner}>
                       <View style={{ flex: 1 }}>
                         <Text style={microLabel}>{t('onboarding.stepWork.previewLabel')}</Text>
-                        <Text style={styles.previewAmount}>{formatMxn(preview)}</Text>
+                        <CountUpMxn value={preview} style={styles.previewAmount} />
                         <Text style={styles.trustText}>{t('onboarding.stepWork.previewNote')}</Text>
                       </View>
                       <View style={styles.previewBadge}>
@@ -629,7 +645,11 @@ export function OnboardingScreen({
             }
             onPress={() => {
               if (step === 4) void submit();
-              else setStep((s) => s + 1);
+              else {
+                // impact, not selection — selectionAsync is near-silent on Android
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                setStep((s) => s + 1);
+              }
             }}
             disabled={!canProceed}
             busy={creating}
