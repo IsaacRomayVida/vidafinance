@@ -24,18 +24,29 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp } from 'firebase/app';
 import * as firebaseAuth from 'firebase/auth';
-import { initializeAuth, type Persistence } from 'firebase/auth';
-import { initializeFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
+import {
+  browserLocalPersistence,
+  connectAuthEmulator,
+  initializeAuth,
+  type Persistence,
+} from 'firebase/auth';
+import { connectFirestoreEmulator, initializeFirestore } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 
 // firebase's React Native entry (what Metro resolves at runtime) exports
 // getReactNativePersistence, but the package's Node-facing type declarations
 // — what tsc resolves — do not. Cast to the one narrow shape we use instead
-// of suppressing the import: if the runtime export ever disappears, auth
-// init throws on the first app start, loudly, not silently.
+// of suppressing the import. On the web target Metro resolves firebase's
+// browser build, where the export genuinely doesn't exist — there the right
+// persistence is the browser's own localStorage-backed one, so fall back
+// instead of crashing at module init.
 const { getReactNativePersistence } = firebaseAuth as unknown as {
-  getReactNativePersistence: (storage: unknown) => Persistence;
+  getReactNativePersistence?: (storage: unknown) => Persistence;
 };
+const persistence: Persistence =
+  typeof getReactNativePersistence === 'function'
+    ? getReactNativePersistence(AsyncStorage)
+    : browserLocalPersistence;
 
 const firebaseConfig = {
   apiKey: 'AIzaSyD5FFDHe2mAtqfBBw6vz4-V2WflvTxCTEw',
@@ -46,14 +57,28 @@ const firebaseConfig = {
   appId: '1:447766605132:web:7d747366eb91b2452cb3e9',
 };
 
-const app = initializeApp(firebaseConfig);
+// QA demo mode: EXPO_PUBLIC_USE_FIREBASE_EMULATORS=1 points every SDK at the
+// local Firebase emulator suite (see ../../qa-demo/) and swaps the project id
+// into the offline `demo-` namespace, so a demo build cannot reach production
+// even by accident. The flag is inlined at bundle time by Expo; store builds
+// never set it.
+const useEmulators = process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATORS === '1';
+const emulatorHost = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
 
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
+const app = initializeApp(
+  useEmulators ? { ...firebaseConfig, projectId: 'demo-funpay' } : firebaseConfig
+);
+
+export const auth = initializeAuth(app, { persistence });
 
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
 });
 
 export const functions = getFunctions(app);
+
+if (useEmulators) {
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(db, emulatorHost, 8080);
+  connectFunctionsEmulator(functions, emulatorHost, 5001);
+}
