@@ -106,6 +106,14 @@ jobs:
       - name: The production health + Railway reconcile decisions are still correct — hard gate
         run: node --test scripts/check-production-health.test.mjs scripts/check-railway-live.test.mjs
 
+      # The recovery planner's never-touch-a-running-service rule is its
+      # entire safety case (recover-production-services.yml redeploys real
+      # money services when — and only when — Railway reports them fully
+      # down), so a PR that breaks the guard must go red here, before the
+      # repairer ever runs with it.
+      - name: The recovery planner's guard rails still hold — hard gate
+        run: node --test scripts/recover-production-services.test.mjs
+
       - name: Install root deps (includes ESLint)
         run: npm ci
 
@@ -547,7 +555,7 @@ jobs:
           REDIS_URL: redis://localhost:6379
         run: firebase emulators:exec --only firestore --config firebase.e2e.json --project demo-vida-finance-test "npm run test:e2e:loan-flow"
 
-  # ─────────────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────────
   # Addresses #376: deploy.yml's deploy-firebase job carries
   # `if: github.event_name == 'push'`, so it never runs on PR CI — a PR
   # can go fully green and still be undeployable. This job runs on every
@@ -580,7 +588,7 @@ jobs:
   # does NOT retroactively flag onContactCreated, whose change is already
   # in the base revision; that one still needs an operator
   # delete-then-recreate.
-  # ─────────────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────────
   deploy-readiness:
     name: "Deploy Readiness Check (build + export drift, no credentials) — #376"
     runs-on: ubuntu-latest
