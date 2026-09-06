@@ -19,10 +19,12 @@
  *      The canonical URLs live in scripts/production-endpoints.json, the
  *      single source of truth (SERVICES.md's table had already diverged from
  *      the uptime runbook's before this file existed).
- *   2. SECRET DRIFT — do the `*_URL` repo secrets (what the deployed Cloud
- *      Functions are actually configured with) agree with canonical? A secret
- *      pointing at a dead domain fails this check even when the canonical
- *      domain is healthy, because the FUNCTIONS call the secret's URL.
+ *   2. SECRET DRIFT — do the leftover `*_URL` repo secrets agree with
+ *      canonical? Informational only since deploy.yml started writing these
+ *      URLs from this file directly (2026-09-04): a drifted secret feeds
+ *      nothing, so it is reported for cleanup, never failed on.
+ *      REGISTRY_SERVICE_URL is the exception — deploy.yml still reads it, so
+ *      its probe gates.
  *   3. HOSTING — does the public site serve the app shell (`id="root"`), not
  *      just any 200? An empty 200 is "hosting is up but our app isn't".
  *
@@ -91,7 +93,7 @@ export function classifySecret(canonicalUrl, secretUrl) {
   if (norm(secretUrl) === norm(canonicalUrl)) return { status: 'match', reason: 'matches canonical' };
   return {
     status: 'drift',
-    reason: `secret points at ${norm(secretUrl)}, canonical is ${norm(canonicalUrl)} — the deployed Functions use the SECRET`,
+    reason: `secret points at ${norm(secretUrl)}, canonical is ${norm(canonicalUrl)}`,
   };
 }
 
@@ -147,18 +149,21 @@ async function main() {
     const canonical = classifyHealth(await probe(`${canonicalUrl}/health`));
     rows.push({ name: `canonical:${name}`, fail: canonical.status !== 'ok', reason: canonical.reason });
 
+    // Since deploy.yml switched to writing these URLs from THIS file (the
+    // 2026-09-04 recovery), the `*_URL` GitHub secrets feed nothing — so a
+    // stale one is stale-config noise to clean up, never an outage. These
+    // rows are informational: they never fail the check, they just keep the
+    // leftover secrets visible until someone deletes them.
     const secretName = endpoints.secretNames[name];
     const secret = classifySecret(canonicalUrl, process.env[secretName]);
-    if (secret.status === 'drift') {
-      const probed = classifyHealth(await probe(`${process.env[secretName].replace(/\/+$/, '')}/health`));
-      rows.push({
-        name: `secret:${secretName}`,
-        fail: probed.status !== 'ok',
-        reason: `${secret.reason}; probing the secret's URL: ${probed.reason}`,
-      });
-    } else {
-      rows.push({ name: `secret:${secretName}`, fail: false, reason: secret.reason });
-    }
+    rows.push({
+      name: `secret:${secretName}`,
+      fail: false,
+      reason:
+        secret.status === 'drift'
+          ? `${secret.reason} — informational only: deploy.yml no longer reads this secret; update or delete it`
+          : secret.reason,
+    });
   }
 
   // registry-service: no canonical URL in-tree (see production-endpoints.json
