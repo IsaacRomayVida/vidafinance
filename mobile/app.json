@@ -26,7 +26,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#194445"
-      }
+      },
+      "allowBackup": false
     },
     "ios": {
       "bundleIdentifier": "mx.funpay.app",
@@ -35,6 +36,8 @@
         "NSPhotoLibraryUsageDescription": "FunPay usa tu galería para subir tu identificación durante la verificación."
       }
     },
-    "plugins": ["react-native-metamap-sdk/plugin/build/index.js"]
+    "plugins": [
+      "react-native-metamap-sdk/plugin/build/index.js"
+    ]
   }
 }
