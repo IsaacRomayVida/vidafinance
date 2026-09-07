@@ -19,6 +19,10 @@ on:
         description: "Override the default brand prompt"
         required: false
         type: string
+      extra_args:
+        description: "Extra script flags (e.g. --pro --duration 10 --resolution 1080p)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -43,9 +47,9 @@ jobs:
             SCRIPT="mobile/scripts/generate-brand-splash.mjs"
           fi
           if [ -n "${{ github.event.inputs.prompt }}" ]; then
-            node "$SCRIPT" --prompt "${{ github.event.inputs.prompt }}"
+            node "$SCRIPT" --prompt "${{ github.event.inputs.prompt }}" ${{ github.event.inputs.extra_args }}
           else
-            node "$SCRIPT"
+            node "$SCRIPT" ${{ github.event.inputs.extra_args }}
           fi
 
       - uses: actions/upload-artifact@v4
