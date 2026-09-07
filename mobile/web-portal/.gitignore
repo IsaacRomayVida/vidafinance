@@ -1,1 +1,7 @@
+# build outputs copied in by deploy-team-portal.yml
 public/app/
+public/web/
+public/images/
+public/video/
+public/favicon.svg
+public/icons.svg

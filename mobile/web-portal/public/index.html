@@ -71,10 +71,10 @@
 </head>
 <body>
 <header><div class="mark"><i></i><i></i><i></i><b></b></div><h1>FunPay · Portal de equipo</h1></header>
-<p class="sub">La app como se ve en cada tamaño — entorno de prueba interno</p>
+<p class="sub">La app móvil y el sitio web, tal como los ve un usuario — entorno de prueba interno</p>
 
 <div class="toggle" role="tablist" aria-label="Tamaño">
-  <button id="t-phone" role="tab" aria-selected="true">Teléfono</button>
+  <button id="t-phone" role="tab" aria-selected="true">App (teléfono)</button>
   <button id="t-mobile" role="tab" aria-selected="false">Web móvil</button>
   <button id="t-desktop" role="tab" aria-selected="false">Web escritorio</button>
 </div>
@@ -110,13 +110,14 @@
   document.getElementById('ver').textContent = 'portal ' + VERSION;
 
   /* ---- Frame toggle -------------------------------------------------
-     One React Native app, shown at three widths. Each iframe's src is set
-     only on first selection: loading all three up front would run the app
-     three times against production, tripling every event a reviewer makes. */
+     Phone = the React Native app's web export (/app/). Web móvil and Web
+     escritorio = the real website (public-v2, served same-origin at /web/)
+     at phone and desktop widths. Each iframe's src is set only on first
+     selection so a reviewer never runs three copies against production. */
   var frames = {
     phone:   { box: document.getElementById('frame-phone'),   frame: document.getElementById('app-phone'),   btn: document.getElementById('t-phone'),   src: '/app/' },
-    mobile:  { box: document.getElementById('frame-mobile'),  frame: document.getElementById('app-mobile'),  btn: document.getElementById('t-mobile'),  src: '/app/?ui=web' },
-    desktop: { box: document.getElementById('frame-desktop'), frame: document.getElementById('app-desktop'), btn: document.getElementById('t-desktop'), src: '/app/?ui=web' }
+    mobile:  { box: document.getElementById('frame-mobile'),  frame: document.getElementById('app-mobile'),  btn: document.getElementById('t-mobile'),  src: '/web/' },
+    desktop: { box: document.getElementById('frame-desktop'), frame: document.getElementById('app-desktop'), btn: document.getElementById('t-desktop'), src: '/web/' }
   };
   var current = 'phone';
   function show(which) {
@@ -137,9 +138,17 @@
      an oversized value fail the WHOLE write — truncate here. */
   function screenName() {
     try {
-      var d = frames[current].frame.contentDocument;
-      var t = ((d && d.title) || '').replace(/\s*\|\s*FunPay\s*$/i, '').trim();
-      return (t || 'desconocida').slice(0, 120);
+      var f = frames[current].frame;
+      var d = f.contentDocument;
+      var t = ((d && d.title) || '').replace(/\s*[|\u2014\-]\s*Fun[Pp]ay\s*$/i, '').replace(/^Fun[Pp]ay\s*[|\u2014\-:]\s*/i, '').trim();
+      // The website titles most pages just "Funpay": fall back to its route
+      // so a report still says WHERE it was filed.
+      if (!t || /^fun\s?pay$/i.test(t)) {
+        var path = (f.contentWindow && f.contentWindow.location.pathname) || '';
+        path = path.replace(/^\/(app|web)\/?/, '/');
+        t = (current === 'phone' ? 'App' : 'Web') + ' ' + (path === '/' ? '/inicio' : path);
+      }
+      return t.slice(0, 120);
     } catch (e) { return 'desconocida'; }
   }
 
