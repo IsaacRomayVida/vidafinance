@@ -43,6 +43,14 @@ on:
         required: false
         default: "alfa.funpay.mx"
         type: string
+      web_launch_mode:
+        description: "Website build: live (full marketing site) or coming-soon"
+        required: false
+        default: "live"
+        type: choice
+        options:
+          - live
+          - coming-soon
 
 permissions:
   contents: read
@@ -60,7 +68,9 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: mobile/package-lock.json
+          cache-dependency-path: |
+            mobile/package-lock.json
+            public-v2/package-lock.json
 
       - name: Auth
         env:
@@ -88,6 +98,29 @@ jobs:
           if grep -q "__PORTAL_VERSION__" web-portal/public/index.html; then
             echo "::error::__PORTAL_VERSION__ survived substitution"; exit 1
           fi
+
+      - name: Build website (public-v2) for /web/
+        if: ${{ github.event.inputs.mode == 'deploy' }}
+        env:
+          # Sub-path build; production deploys never set this and stay at '/'.
+          VITE_BASE_PATH: /web/
+          VITE_LAUNCH_MODE: ${{ github.event.inputs.web_launch_mode || 'live' }}
+          VITE_APP_VERSION: ${{ github.sha }}
+          # No reCAPTCHA key on purpose: the Enterprise key is bound to the
+          # production domains, and a failing verifier is noisier than none.
+        run: |
+          cd public-v2
+          npm ci --legacy-peer-deps --no-audit --no-fund
+          npm run build
+          cd ..
+          rm -rf mobile/web-portal/public/web
+          cp -r public-v2/dist mobile/web-portal/public/web
+          # The site references /images, /video and the favicon by absolute
+          # path in code; serve those from the portal root too.
+          for p in images video favicon.svg icons.svg; do
+            [ -e "public-v2/dist/$p" ] && cp -r "public-v2/dist/$p" "mobile/web-portal/public/$p"
+          done
+          grep -q '/web/assets/' mobile/web-portal/public/web/index.html || { echo "::error::web build is not base-pathed"; exit 1; }
 
       - name: Deploy hosting
         if: ${{ github.event.inputs.mode == 'deploy' }}
@@ -129,6 +162,7 @@ jobs:
             echo "| Mode | \`${{ github.event.inputs.mode }}\` |"
             echo "| Domain | \`${{ github.event.inputs.domain }}\` |"
             echo "| Direct | https://funpay-alfa.web.app |"
+            echo "| Website frame | https://alfa.funpay.mx/web/ (\`${{ github.event.inputs.web_launch_mode }}\`) |"
             if [ -f /tmp/domain.log ]; then
               echo ""
               echo '```'
