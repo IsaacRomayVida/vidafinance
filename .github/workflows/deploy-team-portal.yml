@@ -1,0 +1,81 @@
+name: Deploy team portal (funpay-app hosting)
+
+# Builds the mobile app's web export from the given ref, wraps it in the
+# phone-frame portal, and deploys to the funpay-app Firebase Hosting site
+# with the production service account. mode=domain additionally registers
+# the alfa.funtrip.mx custom domain and prints the DNS records to create
+# in Cloudflare (funtrip.mx zone, managed from the vidatravel repo).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch to build the app from"
+        required: true
+        default: "mobile-motion-pass"
+        type: string
+      mode:
+        description: "deploy | domain"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - domain
+
+permissions:
+  contents: read
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Auth
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}
+        run: printf '%s' "$SA" > /tmp/sa.json
+
+      - name: Ensure hosting site exists
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: |
+          npx firebase-tools hosting:sites:create funpay-app --project vida-finance 2>&1 | tee /tmp/site.log || true
+          grep -qiE "already exists|created" /tmp/site.log
+
+      - name: Build app web export
+        run: |
+          cd mobile
+          npm ci --no-audit --no-fund
+          npx expo export --platform web
+          rm -rf web-portal/public/app
+          cp -r dist web-portal/public/app
+
+      - name: Deploy hosting
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: |
+          cd mobile/web-portal
+          npx firebase-tools deploy --only hosting:funpay-app --project vida-finance --non-interactive
+
+      - name: Register custom domain
+        if: ${{ github.event.inputs.mode == 'domain' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: |
+          npm install --no-save google-auth-library
+          node scripts/register-portal-domain.mjs
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/sa.json
