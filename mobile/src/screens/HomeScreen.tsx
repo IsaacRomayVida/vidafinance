@@ -147,7 +147,7 @@ export function HomeScreen({
                 style={styles.track}
                 accessibilityLabel={`${Math.round(usedRatio * 100)}% utilizado`}
               >
-                <TrackFill ratio={Math.max(usedRatio, 0.02)} color={colors.gold} height={4} />
+                <TrackFill ratio={usedRatio} color={colors.gold} height={4} />
               </View>
             ) : null}
             <View style={styles.cardBottomRow}>
@@ -169,13 +169,11 @@ export function HomeScreen({
                 <View style={styles.noticeBody}>
                   <Text style={styles.noticeTitle}>{t('home.notVerifiedTitle')}</Text>
                   <Text style={styles.notice}>{t('home.notVerified')}</Text>
-                  <Pressable
+                  <PrimaryButton
+                    label={t('home.notVerifiedCta')}
                     onPress={() => void Linking.openURL('https://funpay.mx')}
-                    accessibilityRole="link"
-                    hitSlop={8}
-                  >
-                    <Text style={styles.noticeLink}>{t('home.notVerifiedCta')}</Text>
-                  </Pressable>
+                    style={{ marginTop: spacing.m, alignSelf: 'flex-start' }}
+                  />
                 </View>
               </View>
             </GlassCard>
@@ -244,7 +242,8 @@ const styles = StyleSheet.create({
     fontSize: type.display,
     color: colors.text,
     marginBottom: spacing.l,
-    letterSpacing: -0.3,
+    // optical tracking: large serif wants ~-0.02em (Apple type rule)
+    letterSpacing: -0.64,
   },
   card: {
     borderRadius: radii.xl,

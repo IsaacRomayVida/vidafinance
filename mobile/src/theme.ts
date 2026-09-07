@@ -22,10 +22,14 @@ export const colors = {
   bgTop: '#f7fbfa',
   bgBottom: '#e3f0ee',
   // Glass surfaces: translucent white over the lit ground.
-  glass: 'rgba(255,255,255,0.48)',
-  glassStrong: 'rgba(255,255,255,0.72)',
+  // Glass reads as glass when the FILL is thin and the frost does the work
+  // (glassmorphism rule: ~0.1-0.2 alpha panels; inputs stay near-opaque for
+  // contrast — never stack two light translucents).
+  glass: 'rgba(255,255,255,0.30)',
+  glassStrong: 'rgba(255,255,255,0.82)',
   glassBorder: 'rgba(255,255,255,0.65)',
   glassHighlight: 'rgba(255,255,255,0.95)',
+  glassShade: 'rgba(12,30,31,0.10)',
   hairline: 'rgba(25,68,69,0.10)',
   // Text scale (web: --t1 / --t2 / --t3)
   text: '#0c1e1f',
@@ -98,5 +102,6 @@ export const microLabel = {
   fontSize: 11,
   letterSpacing: 1.8,
   textTransform: 'uppercase' as const,
-  color: colors.faint,
+  // subtle, not faint: vibrancy rule — no low-contrast gray text on glass.
+  color: colors.subtle,
 };

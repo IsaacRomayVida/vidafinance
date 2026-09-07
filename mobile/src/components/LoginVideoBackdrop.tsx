@@ -8,6 +8,7 @@
  * renders the view is transparent, so the Backdrop gradient is the natural
  * fallback and there is never a black flash.
  */
+import { LinearGradient } from 'expo-linear-gradient';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -31,13 +32,18 @@ export function LoginVideoBackdrop() {
         contentFit="cover"
         nativeControls={false}
       />
-      {/* Wash of the app's own ground so text and glass keep their contrast. */}
-      <View style={[StyleSheet.absoluteFill, styles.wash]} />
+      {/* Bottom-weighted scrim: clear where the sky is calm, heavy where the
+          kite gets loud — contrast defense against the backdrop's brightest
+          and busiest region. */}
+      <LinearGradient
+        colors={['rgba(247,251,250,0.15)', 'rgba(247,251,250,0.45)', 'rgba(247,251,250,0.88)']}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFill}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  video: { opacity: 0.55 },
-  wash: { backgroundColor: 'rgba(247,251,250,0.45)' },
+  video: { opacity: 0.6 },
 });

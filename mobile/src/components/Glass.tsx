@@ -14,8 +14,8 @@
  */
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 import { colors, radii } from '../theme';
@@ -50,7 +50,25 @@ export function Backdrop({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** A frosted card: blurred backdrop, translucent fill, bright edge. */
+/** iOS "reduce transparency": glass collapses to a solid pane. */
+function useReducedTransparency(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceTransparencyEnabled?.()
+      .then((v) => mounted && setReduced(!!v))
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.('reduceTransparencyChanged', setReduced);
+    return () => {
+      mounted = false;
+      sub?.remove?.();
+    };
+  }, []);
+  return reduced;
+}
+
+/** A frosted card: blurred backdrop, translucent fill, lit top edge, shaded
+ * bottom edge. */
 export function GlassCard({
   children,
   style,
@@ -60,12 +78,15 @@ export function GlassCard({
   style?: StyleProp<ViewStyle>;
   intensity?: number;
 }) {
+  const solid = useReducedTransparency();
   return (
     <View style={[styles.cardShadow, style]}>
-      <BlurView intensity={intensity} tint="light" style={styles.cardClip}>
-        <View style={styles.cardFill}>
-          {/* The pane's light-catching top edge — what sells glass over tint. */}
+      <BlurView intensity={solid ? 0 : intensity} tint="light" style={styles.cardClip}>
+        <View style={[styles.cardFill, solid && styles.cardSolid]}>
+          {/* The pane's light-catching top edge and shaded lower edge — the
+              pair that sells glass over tint. */}
           <View style={styles.topEdge} />
+          <View style={styles.bottomEdge} />
           {children}
         </View>
       </BlurView>
@@ -91,6 +112,7 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
     overflow: 'hidden',
   },
+  cardSolid: { backgroundColor: colors.bg2 },
   topEdge: {
     position: 'absolute',
     top: 0,
@@ -98,5 +120,13 @@ const styles = StyleSheet.create({
     right: 0,
     height: 1,
     backgroundColor: colors.glassHighlight,
+  },
+  bottomEdge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: colors.glassShade,
   },
 });
