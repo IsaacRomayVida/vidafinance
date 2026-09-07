@@ -1663,3 +1663,87 @@ describe('employee cannot self-assign the identity verdict', () => {
     });
   });
 });
+
+describe('qa_feedback — the one anonymous-write collection (team portal)', () => {
+  // Contexts are hoisted and reused: re-creating a context with the same
+  // identity mid-run re-applies settings to the started Firestore app and
+  // throws "Firestore has already been started".
+  let anonDb: ReturnType<ReturnType<RulesTestEnvironment['unauthenticatedContext']>['firestore']>;
+  let userDb: ReturnType<ReturnType<RulesTestEnvironment['authenticatedContext']>['firestore']>;
+  let opsDb: ReturnType<ReturnType<RulesTestEnvironment['authenticatedContext']>['firestore']>;
+
+  /** Exactly what the portal's Feedback button sends. */
+  const validDoc = (over: Record<string, unknown> = {}) => ({
+    screen: 'Solicitar préstamo',
+    comment: 'El botón de continuar queda tapado por el teclado en Android.',
+    name: 'Ana (equipo)',
+    ua: 'Mozilla/5.0 (Linux; Android 14; SM-A356E)',
+    createdAt: new Date(),
+    ...over,
+  });
+
+  beforeAll(() => {
+    anonDb = testEnv.unauthenticatedContext().firestore();
+    userDb = testEnv.authenticatedContext('qa-fb-user', { role: 'employee' }).firestore();
+    opsDb = testEnv.authenticatedContext('qa-fb-ops', { role: 'ops' }).firestore();
+  });
+
+  beforeEach(async () => {
+    // Seeded through the rules themselves: anonymous create is exactly what
+    // the portal does, so the fixture is the real path, and the admin-bypass
+    // helper cannot be re-entered once a context's Firestore has started.
+    await setDoc(doc(anonDb, 'qa_feedback/f1'), validDoc());
+  });
+
+  it('an anonymous reviewer can file feedback; empty name/ua are fine', async () => {
+    await assertSucceeds(addDoc(collection(anonDb, 'qa_feedback'), validDoc()));
+    await assertSucceeds(
+      addDoc(collection(anonDb, 'qa_feedback'), validDoc({ name: '', ua: '' }))
+    );
+    await assertSucceeds(addDoc(collection(userDb, 'qa_feedback'), validDoc()));
+  });
+
+  it('an extra key fails the whole write — this is not general storage', async () => {
+    await assertFails(
+      addDoc(collection(anonDb, 'qa_feedback'), validDoc({ payload: 'x'.repeat(1000) }))
+    );
+  });
+
+  it('missing, empty, or non-string comments are rejected', async () => {
+    const { comment: _drop, ...rest } = validDoc();
+    await assertFails(addDoc(collection(anonDb, 'qa_feedback'), rest));
+    await assertFails(addDoc(collection(anonDb, 'qa_feedback'), validDoc({ comment: '' })));
+    await assertFails(addDoc(collection(anonDb, 'qa_feedback'), validDoc({ comment: 42 })));
+  });
+
+  it('createdAt must be a real timestamp, not a client string', async () => {
+    await assertFails(
+      addDoc(collection(anonDb, 'qa_feedback'), validDoc({ createdAt: '2026-09-07T12:00:00Z' }))
+    );
+  });
+
+  it('size caps hold at the boundary: accept N, reject N+1', async () => {
+    const c = collection(anonDb, 'qa_feedback');
+    await assertSucceeds(addDoc(c, validDoc({ comment: 'x'.repeat(1500) })));
+    await assertFails(addDoc(c, validDoc({ comment: 'x'.repeat(1501) })));
+    await assertSucceeds(addDoc(c, validDoc({ screen: 's'.repeat(120) })));
+    await assertFails(addDoc(c, validDoc({ screen: 's'.repeat(121) })));
+    await assertSucceeds(addDoc(c, validDoc({ name: 'n'.repeat(80) })));
+    await assertFails(addDoc(c, validDoc({ name: 'n'.repeat(81) })));
+    await assertSucceeds(addDoc(c, validDoc({ ua: 'u'.repeat(200) })));
+    await assertFails(addDoc(c, validDoc({ ua: 'u'.repeat(201) })));
+  });
+
+  it('reads are ops-only', async () => {
+    await assertFails(getDoc(doc(anonDb, 'qa_feedback/f1')));
+    await assertFails(getDocs(collection(anonDb, 'qa_feedback')));
+    await assertFails(getDoc(doc(userDb, 'qa_feedback/f1')));
+    await assertSucceeds(getDoc(doc(opsDb, 'qa_feedback/f1')));
+  });
+
+  it('nobody can edit or delete a report — not even ops', async () => {
+    await assertFails(updateDoc(doc(opsDb, 'qa_feedback/f1'), { comment: 'edited' }));
+    await assertFails(deleteDoc(doc(opsDb, 'qa_feedback/f1')));
+    await assertFails(deleteDoc(doc(anonDb, 'qa_feedback/f1')));
+  });
+});

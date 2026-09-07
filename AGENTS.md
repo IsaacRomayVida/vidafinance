@@ -26,7 +26,9 @@ and build automation. Humans: see README.md; Claude-in-repo: CLAUDE.md.
 | Portal URL | https://alfa.funpay.mx (canonical) · https://funpay-alfa.web.app (direct) |
 | What it is | The mobile app (react-native-web export) rendered in a phone frame, live against production Firebase |
 | App-only URL | https://funpay-alfa.web.app/app/ (no frame — for automated UI drives) |
-| Rebuild/redeploy | GitHub Actions → `deploy-team-portal.yml` (inputs: `ref` branch, `mode` deploy\|domain\|release, `domain`) |
+| Rebuild/redeploy | GitHub Actions → `deploy-team-portal.yml` (inputs: `ref` branch, `mode` deploy\|domain\|release\|feedback, `domain`) |
+| Read feedback | dispatch `deploy-team-portal.yml` with `mode=feedback` — newest 25 reports print to the run summary (SA-authenticated; there is no anonymous read) |
+| Build identity | the portal footer shows `portal <git-sha> · <UTC time>`; quote it in bug reports |
 
 ## QA fixtures (the only sanctioned test identities)
 
@@ -70,7 +72,7 @@ Claude/ops session for a digest. There is no anonymous read.
 | Workflow | Purpose | Key inputs |
 |---|---|---|
 | `build-android.yml` | EAS .apk (installable build) | `profile`: preview\|production |
-| `deploy-team-portal.yml` | Publish the portal | `ref`, `mode` |
+| `deploy-team-portal.yml` | Publish portal / register domain / read feedback | `ref`, `mode`, `domain` |
 | `generate-brand-motion.yml` | fal.ai brand assets (Seedance/FLUX) | `kind`: motion\|splash · `prompt` · `extra_args` |
 | `seed-qa-employer.yml` | (Re)create the FUNQA1 fixture | — |
 
