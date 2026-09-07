@@ -37,6 +37,7 @@ on:
           - deploy
           - domain
           - release
+          - feedback
       domain:
         description: "Custom domain for mode=domain / mode=release"
         required: false
@@ -72,7 +73,7 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
         run: |
           npx firebase-tools hosting:sites:create funpay-alfa --project vida-finance 2>&1 | tee /tmp/site.log || true
-          grep -qiE "already exists|created" /tmp/site.log
+          grep -qiE "already exists|has been created" /tmp/site.log
 
       - name: Build app web export
         if: ${{ github.event.inputs.mode == 'deploy' }}
@@ -82,6 +83,11 @@ jobs:
           npx expo export --platform web
           rm -rf web-portal/public/app
           cp -r dist web-portal/public/app
+          VERSION="$(git rev-parse --short HEAD) · $(date -u '+%Y-%m-%d %H:%M UTC')"
+          sed -i "s/__PORTAL_VERSION__/$VERSION/" web-portal/public/index.html
+          if grep -q "__PORTAL_VERSION__" web-portal/public/index.html; then
+            echo "::error::__PORTAL_VERSION__ survived substitution"; exit 1
+          fi
 
       - name: Deploy hosting
         if: ${{ github.event.inputs.mode == 'deploy' }}
@@ -106,6 +112,12 @@ jobs:
           PORTAL_RELEASE: "1"
         run: node scripts/register-portal-domain.mjs | tee /tmp/domain.log
 
+      - name: Read latest feedback (mode=feedback)
+        if: ${{ github.event.inputs.mode == 'feedback' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: node scripts/read-qa-feedback.mjs | tee /tmp/feedback.log
+
       - name: Summary
         if: always()
         run: |
@@ -121,6 +133,13 @@ jobs:
               echo ""
               echo '```'
               cat /tmp/domain.log
+              echo '```'
+            fi
+            if [ -f /tmp/feedback.log ]; then
+              echo ""
+              echo "### Latest feedback"
+              echo '```'
+              cat /tmp/feedback.log
               echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
