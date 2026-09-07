@@ -26,6 +26,7 @@ export const es = {
     available: 'Disponible',
     myLoans: 'Mis préstamos',
     requestLoan: 'Solicitar préstamo',
+    settling: 'Calculando tu línea…',
     notVerifiedTitle: 'Verifica tu identidad',
     notVerified:
       'Tu cuenta aún no está verificada. Completa tu verificación para solicitar un préstamo.',
@@ -91,6 +92,10 @@ export const es = {
       emailChecking: 'Verificando disponibilidad…',
       emailAvailable: 'Correo disponible',
       emailTaken: 'Este correo ya está registrado. ¿Ya tienes cuenta?',
+    },
+    stepContact: {
+      title: 'Cómo te contactamos.',
+      subtitle: 'Tu teléfono y fecha de nacimiento.',
     },
     stepKyc: {
       title: 'Verifica tu identidad.',

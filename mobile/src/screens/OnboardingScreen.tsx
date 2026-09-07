@@ -71,7 +71,7 @@ type CodeStatus = 'idle' | 'searching' | 'found' | 'not_found';
 type EmailStatus = 'idle' | 'checking' | 'available' | 'taken';
 type KycState = 'not_started' | 'running' | 'pending_review';
 
-const TOTAL_STEPS = 5; // form steps; the success screen sits outside the dots
+const TOTAL_STEPS = 6; // form steps; the success screen sits outside the dots
 
 export function OnboardingScreen({
   navigation,
@@ -186,17 +186,16 @@ export function OnboardingScreen({
         return (
           name.trim().length > 0 &&
           EMAIL_REGEX.test(email) &&
-          phoneValid(phone) &&
-          ageOk &&
-          curpOk &&
           emailStatus !== 'taken' &&
           emailStatus !== 'checking'
         );
       case 2:
-        return kycState === 'pending_review';
+        return phoneValid(phone) && ageOk && curpOk;
       case 3:
-        return salary > 0 && frequency !== null && tenure !== null && validateClabe(clabe);
+        return kycState === 'pending_review';
       case 4:
+        return salary > 0 && frequency !== null && tenure !== null && validateClabe(clabe);
+      case 5:
         return password.length >= 6 && terms;
       default:
         return false;
@@ -442,6 +441,12 @@ export function OnboardingScreen({
                   testID="onb-email"
                   containerStyle={styles.fieldGap}
                 />
+              </StepFrame>
+            ) : step === 2 ? (
+              <StepFrame
+                title={t('onboarding.stepContact.title')}
+                subtitle={t('onboarding.stepContact.subtitle')}
+              >
                 <Field
                   label={t('onboarding.stepPersonal.phone')}
                   value={phone}
@@ -479,7 +484,7 @@ export function OnboardingScreen({
                   containerStyle={styles.fieldGap}
                 />
               </StepFrame>
-            ) : step === 2 ? (
+            ) : step === 3 ? (
               <StepFrame
                 title={t('onboarding.stepKyc.title')}
                 subtitle={t('onboarding.stepKyc.subtitle')}
@@ -524,13 +529,13 @@ export function OnboardingScreen({
                     <Text style={styles.laterNote}>{t('onboarding.stepKyc.laterNote')}</Text>
                     <GhostButton
                       label={t('onboarding.stepKyc.later')}
-                      onPress={() => setStep(3)}
+                      onPress={() => setStep(4)}
                       testID="onb-kyc-later"
                     />
                   </>
                 ) : null}
               </StepFrame>
-            ) : step === 3 ? (
+            ) : step === 4 ? (
               <StepFrame
                 title={t('onboarding.stepWork.title')}
                 subtitle={t('onboarding.stepWork.subtitle')}
@@ -637,14 +642,14 @@ export function OnboardingScreen({
 
           <PrimaryButton
             label={
-              step === 4
+              step === 5
                 ? creating
                   ? t('onboarding.stepPassword.creating')
                   : t('onboarding.stepPassword.submit')
                 : t('onboarding.continue')
             }
             onPress={() => {
-              if (step === 4) void submit();
+              if (step === 5) void submit();
               else {
                 // impact, not selection — selectionAsync is near-silent on Android
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});

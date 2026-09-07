@@ -98,6 +98,9 @@ export function HomeScreen({
   const verified = employee?.metamapStatus === 'verified';
   const name = employee?.name || user?.email || '';
   const firstName = String(name).split(' ')[0];
+  // Right after signup the employee doc exists but the server trigger has not
+  // derived the line yet — that is a settling state, not a $0 line.
+  const settling = employee !== null && typeof employee.creditLimit !== 'number';
   const creditLimit = employee?.creditLimit ?? 0;
   const available = employee?.availableCredit ?? creditLimit;
   const usedRatio = creditLimit > 0 ? Math.min(Math.max(1 - available / creditLimit, 0), 1) : 0;
@@ -139,7 +142,11 @@ export function HomeScreen({
               {/* The gauge: how charged the line is. Replaces the static dot. */}
               <CreditRing ratio={creditLimit > 0 ? available / creditLimit : 0} />
             </View>
-            <CountUpMxn value={creditLimit} style={styles.cardAmount} />
+            {settling ? (
+              <Text style={styles.cardSettling}>{t('home.settling')}</Text>
+            ) : (
+              <CountUpMxn value={creditLimit} style={styles.cardAmount} />
+            )}
             {/* Quiet usage track: how much of the line is in use. Purely
                 informational — no numbers repeated, the bar says it. */}
             {creditLimit > 0 ? (
@@ -257,6 +264,13 @@ const styles = StyleSheet.create({
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardLabel: { ...microLabel, color: colors.aqua },
   cardDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.gold },
+  cardSettling: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 18,
+    color: colors.aqua,
+    marginTop: spacing.m,
+    marginBottom: spacing.m,
+  },
   cardAmount: {
     fontFamily: fonts.sansBold,
     fontSize: 42,
