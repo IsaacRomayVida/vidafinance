@@ -8,7 +8,7 @@
         "projectId": "a882e7fb-24bb-4363-9337-5e37825ade91"
       }
     },
-    "version": "0.1.0",
+    "version": "0.10.0",
     "orientation": "portrait",
     "scheme": "funpay",
     "userInterfaceStyle": "light",
@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "mx.funpay.app",
-      "versionCode": 1,
+      "versionCode": 10,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

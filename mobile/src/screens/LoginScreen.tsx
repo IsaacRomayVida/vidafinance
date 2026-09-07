@@ -1,4 +1,5 @@
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Constants from 'expo-constants';
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -128,6 +129,8 @@ export function LoginScreen({
               onPress={() => navigation.navigate('Onboarding')}
               testID="login-create-account"
             />
+            {/* Which build am I holding? — the question every QA round asked. */}
+            <Text style={styles.version}>v{Constants.expoConfig?.version ?? '?'}</Text>
           </View>
         </FadeSlideIn>
       </KeyboardAvoidingView>
@@ -157,5 +160,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
+  },
+  version: {
+    fontFamily: fonts.sans,
+    color: colors.faint,
+    fontSize: 11,
+    marginTop: spacing.m,
   },
 });
