@@ -12,8 +12,9 @@
 import * as Haptics from 'expo-haptics';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Image, Platform, Pressable, StyleSheet, View } from 'react-native';
 
+import { Asset } from 'expo-asset';
 import { colors } from '../theme';
 import { FunpayMark, FunpayWordmark } from './FunpayLogo';
 import { useReducedMotion } from './motion';
@@ -35,6 +36,18 @@ const SCENES = [
 const bloom = Easing.bezier(0.23, 1, 0.32, 1);
 
 function SceneFilm({ source }: { source: number }) {
+  // Web: a real <video> (expo-video's web player freezes on the poster and
+  // never autoplays muted, which is why the films looked like static images
+  // in the portal). Native keeps expo-video.
+  if (Platform.OS === 'web') {
+    const { WebVideo } = require('./WebVideo');
+    const uri = Asset.fromModule(source).uri;
+    return <WebVideo uri={uri} loop={false} />;
+  }
+  return <NativeScene source={source} />;
+}
+
+function NativeScene({ source }: { source: number }) {
   const player = useVideoPlayer(source, (p) => {
     p.loop = false;
     p.muted = true;
