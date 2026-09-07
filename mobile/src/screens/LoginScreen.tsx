@@ -13,8 +13,9 @@ import { FadeSlideIn, useReducedMotion } from '../components/motion';
 import { GhostButton, PrimaryButton } from '../components/PrimaryButton';
 import { friendlyError } from '../lib/errors';
 import { auth } from '../lib/firebase';
+import { useLayout } from '../lib/layout';
 import { EMAIL_REGEX } from '../lib/validation';
-import { colors, fonts, spacing } from '../theme';
+import { colors, fonts, spacing, type } from '../theme';
 import type { AuthStackParamList } from '../types';
 
 export function LoginScreen({
@@ -28,6 +29,8 @@ export function LoginScreen({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const reduced = useReducedMotion();
+  const { isDesktop } = useLayout();
 
   const submit = async () => {
     if (submitting) return;
@@ -58,7 +61,96 @@ export function LoginScreen({
     }
   };
 
-  const reduced = useReducedMotion();
+  const form = (
+    <GlassCard>
+      <View style={styles.form}>
+        <Field
+          label={t('login.email')}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          editable={!submitting}
+          testID="login-email"
+          containerStyle={{ marginBottom: spacing.l }}
+        />
+        <Field
+          label={t('login.password')}
+          value={password}
+          onChangeText={setPassword}
+          secure
+          autoComplete="password"
+          editable={!submitting}
+          testID="login-password"
+        />
+
+        <GhostButton
+          label={t('login.forgot')}
+          onPress={() => void resetPassword()}
+          style={styles.forgot}
+        />
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
+        <PrimaryButton
+          label={t('login.submit')}
+          onPress={() => void submit()}
+          busy={submitting}
+          style={{ marginTop: spacing.m }}
+          testID="login-submit"
+        />
+      </View>
+    </GlassCard>
+  );
+
+  const createRow = (
+    <View style={styles.createRow}>
+      <Text style={styles.hint}>{t('login.noAccount')}</Text>
+      <GhostButton
+        label={t('login.createAccount')}
+        onPress={() => navigation.navigate('Onboarding')}
+        testID="login-create-account"
+      />
+      {/* Which build am I holding? — the question every QA round asked. */}
+      <Text style={styles.version}>v{Constants.expoConfig?.version ?? '?'}</Text>
+    </View>
+  );
+
+  if (isDesktop) {
+    // Desktop web: split screen. The freedom film owns the left half as a
+    // hero; the form sits alone on the right, the way a site signs you in.
+    return (
+      <Backdrop>
+        <View style={styles.split}>
+          <View style={styles.heroPane}>
+            {!reduced ? <LoginVideoBackdrop variant="hero" /> : null}
+            <View style={styles.heroContent}>
+              <View style={styles.heroBrand}>
+                <FunpayMark size={44} />
+                <FunpayWordmark size={22} color="#ffffff" />
+              </View>
+              <View>
+                <Text style={styles.heroTitle}>{t('login.heroTitle')}</Text>
+                <Text style={styles.heroBody}>{t('login.heroBody')}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.formPane}>
+            <View style={styles.formCol}>
+              <FadeSlideIn index={0}>
+                <Text style={styles.welcome}>{t('login.welcome')}</Text>
+                <Text style={[styles.subtitle, { textAlign: 'left' }]}>{t('login.subtitle')}</Text>
+              </FadeSlideIn>
+              <FadeSlideIn index={1}>{form}</FadeSlideIn>
+              <FadeSlideIn index={2}>{createRow}</FadeSlideIn>
+            </View>
+          </View>
+        </View>
+      </Backdrop>
+    );
+  }
 
   return (
     <Backdrop>
@@ -77,62 +169,8 @@ export function LoginScreen({
           <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
         </FadeSlideIn>
 
-        <FadeSlideIn index={1}>
-          <GlassCard>
-            <View style={styles.form}>
-              <Field
-                label={t('login.email')}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                editable={!submitting}
-                testID="login-email"
-                containerStyle={{ marginBottom: spacing.l }}
-              />
-              <Field
-                label={t('login.password')}
-                value={password}
-                onChangeText={setPassword}
-                secure
-                autoComplete="password"
-                editable={!submitting}
-                testID="login-password"
-              />
-
-              <GhostButton
-                label={t('login.forgot')}
-                onPress={() => void resetPassword()}
-                style={styles.forgot}
-              />
-
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-              {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-
-              <PrimaryButton
-                label={t('login.submit')}
-                onPress={() => void submit()}
-                busy={submitting}
-                style={{ marginTop: spacing.m }}
-                testID="login-submit"
-              />
-            </View>
-          </GlassCard>
-        </FadeSlideIn>
-
-        <FadeSlideIn index={2}>
-          <View style={styles.createRow}>
-            <Text style={styles.hint}>{t('login.noAccount')}</Text>
-            <GhostButton
-              label={t('login.createAccount')}
-              onPress={() => navigation.navigate('Onboarding')}
-              testID="login-create-account"
-            />
-            {/* Which build am I holding? — the question every QA round asked. */}
-            <Text style={styles.version}>v{Constants.expoConfig?.version ?? '?'}</Text>
-          </View>
-        </FadeSlideIn>
+        <FadeSlideIn index={1}>{form}</FadeSlideIn>
+        <FadeSlideIn index={2}>{createRow}</FadeSlideIn>
       </KeyboardAvoidingView>
     </Backdrop>
   );
@@ -166,5 +204,39 @@ const styles = StyleSheet.create({
     color: colors.faint,
     fontSize: 11,
     marginTop: spacing.m,
+  },
+
+  // Desktop split
+  split: { flex: 1, flexDirection: 'row' },
+  heroPane: { flex: 1.1, backgroundColor: colors.brand, overflow: 'hidden' },
+  heroContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+    padding: spacing.xl + spacing.m,
+  },
+  heroBrand: { flexDirection: 'row', alignItems: 'center', gap: spacing.m },
+  heroTitle: {
+    fontFamily: fonts.display,
+    fontSize: 46,
+    lineHeight: 52,
+    color: '#ffffff',
+    letterSpacing: -0.9,
+    maxWidth: 520,
+  },
+  heroBody: {
+    fontFamily: fonts.sans,
+    fontSize: 17,
+    lineHeight: 26,
+    color: 'rgba(255,255,255,0.86)',
+    marginTop: spacing.m,
+    maxWidth: 480,
+  },
+  formPane: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  formCol: { width: '100%', maxWidth: 440 },
+  welcome: {
+    fontFamily: fonts.display,
+    fontSize: type.display,
+    color: colors.text,
+    letterSpacing: -0.64,
   },
 });

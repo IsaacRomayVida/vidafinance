@@ -15,7 +15,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import './src/i18n';
 import { BrandIntro } from './src/components/BrandIntro';
 import { FunpayMark } from './src/components/FunpayLogo';
+import { WebTopBar } from './src/components/WebLayout';
 import { AuthProvider, useAuth } from './src/hooks/useAuth';
+import { readWebMode, useLayout } from './src/lib/layout';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LoansScreen } from './src/screens/LoansScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -109,6 +111,20 @@ function Root() {
   );
 }
 
+/** Desktop web gets a site-style top bar once signed in; auth screens own
+ *  their whole canvas (the Login split has its own brand panel). */
+function Shell({ children }: { children: React.ReactNode }) {
+  const { isDesktop } = useLayout();
+  const { user, onboardingHold } = useAuth();
+  if (!isDesktop || !user || onboardingHold) return <>{children}</>;
+  return (
+    <View style={{ flex: 1 }}>
+      <WebTopBar />
+      {children}
+    </View>
+  );
+}
+
 export default function App() {
   // The brand's own faces (public-v2 loads the same pair from Google Fonts).
   // Until they're ready, the splash holds — mixed-font flashes read as broken.
@@ -118,15 +134,25 @@ export default function App() {
     DMSans_700Bold,
     DMSerifDisplay_400Regular,
   });
-  const [introDone, setIntroDone] = React.useState(false);
-  if (!fontsLoaded) return <Splash />;
+  // The web frames (`?ui=web`) are a website: content first, no brand film.
+  const [introDone, setIntroDone] = React.useState(readWebMode());
+  // A font that never arrives (blocked CDN, poisoned cache) must degrade to
+  // system type, never hold the product on the splash forever.
+  const [fontTimeout, setFontTimeout] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setFontTimeout(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!fontsLoaded && !fontTimeout) return <Splash />;
 
   return (
     <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer theme={navTheme}>
           <StatusBar style="dark" />
-          <Root />
+          <Shell>
+            <Root />
+          </Shell>
           {/* Brand moment on cold start, laid over the already-mounted app so
               the handoff is a fade, never a blank frame. */}
           {!introDone ? <BrandIntro onDone={() => setIntroDone(true)} /> : null}

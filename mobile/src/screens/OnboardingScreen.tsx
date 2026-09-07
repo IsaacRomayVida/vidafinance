@@ -40,6 +40,8 @@ import { FadeSlideIn, PressableScale } from '../components/motion';
 import { GhostButton, PrimaryButton } from '../components/PrimaryButton';
 import { Skeleton } from '../components/Skeleton';
 import { StepDots } from '../components/StepDots';
+import { PageColumn } from '../components/WebLayout';
+import { useColumn } from '../lib/layout';
 import { useOnboardingHold } from '../hooks/useAuth';
 import { friendlyError } from '../lib/errors';
 import { auth, db } from '../lib/firebase';
@@ -80,6 +82,7 @@ export function OnboardingScreen({
 }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const column = useColumn(640);
   const { setHold } = useOnboardingHold();
 
   const [step, setStep] = useState(0);
@@ -350,18 +353,20 @@ export function OnboardingScreen({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={{ paddingTop: insets.top }}>
-          <View style={styles.headerRow}>
-            <BackButton onPress={goBack} />
-            <View style={styles.dotsWrap}>
-              <StepDots total={TOTAL_STEPS} current={step} />
+          <PageColumn maxWidth={640}>
+            <View style={styles.headerRow}>
+              <BackButton onPress={goBack} />
+              <View style={styles.dotsWrap}>
+                <StepDots total={TOTAL_STEPS} current={step} />
+              </View>
+              <View style={{ width: 42 }} />
             </View>
-            <View style={{ width: 42 }} />
-          </View>
+          </PageColumn>
         </View>
 
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: spacing.l, paddingBottom: spacing.xl }}
+          contentContainerStyle={[{ padding: spacing.l, paddingBottom: spacing.xl }, column]}
           keyboardShouldPersistTaps="handled"
         >
           <FadeSlideIn key={step}>

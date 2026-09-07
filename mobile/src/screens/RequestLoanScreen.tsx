@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchLoanConfig, submitLoanRequest, type LoanConfig } from '../api/callables';
 import { FunpayMark } from '../components/FunpayLogo';
+import { PageColumn } from '../components/WebLayout';
+import { useColumn } from '../lib/layout';
 import { Backdrop, GlassCard } from '../components/Glass';
 import { GlassHeader } from '../components/GlassHeader';
 import { GoldBurst } from '../components/GoldBurst';
@@ -46,6 +48,7 @@ export function RequestLoanScreen({
   const { t } = useTranslation();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const column = useColumn(640);
   const [config, setConfig] = useState<LoanConfig | null>(null);
   const [employee, setEmployee] = useState<EmployeeDoc | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -160,9 +163,14 @@ export function RequestLoanScreen({
   return (
     <Backdrop>
       <View style={{ paddingTop: insets.top }}>
-        <GlassHeader title={t('request.title')} />
+        <PageColumn maxWidth={640}>
+          <GlassHeader title={t('request.title')} />
+        </PageColumn>
       </View>
-      <ScrollView style={styles.scroll} contentContainerStyle={{ padding: spacing.l, paddingTop: spacing.s }}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[{ padding: spacing.l, paddingTop: spacing.s }, column]}
+      >
         <GlassCard>
           <View style={styles.amountInner}>
             <Text style={styles.label}>{t('request.amountLabel')}</Text>

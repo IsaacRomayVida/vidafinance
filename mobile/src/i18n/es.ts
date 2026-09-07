@@ -10,6 +10,10 @@ export const es = {
   login: {
     title: 'Inicia sesión',
     subtitle: 'Adelantos de nómina para tu tranquilidad',
+    welcome: 'Bienvenido de vuelta',
+    heroTitle: 'Tu nómina, tu libertad.',
+    heroBody:
+      'Adelantos de nómina claros y al instante, respaldados por tu empleador. Sin filas, sin papeleo, sin sorpresas.',
     email: 'Correo electrónico',
     password: 'Contraseña',
     submit: 'Entrar',

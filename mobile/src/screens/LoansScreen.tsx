@@ -6,6 +6,8 @@ import { FlatList, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchPaymentUrl } from '../api/callables';
+import { PageColumn } from '../components/WebLayout';
+import { useColumn } from '../lib/layout';
 import { Backdrop, GlassCard } from '../components/Glass';
 import { GlassHeader } from '../components/GlassHeader';
 import { FadeSlideIn } from '../components/motion';
@@ -65,6 +67,7 @@ export function LoansScreen() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const column = useColumn(760);
   const [loans, setLoans] = useState<LoanDoc[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryToken, setRetryToken] = useState(0);
@@ -133,11 +136,13 @@ export function LoansScreen() {
   return (
     <Backdrop>
       <View style={{ paddingTop: insets.top }}>
-        <GlassHeader title={t('loans.title')} />
+        <PageColumn maxWidth={760}>
+          <GlassHeader title={t('loans.title')} />
+        </PageColumn>
       </View>
       <FlatList
         style={styles.list}
-        contentContainerStyle={{ padding: spacing.l, paddingTop: spacing.s, flexGrow: 1 }}
+        contentContainerStyle={[{ padding: spacing.l, paddingTop: spacing.s, flexGrow: 1 }, column]}
         data={loans}
         keyExtractor={(loan) => loan.id}
         ListEmptyComponent={

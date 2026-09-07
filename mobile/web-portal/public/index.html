@@ -115,8 +115,8 @@
      three times against production, tripling every event a reviewer makes. */
   var frames = {
     phone:   { box: document.getElementById('frame-phone'),   frame: document.getElementById('app-phone'),   btn: document.getElementById('t-phone'),   src: '/app/' },
-    mobile:  { box: document.getElementById('frame-mobile'),  frame: document.getElementById('app-mobile'),  btn: document.getElementById('t-mobile'),  src: '/app/' },
-    desktop: { box: document.getElementById('frame-desktop'), frame: document.getElementById('app-desktop'), btn: document.getElementById('t-desktop'), src: '/app/' }
+    mobile:  { box: document.getElementById('frame-mobile'),  frame: document.getElementById('app-mobile'),  btn: document.getElementById('t-mobile'),  src: '/app/?ui=web' },
+    desktop: { box: document.getElementById('frame-desktop'), frame: document.getElementById('app-desktop'), btn: document.getElementById('t-desktop'), src: '/app/?ui=web' }
   };
   var current = 'phone';
   function show(which) {

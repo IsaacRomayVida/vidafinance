@@ -15,7 +15,9 @@ import { FadeSlideIn, PressableScale } from '../components/motion';
 import { TrackFill } from '../components/TrackFill';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Skeleton } from '../components/Skeleton';
+import { PageColumn } from '../components/WebLayout';
 import { useAuth } from '../hooks/useAuth';
+import { useLayout } from '../lib/layout';
 import { db } from '../lib/firebase';
 import { formatMxn } from '../lib/money';
 import { colors, fonts, gradient, microLabel, radii, spacing, type } from '../theme';
@@ -37,6 +39,7 @@ export function HomeScreen({
   const { t } = useTranslation();
   const { user, logOut } = useAuth();
   const insets = useSafeAreaInsets();
+  const { isDesktop } = useLayout();
   const [employee, setEmployee] = useState<EmployeeDoc | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryToken, setRetryToken] = useState(0);
@@ -105,129 +108,153 @@ export function HomeScreen({
   const available = employee?.availableCredit ?? creditLimit;
   const usedRatio = creditLimit > 0 ? Math.min(Math.max(1 - available / creditLimit, 0), 1) : 0;
 
+  const hero = (
+    <FadeSlideIn index={1}>
+      <LinearGradient
+        colors={gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.card}
+      >
+        <View style={styles.cardTopRow}>
+          <Text style={styles.cardLabel}>{t('home.creditLine')}</Text>
+          {/* The gauge: how charged the line is. Replaces the static dot. */}
+          <CreditRing ratio={creditLimit > 0 ? available / creditLimit : 0} />
+        </View>
+        {settling ? (
+          <Text style={styles.cardSettling}>{t('home.settling')}</Text>
+        ) : (
+          <CountUpMxn value={creditLimit} style={styles.cardAmount} />
+        )}
+        {/* Quiet usage track: how much of the line is in use. Purely
+            informational — no numbers repeated, the bar says it. */}
+        {creditLimit > 0 ? (
+          <View
+            style={styles.track}
+            accessibilityLabel={`${Math.round(usedRatio * 100)}% utilizado`}
+          >
+            <TrackFill ratio={usedRatio} color={colors.gold} height={4} />
+          </View>
+        ) : null}
+        <View style={styles.cardBottomRow}>
+          <Text style={styles.cardSub}>
+            {t('home.available')}: {formatMxn(available)}
+          </Text>
+          <FunpayWordmark size={15} color="rgba(255,255,255,0.85)" />
+        </View>
+      </LinearGradient>
+    </FadeSlideIn>
+  );
+
+  const notice = !verified ? (
+    <FadeSlideIn index={2}>
+      <GlassCard style={{ marginTop: isDesktop ? 0 : spacing.l }}>
+        <View style={styles.noticeInner}>
+          <View style={styles.noticeIcon}>
+            <Ionicons name="shield-checkmark-outline" size={22} color={colors.gold} />
+          </View>
+          <View style={styles.noticeBody}>
+            <Text style={styles.noticeTitle}>{t('home.notVerifiedTitle')}</Text>
+            <Text style={styles.notice}>{t('home.notVerified')}</Text>
+            <PrimaryButton
+              label={t('home.notVerifiedCta')}
+              onPress={() => void Linking.openURL('https://funpay.mx')}
+              style={{ marginTop: spacing.m, alignSelf: 'flex-start' }}
+            />
+          </View>
+        </View>
+      </GlassCard>
+    </FadeSlideIn>
+  ) : null;
+
+  // Frosted action tiles, icon-led like the reference dashboards. Side by
+  // side on a phone; stacked in the desktop side column.
+  const actions = (
+    <View style={[styles.actions, isDesktop && styles.actionsStacked]}>
+      <FadeSlideIn index={3} style={styles.actionWrap}>
+        <PressableScale
+          onPress={() => navigation.navigate('Loans')}
+          accessibilityRole="button"
+          accessibilityLabel={t('home.myLoans')}
+        >
+          <GlassCard style={styles.actionCard}>
+            <View style={styles.actionInner}>
+              <View style={styles.actionIcon}>
+                <Ionicons name="wallet-outline" size={22} color={colors.brand} />
+              </View>
+              <Text style={styles.actionText}>{t('home.myLoans')}</Text>
+            </View>
+          </GlassCard>
+        </PressableScale>
+      </FadeSlideIn>
+
+      {/* The server re-checks eligibility on every requestLoan; hiding
+          the tile for unverified borrowers is UX, not the security
+          boundary. */}
+      {verified ? (
+        <FadeSlideIn index={4} style={styles.actionWrap}>
+          <PressableScale
+            onPress={() => navigation.navigate('RequestLoan')}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.requestLoan')}
+          >
+            <GlassCard style={styles.actionCard}>
+              <View style={styles.actionInner}>
+                <View style={[styles.actionIcon, { backgroundColor: colors.goldTint }]}>
+                  <Ionicons name="add" size={24} color={colors.gold} />
+                </View>
+                <Text style={styles.actionText}>{t('home.requestLoan')}</Text>
+              </View>
+            </GlassCard>
+          </PressableScale>
+        </FadeSlideIn>
+      ) : null}
+    </View>
+  );
+
   return (
     <Backdrop>
       <ScrollView
         style={styles.container}
         contentContainerStyle={{ padding: spacing.l, paddingTop: insets.top + spacing.l }}
       >
-        <FadeSlideIn index={0}>
-          <View style={styles.topRow}>
-            <FunpayMark size={34} />
-            <PressableScale
-              onPress={() => void logOut()}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.signOut')}
-              style={styles.signOutChip}
-            >
-              <Ionicons name="log-out-outline" size={18} color={colors.subtle} />
-              <Text style={styles.signOutText}>{t('common.signOut')}</Text>
-            </PressableScale>
-          </View>
-
-          <Text style={styles.greeting}>{t('home.greeting', { name: firstName })}</Text>
-        </FadeSlideIn>
-
-        {/* The dark element over the light world: the borrower's credit line
-            as a payment-card, deep brand gradient with the gold dot. */}
-        <FadeSlideIn index={1}>
-          <LinearGradient
-            colors={gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.card}
-          >
-            <View style={styles.cardTopRow}>
-              <Text style={styles.cardLabel}>{t('home.creditLine')}</Text>
-              {/* The gauge: how charged the line is. Replaces the static dot. */}
-              <CreditRing ratio={creditLimit > 0 ? available / creditLimit : 0} />
-            </View>
-            {settling ? (
-              <Text style={styles.cardSettling}>{t('home.settling')}</Text>
-            ) : (
-              <CountUpMxn value={creditLimit} style={styles.cardAmount} />
-            )}
-            {/* Quiet usage track: how much of the line is in use. Purely
-                informational — no numbers repeated, the bar says it. */}
-            {creditLimit > 0 ? (
-              <View
-                style={styles.track}
-                accessibilityLabel={`${Math.round(usedRatio * 100)}% utilizado`}
-              >
-                <TrackFill ratio={usedRatio} color={colors.gold} height={4} />
-              </View>
-            ) : null}
-            <View style={styles.cardBottomRow}>
-              <Text style={styles.cardSub}>
-                {t('home.available')}: {formatMxn(available)}
-              </Text>
-              <FunpayWordmark size={15} color="rgba(255,255,255,0.85)" />
-            </View>
-          </LinearGradient>
-        </FadeSlideIn>
-
-        {!verified ? (
-          <FadeSlideIn index={2}>
-            <GlassCard style={{ marginTop: spacing.l }}>
-              <View style={styles.noticeInner}>
-                <View style={styles.noticeIcon}>
-                  <Ionicons name="shield-checkmark-outline" size={22} color={colors.gold} />
-                </View>
-                <View style={styles.noticeBody}>
-                  <Text style={styles.noticeTitle}>{t('home.notVerifiedTitle')}</Text>
-                  <Text style={styles.notice}>{t('home.notVerified')}</Text>
-                  <PrimaryButton
-                    label={t('home.notVerifiedCta')}
-                    onPress={() => void Linking.openURL('https://funpay.mx')}
-                    style={{ marginTop: spacing.m, alignSelf: 'flex-start' }}
-                  />
-                </View>
-              </View>
-            </GlassCard>
-          </FadeSlideIn>
-        ) : null}
-
-        {/* Frosted action tiles, icon-led like the reference dashboards. */}
-        <View style={styles.actions}>
-          <FadeSlideIn index={3} style={styles.actionWrap}>
-            <PressableScale
-              onPress={() => navigation.navigate('Loans')}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.myLoans')}
-            >
-              <GlassCard style={styles.actionCard}>
-                <View style={styles.actionInner}>
-                  <View style={styles.actionIcon}>
-                    <Ionicons name="wallet-outline" size={22} color={colors.brand} />
-                  </View>
-                  <Text style={styles.actionText}>{t('home.myLoans')}</Text>
-                </View>
-              </GlassCard>
-            </PressableScale>
-          </FadeSlideIn>
-
-          {/* The server re-checks eligibility on every requestLoan; hiding
-              the tile for unverified borrowers is UX, not the security
-              boundary. */}
-          {verified ? (
-            <FadeSlideIn index={4} style={styles.actionWrap}>
+        <PageColumn maxWidth={1040}>
+          <FadeSlideIn index={0}>
+            <View style={styles.topRow}>
+              {/* On desktop the top bar already carries the mark. */}
+              {isDesktop ? <View /> : <FunpayMark size={34} />}
               <PressableScale
-                onPress={() => navigation.navigate('RequestLoan')}
+                onPress={() => void logOut()}
                 accessibilityRole="button"
-                accessibilityLabel={t('home.requestLoan')}
+                accessibilityLabel={t('common.signOut')}
+                style={styles.signOutChip}
               >
-                <GlassCard style={styles.actionCard}>
-                  <View style={styles.actionInner}>
-                    <View style={[styles.actionIcon, { backgroundColor: colors.goldTint }]}>
-                      <Ionicons name="add" size={24} color={colors.gold} />
-                    </View>
-                    <Text style={styles.actionText}>{t('home.requestLoan')}</Text>
-                  </View>
-                </GlassCard>
+                <Ionicons name="log-out-outline" size={18} color={colors.subtle} />
+                <Text style={styles.signOutText}>{t('common.signOut')}</Text>
               </PressableScale>
-            </FadeSlideIn>
-          ) : null}
-        </View>
+            </View>
+
+            <Text style={styles.greeting}>{t('home.greeting', { name: firstName })}</Text>
+          </FadeSlideIn>
+
+          {/* Desktop: the card holds the left, the side column carries the
+              verification notice and the actions. Phone: one column. */}
+          {isDesktop ? (
+            <View style={styles.deskGrid}>
+              <View style={styles.deskMain}>{hero}</View>
+              <View style={styles.deskSide}>
+                {notice}
+                {actions}
+              </View>
+            </View>
+          ) : (
+            <>
+              {hero}
+              {notice}
+              {actions}
+            </>
+          )}
+        </PageColumn>
       </ScrollView>
     </Backdrop>
   );
@@ -324,6 +351,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   actions: { flexDirection: 'row', gap: spacing.m, marginTop: spacing.l },
+  actionsStacked: { flexDirection: 'column', marginTop: 0 },
+  deskGrid: { flexDirection: 'row', gap: spacing.l, alignItems: 'flex-start' },
+  deskMain: { flex: 1.25 },
+  deskSide: { flex: 1, gap: spacing.l },
   actionWrap: { flex: 1 },
   actionCard: { flex: 1 },
   actionInner: { padding: spacing.m, alignItems: 'flex-start', gap: spacing.m, minHeight: 108 },
