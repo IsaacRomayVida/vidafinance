@@ -418,7 +418,10 @@ export interface LoanQuoteConfig extends LoanConfig {
 }
 
 export const getLoanConfig = onCall(
-  { cors: true, enforceAppCheck: true },
+  // enforceAppCheck OFF until Play Integrity is registered (VID3-676) — the
+  // mobile app cannot attest, and this endpoint is already auth-gated to the
+  // employee role. Same re-enable path as lookupEmployerByCode.ts.
+  { cors: true, enforceAppCheck: false },
   withAuth<Record<string, never>, LoanQuoteConfig>(['employee'], async (_data, auth) => {
     const config = await getLoanConfigValues();
     const { frequency, source } = await resolvePayFrequency(auth.uid);
