@@ -1,14 +1,27 @@
 /**
- * register-portal-domain.mjs — attach alfa.funtrip.mx to the funpay-alfa
- * Firebase Hosting site (v1beta1 customDomains API). Zero dependencies:
- * the service-account access token is minted with node:crypto (RS256 JWT
- * → oauth2 token exchange). Prints the DNS records Cloudflare must hold.
+ * register-portal-domain.mjs — attach (or detach) a custom domain on the
+ * funpay-alfa Firebase Hosting site via the v1beta1 customDomains API.
+ * Zero dependencies: the service-account access token is minted with
+ * node:crypto (RS256 JWT → oauth2 token exchange). Prints the DNS records
+ * Cloudflare must hold.
+ *
+ * Env:
+ *   PORTAL_DOMAIN   domain to act on (default alfa.funpay.mx)
+ *   PORTAL_RELEASE  when "1", DELETE the domain instead of creating it.
+ *
+ * Release exists because a Firebase custom domain can be attached to
+ * exactly one hosting site across ALL projects. FunPay's portal was
+ * originally parked on alfa.funtrip.mx — Funtrip's domain — back when
+ * funpay.mx was not on Cloudflare and could not be automated. Now that it
+ * is, FunPay moves to its own domain and hands alfa.funtrip.mx back, and
+ * the handover is only possible if this site releases it first.
  */
 import { readFileSync } from 'node:fs';
 import { createSign } from 'node:crypto';
 
 const SITE = 'funpay-alfa';
-const DOMAIN = process.env.PORTAL_DOMAIN || 'alfa.funtrip.mx';
+const DOMAIN = process.env.PORTAL_DOMAIN || 'alfa.funpay.mx';
+const RELEASE = process.env.PORTAL_RELEASE === '1';
 const BASE = `https://firebasehosting.googleapis.com/v1beta1/projects/vida-finance/sites/${SITE}`;
 
 const sa = JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
@@ -40,6 +53,22 @@ const headers = { Authorization: `Bearer ${access_token}`, 'Content-Type': 'appl
 async function get() {
   const r = await fetch(`${BASE}/customDomains/${DOMAIN}`, { headers });
   return r.ok ? r.json() : null;
+}
+
+if (RELEASE) {
+  const existing = await get();
+  if (!existing) {
+    console.log(`${DOMAIN} is not attached to ${SITE} — nothing to release.`);
+    process.exit(0);
+  }
+  const del = await fetch(`${BASE}/customDomains/${DOMAIN}`, { method: 'DELETE', headers });
+  if (!del.ok) {
+    console.error('release failed', del.status, await del.text());
+    process.exit(1);
+  }
+  console.log(`RELEASED ${DOMAIN} from ${SITE}. It can now be claimed by another site.`);
+  console.log('Remember to repoint or remove its DNS records.');
+  process.exit(0);
 }
 
 let domain = await get();

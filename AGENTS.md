@@ -11,18 +11,22 @@ and build automation. Humans: see README.md; Claude-in-repo: CLAUDE.md.
   transfers, or disbursements, and must never create borrowers outside
   the QA fixtures below.
 - FunPay (vidafinance) is a separate business from Funtrip (vidatravel).
-  Never cross their data, domains, or credentials — the sole sanctioned
-  exception is the `alfa.funtrip.mx` DNS record, which lives on the
-  funtrip.mx Cloudflare zone by explicit owner decision.
+  Never cross their data, domains, or credentials. FunPay's portal used to
+  live on `alfa.funtrip.mx` — Funtrip's domain — because `funpay.mx` was
+  not on Cloudflare and could not be automated. It is now, so the portal
+  moved to `alfa.funpay.mx` and handed that domain back. The one remaining
+  shared resource is the Cloudflare API token, which lives in the
+  vidatravel repo and now sees all four zones; DNS for `funpay.mx` is
+  created with that repo's `cloudflare-dns.yml` workflow.
 
 ## The team-testing portal
 
 | Thing | Value |
 |---|---|
-| Portal URL | https://alfa.funtrip.mx (canonical) · https://funpay-alfa.web.app (direct) |
+| Portal URL | https://alfa.funpay.mx (canonical) · https://funpay-alfa.web.app (direct) |
 | What it is | The mobile app (react-native-web export) rendered in a phone frame, live against production Firebase |
 | App-only URL | https://funpay-alfa.web.app/app/ (no frame — for automated UI drives) |
-| Rebuild/redeploy | GitHub Actions → `deploy-team-portal.yml` (inputs: `ref` branch, `mode` deploy\|domain) |
+| Rebuild/redeploy | GitHub Actions → `deploy-team-portal.yml` (inputs: `ref` branch, `mode` deploy\|domain\|release, `domain`) |
 
 ## QA fixtures (the only sanctioned test identities)
 
