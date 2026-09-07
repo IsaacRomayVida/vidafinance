@@ -39,6 +39,9 @@
     "plugins": [
       "react-native-metamap-sdk/plugin/build/index.js",
       "expo-video"
-    ]
+    ],
+    "experiments": {
+      "baseUrl": "/app"
+    }
   }
 }

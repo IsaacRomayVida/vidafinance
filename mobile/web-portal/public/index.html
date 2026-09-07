@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FunPay — Portal de equipo</title>
+<style>
+  :root{--brand:#194445;--gold:#a28657;--aqua:#a8d5d0;--bg:#f7fbfa;}
+  *{margin:0;box-sizing:border-box}
+  body{min-height:100vh;font-family:-apple-system,'Segoe UI',sans-serif;
+    background:linear-gradient(180deg,#f2f9f7 0%,#f7fbfa 55%,#faf3e6 100%);
+    display:flex;flex-direction:column;align-items:center;padding:32px 16px 48px}
+  body::before{content:'';position:fixed;inset:auto 0 -30vh 0;height:70vh;pointer-events:none;
+    background:radial-gradient(ellipse 90% 60% at 50% 100%,rgba(162,134,87,.25),transparent 70%)}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+  .mark{width:44px;height:44px;border-radius:10px;background:var(--brand);position:relative}
+  .mark i{position:absolute;background:#fff;border-radius:1.5px}
+  .mark i:nth-child(1){left:13px;top:11px;width:6px;height:22px}
+  .mark i:nth-child(2){left:13px;top:11px;width:18px;height:6px}
+  .mark i:nth-child(3){left:13px;top:19px;width:13px;height:6px}
+  .mark b{position:absolute;right:8px;bottom:8px;width:6px;height:6px;border-radius:50%;background:var(--gold)}
+  h1{font-size:22px;color:var(--brand);letter-spacing:-.02em}
+  p.sub{color:#4a6364;font-size:13.5px;margin-bottom:26px}
+  .phone{position:relative;width:389px;max-width:96vw;border-radius:54px;padding:7px;
+    background:linear-gradient(160deg,#2b2d2e,#0d0f10);
+    box-shadow:0 24px 80px rgba(25,68,69,.35),0 2px 8px rgba(25,68,69,.25),inset 0 1px 0 rgba(255,255,255,.18)}
+  .screen{position:relative;border-radius:47px;overflow:hidden;background:var(--bg);height:min(812px,78vh)}
+  .screen iframe{width:100%;height:100%;border:0;display:block}
+  .punch{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:12px;height:12px;
+    border-radius:50%;background:#0d0f10;z-index:5;box-shadow:inset 0 0 2px rgba(255,255,255,.15)}
+  footer{margin-top:26px;max-width:520px;text-align:center;color:#4a6364;font-size:12.5px;line-height:1.7}
+  footer code{background:rgba(25,68,69,.08);padding:2px 7px;border-radius:5px;font-weight:600;color:var(--brand)}
+  footer strong{color:#8a5b2a}
+</style>
+</head>
+<body>
+<header><div class="mark"><i></i><i></i><i></i><b></b></div><h1>FunPay · Portal de equipo</h1></header>
+<p class="sub">La app tal como se ve en el teléfono — entorno de prueba interno</p>
+<div class="phone"><div class="punch"></div><div class="screen"><iframe src="/app/" title="FunPay app" allow="camera; microphone; autoplay; encrypted-media"></iframe></div></div>
+<footer>
+  Para crear una cuenta de prueba usa el código de empresa <code>FUNQA1</code> y un correo <code>@demo-diagnostic.funpay.mx</code>.<br>
+  <strong>Este entorno apunta a producción:</strong> mirar, registrarse con datos de prueba — nunca ejecutar pagos reales.
+</footer>
+</body>
+</html>
