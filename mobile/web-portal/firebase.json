@@ -1,8 +1,13 @@
 {
   "hosting": {
-    "site": "funpay-app",
+    "site": "funpay-alfa",
     "public": "public",
     "cleanUrls": true,
-    "rewrites": [{ "source": "/app/**", "destination": "/app/index.html" }]
+    "rewrites": [
+      {
+        "source": "/app/**",
+        "destination": "/app/index.html"
+      }
+    ]
   }
 }
