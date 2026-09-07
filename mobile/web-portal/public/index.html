@@ -52,12 +52,38 @@
   #fb-status.bad{color:#b3261e}
   #fb-count{font-size:11px;color:#93aaa9;text-align:right;margin:-4px 0 6px}
   .ver{margin-top:10px;font-size:11px;color:#93aaa9}
+  .toggle{display:flex;gap:6px;margin-bottom:20px;background:rgba(25,68,69,.06);padding:5px;border-radius:999px}
+  .toggle button{border:0;cursor:pointer;font:inherit;font-size:13px;font-weight:600;color:#4a6364;
+    background:transparent;padding:8px 16px;border-radius:999px;transition:background .15s,color .15s}
+  .toggle button[aria-selected="true"]{background:#194445;color:#fff}
+  .mobileweb{width:392px;max-width:96vw}
+  .desk{width:min(1100px,94vw)}
+  .browserbar{display:flex;align-items:center;gap:6px;background:#e7efec;border-radius:12px 12px 0 0;
+    padding:9px 14px;border:1px solid rgba(25,68,69,.12);border-bottom:0}
+  .browserbar span{width:10px;height:10px;border-radius:50%;background:#c4d3cf}
+  .browserbar em{margin-left:10px;font-style:normal;font-size:12px;color:#4a6364}
+  .mobileweb .screen,.desk .screen{border-radius:0 0 12px 12px;overflow:hidden;
+    box-shadow:0 24px 70px rgba(25,68,69,.22);background:#f7fbfa}
+  .mobileweb .screen{height:min(760px,74vh)}
+  .desk .screen{height:min(680px,72vh)}
+  .mobileweb .screen iframe,.desk .screen iframe{width:100%;height:100%;border:0;display:block}
 </style>
 </head>
 <body>
 <header><div class="mark"><i></i><i></i><i></i><b></b></div><h1>FunPay · Portal de equipo</h1></header>
-<p class="sub">La app tal como se ve en el teléfono — entorno de prueba interno</p>
-<div class="phone"><div class="punch"></div><div class="screen"><iframe id="appframe" src="/app/" title="FunPay app" allow="camera; microphone; autoplay; encrypted-media"></iframe></div></div>
+<p class="sub">La app como se ve en cada tamaño — entorno de prueba interno</p>
+
+<div class="toggle" role="tablist" aria-label="Tamaño">
+  <button id="t-phone" role="tab" aria-selected="true">Teléfono</button>
+  <button id="t-mobile" role="tab" aria-selected="false">Web móvil</button>
+  <button id="t-desktop" role="tab" aria-selected="false">Web escritorio</button>
+</div>
+
+<div class="phone" id="frame-phone"><div class="punch"></div><div class="screen"><iframe id="app-phone" src="/app/" title="FunPay (teléfono)" allow="camera; microphone; autoplay; encrypted-media"></iframe></div></div>
+
+<div class="mobileweb" id="frame-mobile" hidden><div class="browserbar"><span></span><span></span><span></span><em>alfa.funpay.mx</em></div><div class="screen"><iframe id="app-mobile" title="FunPay (web móvil)" allow="camera; microphone; autoplay; encrypted-media"></iframe></div></div>
+
+<div class="desk" id="frame-desktop" hidden><div class="browserbar"><span></span><span></span><span></span><em>alfa.funpay.mx</em></div><div class="screen"><iframe id="app-desktop" title="FunPay (web escritorio)" allow="camera; microphone; autoplay; encrypted-media"></iframe></div></div>
 
 <button id="fb-open" title="Enviar comentario">✦ Feedback</button>
 <div id="fb-panel" hidden>
@@ -83,14 +109,35 @@
   var VERSION = '__PORTAL_VERSION__';
   document.getElementById('ver').textContent = 'portal ' + VERSION;
 
-  var frame = document.getElementById('appframe');
+  /* ---- Frame toggle -------------------------------------------------
+     One React Native app, shown at three widths. Each iframe's src is set
+     only on first selection: loading all three up front would run the app
+     three times against production, tripling every event a reviewer makes. */
+  var frames = {
+    phone:   { box: document.getElementById('frame-phone'),   frame: document.getElementById('app-phone'),   btn: document.getElementById('t-phone'),   src: '/app/' },
+    mobile:  { box: document.getElementById('frame-mobile'),  frame: document.getElementById('app-mobile'),  btn: document.getElementById('t-mobile'),  src: '/app/' },
+    desktop: { box: document.getElementById('frame-desktop'), frame: document.getElementById('app-desktop'), btn: document.getElementById('t-desktop'), src: '/app/' }
+  };
+  var current = 'phone';
+  function show(which) {
+    current = which;
+    Object.keys(frames).forEach(function (k) {
+      var f = frames[k];
+      f.box.hidden = k !== which;
+      f.btn.setAttribute('aria-selected', String(k === which));
+    });
+    var f = frames[which];
+    if (!f.frame.getAttribute('src')) f.frame.setAttribute('src', f.src);
+  }
+  Object.keys(frames).forEach(function (k) { frames[k].btn.onclick = function () { show(k); }; });
+
   /* Same-origin by construction (the app is served from /app/ on this very
      site); try/catch so a cross-origin redirect inside the app cannot take
      the drawer down. The rules cap `screen` at 120 chars and hasOnly makes
      an oversized value fail the WHOLE write — truncate here. */
   function screenName() {
     try {
-      var d = frame.contentDocument;
+      var d = frames[current].frame.contentDocument;
       var t = ((d && d.title) || '').replace(/\s*\|\s*FunPay\s*$/i, '').trim();
       return (t || 'desconocida').slice(0, 120);
     } catch (e) { return 'desconocida'; }
