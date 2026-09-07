@@ -26,6 +26,7 @@ and build automation. Humans: see README.md; Claude-in-repo: CLAUDE.md.
 | Portal URL | https://alfa.funpay.mx (canonical) · https://funpay-alfa.web.app (direct) |
 | What it is | The mobile app (react-native-web export) rendered in a phone frame, live against production Firebase |
 | App-only URL | https://funpay-alfa.web.app/app/ (no frame — for automated UI drives) |
+| Website frame | https://alfa.funpay.mx/web/ — the real web product (public-v2) built with `VITE_BASE_PATH=/web/`; the portal's Web móvil / Web escritorio tabs show it at phone and desktop widths. Launch mode per the `web_launch_mode` input (default `live`). |
 | Rebuild/redeploy | GitHub Actions → `deploy-team-portal.yml` (inputs: `ref` branch, `mode` deploy\|domain\|release\|feedback, `domain`) |
 | Read feedback | dispatch `deploy-team-portal.yml` with `mode=feedback` — newest 25 reports print to the run summary (SA-authenticated; there is no anonymous read) |
 | Build identity | the portal footer shows `portal <git-sha> · <UTC time>`; quote it in bug reports |
