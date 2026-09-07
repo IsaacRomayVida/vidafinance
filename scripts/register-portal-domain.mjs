@@ -1,23 +1,41 @@
 /**
  * register-portal-domain.mjs — attach alfa.funtrip.mx to the funpay-alfa
- * Firebase Hosting site via the v1beta1 customDomains API, using the
- * service account in GOOGLE_APPLICATION_CREDENTIALS. Prints the DNS
- * records Cloudflare must hold (ownership TXT + connect records).
+ * Firebase Hosting site (v1beta1 customDomains API). Zero dependencies:
+ * the service-account access token is minted with node:crypto (RS256 JWT
+ * → oauth2 token exchange). Prints the DNS records Cloudflare must hold.
  */
 import { readFileSync } from 'node:fs';
-import { GoogleAuth } from 'google-auth-library';
+import { createSign } from 'node:crypto';
 
 const SITE = 'funpay-alfa';
 const DOMAIN = process.env.PORTAL_DOMAIN || 'alfa.funtrip.mx';
 const BASE = `https://firebasehosting.googleapis.com/v1beta1/projects/vida-finance/sites/${SITE}`;
 
-const auth = new GoogleAuth({
-  keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+const sa = JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+const now = Math.floor(Date.now() / 1000);
+const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+const unsigned =
+  b64({ alg: 'RS256', typ: 'JWT' }) +
+  '.' +
+  b64({
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600,
+  });
+const jwt = unsigned + '.' + createSign('RSA-SHA256').update(unsigned).sign(sa.private_key, 'base64url');
+const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: 'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=' + jwt,
 });
-const client = await auth.getClient();
-const { token } = await client.getAccessToken();
-const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+const { access_token } = await tokenRes.json();
+if (!access_token) {
+  console.error('token exchange failed', await tokenRes.text?.());
+  process.exit(1);
+}
+const headers = { Authorization: `Bearer ${access_token}`, 'Content-Type': 'application/json' };
 
 async function get() {
   const r = await fetch(`${BASE}/customDomains/${DOMAIN}`, { headers });
@@ -40,8 +58,7 @@ if (!domain) {
 
 for (let i = 0; i < 30; i++) {
   domain = await get();
-  const updates = domain?.requiredDnsUpdates;
-  if (updates?.desired?.length) break;
+  if (domain?.requiredDnsUpdates?.desired?.length) break;
   await new Promise((r) => setTimeout(r, 4000));
 }
 

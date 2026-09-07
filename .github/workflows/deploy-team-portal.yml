@@ -72,9 +72,7 @@ jobs:
         if: ${{ github.event.inputs.mode == 'domain' }}
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
-        run: |
-          npm install --no-save google-auth-library
-          node scripts/register-portal-domain.mjs
+        run: node scripts/register-portal-domain.mjs
 
       - name: Cleanup
         if: always()
