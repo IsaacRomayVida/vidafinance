@@ -1,12 +1,16 @@
 /**
- * Cold-start brand moment, choreographed: the papalote dawn artwork breathes
- * (slow Ken Burns drift) while a warm light sweep rises from the horizon;
- * the mark blooms with a gold ring pulse and a soft haptic; the wordmark
- * rises; then the curtain fades the app in. ~3s, tappable to skip, pure
- * transform/opacity on the native driver. Under reduced motion the whole
- * thing collapses to a quick opacity-only fade.
+ * Cold-start brand film: one of seven "Amanecer" scenes — dignified moments
+ * of Mexican family life, each ending on the teal-and-gold papalote — plays
+ * full-bleed, and as the kite holds the sky the mark blooms with a gold ring
+ * pulse and a soft haptic, the wordmark rises, and the curtain fades the app
+ * in. A scene is drawn at random per cold start, so the opening stays alive.
+ *
+ * The dawn artwork sits under the video as poster and failure fallback.
+ * ~5.8s total, tap anywhere to skip. Under reduced motion: artwork only,
+ * fast opacity fade, no video.
  */
 import * as Haptics from 'expo-haptics';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, Pressable, StyleSheet, View } from 'react-native';
 
@@ -14,15 +18,41 @@ import { colors } from '../theme';
 import { FunpayMark, FunpayWordmark } from './FunpayLogo';
 import { useReducedMotion } from './motion';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// Metro needs static requires — the whole set ships (~7 MB total).
+/* eslint-disable @typescript-eslint/no-var-requires */
 const artwork = require('../../assets/splash-artwork.png');
+const SCENES = [
+  require('../../assets/intros/scene-1.mp4'),
+  require('../../assets/intros/scene-2.mp4'),
+  require('../../assets/intros/scene-3.mp4'),
+  require('../../assets/intros/scene-4.mp4'),
+  require('../../assets/intros/scene-5.mp4'),
+  require('../../assets/intros/scene-6.mp4'),
+  require('../../assets/intros/scene-7.mp4'),
+];
+/* eslint-enable @typescript-eslint/no-var-requires */
 
 const bloom = Easing.bezier(0.23, 1, 0.32, 1);
 
+function SceneFilm({ source }: { source: number }) {
+  const player = useVideoPlayer(source, (p) => {
+    p.loop = false;
+    p.muted = true;
+    p.play();
+  });
+  return (
+    <VideoView
+      player={player}
+      style={StyleSheet.absoluteFill}
+      contentFit="cover"
+      nativeControls={false}
+    />
+  );
+}
+
 export function BrandIntro({ onDone }: { onDone: () => void }) {
   const reduced = useReducedMotion();
-  const drift = useRef(new Animated.Value(0)).current;
-  const sweep = useRef(new Animated.Value(0)).current;
+  const [scene] = useState(() => SCENES[Math.floor(Math.random() * SCENES.length)]);
   const mark = useRef(new Animated.Value(0)).current;
   const ring = useRef(new Animated.Value(0)).current;
   const word = useRef(new Animated.Value(0)).current;
@@ -59,25 +89,10 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    // The sky breathes for the whole moment.
-    Animated.timing(drift, {
-      toValue: 1,
-      duration: 3400,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
-
-    // Light rises from the horizon.
-    Animated.timing(sweep, {
-      toValue: 1,
-      duration: 2200,
-      delay: 200,
-      easing: Easing.inOut(Easing.quad),
-      useNativeDriver: true,
-    }).start();
-
+    // Timed to the 5s scenes: the film breathes alone, then as the papalote
+    // holds the sky the brand arrives, and the curtain hands over the app.
     Animated.sequence([
-      Animated.delay(500),
+      Animated.delay(3300),
       Animated.parallel([
         Animated.spring(mark, {
           toValue: 1,
@@ -93,11 +108,11 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
           useNativeDriver: true,
         }),
       ]),
-      Animated.timing(word, { toValue: 1, duration: 380, easing: bloom, useNativeDriver: true }),
-      Animated.delay(950),
+      Animated.timing(word, { toValue: 1, duration: 360, easing: bloom, useNativeDriver: true }),
+      Animated.delay(900),
       Animated.timing(curtain, {
         toValue: 0,
-        duration: 380,
+        duration: 420,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
@@ -105,58 +120,21 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
 
     const haptic = setTimeout(
       () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}),
-      620
+      3450
     );
     return () => clearTimeout(haptic);
-  }, [drift, sweep, mark, ring, word, curtain, reduced, finish]);
+  }, [mark, ring, word, curtain, reduced, finish]);
 
   if (finished) return null;
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, styles.layer, { opacity: curtain }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={skip} accessibilityLabel="saltar intro">
-        {/* The dawn, breathing. */}
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            reduced
-              ? null
-              : {
-                  transform: [
-                    { scale: drift.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.07] }) },
-                    {
-                      translateY: drift.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }),
-                    },
-                  ],
-                },
-          ]}
-        >
-          <Image source={artwork} style={styles.artwork} resizeMode="cover" />
-        </Animated.View>
-
-        {/* First light rising over the frame. */}
-        {!reduced ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.sweep,
-              {
-                opacity: sweep.interpolate({
-                  inputRange: [0, 0.5, 1],
-                  outputRange: [0, 0.4, 0],
-                }),
-                transform: [
-                  {
-                    translateY: sweep.interpolate({ inputRange: [0, 1], outputRange: [260, -340] }),
-                  },
-                ],
-              },
-            ]}
-          />
-        ) : null}
+        {/* Poster + fallback ground, always beneath the film. */}
+        <Image source={artwork} style={styles.artwork} resizeMode="cover" />
+        {!reduced ? <SceneFilm source={scene} /> : null}
 
         <View style={styles.center} pointerEvents="none">
-          {/* Gold ring pulse behind the blooming mark. */}
           {!reduced ? (
             <Animated.View
               style={[
@@ -202,16 +180,7 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
 
 const styles = StyleSheet.create({
   layer: { zIndex: 10, backgroundColor: colors.bg },
-  artwork: { width: '100%', height: '100%' },
-  sweep: {
-    position: 'absolute',
-    left: -80,
-    right: -80,
-    bottom: 0,
-    height: 420,
-    backgroundColor: colors.goldSoft,
-    borderRadius: 210,
-  },
+  artwork: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   center: {
     position: 'absolute',
     top: 0,
