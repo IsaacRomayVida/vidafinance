@@ -19,9 +19,9 @@ and build automation. Humans: see README.md; Claude-in-repo: CLAUDE.md.
 
 | Thing | Value |
 |---|---|
-| Portal URL | https://alfa.funtrip.mx (canonical) · https://funpay-app.web.app (direct) |
+| Portal URL | https://alfa.funtrip.mx (canonical) · https://funpay-alfa.web.app (direct) |
 | What it is | The mobile app (react-native-web export) rendered in a phone frame, live against production Firebase |
-| App-only URL | https://funpay-app.web.app/app/ (no frame — for automated UI drives) |
+| App-only URL | https://funpay-alfa.web.app/app/ (no frame — for automated UI drives) |
 | Rebuild/redeploy | GitHub Actions → `deploy-team-portal.yml` (inputs: `ref` branch, `mode` deploy\|domain) |
 
 ## QA fixtures (the only sanctioned test identities)

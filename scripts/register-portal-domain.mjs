@@ -1,5 +1,5 @@
 /**
- * register-portal-domain.mjs — attach alfa.funtrip.mx to the funpay-app
+ * register-portal-domain.mjs — attach alfa.funtrip.mx to the funpay-alfa
  * Firebase Hosting site via the v1beta1 customDomains API, using the
  * service account in GOOGLE_APPLICATION_CREDENTIALS. Prints the DNS
  * records Cloudflare must hold (ownership TXT + connect records).
@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { GoogleAuth } from 'google-auth-library';
 
-const SITE = 'funpay-app';
+const SITE = 'funpay-alfa';
 const DOMAIN = process.env.PORTAL_DOMAIN || 'alfa.funtrip.mx';
 const BASE = `https://firebasehosting.googleapis.com/v1beta1/projects/vida-finance/sites/${SITE}`;
 
