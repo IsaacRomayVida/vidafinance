@@ -49,6 +49,9 @@
   #fb-cancel{background:rgba(25,68,69,.08);color:var(--brand)}
   #fb-send{background:var(--brand);color:#fff}
   #fb-status{font-size:12px;color:#247a6e;margin-top:8px;min-height:15px}
+  #fb-status.bad{color:#b3261e}
+  #fb-count{font-size:11px;color:#93aaa9;text-align:right;margin:-4px 0 6px}
+  .ver{margin-top:10px;font-size:11px;color:#93aaa9}
 </style>
 </head>
 <body>
@@ -61,42 +64,90 @@
   <h2>Tu comentario</h2>
   <p id="fb-screen">Pantalla: —</p>
   <textarea id="fb-text" rows="4" maxlength="1500" placeholder="¿Qué viste? ¿Qué mejorarías?"></textarea>
+  <p id="fb-count">0 / 1500</p>
   <input id="fb-name" maxlength="80" placeholder="Tu nombre (opcional)">
   <div class="fb-row"><button id="fb-cancel">Cancelar</button><button id="fb-send">Enviar</button></div>
   <p id="fb-status"></p>
 </div>
 <script>
-(function(){
-  var FS='https://firestore.googleapis.com/v1/projects/vida-finance/databases/(default)/documents/qa_feedback';
-  var frame=document.getElementById('appframe');
-  function screenName(){
-    try{ return frame.contentDocument && frame.contentDocument.title || 'desconocida'; }
-    catch(e){ return 'desconocida'; }
+(function () {
+  'use strict';
+  var FS = 'https://firestore.googleapis.com/v1/projects/vida-finance/databases/(default)/documents/qa_feedback';
+  /* Replaced at deploy time by the workflow. */
+  var VERSION = '__PORTAL_VERSION__';
+  document.getElementById('ver').textContent = 'portal ' + VERSION;
+
+  var frame = document.getElementById('appframe');
+  /* Same-origin by construction (the app is served from /app/ on this very
+     site); try/catch so a cross-origin redirect inside the app cannot take
+     the drawer down. The rules cap `screen` at 120 chars and hasOnly makes
+     an oversized value fail the WHOLE write — truncate here. */
+  function screenName() {
+    try {
+      var d = frame.contentDocument;
+      var t = ((d && d.title) || '').replace(/\s*\|\s*FunPay\s*$/i, '').trim();
+      return (t || 'desconocida').slice(0, 120);
+    } catch (e) { return 'desconocida'; }
   }
-  var open=document.getElementById('fb-open'),panel=document.getElementById('fb-panel'),
-      txt=document.getElementById('fb-text'),name=document.getElementById('fb-name'),
-      status=document.getElementById('fb-status'),scr=document.getElementById('fb-screen');
-  open.onclick=function(){ scr.textContent='Pantalla: '+screenName(); status.textContent=''; panel.hidden=false; txt.focus(); };
-  document.getElementById('fb-cancel').onclick=function(){ panel.hidden=true; };
-  document.getElementById('fb-send').onclick=function(){
-    var c=txt.value.trim(); if(!c){ status.textContent='Escribe un comentario primero.'; return; }
-    status.textContent='Enviando…';
-    fetch(FS,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{
-      screen:{stringValue:screenName()},
-      comment:{stringValue:c},
-      name:{stringValue:name.value.trim()},
-      ua:{stringValue:navigator.userAgent.slice(0,200)},
-      createdAt:{timestampValue:new Date().toISOString()}
-    }})}).then(function(r){
-      if(r.ok){ status.textContent='¡Gracias! Comentario guardado.'; txt.value=''; setTimeout(function(){panel.hidden=true;},1200); }
-      else { status.textContent='No se pudo guardar ('+r.status+'). Intenta de nuevo.'; }
-    }).catch(function(){ status.textContent='Sin conexión. Intenta de nuevo.'; });
+
+  var openBtn = document.getElementById('fb-open'),
+      panel = document.getElementById('fb-panel'),
+      txt = document.getElementById('fb-text'),
+      nameEl = document.getElementById('fb-name'),
+      countEl = document.getElementById('fb-count'),
+      statusEl = document.getElementById('fb-status'),
+      scrEl = document.getElementById('fb-screen'),
+      sendBtn = document.getElementById('fb-send');
+
+  function say(msg, bad) { statusEl.textContent = msg; statusEl.className = bad ? 'bad' : ''; }
+
+  txt.addEventListener('input', function () { countEl.textContent = txt.value.length + ' / 1500'; });
+
+  openBtn.onclick = function () {
+    scrEl.textContent = 'Pantalla: ' + screenName();
+    say('');
+    panel.hidden = false;
+    txt.focus();
+  };
+  document.getElementById('fb-cancel').onclick = function () { panel.hidden = true; };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !panel.hidden) panel.hidden = true;
+  });
+
+  sendBtn.onclick = function () {
+    var comment = txt.value.trim();
+    if (!comment) { say('Escribe un comentario primero.', true); txt.focus(); return; }
+    sendBtn.disabled = true;
+    say('Enviando…');
+    /* Exactly the five keys the security rules allow — an extra key fails
+       the whole write, not just that field. */
+    var body = { fields: {
+      screen:    { stringValue: screenName() },
+      comment:   { stringValue: comment.slice(0, 1500) },
+      name:      { stringValue: nameEl.value.trim().slice(0, 80) },
+      ua:        { stringValue: navigator.userAgent.slice(0, 200) },
+      createdAt: { timestampValue: new Date().toISOString() }
+    } };
+    fetch(FS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) {
+        sendBtn.disabled = false;
+        if (r.ok) {
+          say('¡Gracias! Comentario guardado.');
+          txt.value = '';
+          countEl.textContent = '0 / 1500';
+          setTimeout(function () { panel.hidden = true; }, 1300);
+        } else {
+          say('No se pudo guardar (' + r.status + '). Intenta de nuevo.', true);
+        }
+      })
+      .catch(function () { sendBtn.disabled = false; say('Sin conexión. Intenta de nuevo.', true); });
   };
 })();
 </script>
 <footer>
   Para crear una cuenta de prueba usa el código de empresa <code>FUNQA1</code> y un correo <code>@demo-diagnostic.funpay.mx</code>.<br>
   <strong>Este entorno apunta a producción:</strong> mirar, registrarse con datos de prueba — nunca ejecutar pagos reales.
+  <div class="ver" id="ver">—</div>
 </footer>
 </body>
 </html>

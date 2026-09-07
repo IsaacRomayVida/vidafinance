@@ -77,8 +77,14 @@ function Root() {
           animationDuration: 220,
         }}
       >
-        <AuthStack.Screen name="Login" component={LoginScreen} />
-        <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
+        {/* title → document.title on web: the team portal labels feedback
+            with the framed document's title, so every screen names itself. */}
+        <AuthStack.Screen name="Login" component={LoginScreen} options={{ title: 'Entrar' }} />
+        <AuthStack.Screen
+          name="Onboarding"
+          component={OnboardingScreen}
+          options={{ title: 'Crear cuenta' }}
+        />
       </AuthStack.Navigator>
     );
   }
@@ -92,9 +98,13 @@ function Root() {
         animationDuration: 220,
       }}
     >
-      <Stack.Screen name="Home" component={HomeScreen} />
-      <Stack.Screen name="Loans" component={LoansScreen} />
-      <Stack.Screen name="RequestLoan" component={RequestLoanScreen} />
+      <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Inicio' }} />
+      <Stack.Screen name="Loans" component={LoansScreen} options={{ title: 'Mis préstamos' }} />
+      <Stack.Screen
+        name="RequestLoan"
+        component={RequestLoanScreen}
+        options={{ title: 'Solicitar préstamo' }}
+      />
     </Stack.Navigator>
   );
 }
