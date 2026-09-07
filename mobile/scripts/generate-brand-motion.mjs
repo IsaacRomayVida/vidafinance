@@ -28,11 +28,21 @@ if (!KEY || KEY.includes('PASTE_YOUR')) {
   process.exit(1);
 }
 
-const MODEL = 'fal-ai/bytedance/seedance/v1/lite/text-to-video';
-const argPrompt = process.argv.indexOf('--prompt');
+const args = process.argv;
+// --pro selects the hero-quality tier; --duration 5|10; --resolution 480p|720p|1080p
+const MODEL = args.includes('--pro')
+  ? 'fal-ai/bytedance/seedance/v1/pro/text-to-video'
+  : 'fal-ai/bytedance/seedance/v1/lite/text-to-video';
+const argOf = (flag, fallback) => {
+  const i = args.indexOf(flag);
+  return i > -1 ? args[i + 1] : fallback;
+};
+const DURATION = argOf('--duration', '5');
+const RESOLUTION = argOf('--resolution', '720p');
+const argPrompt = args.indexOf('--prompt');
 const prompt =
   argPrompt > -1
-    ? process.argv[argPrompt + 1]
+    ? args[argPrompt + 1]
     : 'Extreme slow motion abstract macro: translucent aquamarine glass and soft deep-teal fluid, ' +
       'gentle light caustics drifting through frosted glass, pale mint-white background, faint warm ' +
       'gold glints, elegant calm premium private-banking mood, soft focus, no text, no people, ' +
@@ -45,7 +55,7 @@ async function main() {
   const submit = await fetch(`https://queue.fal.run/${MODEL}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ prompt, aspect_ratio: '9:16', resolution: '720p', duration: '5' }),
+    body: JSON.stringify({ prompt, aspect_ratio: '9:16', resolution: RESOLUTION, duration: DURATION }),
   });
   if (!submit.ok) throw new Error(`submit ${submit.status}: ${await submit.text()}`);
   const { status_url, response_url } = await submit.json();
