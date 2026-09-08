@@ -90,7 +90,7 @@ export function EmployeePage() {
       </Board>
 
       {/* Use cases */}
-      <Board tone="leaf" className="film">
+      <Board className="film">
       <BoardFilm film="/video/live-kitchen.mp4" still="/images/brand/moment-kitchen.jpg" />
         <BoardHead kicker={t('lp_m_use_tag')} title={t('lp_m_use_h')} />
         <div className="mk-gap" />

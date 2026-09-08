@@ -12,7 +12,7 @@ const base = {
   ink: '#1e201d',
   inkSoft: '#3a3d38',
   mute: '#5f6a5c',   // ≥4.5:1 on cream for 13px labels
-  typeQuiet: '#7d8d77',
+  typeQuiet: '#5c6a57',
 
   cream: '#f3f4ec',
   creamMid: '#eaf0e3',

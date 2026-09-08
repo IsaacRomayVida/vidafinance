@@ -6,7 +6,7 @@ export function HowItWorks() {
   const { t } = useTranslation();
 
   return (
-    <Board tone="leaf" className="film" id="how">
+    <Board className="film" id="how">
       <BoardFilm film="/video/live-stall.mp4" still="/images/brand/home-stall.jpg" />
       <div className="mk-cols">
         <div className="sticky">

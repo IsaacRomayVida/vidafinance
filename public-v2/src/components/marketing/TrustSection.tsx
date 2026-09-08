@@ -18,7 +18,7 @@ export function TrustSection() {
   const { t } = useTranslation();
 
   return (
-    <Board tone="leaf" className="film" id="trust">
+    <Board className="film" id="trust">
       <BoardFilm film="/video/live-backpack.mp4" still="/images/brand/moment-backpack.jpg" />
       <div className="mk-cols">
         <div className="sticky sh">

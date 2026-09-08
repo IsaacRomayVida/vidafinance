@@ -207,8 +207,11 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-cols>.sticky{position:sticky;top:96px}
 
 /* ─── Statement board (home hero) ─────────────────────────────── */
-.mk-statement{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:clamp(24px,4vw,56px);align-items:center;min-height:min(620px,78vh);padding:clamp(8px,2vw,24px) 0 clamp(16px,3vw,32px)}
-.mk-stage{position:relative;min-height:400px}
+.mk-statement{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;min-height:min(660px,80vh);padding:clamp(8px,2vw,24px) 0 clamp(16px,3vw,32px)}
+/* The film is the board, not a card inside it. */
+/* Anchored to .mk-board.mk-hero (the nearest positioned ancestor), so it
+   fills the whole board rather than the inner column. */
+.mk-stage{position:absolute;inset:0;z-index:-2;min-height:0;border-radius:0;overflow:hidden}
 .mk-float{position:absolute}
 .mk-capture{display:inline-flex;align-items:center;gap:8px;padding:6px;border-radius:var(--r-pill);background:var(--ink);box-shadow:var(--shadow-float)}
 .mk-capture .ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--cream)}
@@ -547,26 +550,15 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
    Stacked, the film sat under the headline and had to be scrolled to. At
    phone widths the stage lifts out of the flow and becomes the board's
    background, with the statement over a scrim that keeps it readable. */
-@media (max-width:860px){
-  .mk-board.mk-hero{position:relative;overflow:hidden;isolation:isolate}
-  .mk-board.mk-hero .mk-stage{position:absolute;inset:0;z-index:-2;border-radius:0;min-height:0}
-  .mk-board.mk-hero .mk-stage-film{border-radius:0}
-  .mk-board.mk-hero::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
-    background:linear-gradient(180deg,rgba(18,26,16,.34) 0%,rgba(18,26,16,.58) 48%,rgba(18,26,16,.84) 100%)}
-  .mk-board.mk-hero .mk-statement{grid-template-columns:1fr;min-height:min(88vh,720px);align-content:center}
-  .mk-board.mk-hero .mk-h1{color:#f4f7ee;text-shadow:0 2px 20px rgba(8,16,8,.62)}
-  .mk-board.mk-hero .mk-h1 .quiet,.mk-board.mk-hero .mk-h1 em{color:rgba(244,247,238,.92)}
-  .mk-board.mk-hero .mk-kicker,.mk-board.mk-hero .mk-board-title{color:rgba(244,247,238,.92)}
-  .mk-board.mk-hero .mk-disclose{color:rgba(244,247,238,.92);text-shadow:0 1px 12px rgba(8,16,8,.6)}
-  .mk-board.mk-hero .mk-float{display:none}
-  .mk-board.mk-hero .mk-btn.ghost{color:#f4f7ee;border-color:rgba(244,247,238,.5)}
-}
 
 /* ─── A board whose background is a film ──────────────────────────────
    The still sits under the film so the board is never empty; the scrim is
    fixed rather than inherited from whatever the frame is doing, so type
    over motion keeps a contrast floor. */
-.mk-board.film{position:relative;isolation:isolate;color:#f4f7ee}
+.mk-board.film{position:relative;isolation:isolate;color:#f4f7ee;
+  /* No tone gradient here: the film IS the background, and a gradient would
+     paint straight over it. The dark ground shows only until it loads. */
+  background:#10180e}
 .mk-board-film{position:absolute;inset:0;z-index:-1;overflow:hidden;border-radius:inherit}
 .mk-board-film img,.mk-board-film video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .mk-board-film video{filter:saturate(.92)}
@@ -584,3 +576,33 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-board.film .mk-fig span{color:rgba(244,247,238,.94)}
 .mk-board.film .mk-btn.ghost{color:#f4f7ee;border-color:rgba(244,247,238,.6)}
 @media (prefers-reduced-motion:reduce){.mk-board-film video{display:none}}
+
+/* ─── Hero: the film is the ground at every width ────────────────────── */
+.mk-board.mk-hero{position:relative;overflow:hidden;isolation:isolate;background:#10180e}
+.mk-board.mk-hero::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(180deg,rgba(14,22,12,.52) 0%,rgba(14,22,12,.66) 45%,rgba(14,22,12,.85) 100%)}
+.mk-board.mk-hero .mk-h1{color:#f4f7ee;text-shadow:0 2px 22px rgba(8,14,8,.6);max-width:18ch}
+.mk-board.mk-hero .mk-h1 .quiet,.mk-board.mk-hero .mk-h1 em{color:rgba(244,247,238,.92)}
+.mk-board.mk-hero .mk-kicker,.mk-board.mk-hero .mk-board-title{color:rgba(244,247,238,.94)}
+.mk-board.mk-hero .mk-disclose{color:rgba(244,247,238,.94);text-shadow:0 1px 12px rgba(8,14,8,.6)}
+.mk-board.mk-hero .mk-btn.ghost{color:#f4f7ee;border-color:rgba(244,247,238,.6)}
+/* The floating cards sit over the film on wide screens, and step aside on
+   phones where the headline needs the whole width. */
+.mk-board.mk-hero .mk-float{z-index:1}
+@media (max-width:1100px){.mk-board.mk-hero .mk-float{display:none}}
+
+/* ─── Light surfaces on a film board keep their own ink ───────────────
+   A board sets cream type for text sitting directly on the film. Anything
+   that carries its own light surface — step pills, FAQ pills, inputs —
+   must NOT inherit that cream, or it becomes cream on paper. */
+.mk-board.film .mk-step,
+.mk-board.film .mk-faq-item,
+.mk-board.film .mk-input,
+.mk-board.film .mk-fig.paper{background:rgba(255,255,255,.94);color:var(--ink);text-shadow:none}
+.mk-board.film .mk-step .l,
+.mk-board.film .mk-step .l small,
+.mk-board.film .mk-faq-q,
+.mk-board.film .mk-faq-a{color:var(--ink);text-shadow:none}
+.mk-board.film .mk-step .l small{color:var(--ink-soft)}
+.mk-board.film .mk-step .d{background:var(--mark);color:var(--mark-ink)}
+.mk-board.film .mk-num,.mk-board.film .mk-num small{color:var(--ink)}

@@ -51,7 +51,7 @@ export function ROICalculator() {
   }, []);
 
   return (
-    <Board tone="leaf" className="film" id="cost">
+    <Board className="film" id="cost">
       <BoardFilm film="/video/live-pharmacy.mp4" still="/images/brand/moment-pharmacy.jpg" />
       <div className="mk-cols">
         <div className="sticky">
