@@ -159,7 +159,7 @@ export default function App() {
   // system type, never hold the product on the splash forever.
   const [fontTimeout, setFontTimeout] = React.useState(false);
   React.useEffect(() => {
-    const t = setTimeout(() => setFontTimeout(true), 3000);
+    const t = setTimeout(() => setFontTimeout(true), 6000);
     return () => clearTimeout(t);
   }, []);
   if (!fontsLoaded && !fontTimeout) return <Splash />;

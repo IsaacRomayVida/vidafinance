@@ -249,16 +249,17 @@ export function RequestLoanScreen({
             {[0, 3, 6, 9].map((row) => (
               <View key={row} style={styles.padRow}>
                 {KEYS.slice(row, row + 3).map((k) => (
-                  <PressableScale
-                    key={k}
-                    onPress={() => press(k)}
-                    accessibilityRole="button"
-                    accessibilityLabel={k === '⌫' ? 'borrar' : k}
-                    style={styles.key}
-                    testID={`key-${k === '⌫' ? 'del' : k}`}
-                  >
-                    <Text style={styles.keyText}>{k}</Text>
-                  </PressableScale>
+                  <View key={k} style={styles.keyCell}>
+                    <PressableScale
+                      onPress={() => press(k)}
+                      accessibilityRole="button"
+                      accessibilityLabel={k === '⌫' ? 'borrar' : k}
+                      style={styles.key}
+                      testID={`key-${k === '⌫' ? 'del' : k}`}
+                    >
+                      <Text style={styles.keyText}>{k}</Text>
+                    </PressableScale>
+                  </View>
                 ))}
               </View>
             ))}
@@ -295,7 +296,8 @@ const styles = StyleSheet.create({
   error: { fontFamily: fonts.sans, color: colors.danger, marginTop: spacing.m, lineHeight: 19 },
   pad: { marginTop: spacing.l, gap: 6 },
   padRow: { flexDirection: 'row', gap: 6 },
-  key: { flex: 1, height: 52, borderRadius: radii.pill, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center' },
+  keyCell: { flex: 1 },
+  key: { height: 52, borderRadius: radii.pill, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
   keyText: { fontFamily: fonts.sans, fontSize: 22, color: colors.ink },
   title: { fontFamily: fonts.display, fontSize: type.display, lineHeight: 44, color: colors.ink, letterSpacing: -0.4 },
   quiet: { fontFamily: fonts.sansLight, fontSize: 17, lineHeight: 25, color: colors.inkSoft, marginTop: spacing.m, maxWidth: 320 },
