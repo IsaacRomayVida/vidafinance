@@ -1,5 +1,14 @@
 # Imagery — what the photos are, and how to generate them
 
+> **Override (Isaac, 2026-09-08): no botanical subjects.** The subject is
+> *people achieving freedom* — the moment someone can pay for the last-minute
+> thing: the pharmacy counter, the school backpack, walking out of the service
+> door at dawn, hands letting the cream-and-sage paper kite go. Everything
+> else below still holds: photography is colour, the grade is muted
+> olive-clay-and-cream film, faces are never legible, one subject per frame,
+> a clear zone for type. Prompts live in `mobile/scripts/generate-brand-assets.mjs`.
+
+
 Applies to the borrower side only. The Ops dashboard uses no photography.
 
 Photography in this direction is **colour, not subject**. A leaf is on screen because it supplies a green-to-cream gradient with organic grain, not because the app is about plants. Every image must pass one test: could you drop a 44px white title on it and read it without a scrim? If not, it's wrong.

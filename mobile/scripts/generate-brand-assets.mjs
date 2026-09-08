@@ -1,12 +1,17 @@
 /**
  * Brand assets in the funpay-ui direction (.claude/skills/funpay-ui/references/imagery.md).
  *
- * Stills  — OpenAI Images (env OPENAI_API_KEY): macro botanical, motion-blurred
- *           portrait, figure in soft green, dark abstract, and transparent
- *           cutouts (leaf, frond, the cream-and-sage paper kite).
- * Films   — fal.ai Seedance (env FAL_KEY): five intro scenes in the botanical
- *           grade that each end on the kite, and two leaf loops (9:16 for the
- *           app's Home board, 16:9 for the website hero).
+ * Subject (Isaac, 2026-09-08): PEOPLE ACHIEVING FREEDOM — the moment someone
+ * can pay for the last-minute thing. Never plants as subject. Faces are never
+ * legible (turned away, motion-blurred, out of focus); the grade stays the
+ * skill's muted olive-clay-and-cream film look, and every intro ends on the
+ * cream-and-sage paper kite, the brand's freedom motif.
+ *
+ * Stills  — OpenAI Images (env OPENAI_API_KEY): Home backgrounds, four
+ *           "moments", the figure in green, the dark abstract, and transparent
+ *           cutouts (kite, hands with kite, pharmacy paper bag).
+ * Films   — fal.ai Seedance (env FAL_KEY): five intro scenes and two kite
+ *           loops (9:16 for the app's Home board, 16:9 for the website hero).
  *
  * Keys come from the environment only (GitHub secrets in CI). Nothing is
  * committed by this script; it writes to --out (default ./brand-assets) and the
@@ -34,17 +39,28 @@ const NEG =
   'No text, no watermark, no logo, no saturated colours, no neon, no bright white, no sharp face, no eye contact, no bouquet, no multiple subjects, no stock photo lighting, no HDR.';
 
 const IMAGES = [
+  // Home backgrounds — 9:16, a clear lighter upper third for the numeral,
+  // a darker mass in the lower third for the chips. A person, never legible.
   {
-    file: 'leaf-home-calla.png', size: '1024x1536',
-    prompt: `Macro photograph of a single backlit calla lily spathe, translucent, veins visible, olive and chartreuse green fading to cream at the top, extremely shallow depth of field, soft diffused light, muted desaturated film look, fine grain, no background, the form rises from the bottom and leans to one side leaving a clean lighter area in the upper third and a darker mass in the lower third, vertical. ${NEG}`,
+    file: 'home-doorway.png', size: '1024x1536',
+    prompt: `A hotel housekeeper in a pale sage uniform stepping out of a service door into early morning light, seen from behind, walking away, long-exposure motion blur, face never visible, olive and clay tones, a pale cream sky filling the upper third of the frame, darker doorway shadow in the lower third, muted desaturated analog film grade, fine grain, editorial, vertical. ${NEG}`,
   },
   {
-    file: 'leaf-home-fern.png', size: '1024x1536',
-    prompt: `Macro photograph of a single backlit fern frond unrolling, translucent, veins visible, olive and chartreuse green fading to cream at the top, extremely shallow depth of field, soft diffused light, muted desaturated film look, fine grain, no background, form rising from the bottom leaning to one side, clean lighter area in the upper third, vertical. ${NEG}`,
+    file: 'home-kite.png', size: '1024x1536',
+    prompt: `Two hands releasing a small cream paper kite with a sage green cross into a pale cream sky, seen from below, slight motion blur on the hands, no face, olive-clay skin tones desaturated toward clay, the sky filling the upper two thirds, muted desaturated analog film grade, fine grain, vertical. ${NEG}`,
+  },
+  // Moments — 4:3, for the credit-line / statement boards and the website.
+  {
+    file: 'moment-pharmacy.png', size: '1536x1024',
+    prompt: `Close-up of hands at a pharmacy counter receiving a small cream paper bag of medicine, soft focus, no faces in frame, warm olive and clay tones with cream highlights, quiet relief, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
   },
   {
-    file: 'portrait-clay.png', size: '1536x1024',
-    prompt: `Long exposure portrait, a person holding a pale flower over their face, motion blur, face not visible, olive green and clay tones, muted, soft cream flower petals as the only sharp detail, grainy analog film, dark green shadows, editorial, figure centred, flower upper-centre. ${NEG}`,
+    file: 'moment-backpack.png', size: '1536x1024',
+    prompt: `A parent kneeling in a doorway handing a child a school backpack, backlit by morning light, both faces turned away and softly blurred, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial, tender and unposed. ${NEG}`,
+  },
+  {
+    file: 'moment-kitchen.png', size: '1536x1024',
+    prompt: `A person sitting at a simple kitchen table at dawn, seen from the side and slightly behind, exhaling with relief, a phone face-down on the table, window light, face out of focus, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
   },
   {
     file: 'figure-green.png', size: '1024x1024',
@@ -54,35 +70,35 @@ const IMAGES = [
     file: 'dark-abstract.png', size: '1024x1024',
     prompt: `Near-black photograph, the shadowed shoulder of a figure against black, faint cool grey-green gradient, almost no detail, grainy, moody, minimal. ${NEG}`,
   },
-  // Transparent cutouts — floats for the website statement boards and the app.
-  {
-    file: 'cutout-leaf.png', size: '1024x1536', transparent: true,
-    prompt: `A single backlit leaf, isolated on a transparent background, olive and chartreuse green with cream highlights along the veins, translucent, soft diffused light, muted desaturated film grade, photographic, no shadow on the ground. ${NEG}`,
-  },
-  {
-    file: 'cutout-frond.png', size: '1024x1536', transparent: true,
-    prompt: `A single fern frond unrolling, isolated on a transparent background, olive to cream, translucent, backlit, muted desaturated film grade, photographic, no ground shadow. ${NEG}`,
-  },
+  // Transparent cutouts — floats for the statement boards and the app.
   {
     file: 'cutout-kite.png', size: '1024x1536', transparent: true,
     prompt: `A small paper kite, diamond shaped, cream paper with a sage green cross and a short cream tail, photographed in soft diffused light, isolated on a transparent background, muted desaturated film grade, slight paper texture, photographic. ${NEG}`,
   },
+  {
+    file: 'cutout-hands-kite.png', size: '1024x1536', transparent: true,
+    prompt: `Two hands holding the string of a small cream paper kite that floats just above them, isolated on a transparent background, olive-clay skin tones desaturated, soft diffused light, muted film grade, photographic, no face. ${NEG}`,
+  },
+  {
+    file: 'cutout-paperbag.png', size: '1024x1024', transparent: true,
+    prompt: `A small folded cream paper bag, the kind a pharmacy hands over the counter, isolated on a transparent background, soft diffused light, muted desaturated film grade, slight paper texture, photographic. ${NEG}`,
+  },
 ];
 
-const KITE_END = 'In the last second a small cream paper kite with a sage green cross drifts up across the top of the frame and holds against a pale cream sky.';
-const GRADE = 'Muted desaturated analog film grade, olive and moss greens through chartreuse to cream highlights, fine grain, soft diffused light, no saturated colour, no bright white, no text.';
+const KITE_END = 'In the last second a small cream paper kite with a sage green cross rises across the top of the frame and holds against a pale cream sky.';
+const GRADE = 'Muted desaturated analog film grade, olive and clay tones through moss to cream highlights, fine grain, soft diffused light, faces never legible, no saturated colour, no bright white, no text.';
 
 const FILMS = [
-  { file: 'intro-calla.mp4', aspect: '9:16', prompt: `Macro of a single backlit calla lily spathe, light slowly drifting through its translucent veins, extremely shallow focus, the form leaning to one side. ${GRADE} ${KITE_END}` },
-  { file: 'intro-portrait.mp4', aspect: '9:16', prompt: `Long exposure portrait of a person holding a pale flower over their face, slow motion blur, face never visible, olive-clay tones, the flower the only crisp detail. ${GRADE} ${KITE_END}` },
-  { file: 'intro-figure.mp4', aspect: '9:16', prompt: `Soft-focus figure from the shoulders up in a pale sage green knit top, turning slowly away, green-grey field, heavily diffused. ${GRADE} ${KITE_END}` },
-  { file: 'intro-fern.mp4', aspect: '9:16', prompt: `A backlit fern frond unrolling slowly with dew on it, olive to cream, shallow focus, gentle breeze. ${GRADE} ${KITE_END}` },
-  { file: 'intro-grass.mp4', aspect: '9:16', prompt: `Grass blades with dew moving in a slow breeze, backlit olive light, extremely shallow focus, cream sky above. ${GRADE} ${KITE_END}` },
+  { file: 'intro-doorway.mp4', aspect: '9:16', prompt: `A hotel housekeeper in a pale sage uniform steps out of a service door into early morning light, seen from behind, walking away with light motion blur, a pale cream sky above. ${GRADE} ${KITE_END}` },
+  { file: 'intro-pharmacy.mp4', aspect: '9:16', prompt: `Close-up of hands at a pharmacy counter receiving a small cream paper bag, soft focus, no faces, a quiet moment of relief, slow. ${GRADE} ${KITE_END}` },
+  { file: 'intro-backpack.mp4', aspect: '9:16', prompt: `A parent kneels in a backlit doorway and hands a child a school backpack, both faces turned away and softly blurred, tender and unposed, slow. ${GRADE} ${KITE_END}` },
+  { file: 'intro-kitchen.mp4', aspect: '9:16', prompt: `A person at a simple kitchen table at dawn, seen from the side, exhales with relief and sets a phone face-down, window light, face out of focus, slow. ${GRADE} ${KITE_END}` },
+  { file: 'intro-release.mp4', aspect: '9:16', prompt: `Two hands let go of the string of a small cream paper kite with a sage green cross; the kite climbs slowly into a pale cream sky, seen from below, slight motion blur on the hands. ${GRADE}` },
 ];
 
 const LOOPS = [
-  { file: 'leaf-loop.mp4', aspect: '9:16', prompt: `Macro of a single backlit leaf swaying very slowly in a breeze, translucent veins, olive and chartreuse to cream at the top, extremely shallow focus, seamless slow ambient motion, no camera movement. ${GRADE}` },
-  { file: 'leaf-loop-wide.mp4', aspect: '16:9', prompt: `Macro of a single backlit leaf swaying very slowly in a breeze, translucent veins, olive and chartreuse to cream toward one side, extremely shallow focus, seamless slow ambient motion, no camera movement, wide. ${GRADE}` },
+  { file: 'kite-loop.mp4', aspect: '9:16', prompt: `A small cream paper kite with a sage green cross drifting very slowly in a pale cream sky, gentle ambient motion, no camera movement, seamless and calm, vertical. ${GRADE}` },
+  { file: 'kite-loop-wide.mp4', aspect: '16:9', prompt: `A small cream paper kite with a sage green cross drifting very slowly in a pale cream sky, gentle ambient motion, no camera movement, seamless and calm, wide. ${GRADE}` },
 ];
 
 // ---------------------------------------------------------------- stills

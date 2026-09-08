@@ -53,13 +53,13 @@ jobs:
           cd brand-assets || exit 0
           mkdir -p graded
           # Universal grade from imagery.md: saturation −25%, blacks lifted, faint grain.
-          for f in leaf-home-calla leaf-home-fern portrait-clay figure-green dark-abstract; do
+          for f in home-doorway home-kite moment-pharmacy moment-backpack moment-kitchen figure-green dark-abstract; do
             [ -f "$f.png" ] || continue
             ffmpeg -loglevel error -y -i "$f.png" -vf "eq=saturation=0.75:brightness=0.02:contrast=0.97,noise=alls=5:allf=t" -q:v 2 "graded/$f.jpg"
             ffmpeg -loglevel error -y -i "graded/$f.jpg" -vf "scale=1080:-2" -q:v 3 "graded/$f-1080.jpg"
           done
           # Cutouts keep their alpha: grade the colour, merge the original alpha back.
-          for f in cutout-leaf cutout-frond cutout-kite; do
+          for f in cutout-kite cutout-hands-kite cutout-paperbag; do
             [ -f "$f.png" ] || continue
             ffmpeg -loglevel error -y -i "$f.png" -filter_complex "[0:v]format=rgba,split[c][a];[a]alphaextract[al];[c]format=rgb24,eq=saturation=0.8[cg];[cg][al]alphamerge,format=rgba" "graded/$f.png"
           done
