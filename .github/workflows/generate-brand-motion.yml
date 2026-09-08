@@ -88,7 +88,15 @@ jobs:
             [ -f "$f" ] || continue
             ffmpeg -loglevel error -y -i "$f" -vf "scale='if(gt(iw,ih),1280,720)':-2,eq=saturation=0.85,noise=alls=4:allf=t" -c:v libx264 -preset slow -crf 27 -pix_fmt yuv420p -movflags +faststart -an "graded/$f"
           done
-          ls -la graded
+          # Review frames: one early, one at the kite moment, per film.
+          mkdir -p frames
+          for f in *.mp4; do
+            [ -f "$f" ] || continue
+            b="${f%.mp4}"
+            ffmpeg -loglevel error -y -ss 1.2 -i "$f" -frames:v 1 -vf "scale=480:-2" "frames/$b-a.jpg"
+            ffmpeg -loglevel error -y -ss 4.5 -i "$f" -frames:v 1 -vf "scale=480:-2" "frames/$b-b.jpg"
+          done
+          ls -la graded frames
 
       - name: Summary
         if: always()
