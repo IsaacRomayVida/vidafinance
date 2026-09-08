@@ -239,7 +239,7 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-panel.stage.photo{background:linear-gradient(180deg,rgba(0,11,26,.55) 0%,rgba(0,11,26,.15) 45%,rgba(0,11,26,.6) 100%),url('/images/brand/stage-employer.jpg') center/cover,var(--stage-grad)}
 .mk-objects{position:absolute;left:24px;right:24px;bottom:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .mk-object{padding:16px 14px 14px;border-radius:18px;background:rgba(255,255,255,.1);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.14);color:var(--paper-dark);min-height:150px;display:flex;flex-direction:column}
-.mk-object img{width:56px;height:56px;object-fit:contain;margin-bottom:auto;filter:drop-shadow(0 8px 12px rgba(0,0,0,.35))}
+.mk-object svg{width:30px;height:30px;color:var(--harmony);margin-bottom:auto;stroke-width:1.4}
 .mk-object b{display:block;font-size:14.5px;font-weight:600;margin-top:12px}
 .mk-object span{display:block;font-size:12.5px;color:rgba(242,245,240,.85);line-height:1.35;margin-top:2px}
 .mk-object.lit{background:rgba(104,231,142,.22);border-color:rgba(160,255,190,.55);box-shadow:0 24px 50px -20px rgba(104,231,142,.45)}
@@ -260,7 +260,8 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-panel.data h3{font-size:15px;font-weight:500;margin:10px 0 0;color:rgba(242,245,240,.85)}
 .mk-batch{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:rgba(255,255,255,.04);font-size:14px}
 .mk-batch .fl{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.12);flex:none;display:grid;place-items:center}
-.mk-batch .fl img{width:24px;height:24px;object-fit:contain}
+.mk-batch .fl svg{width:18px;height:18px;color:rgba(242,245,240,.92)}
+.mk-batch .fl.g svg{color:var(--harmony)}
 .mk-batch .fl.g{background:rgba(104,231,142,.28);box-shadow:0 0 0 1px rgba(104,231,142,.5)}
 .mk-batch .t{flex:1}
 .mk-batch .t small{display:block;font-size:12px;color:rgba(242,245,240,.82)}
@@ -528,3 +529,23 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-closing-art{position:absolute;right:-2%;bottom:-6%;width:min(34%,320px);pointer-events:none;filter:drop-shadow(0 20px 30px rgba(30,60,30,.25))}
 @media (max-width:760px){.mk-closing-art{width:44%;right:-8%;opacity:.9}}
 @media (prefers-reduced-motion:reduce){.mk-stage-film{display:none}}
+
+/* ─── Mobile hero: the photograph is the ground, not a block below ──────
+   Stacked, the film sat under the headline and had to be scrolled to. At
+   phone widths the stage lifts out of the flow and becomes the board's
+   background, with the statement over a scrim that keeps it readable. */
+@media (max-width:860px){
+  .mk-board.mk-hero{position:relative;overflow:hidden;isolation:isolate}
+  .mk-board.mk-hero .mk-stage{position:absolute;inset:0;z-index:-2;border-radius:0;min-height:0}
+  .mk-board.mk-hero .mk-stage-still,
+  .mk-board.mk-hero .mk-stage-film{border-radius:0}
+  .mk-board.mk-hero::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
+    background:linear-gradient(180deg,rgba(20,30,18,.58) 0%,rgba(20,30,18,.72) 55%,rgba(20,30,18,.88) 100%)}
+  .mk-board.mk-hero .mk-statement{grid-template-columns:1fr;min-height:min(88vh,720px);align-content:center}
+  .mk-board.mk-hero .mk-h1{color:#f4f7ee;text-shadow:0 1px 16px rgba(10,20,10,.45)}
+  .mk-board.mk-hero .mk-h1 .quiet,.mk-board.mk-hero .mk-h1 em{color:rgba(244,247,238,.92)}
+  .mk-board.mk-hero .mk-kicker,.mk-board.mk-hero .mk-board-title{color:rgba(244,247,238,.92)}
+  .mk-board.mk-hero .mk-disclose{color:rgba(244,247,238,.92)}
+  .mk-board.mk-hero .mk-float{display:none}
+  .mk-board.mk-hero .mk-btn.ghost{color:#f4f7ee;border-color:rgba(244,247,238,.5)}
+}

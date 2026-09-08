@@ -1,12 +1,11 @@
 /**
- * Cold-start brand film: one of five moments of freedom — the service door
- * at dawn, the pharmacy counter, the school backpack, the kitchen exhale,
- * hands letting go — each ending on the cream-and-sage paper kite. As the
- * kite holds the sky the mark blooms with a soft ring and a haptic, the
- * label rises, and the curtain fades the app in. Drawn at random per cold
- * start so the opening stays alive.
+ * Cold-start brand film: one of the moments credit buys — the service door
+ * at dawn, the pharmacy counter, the school backpack, the kitchen exhale.
+ * Documentary photography, never illustration. As the scene settles the
+ * mark blooms with a soft ring and a haptic, the label rises, and the
+ * curtain fades the app in. Drawn at random per cold start.
  *
- * The kite still sits under the video as poster and failure fallback.
+ * The doorway still sits under the video as poster and failure fallback.
  * ~5.8s total, tap anywhere to skip. Under reduced motion: artwork only,
  * fast opacity fade, no video.
  */
@@ -22,7 +21,7 @@ import { useReducedMotion } from './motion';
 
 // Metro needs static requires — the whole set ships (~2 MB total).
 /* eslint-disable @typescript-eslint/no-var-requires */
-const artwork = require('../../assets/brand/home-kite.jpg');
+const artwork = require('../../assets/brand/home-doorway.jpg');
 // Five moments of freedom, each ending on the cream-and-sage kite
 // (~0.4 MB each after grading). One is drawn per cold start.
 const SCENES = [
@@ -30,7 +29,6 @@ const SCENES = [
   require('../../assets/intros/intro-pharmacy.mp4'),
   require('../../assets/intros/intro-backpack.mp4'),
   require('../../assets/intros/intro-kitchen.mp4'),
-  require('../../assets/intros/intro-release.mp4'),
 ];
 /* eslint-enable @typescript-eslint/no-var-requires */
 
@@ -43,7 +41,8 @@ function SceneFilm({ source }: { source: number }) {
   if (Platform.OS === 'web') {
     const { WebVideo } = require('./WebVideo');
     const uri = Asset.fromModule(source).uri;
-    return <WebVideo uri={uri} loop={false} />;
+    const posterUri = Asset.fromModule(artwork).uri;
+    return <WebVideo uri={uri} loop={false} poster={posterUri} />;
   }
   return <NativeScene source={source} />;
 }

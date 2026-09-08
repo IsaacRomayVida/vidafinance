@@ -7,13 +7,14 @@ import { Board, Statement, ArrowIcon } from './Board';
  * headline alternating ink and quiet lines, and two
  * floating elements over the stage: the capture bar (dark pill, icon
  * circles, active one cream) at −3° and the identity card (employee ·
- * payroll · lender) at +5°, over the kite film.
+ * payroll · lender) at +5°, over the ambient film. Below 860px the film
+ * becomes the board's own background and the statement sits on it.
  */
 export function HeroSection() {
   const { t } = useTranslation();
 
   return (
-    <Board label={t('hero_badge')} id="top">
+    <Board label={t('hero_badge')} id="top" className="mk-hero">
       <div className="mk-statement">
         <Statement html={t('hero_h1')}>
           <div className="mk-actions">
@@ -27,9 +28,9 @@ export function HeroSection() {
           {/* The freedom motif: the cream-and-sage kite drifting in a pale sky.
               A real <video> so it actually moves; the still stands in under
               reduced motion or while it loads. */}
-          <img className="mk-stage-still" src="/images/brand/home-kite.jpg" alt="" />
-          <video className="mk-stage-film" autoPlay muted loop playsInline preload="metadata" poster="/images/brand/home-kite.jpg">
-            <source src="/video/kite-loop-wide.mp4" type="video/mp4" />
+          <img className="mk-stage-still" src="/images/brand/home-doorway.jpg" alt="" />
+          <video className="mk-stage-film" autoPlay muted loop playsInline preload="metadata" poster="/images/brand/home-doorway.jpg">
+            <source src="/video/ambient-loop-wide.mp4" type="video/mp4" />
           </video>
           <div className="mk-float mk-capture" style={{ left: '4%', top: '16%', transform: 'rotate(-3deg)' }}>
             <div className="ic on">

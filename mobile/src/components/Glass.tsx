@@ -20,15 +20,15 @@ import { boardGradient, colors, radii } from '../theme';
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 const PHOTOS = {
-  kite: require('../../assets/brand/home-kite.jpg'),
   doorway: require('../../assets/brand/home-doorway.jpg'),
+  stall: require('../../assets/brand/home-doorway.jpg'),
 };
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 export function Backdrop({
   children,
   variant = 'board',
-  photo = 'kite',
+  photo = 'doorway',
 }: {
   children: React.ReactNode;
   variant?: 'board' | 'paper' | 'leaf' | 'photo';

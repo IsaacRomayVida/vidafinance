@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Icon, type IconName } from '../components/shared/Icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -67,11 +68,6 @@ interface EmployerGroup {
   status?: string;
 }
 
-
-/** Which rendered object stands for each thing on the stage. */
-function stageIcon(kind: 'quincena' | 'empleador' | 'kyc' | 'contrato' | 'condusef' | 'sat' | 'cobranza'): string {
-  return `/images/brand/icon-${kind}.png`;
-}
 
 export function AdminDashboard() {
   const { user } = useAuth();
@@ -186,8 +182,8 @@ export function AdminDashboard() {
     .sort((a, b) => b.active - a.active || b.pending - a.pending)
     .slice(0, 6);
   const stackEmployers = employerRows.slice(0, 3);
-  const folders: { i: number; label: string; n: number; lit?: boolean; kind: 'quincena' | 'empleador' | 'contrato' }[] = [
-    ...stackEmployers.map((g, idx) => ({ i: idx - stackEmployers.length, label: g.name, n: g.active, kind: 'empleador' as const })),
+  const folders: { i: number; label: string; n: number; lit?: boolean; kind: IconName }[] = [
+    ...stackEmployers.map((g, idx) => ({ i: idx - stackEmployers.length, label: g.name, n: g.active, kind: 'empleador' as IconName })),
     { i: 0, label: curLabel, n: inDeduction.length, lit: true, kind: 'quincena' },
     { i: 1, label: t('ops_folder_review'), n: pendingLoans.length, kind: 'contrato' },
     { i: 2, label: t('ops_folder_signups'), n: pendingEmployers.length, kind: 'empleador' },
@@ -205,7 +201,7 @@ export function AdminDashboard() {
           <div className="ops-objects" aria-hidden="true">
             {folders.map((f) => (
               <div key={f.i} className={`ops-object${f.lit ? ' lit' : ''}`}>
-                <img src={stageIcon(f.kind)} alt="" loading="lazy" />
+                <Icon name={f.kind} size={26} />
                 <b>{f.n}</b>
                 <span>{f.label}</span>
               </div>

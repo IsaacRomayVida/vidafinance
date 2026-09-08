@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Icon, type IconName } from '../components/shared/Icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
@@ -520,11 +521,6 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
 
 
 
-/** Which rendered object stands for each thing on the stage. */
-function stageIcon(kind: 'quincena' | 'empleador' | 'kyc' | 'contrato' | 'condusef' | 'sat' | 'cobranza'): string {
-  return `/images/brand/icon-${kind}.png`;
-}
-
 export function EmployerDashboard() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -759,7 +755,7 @@ export function EmployerDashboard() {
   const onSchedule = stats ? Math.max(0, stats.activeLoans - stats.overdueCount) : 0;
   const pct = stats && stats.activeLoans > 0 ? Math.round((onSchedule / stats.activeLoans) * 100) : null;
 
-  const folders: { i: number; label: string; n: number; lit?: boolean; kind: 'quincena' | 'empleador' | 'kyc' | 'contrato' }[] = [
+  const folders: { i: number; label: string; n: number; lit?: boolean; kind: IconName }[] = [
     { i: -3, label: employer?.companyName ?? '', n: stats?.totalEmployees ?? employer?.totalEmployees ?? 0, kind: 'empleador' },
     { i: -2, label: label(prev2), n: countIn(prev2), kind: 'quincena' },
     { i: -1, label: label(prev1), n: countIn(prev1), kind: 'quincena' },
@@ -784,7 +780,7 @@ export function EmployerDashboard() {
           <div className="ops-objects" aria-hidden="true">
             {folders.map((f) => (
               <div key={f.i} className={`ops-object${f.lit ? ' lit' : ''}`}>
-                <img src={stageIcon(f.kind)} alt="" loading="lazy" />
+                <Icon name={f.kind} size={26} />
                 <b>{f.n}</b>
                 <span>{f.label}</span>
               </div>

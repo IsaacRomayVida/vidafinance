@@ -112,7 +112,8 @@
 .ops-object{flex:1 1 150px;min-width:150px;max-width:220px;padding:14px 14px 12px;border-radius:18px;
   background:rgba(255,255,255,.1);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   border:1px solid rgba(255,255,255,.14);color:var(--paper-dark);display:flex;flex-direction:column;gap:8px}
-.ops-object img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 8px 12px rgba(0,0,0,.35))}
+.ops-object svg{width:26px;height:26px;color:var(--harmony);stroke-width:1.4}
+.ops-object.lit svg{color:#eafff1}
 .ops-object b{font-size:24px;font-weight:400;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
 .ops-object span{font-size:13px;line-height:1.3;color:rgba(242,245,240,.88);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .ops-object.lit{background:rgba(104,231,142,.24);border-color:rgba(160,255,190,.6);box-shadow:0 24px 50px -20px rgba(104,231,142,.5)}

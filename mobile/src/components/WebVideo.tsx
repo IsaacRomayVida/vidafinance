@@ -1,13 +1,15 @@
 /**
- * A real HTML5 <video> for web, rendered through react-native-web's
- * unstable_createElement so it accepts DOM attributes RN's own components
- * don't expose (autoPlay, muted, loop, playsInline).
+ * A real HTML5 <video> for web that is actually allowed to autoplay.
  *
- * Why not expo-video's VideoView on web: its web player does not reliably
- * start muted-autoplay — it paints the poster/first frame and waits, which
- * reads as a frozen "static image" in the team portal. A native <video>
- * with muted+autoplay+playsInline is the one combination browsers are
- * REQUIRED to autoplay, so the brand films actually move on the web export.
+ * Browsers permit autoplay only when the element is muted AT THE MOMENT the
+ * source is attached. React does not reliably apply the `muted` attribute
+ * during render (facebook/react#10389), so a `<video autoPlay muted>` written
+ * as JSX is evaluated by the browser as UNMUTED, refused, and left frozen on
+ * its first frame — which is exactly what the portal showed.
+ *
+ * So the element is created with NO source. Once it is in the DOM we set the
+ * muted property, then attach the source, then load and play. Muted is true
+ * before a source exists, so the autoplay gate never closes.
  *
  * Native builds never import this — callers branch on Platform.OS and use
  * expo-video there.
@@ -27,11 +29,14 @@ const createElement = (ReactNative as unknown as {
 export function WebVideo({
   uri,
   loop = true,
+  poster,
   style,
   onEnded,
 }: {
   uri: string;
   loop?: boolean;
+  /** Shown until the first frame paints; also the frame a refusal falls back to. */
+  poster?: string;
   style?: React.CSSProperties;
   onEnded?: () => void;
 }) {
@@ -41,28 +46,52 @@ export function WebVideo({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // Belt-and-suspenders: some browsers only honor muted autoplay when the
-    // property (not just the attribute) is set before play() is invoked.
+    let cancelled = false;
+
+    // Order matters: mute, then give it something to play.
     el.muted = true;
-    const tryPlay = () => {
+    el.defaultMuted = true;
+    el.setAttribute('muted', '');
+    el.playsInline = true;
+    el.setAttribute('playsinline', '');
+    el.loop = loop;
+
+    if (el.getAttribute('src') !== uri) {
+      el.setAttribute('src', uri);
+      el.load();
+    }
+
+    const play = () => {
+      if (cancelled) return;
       const p = el.play?.();
+      // A refusal leaves the poster showing rather than a black box.
       if (p && typeof p.catch === 'function') p.catch(() => {});
     };
-    tryPlay();
-    el.addEventListener('canplay', tryPlay, { once: true });
-    return () => el.removeEventListener('canplay', tryPlay);
-  }, [uri]);
+    play();
+    el.addEventListener('loadeddata', play);
+    el.addEventListener('canplay', play);
+    // Some browsers only release the gate after the first interaction; take it.
+    const onFirstTouch = () => play();
+    document.addEventListener('pointerdown', onFirstTouch, { once: true, passive: true });
+
+    return () => {
+      cancelled = true;
+      el.removeEventListener('loadeddata', play);
+      el.removeEventListener('canplay', play);
+      document.removeEventListener('pointerdown', onFirstTouch);
+    };
+  }, [uri, loop]);
 
   return createElement('video', {
     ref,
-    src: uri,
+    // NO src here — the effect attaches it after muting.
     autoPlay: true,
     muted: true,
     loop,
     playsInline: true,
-    // iOS Safari reads the lowercase attribute form:
     'webkit-playsinline': 'true',
     preload: 'auto',
+    poster,
     onEnded,
     style: {
       width: '100%',
