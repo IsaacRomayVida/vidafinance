@@ -219,7 +219,7 @@ export function HomeScreen({
           <FadeSlideIn index={3}>
             <LinearGradient colors={assistGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.companion}>
               <View style={styles.chipRow}>
-                <DotLabel color="rgba(20,40,20,0.55)" size={14}>{t('home.companion')}</DotLabel>
+                <DotLabel color="rgba(20,40,20,0.8)" size={14}>{t('home.companion')}</DotLabel>
                 <PressableScale
                   onPress={() => setCompanionOpen((v) => !v)}
                   accessibilityRole="button"

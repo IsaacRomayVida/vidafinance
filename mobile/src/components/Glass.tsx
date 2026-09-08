@@ -30,7 +30,7 @@ export function Backdrop({
   }
   if (variant === 'leaf') {
     return (
-      <LinearGradient colors={['#d6dfb2', '#a6b46a', '#3c5420']} locations={[0, 0.45, 1]} style={styles.fill}>
+      <LinearGradient colors={['#d6dfb2', '#8fa15a', '#33491f']} locations={[0, 0.42, 1]} style={styles.fill}>
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none" width="100%" height="100%">
           <Defs>
             <RadialGradient id="l1" cx="62%" cy="38%" rx="75%" ry="55%">
@@ -41,9 +41,9 @@ export function Backdrop({
               <Stop offset="0%" stopColor="#47611f" stopOpacity="1" />
               <Stop offset="80%" stopColor="#47611f" stopOpacity="0" />
             </RadialGradient>
-            <RadialGradient id="l3" cx="30%" cy="85%" rx="60%" ry="40%">
-              <Stop offset="0%" stopColor="#dfe8b4" stopOpacity="1" />
-              <Stop offset="70%" stopColor="#dfe8b4" stopOpacity="0" />
+            <RadialGradient id="l3" cx="35%" cy="92%" rx="70%" ry="45%">
+              <Stop offset="0%" stopColor="#2f4a22" stopOpacity="0.9" />
+              <Stop offset="75%" stopColor="#2f4a22" stopOpacity="0" />
             </RadialGradient>
             <RadialGradient id="l4" cx="80%" cy="8%" rx="70%" ry="50%">
               <Stop offset="0%" stopColor="#ecf0d6" stopOpacity="1" />

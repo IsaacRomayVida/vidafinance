@@ -23,14 +23,7 @@
 .mk-board.sage{background:linear-gradient(180deg,var(--cream-mid) 0%,var(--sage) 100%)}
 .mk-board.ink{background:var(--ink);color:var(--cream)}
 .mk-board.ops{background:var(--ops-grad);color:var(--paper-dark)}
-.mk-board.leaf{
-  color:#f4f7ee;
-  background:
-    radial-gradient(75% 55% at 62% 38%, rgba(110,138,60,.85) 0%, transparent 70%),
-    radial-gradient(40% 75% at 50% 50%, #47611f 0%, transparent 80%),
-    radial-gradient(60% 40% at 30% 85%, #dfe8b4 0%, transparent 70%),
-    radial-gradient(70% 50% at 80% 8%, #ecf0d6 0%, transparent 75%),
-    linear-gradient(180deg,#d6dfb2 0%,#a6b46a 45%,#3c5420 100%)}
+.mk-board.leaf{color:#f4f7ee;background:radial-gradient(70% 50% at 80% 8%,rgba(236,240,214,.55) 0%,transparent 70%),radial-gradient(60% 40% at 30% 92%,rgba(47,74,34,.9) 0%,transparent 70%),linear-gradient(180deg,#8a9d5c 0%,#5c7236 42%,#2f4a22 100%);text-shadow:0 1px 14px rgba(20,40,10,.35)}
 .mk-board.leaf>*{position:relative}
 .mk-board.leaf .sh{text-shadow:0 1px 18px rgba(20,40,10,.4)}
 .mk-board.tight{padding-top:clamp(24px,3vw,40px);padding-bottom:clamp(24px,3vw,40px)}
@@ -52,7 +45,7 @@
 .mk-board.leaf .mk-title em{color:rgba(244,247,238,.78)}
 .mk-lead{font-size:15px;line-height:1.55;font-weight:300;color:var(--ink-soft);max-width:44ch;margin:16px 0 0}
 .mk-lead b{font-weight:600;color:var(--ink)}
-.mk-board.ops .mk-lead,.mk-board.ink .mk-lead{color:rgba(242,245,240,.78)}
+.mk-board.ops .mk-lead,.mk-board.ink .mk-lead{color:rgba(242,245,240,.92)}
 .mk-board.ops .mk-lead b,.mk-board.ink .mk-lead b{color:var(--paper-dark)}
 .mk-board.leaf .mk-lead{color:rgba(244,247,238,.92)}
 .mk-body{font-size:16px;line-height:1.6;font-weight:300;color:var(--ink-soft);max-width:62ch}
