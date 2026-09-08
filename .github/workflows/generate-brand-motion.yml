@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       set:
-        description: "Which assets: imagery | icons | stages | intros | loops | all"
+        description: "Which assets: imagery | icons | stages | animate (image-to-video) | intros | loops | all"
         required: true
         default: "all"
         type: choice
@@ -18,6 +18,7 @@ on:
           - imagery
           - icons
           - stages
+          - animate
           - intros
           - loops
           - all

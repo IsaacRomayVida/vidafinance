@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|intros|loops|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|all [--out dir] [--pro]
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -98,6 +98,42 @@ const STAGES = [
   { file: 'stage-employer.png', size: '1536x1024', prompt: `Wide photograph of a hotel service corridor at dawn, empty, seen from low, soft cream light entering from the far end, deep forest and charcoal shadows, muted desaturated analog film grade, fine grain, no people, no text. ${NEG}` },
 ];
 
+
+/**
+ * IMAGE-TO-VIDEO (Isaac, 2026-09-08): "the videos don't look like the images
+ * at all — do image to video so we have exactly the same look and feel."
+ *
+ * Text-to-video kept inventing its own world: different country, different
+ * palette, cartoon props. These start FROM the photographs already published
+ * on the site, so the first frame IS the picture and the grade cannot drift.
+ * Motion is deliberately small — a background has to hold type.
+ */
+const SITE = process.env.BRAND_IMAGE_BASE || 'https://alfa.funpay.mx/images/brand';
+const MOTION = 'Subtle natural motion only. The camera does not move, does not zoom and does not pan. No new objects enter the frame, nothing morphs, nobody turns toward the camera. Photographic, documentary, film grain preserved.';
+
+const ANIMATED = [
+  {
+    file: 'live-doorway.mp4', image: `${SITE}/home-doorway.jpg`, aspect: '9:16',
+    prompt: `She keeps walking slowly away down the path; her dress and the palm fronds move gently in the breeze; the light stays soft and even. ${MOTION}`,
+  },
+  {
+    file: 'live-stall.mp4', image: `${SITE}/home-stall.jpg`, aspect: '9:16',
+    prompt: `She finishes raising the shutter and settles her hands; steam drifts; palm fronds sway slightly against the dawn light. ${MOTION}`,
+  },
+  {
+    file: 'live-pharmacy.mp4', image: `${SITE}/moment-pharmacy.jpg`, aspect: '16:9',
+    prompt: `The hands complete the exchange of the paper bag and draw it in; a small settling of the fingers. ${MOTION}`,
+  },
+  {
+    file: 'live-backpack.mp4', image: `${SITE}/moment-backpack.jpg`, aspect: '16:9',
+    prompt: `The child steps forward through the doorway into the light while the parent stays kneeling; a soft shift of weight. ${MOTION}`,
+  },
+  {
+    file: 'live-kitchen.mp4', image: `${SITE}/moment-kitchen.jpg`, aspect: '16:9',
+    prompt: `She breathes out and her shoulders lower a little; the window light shifts almost imperceptibly. ${MOTION}`,
+  },
+];
+
 /**
  * PHOTOGRAPHIC ONLY (Isaac, 2026-09-08). The handmade-kite motif is out of
  * the films: every generator rendered it as a cartoon pasted over the plate.
@@ -156,14 +192,19 @@ async function generateImage(spec) {
 
 // ---------------------------------------------------------------- films
 const VIDEO_MODEL = PRO ? 'fal-ai/bytedance/seedance/v1/pro/text-to-video' : 'fal-ai/bytedance/seedance/v1/lite/text-to-video';
+const I2V_MODEL = PRO ? 'fal-ai/bytedance/seedance/v1/pro/image-to-video' : 'fal-ai/bytedance/seedance/v1/lite/image-to-video';
 
 async function generateFilm(spec) {
   const key = process.env.FAL_KEY;
   if (!key) throw new Error('FAL_KEY missing');
   const headers = { Authorization: `Key ${key}`, 'Content-Type': 'application/json' };
-  const submit = await fetch(`https://queue.fal.run/${VIDEO_MODEL}`, {
-    method: 'POST', headers,
-    body: JSON.stringify({ prompt: spec.prompt, aspect_ratio: spec.aspect, resolution: PRO ? '1080p' : '720p', duration: '5' }),
+  // With an `image`, the film starts from that exact photograph.
+  const model = spec.image ? I2V_MODEL : VIDEO_MODEL;
+  const body = spec.image
+    ? { prompt: spec.prompt, image_url: spec.image, resolution: PRO ? '1080p' : '720p', duration: '5' }
+    : { prompt: spec.prompt, aspect_ratio: spec.aspect, resolution: PRO ? '1080p' : '720p', duration: '5' };
+  const submit = await fetch(`https://queue.fal.run/${model}`, {
+    method: 'POST', headers, body: JSON.stringify(body),
   });
   if (!submit.ok) throw new Error(`fal submit ${submit.status}: ${(await submit.text()).slice(0, 300)}`);
   const { request_id, status_url, response_url } = await submit.json();
@@ -181,7 +222,7 @@ async function generateFilm(spec) {
   if (!url) throw new Error(`fal ${request_id}: no video url`);
   const bytes = Buffer.from(await (await fetch(url)).arrayBuffer());
   writeFileSync(join(OUT, spec.file), bytes);
-  console.log(`film   ${spec.file}  (${VIDEO_MODEL.split('/').slice(-3, -1).join('/')}, ${spec.aspect}, ${(bytes.length / 1e6).toFixed(1)} MB)`);
+  console.log(`film   ${spec.file}  (${spec.image ? 'image-to-video' : 'text-to-video'}, ${(bytes.length / 1e6).toFixed(1)} MB)`);
 }
 
 // ---------------------------------------------------------------- run
@@ -194,6 +235,7 @@ async function runAll(list, fn) {
 if (SET === 'imagery' || SET === 'all') await runAll(IMAGES, generateImage);
 if (SET === 'icons' || SET === 'all') await runAll(ICONS, generateImage);
 if (SET === 'stages' || SET === 'all') await runAll(STAGES, generateImage);
-if (SET === 'intros' || SET === 'all') await runAll(FILMS, generateFilm);
+if (SET === 'animate' || SET === 'all') await runAll(ANIMATED, generateFilm);
+if (SET === 'intros') await runAll(FILMS, generateFilm);
 if (SET === 'loops' || SET === 'all') await runAll(LOOPS, generateFilm);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }
