@@ -1,6 +1,8 @@
 /**
- * Cold-start brand film: one of the moments credit buys — the stall shutter
- * going up at dawn, the service door, the school backpack.
+ * Cold-start brand film: one of the photographs on the site, moving — she
+ * walks away down the path, or the shutter goes up at dawn. Generated with
+ * image-to-video from those exact stills, so the film and the still that
+ * posters it are the same picture.
  * Documentary photography, never illustration. As the scene settles the
  * mark blooms with a soft ring and a haptic, the label rises, and the
  * curtain fades the app in. Drawn at random per cold start.
@@ -25,9 +27,8 @@ const artwork = require('../../assets/brand/home-doorway.jpg');
 // Five moments of freedom, each ending on the cream-and-sage kite
 // (~0.4 MB each after grading). One is drawn per cold start.
 const SCENES = [
-  require('../../assets/intros/intro-market.mp4'),
-  require('../../assets/intros/intro-doorway.mp4'),
-  require('../../assets/intros/intro-backpack.mp4'),
+  require('../../assets/intros/live-doorway.mp4'),
+  require('../../assets/intros/live-stall.mp4'),
 ];
 /* eslint-enable @typescript-eslint/no-var-requires */
 
