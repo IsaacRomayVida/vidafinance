@@ -106,7 +106,7 @@ export function LoginScreen({
     <Text style={[styles.title, onLeaf && styles.titleOnLeaf]}>
       {t('login.title')}
       {'\n'}
-      <Text style={[styles.titleQuiet, onLeaf && { color: 'rgba(244,247,238,0.7)' }]}>{t('login.titleQuiet')}</Text>
+      <Text style={[styles.titleQuiet, onLeaf && { color: 'rgba(244,247,238,0.9)' }]}>{t('login.titleQuiet')}</Text>
     </Text>
   );
 
@@ -118,7 +118,7 @@ export function LoginScreen({
             <View style={styles.heroContent}>
               <View style={styles.heroHead}>
                 <FunpayMark size={40} tone="cream" />
-                <DotLabel color="rgba(244,247,238,0.75)" size={14}>FunPay</DotLabel>
+                <DotLabel color="rgba(244,247,238,0.95)" size={14}>FunPay</DotLabel>
               </View>
               <View>
                 {statement(true)}
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   split: { flex: 1, flexDirection: 'row', backgroundColor: colors.cream },
   heroContent: { flex: 1, justifyContent: 'space-between', padding: spacing.xl + spacing.m },
   heroHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.m },
-  heroBody: { fontFamily: fonts.sansLight, fontSize: 17, lineHeight: 26, color: 'rgba(244,247,238,0.86)', marginTop: spacing.m, maxWidth: 440 },
+  heroBody: { fontFamily: fonts.sansLight, fontSize: 17, lineHeight: 26, color: 'rgba(244,247,238,0.96)', marginTop: spacing.m, maxWidth: 440 },
   ident: { width: 200, padding: 14, paddingHorizontal: 16, borderRadius: radii.s, gap: 10, alignSelf: 'flex-end', transform: [{ rotate: '5deg' }], ...shadowFloat },
   identRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   identDot: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.45)', alignItems: 'center', justifyContent: 'center' },

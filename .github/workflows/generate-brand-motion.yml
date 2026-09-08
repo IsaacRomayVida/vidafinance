@@ -26,9 +26,15 @@ on:
         required: false
         default: false
         type: boolean
+      grade_run_id:
+        description: "Grade-only: skip generation and re-grade the raw artifact of this earlier run id"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   generate:
@@ -41,7 +47,18 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Fetch an earlier run's raw assets (grade-only)
+        if: ${{ github.event.inputs.grade_run_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p brand-assets
+          gh run download "${{ github.event.inputs.grade_run_id }}" --repo "${{ github.repository }}" -D /tmp/raw
+          find /tmp/raw -type f \( -name '*.png' -o -name '*.mp4' \) -not -path '*/graded/*' -exec cp {} brand-assets/ \;
+          ls brand-assets | tee generate.log
+
       - name: Generate
+        if: ${{ github.event.inputs.grade_run_id == '' }}
         env:
           FAL_KEY: ${{ secrets.FAL_AI }}
           OPENAI_API_KEY: ${{ secrets.OPEN_API }}
@@ -81,7 +98,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: brand-assets-${{ github.event.inputs.set }}
+          name: brand-assets-${{ github.event.inputs.set }}${{ github.event.inputs.grade_run_id != '' && '-graded' || '' }}
           path: brand-assets
           retention-days: 7
           if-no-files-found: warn

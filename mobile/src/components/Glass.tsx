@@ -30,11 +30,11 @@ export function Backdrop({
   }
   if (variant === 'leaf') {
     return (
-      <LinearGradient colors={['#d6dfb2', '#8fa15a', '#33491f']} locations={[0, 0.42, 1]} style={styles.fill}>
+      <LinearGradient colors={['#c9d5a3', '#6f8340', '#2c421c']} locations={[0, 0.4, 1]} style={styles.fill}>
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none" width="100%" height="100%">
           <Defs>
             <RadialGradient id="l1" cx="62%" cy="38%" rx="75%" ry="55%">
-              <Stop offset="0%" stopColor="#6e8a3c" stopOpacity="0.85" />
+              <Stop offset="0%" stopColor="#5e7a34" stopOpacity="0.85" />
               <Stop offset="70%" stopColor="#6e8a3c" stopOpacity="0" />
             </RadialGradient>
             <RadialGradient id="l2" cx="50%" cy="50%" rx="40%" ry="75%">
