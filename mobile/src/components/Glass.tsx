@@ -11,9 +11,11 @@
  * inset top highlight. Only over the leaf; never glass over flat colour.
  */
 import { BlurView } from 'expo-blur';
+import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useEffect, useState } from 'react';
-import { AccessibilityInfo, ImageBackground, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, ImageBackground, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { boardGradient, colors, radii } from '../theme';
@@ -21,8 +23,38 @@ import { boardGradient, colors, radii } from '../theme';
 /* eslint-disable @typescript-eslint/no-var-requires */
 const PHOTOS = {
   doorway: require('../../assets/brand/home-doorway.jpg'),
-  stall: require('../../assets/brand/home-doorway.jpg'),
+  stall: require('../../assets/brand/home-stall.jpg'),
 };
+const FILMS = {
+  doorway: require('../../assets/intros/live-doorway.mp4'),
+  stall: require('../../assets/intros/live-stall.mp4'),
+};
+
+/** The film that belongs to a photograph, looping behind the screen. */
+function BackdropFilm({ photo }: { photo: keyof typeof PHOTOS }) {
+  if (Platform.OS === 'web') {
+    const { WebVideo } = require('./WebVideo');
+    return (
+      <WebVideo
+        uri={Asset.fromModule(FILMS[photo]).uri}
+        poster={Asset.fromModule(PHOTOS[photo]).uri}
+        loop
+      />
+    );
+  }
+  return <NativeBackdropFilm source={FILMS[photo]} />;
+}
+
+function NativeBackdropFilm({ source }: { source: number }) {
+  const player = useVideoPlayer(source, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
+  return (
+    <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+  );
+}
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 export function Backdrop({
@@ -36,10 +68,12 @@ export function Backdrop({
   photo?: keyof typeof PHOTOS;
 }) {
   if (variant === 'photo') {
-    // The people photograph, with a scrim that keeps the upper third light
-    // and turns the lower half dark so cream type and the chips read.
+    // The photograph, then its film over it, then a scrim that keeps the
+    // upper third light and the lower half dark so cream type and the chips
+    // read against whatever frame is showing.
     return (
       <ImageBackground source={PHOTOS[photo]} style={styles.fill} resizeMode="cover">
+        <BackdropFilm photo={photo} />
         <LinearGradient
           colors={['rgba(20,32,18,0.05)', 'rgba(20,32,18,0.35)', 'rgba(20,32,18,0.82)']}
           locations={[0.15, 0.55, 1]}

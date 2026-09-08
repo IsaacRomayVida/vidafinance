@@ -117,24 +117,24 @@ const MOTION = 'Subtle natural motion only. The camera does not move, does not z
 
 const ANIMATED = [
   {
-    file: 'live-doorway.mp4', image: `${SITE}/home-doorway.jpg`, aspect: '9:16',
-    prompt: `She keeps walking slowly away down the path; her dress and the palm fronds move gently in the breeze; the light stays soft and even. ${MOTION}`,
+    file: 'live-doorway.mp4', image: `${SITE}/home-doorway.jpg`, aspect: '9:16', duration: '3',
+    prompt: `The housekeeper REMAINS in frame for the whole shot and does not fade or change: she keeps walking slowly away down the path, her uniform and the palm fronds moving gently in the breeze. ${MOTION}`,
   },
   {
-    file: 'live-stall.mp4', image: `${SITE}/home-stall.jpg`, aspect: '9:16',
-    prompt: `She finishes raising the shutter and settles her hands; steam drifts; palm fronds sway slightly against the dawn light. ${MOTION}`,
+    file: 'live-stall.mp4', image: `${SITE}/home-stall.jpg`, aspect: '9:16', duration: '3',
+    prompt: `She REMAINS in frame for the whole shot and does not fade or change: she finishes raising the shutter and settles her hands; palm fronds sway slightly against the dawn light. ${MOTION}`,
   },
   {
-    file: 'live-pharmacy.mp4', image: `${SITE}/moment-pharmacy.jpg`, aspect: '16:9',
-    prompt: `The hands complete the exchange of the paper bag and draw it in; a small settling of the fingers. ${MOTION}`,
+    file: 'live-pharmacy.mp4', image: `${SITE}/moment-pharmacy.jpg`, aspect: '16:9', duration: '3',
+    prompt: `Both pairs of hands and the paper bag REMAIN in frame the whole shot and nothing fades: the exchange completes and the fingers settle. ${MOTION}`,
   },
   {
     file: 'live-backpack.mp4', image: `${SITE}/moment-backpack.jpg`, aspect: '16:9', duration: '3',
     prompt: `Both people REMAIN in frame for the entire shot and neither fades, disappears or changes: the mother stays kneeling and the child stays standing in the doorway. The only movement is a small shift of weight and the plants beyond the door moving in the breeze. ${MOTION}`,
   },
   {
-    file: 'live-kitchen.mp4', image: `${SITE}/moment-kitchen.jpg`, aspect: '16:9',
-    prompt: `She breathes out and her shoulders lower a little; the window light shifts almost imperceptibly. ${MOTION}`,
+    file: 'live-kitchen.mp4', image: `${SITE}/moment-kitchen.jpg`, aspect: '16:9', duration: '3',
+    prompt: `He REMAINS in frame the whole shot and does not fade or change: he breathes out and his shoulders lower a little; the window light shifts almost imperceptibly. ${MOTION}`,
   },
 ];
 
