@@ -47,16 +47,16 @@ const IMAGES = [
   // a darker mass in the lower third for the chips. A person, never legible.
   {
     file: 'home-doorway.png', size: '1024x1536',
-    prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A hotel housekeeper in a pale sage uniform stepping out of a service door into early morning light, seen from behind, walking away, long-exposure motion blur, face never visible, olive and clay tones, a pale cream sky filling the upper third of the frame, darker doorway shadow in the lower third, muted desaturated analog film grade, fine grain, editorial, vertical. ${NEG}`,
+    prompt: `${MX} A hotel housekeeper in a pale sage uniform stepping out of a service door into early morning light, seen from behind, walking away, long-exposure motion blur, face never visible, olive and clay tones, a pale cream sky filling the upper third of the frame, darker doorway shadow in the lower third, muted desaturated analog film grade, fine grain, editorial, vertical. ${NEG}`,
   },
   {
     file: 'home-stall.png', size: '1024x1536',
-    prompt: `Quintana Roo, Mexico. A woman in a pale sage apron raising the shutter of her small street food stall at dawn, seen from behind, warm cream morning light filling the upper third, the darker stall interior in the lower third, shot on 35mm film, documentary photography, muted desaturated grade, olive and clay tones, fine grain, shallow depth of field, face never visible, vertical. ${NEG}`,
+    prompt: `${MX} A woman in a pale sage apron raising the shutter of her small street food stall at dawn, seen from behind, warm cream morning light filling the upper third, the darker stall interior in the lower third, shot on 35mm film, documentary photography, muted desaturated grade, olive and clay tones, fine grain, shallow depth of field, face never visible, vertical. ${NEG}`,
   },
   // Moments — 4:3, for the credit-line / statement boards and the website.
   {
     file: 'moment-pharmacy.png', size: '1536x1024',
-    prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. Close-up of hands at a pharmacy counter receiving a small cream paper bag of medicine, soft focus, no faces in frame, warm olive and clay tones with cream highlights, quiet relief, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
+    prompt: `${MX} Close-up of hands at a pharmacy counter receiving a small cream paper bag of medicine, soft focus, no faces in frame, warm olive and clay tones with cream highlights, quiet relief, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
   },
   {
     file: 'moment-backpack.png', size: '1536x1024',
@@ -64,7 +64,7 @@ const IMAGES = [
   },
   {
     file: 'moment-kitchen.png', size: '1536x1024',
-    prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A person sitting at a simple kitchen table at dawn, seen from the side and slightly behind, exhaling with relief, a phone face-down on the table, window light, face out of focus, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
+    prompt: `${MX} A person sitting at a simple kitchen table at dawn, seen from the side and slightly behind, exhaling with relief, a phone face-down on the table, window light, face out of focus, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
   },
   {
     file: 'figure-green.png', size: '1024x1024',
@@ -160,6 +160,14 @@ const LOOPS = [
   { file: 'ambient-loop.mp4', aspect: '9:16', prompt: `${MX} A hotel service doorway at dawn seen from inside: soft cream light falling through the open door onto a tiled floor, palm shadows moving very gently in the breeze, nobody in frame, almost still, seamless ambient motion, the camera does not move. ${GRADE}` },
   { file: 'ambient-loop-wide.mp4', aspect: '16:9', prompt: `${MX} Early morning light moving very gently across a quiet hotel service corridor, palm shadows drifting on a cream wall, nobody in frame, almost still, seamless ambient motion, the camera does not move, wide. ${GRADE}` },
 ];
+
+// Every human scene must reference MX rather than repeat the setting inline:
+// pasted copies went stale silently and a casting change reached nothing.
+for (const spec of [...IMAGES, ...ANIMATED, ...FILMS]) {
+  if (/Quintana Roo/.test(spec.prompt) && !spec.prompt.startsWith(MX)) {
+    throw new Error(`${spec.file}: hardcodes the setting — use \${MX} instead`);
+  }
+}
 
 // ---------------------------------------------------------------- stills
 const IMAGE_MODELS = ['gpt-image-2', 'gpt-image-1.5', 'gpt-image-1'];
