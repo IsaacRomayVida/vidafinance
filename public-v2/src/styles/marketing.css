@@ -131,9 +131,9 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-slider .fill{position:absolute;left:0;top:0;height:100%;background:var(--ink);border-radius:4px;transition:width .12s}
 .mk-slider input[type="range"]{-webkit-appearance:none;appearance:none;position:absolute;left:0;top:0;width:100%;height:36px;margin:0;background:transparent;cursor:pointer;z-index:2}
 .mk-slider input[type="range"]::-webkit-slider-runnable-track{height:8px;background:transparent}
-.mk-slider input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:#fff;border:0;box-shadow:var(--shadow-float);margin-top:-11px;cursor:grab}
+.mk-slider input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:var(--cta);border:0;box-shadow:var(--shadow-float);margin-top:-11px;cursor:grab}
 .mk-slider input[type="range"]::-moz-range-track{height:8px;background:transparent}
-.mk-slider input[type="range"]::-moz-range-thumb{width:30px;height:30px;border-radius:50%;background:#fff;border:0;box-shadow:var(--shadow-float);cursor:grab}
+.mk-slider input[type="range"]::-moz-range-thumb{width:30px;height:30px;border-radius:50%;background:var(--cta);border:0;box-shadow:var(--shadow-float);cursor:grab}
 .mk-slider input[type="range"]:disabled{cursor:not-allowed}
 .mk-slider input[type="range"]:disabled::-webkit-slider-thumb{background:#e9ebe1;box-shadow:none}
 .mk-slider input[type="range"]:disabled::-moz-range-thumb{background:#e9ebe1;box-shadow:none}
@@ -563,7 +563,7 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-board-film img,.mk-board-film video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .mk-board-film video{filter:saturate(.92)}
 .mk-board-scrim{position:absolute;inset:0;display:block;
-  background:linear-gradient(180deg,rgba(16,24,14,.62) 0%,rgba(16,24,14,.72) 55%,rgba(16,24,14,.86) 100%)}
+  background:linear-gradient(180deg,rgba(16,24,14,.42) 0%,rgba(16,24,14,.54) 55%,rgba(16,24,14,.72) 100%)}
 .mk-board.film .mk-title,.mk-board.film .mk-h1,.mk-board.film h2,.mk-board.film h3{color:#f4f7ee;text-shadow:0 2px 18px rgba(8,14,8,.55)}
 .mk-board.film .mk-lead,.mk-board.film p,.mk-board.film li{color:rgba(244,247,238,.96)}
 .mk-board.film .mk-kicker,.mk-board.film .mk-board-title{color:rgba(244,247,238,.94)}
@@ -580,7 +580,7 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 /* ─── Hero: the film is the ground at every width ────────────────────── */
 .mk-board.mk-hero{position:relative;overflow:hidden;isolation:isolate;background:#10180e}
 .mk-board.mk-hero::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
-  background:linear-gradient(180deg,rgba(14,22,12,.52) 0%,rgba(14,22,12,.66) 45%,rgba(14,22,12,.85) 100%)}
+  background:linear-gradient(180deg,rgba(14,22,12,.34) 0%,rgba(14,22,12,.48) 45%,rgba(14,22,12,.7) 100%)}
 .mk-board.mk-hero .mk-h1{color:#f4f7ee;text-shadow:0 2px 22px rgba(8,14,8,.6);max-width:18ch}
 .mk-board.mk-hero .mk-h1 .quiet,.mk-board.mk-hero .mk-h1 em{color:rgba(244,247,238,.92)}
 .mk-board.mk-hero .mk-kicker,.mk-board.mk-hero .mk-board-title{color:rgba(244,247,238,.94)}
@@ -606,3 +606,32 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-board.film .mk-step .l small{color:var(--ink-soft)}
 .mk-board.film .mk-step .d{background:var(--mark);color:var(--mark-ink)}
 .mk-board.film .mk-num,.mk-board.film .mk-num small{color:var(--ink)}
+
+/* ─── Secondary type on a film board ──────────────────────────────────
+   These all default to ink-based colours for cream boards. Over a film the
+   ground is dark, so each needs its light counterpart or it disappears —
+   the failure Isaac caught on "Ninguna sucursal.", the salary label, the
+   amount and the disclosure lines. */
+.mk-board.film .mk-title em,.mk-board.film .mk-title .quiet,
+.mk-board.film .mk-h1 em,.mk-board.film .mk-h1 .quiet,
+.mk-board.mk-hero .mk-h1 em,.mk-board.mk-hero .mk-h1 .quiet{color:rgba(244,247,238,.86)}
+.mk-board.film .mk-quiet,
+.mk-board.film .mk-disclose,
+.mk-board.film .mk-field>label,
+.mk-board.film .mk-label{color:rgba(244,247,238,.94)}
+.mk-board.film .mk-disclose b,
+.mk-board.film .mk-disclose a{color:#f4f7ee}
+.mk-board.film .mk-num{color:#f4f7ee;text-shadow:0 2px 18px rgba(8,14,8,.5)}
+.mk-board.film .mk-num small,
+.mk-board.film .mk-money .pre,
+.mk-board.film .mk-money .suf{color:rgba(244,247,238,.9)}
+/* The input keeps its own light surface, so its text stays ink. */
+.mk-board.film .mk-money .mk-input{color:var(--ink)}
+.mk-board.film .mk-money .mk-input+.suf,
+.mk-board.film .mk-money .pre{color:var(--ink-soft)}
+.mk-board.film .mk-slider .track{background:rgba(255,255,255,.28)}
+.mk-board.film .mk-slider .fill{background:var(--cta)}
+.mk-board.film .mk-slider-labels,
+.mk-board.film .mk-slider-labels span,
+.mk-board.film .mk-hint{color:rgba(244,247,238,.94)}
+.mk-board.film .mk-hint.ok{color:#9ff0b6}
