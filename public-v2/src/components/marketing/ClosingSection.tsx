@@ -7,8 +7,7 @@ export function ClosingSection() {
   const { t } = useTranslation();
 
   return (
-    <Board tone="sage" id="closing" className="mk-closing">
-      <img className="mk-closing-art" src="/images/brand/cutout-paperbag.png" alt="" loading="lazy" />
+    <Board tone="sage" id="closing">
       <Statement html={t('close_h2')} lead={t('close_sub')} center>
         <div className="mk-actions">
           <Link to="/onboarding" className="mk-btn">{t('close_cta')}</Link>

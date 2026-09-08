@@ -27,7 +27,8 @@ const BATCH = {
   '34231137156': ['B4', 'Mexico hardened (raw)'],
   '34233071446': ['B4', 'Mexico hardened, graded 0.85'],
   '34233074596': ['B3', 'Ambient loops, graded 0.85'],
-  '34233313875': ['B5', 'Mexico hardened, graded 0.42 — shipping'],
+  '34233313875': ['B5', 'Mexico hardened, graded 0.42'],
+  '34236400263': ['B6', 'IMAGE-TO-VIDEO from the published stills — shipping'],
 };
 
 function walk(dir, hit = []) {
