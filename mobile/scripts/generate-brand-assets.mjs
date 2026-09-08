@@ -43,24 +43,24 @@ const IMAGES = [
   // a darker mass in the lower third for the chips. A person, never legible.
   {
     file: 'home-doorway.png', size: '1024x1536',
-    prompt: `A hotel housekeeper in a pale sage uniform stepping out of a service door into early morning light, seen from behind, walking away, long-exposure motion blur, face never visible, olive and clay tones, a pale cream sky filling the upper third of the frame, darker doorway shadow in the lower third, muted desaturated analog film grade, fine grain, editorial, vertical. ${NEG}`,
+    prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A hotel housekeeper in a pale sage uniform stepping out of a service door into early morning light, seen from behind, walking away, long-exposure motion blur, face never visible, olive and clay tones, a pale cream sky filling the upper third of the frame, darker doorway shadow in the lower third, muted desaturated analog film grade, fine grain, editorial, vertical. ${NEG}`,
   },
   {
     file: 'home-kite.png', size: '1024x1536',
-    prompt: `Two hands releasing a small cream paper kite with a sage green cross into a pale cream sky, seen from below, slight motion blur on the hands, no face, olive-clay skin tones desaturated toward clay, the sky filling the upper two thirds, muted desaturated analog film grade, fine grain, vertical. ${NEG}`,
+    prompt: `Two Mexican hands releasing a small cream paper kite with a sage green cross into a pale Caribbean sky, seen from below, slight motion blur on the hands, no face, olive-clay skin tones desaturated toward clay, the sky filling the upper two thirds, muted desaturated analog film grade, fine grain, vertical. ${NEG}`,
   },
   // Moments — 4:3, for the credit-line / statement boards and the website.
   {
     file: 'moment-pharmacy.png', size: '1536x1024',
-    prompt: `Close-up of hands at a pharmacy counter receiving a small cream paper bag of medicine, soft focus, no faces in frame, warm olive and clay tones with cream highlights, quiet relief, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
+    prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. Close-up of hands at a pharmacy counter receiving a small cream paper bag of medicine, soft focus, no faces in frame, warm olive and clay tones with cream highlights, quiet relief, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
   },
   {
     file: 'moment-backpack.png', size: '1536x1024',
-    prompt: `A parent kneeling in a doorway handing a child a school backpack, backlit by morning light, both faces turned away and softly blurred, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial, tender and unposed. ${NEG}`,
+    prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A parent kneeling in a doorway handing a child a school backpack, backlit by morning light, both faces turned away and softly blurred, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial, tender and unposed. ${NEG}`,
   },
   {
     file: 'moment-kitchen.png', size: '1536x1024',
-    prompt: `A person sitting at a simple kitchen table at dawn, seen from the side and slightly behind, exhaling with relief, a phone face-down on the table, window light, face out of focus, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
+    prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A person sitting at a simple kitchen table at dawn, seen from the side and slightly behind, exhaling with relief, a phone face-down on the table, window light, face out of focus, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
   },
   {
     file: 'figure-green.png', size: '1024x1024',
@@ -110,11 +110,11 @@ const KITE_END = 'In the last second a small cream paper kite with a sage green 
 const GRADE = 'Muted desaturated analog film grade, olive and clay tones through moss to cream highlights, fine grain, soft diffused light, faces never legible, no saturated colour, no bright white, no text.';
 
 const FILMS = [
-  { file: 'intro-doorway.mp4', aspect: '9:16', prompt: `A hotel housekeeper in a pale sage uniform steps out of a service door into early morning light, seen from behind, walking away with light motion blur, a pale cream sky above. ${GRADE} ${KITE_END}` },
-  { file: 'intro-pharmacy.mp4', aspect: '9:16', prompt: `Close-up of hands at a pharmacy counter receiving a small cream paper bag, soft focus, no faces, a quiet moment of relief, slow. ${GRADE} ${KITE_END}` },
-  { file: 'intro-backpack.mp4', aspect: '9:16', prompt: `A parent kneels in a backlit doorway and hands a child a school backpack, both faces turned away and softly blurred, tender and unposed, slow. ${GRADE} ${KITE_END}` },
-  { file: 'intro-kitchen.mp4', aspect: '9:16', prompt: `A person at a simple kitchen table at dawn, seen from the side, exhales with relief and sets a phone face-down, window light, face out of focus, slow. ${GRADE} ${KITE_END}` },
-  { file: 'intro-release.mp4', aspect: '9:16', prompt: `Two hands let go of the string of a small cream paper kite with a sage green cross; the kite climbs slowly into a pale cream sky, seen from below, slight motion blur on the hands. ${GRADE}` },
+  { file: 'intro-doorway.mp4', aspect: '9:16', prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A hotel housekeeper in a pale sage uniform steps out of a service door into early morning light, seen from behind, walking away with light motion blur, a pale cream sky above. ${GRADE} ${KITE_END}` },
+  { file: 'intro-pharmacy.mp4', aspect: '9:16', prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. Close-up of hands at a pharmacy counter receiving a small cream paper bag, soft focus, no faces, a quiet moment of relief, slow. ${GRADE} ${KITE_END}` },
+  { file: 'intro-backpack.mp4', aspect: '9:16', prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A parent kneels in a backlit doorway and hands a child a school backpack, both faces turned away and softly blurred, tender and unposed, slow. ${GRADE} ${KITE_END}` },
+  { file: 'intro-kitchen.mp4', aspect: '9:16', prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A person at a simple kitchen table at dawn, seen from the side, exhales with relief and sets a phone face-down, window light, face out of focus, slow. ${GRADE} ${KITE_END}` },
+  { file: 'intro-release.mp4', aspect: '9:16', prompt: `Two Mexican hands, on a Quintana Roo beach at dawn, let go of the string of a small cream paper kite with a sage green cross; the kite climbs slowly into a pale cream sky, seen from below, slight motion blur on the hands. ${GRADE}` },
 ];
 
 const LOOPS = [
