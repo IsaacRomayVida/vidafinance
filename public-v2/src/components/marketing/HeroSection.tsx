@@ -1,35 +1,27 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Board, Statement, ArrowIcon } from './Board';
+import { HeroFilm, type Film } from './HeroFilm';
 
 /**
- * The hero films are the published photographs, moving — generated with
- * image-to-video from those exact stills, so the first frame IS the picture.
- * Portrait on phones (where the film is the board's background) and
- * landscape on desktop, each with its own still as the poster.
+ * The reels. Landscape films fill the desktop stage; the portrait cuts are
+ * the phone background, where the film is the board itself. Each entry is a
+ * photograph from the site and the film generated from it.
  */
-const HERO = {
-  portrait: { film: '/video/live-doorway.mp4', still: '/images/brand/home-doorway.jpg' },
-  landscape: { film: '/video/live-kitchen.mp4', still: '/images/brand/moment-kitchen.jpg' },
-};
-
-/** Muted must be set before a source exists or the browser refuses autoplay
- *  and freezes the first frame (React does not apply `muted` during render). */
-function armVideo(el: HTMLVideoElement | null, src: string) {
-  if (!el) return;
-  el.muted = true;
-  el.defaultMuted = true;
-  el.setAttribute('muted', '');
-  el.playsInline = true;
-  if (el.getAttribute('src') !== src) {
-    el.setAttribute('src', src);
-    el.load();
-    el.play().catch(() => {});
-  }
-}
+const LANDSCAPE: Film[] = [
+  { film: '/video/live-kitchen.mp4', still: '/images/brand/moment-kitchen.jpg' },
+  { film: '/video/live-pharmacy.mp4', still: '/images/brand/moment-pharmacy.jpg' },
+  { film: '/video/live-backpack.mp4', still: '/images/brand/moment-backpack.jpg' },
+];
+const PORTRAIT: Film[] = [
+  { film: '/video/live-doorway.mp4', still: '/images/brand/home-doorway.jpg' },
+  { film: '/video/live-stall.mp4', still: '/images/brand/home-stall.jpg' },
+];
 
 /**
- * Statement board — the landing hero from funpay-ui. One big Urbanist
+ * Statement board — the landing hero from funpay-ui. The films rotate: each
+ * plays once and crossfades into the next, landscape in the desktop stage and
+ * portrait as the phone background. One big Urbanist
  * headline alternating ink and quiet lines, and two
  * floating elements over the stage: the capture bar (dark pill, icon
  * circles, active one cream) at −3° and the identity card (employee ·
@@ -54,27 +46,8 @@ export function HeroSection() {
           {/* The freedom motif: the cream-and-sage kite drifting in a pale sky.
               A real <video> so it actually moves; the still stands in under
               reduced motion or while it loads. */}
-          <img className="mk-stage-still" src={HERO.landscape.still} alt="" />
-          <video
-            className="mk-stage-film wide"
-            ref={(el) => armVideo(el, HERO.landscape.film)}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            poster={HERO.landscape.still}
-          />
-          <video
-            className="mk-stage-film tall"
-            ref={(el) => armVideo(el, HERO.portrait.film)}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            poster={HERO.portrait.still}
-          />
+          <HeroFilm reel={LANDSCAPE} className="mk-stage-film wide" />
+          <HeroFilm reel={PORTRAIT} className="mk-stage-film tall" />
         </div>
       </div>
     </Board>
