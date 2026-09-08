@@ -160,7 +160,7 @@
 
 .ops-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:22px}
 .ops-kpi{padding:14px 12px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);min-width:0}
-.ops-kpi small{display:block;font-size:11px;color:rgba(242,245,240,.75);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ops-kpi small{display:block;font-size:11px;color:rgba(242,245,240,.75);letter-spacing:.04em;text-transform:uppercase;line-height:1.3;min-height:2.6em}
 .ops-kpi b{display:block;font-size:22px;font-weight:400;letter-spacing:-.02em;margin-top:6px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ops-kpi b span{font-size:12px;color:var(--harmony);margin-left:6px}
 .ops-kpi.warn b{color:#f2c4a0}
