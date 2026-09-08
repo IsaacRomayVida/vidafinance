@@ -64,7 +64,7 @@ const rowStyle: React.CSSProperties = {
   // 8px, not the frames' itemSpacing:0 — see the note at the foot of this file.
   gap: 8,
   padding: '11px 0',
-  borderBottom: '1px solid rgba(25,68,69,0.06)',
+  borderBottom: '1px solid rgba(255,255,255,.08)',
 };
 
 /**
@@ -194,10 +194,11 @@ export function Stage3ConditionsPanel({
 }) {
   const buckets = bucketConditions(detail);
 
-  // 12px, overriding the page's 20px cards, per CTO ruling 2026-08-06 (§5 of
-  // the production notes): the already-approved conditions panel is 12px and a
-  // second radius convention should not arrive mid-project.
-  const panelStyle: React.CSSProperties = { ...cardStyle, borderRadius: 12 };
+  // The CTO ruling of 2026-08-06 (§5) fixed this panel at 12px so a second
+  // radius convention would not arrive mid-project. The funpay-ui direction
+  // moved the whole ops side to one convention (no radius under 16px), so the
+  // panel now takes the page card's radius instead of carrying its own.
+  const panelStyle: React.CSSProperties = { ...cardStyle };
 
   /* Empty state. A loan that never reached Stage 3, one predating #393/#509,
      or a review with no loanId all land here, and none of them is an error.
