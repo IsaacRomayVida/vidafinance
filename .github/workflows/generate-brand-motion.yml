@@ -86,7 +86,7 @@ jobs:
           # Films: compact H.264 for the app bundle (intros ≈ 1 MB each), loops looped-friendly.
           for f in *.mp4; do
             [ -f "$f" ] || continue
-            ffmpeg -loglevel error -y -i "$f" -vf "scale='if(gt(iw,ih),1280,720)':-2,eq=saturation=0.85,noise=alls=4:allf=t" -c:v libx264 -preset slow -crf 27 -pix_fmt yuv420p -movflags +faststart -an "graded/$f"
+            ffmpeg -loglevel error -y -i "$f" -vf "scale='if(gt(iw,ih),1280,720)':-2,eq=saturation=0.42:contrast=0.96:brightness=0.015,colorbalance=rs=.03:gs=.01:bs=-.03:rm=.02:bm=-.02,noise=alls=4:allf=t" -c:v libx264 -preset slow -crf 27 -pix_fmt yuv420p -movflags +faststart -an "graded/$f"
           done
           # Review frames: one early, one at the kite moment, per film.
           mkdir -p frames
