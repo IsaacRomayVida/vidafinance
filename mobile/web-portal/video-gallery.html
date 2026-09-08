@@ -58,6 +58,11 @@ figure.sel .pick{background:var(--cta);color:#fff}
 <script>
 fetch('index.json').then(r=>r.json()).then(items=>{
   const grid=document.getElementById('grid');
+  // Play what is on screen, pause what is not: 41 films decoding at once
+  // stalls the page, and hover does not exist on a phone.
+  const io=new IntersectionObserver((es)=>es.forEach(e=>{
+    if(e.isIntersecting) e.target.play().catch(()=>{}); else e.target.pause();
+  }),{threshold:0.35});
   items.forEach(it=>{
     const wide=it.scene.includes('wide');
     const fig=document.createElement('figure');
@@ -65,17 +70,20 @@ fetch('index.json').then(r=>r.json()).then(items=>{
     fig.dataset.batch=it.batch;
     fig.innerHTML=`<span class="tag">${it.batch}</span>
       <button class="pick" title="seleccionar">○</button>
-      <video muted loop playsinline preload="metadata" poster=""></video>
+      <video muted loop playsinline preload="metadata"></video>
       <figcaption><div class="scene">${it.scene.replace('intro-','').replace('ambient-','ambiente ').replace('-',' ')}</div>
       <div class="meta">${it.note} · ${it.graded?'gradado':'sin gradar'} · ${it.kb} KB</div></figcaption>`;
     const v=fig.querySelector('video');
     // muted BEFORE the source, or the browser refuses to autoplay it.
     v.muted=true;v.defaultMuted=true;v.setAttribute('muted','');v.playsInline=true;
+    // Nudge past 0 once metadata lands so the card shows a real frame instead
+    // of an empty box while it waits to be played.
+    v.addEventListener('loadedmetadata',()=>{ try{ v.currentTime=0.1; }catch(e){} },{once:true});
     v.setAttribute('src','files/'+it.file);
     const play=()=>v.play().catch(()=>{});
     fig.addEventListener('mouseenter',play);
-    fig.addEventListener('mouseleave',()=>v.pause());
     v.addEventListener('click',()=>v.paused?play():v.pause());
+    io.observe(v);
     fig.querySelector('.pick').onclick=e=>{e.stopPropagation();fig.classList.toggle('sel');
       fig.querySelector('.pick').textContent=fig.classList.contains('sel')?'✓':'○';report();};
     fig.dataset.name=it.batch+' '+it.scene;
