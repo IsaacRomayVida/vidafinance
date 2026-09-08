@@ -1,6 +1,6 @@
 /**
- * Cold-start brand film: one of the moments credit buys — the service door
- * at dawn, the pharmacy counter, the school backpack, the kitchen exhale.
+ * Cold-start brand film: one of the moments credit buys — the stall shutter
+ * going up at dawn, the service door, the school backpack.
  * Documentary photography, never illustration. As the scene settles the
  * mark blooms with a soft ring and a haptic, the label rises, and the
  * curtain fades the app in. Drawn at random per cold start.
@@ -27,9 +27,7 @@ const artwork = require('../../assets/brand/home-doorway.jpg');
 const SCENES = [
   require('../../assets/intros/intro-market.mp4'),
   require('../../assets/intros/intro-doorway.mp4'),
-  require('../../assets/intros/intro-pharmacy.mp4'),
   require('../../assets/intros/intro-backpack.mp4'),
-  require('../../assets/intros/intro-kitchen.mp4'),
 ];
 /* eslint-enable @typescript-eslint/no-var-requires */
 
