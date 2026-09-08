@@ -3,9 +3,9 @@
  *
  * Backdrop 'board' — the cream→sage vertical gradient every borrower screen
  * sits on. 'paper' — flat cream for capture screens (request, repayment,
- * forms). 'leaf' — the painted macro-botanical: olive and chartreuse rising
- * from the bottom, cream light in the upper third, soft-light vein stripes
- * at ~112°. It stands in for photography until a graded image exists.
+ * forms). 'leaf' — a painted colour field (olive rising from the bottom,
+ * cream light in the upper third) that stands in for the graded people
+ * photograph until it ships; no botanical texture, per Isaac.
  *
  * GlassCard — the frosted chip: thin white fill, real blur, hairline edge,
  * inset top highlight. Only over the leaf; never glass over flat colour.
@@ -14,7 +14,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Defs, Ellipse, Line, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { boardGradient, colors, radii } from '../theme';
 
@@ -49,16 +49,11 @@ export function Backdrop({
               <Stop offset="0%" stopColor="#ecf0d6" stopOpacity="1" />
               <Stop offset="75%" stopColor="#ecf0d6" stopOpacity="0" />
             </RadialGradient>
-            {/* vein stripes: 1px lines every 9px, tilted like a leaf's veins */}
-            <Pattern id="veins" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(112)">
-              <Line x1="0" y1="0" x2="0" y2="9" stroke="#ffffff" strokeOpacity="0.07" strokeWidth="1" />
-            </Pattern>
           </Defs>
           <Rect width="100%" height="100%" fill="url(#l4)" />
           <Rect width="100%" height="100%" fill="url(#l3)" />
           <Ellipse cx="50%" cy="50%" rx="40%" ry="75%" fill="url(#l2)" />
           <Ellipse cx="62%" cy="38%" rx="75%" ry="55%" fill="url(#l1)" />
-          <Rect width="100%" height="100%" fill="url(#veins)" />
         </Svg>
         {children}
       </LinearGradient>

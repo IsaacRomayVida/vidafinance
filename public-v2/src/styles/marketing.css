@@ -31,8 +31,6 @@
     radial-gradient(60% 40% at 30% 85%, #dfe8b4 0%, transparent 70%),
     radial-gradient(70% 50% at 80% 8%, #ecf0d6 0%, transparent 75%),
     linear-gradient(180deg,#d6dfb2 0%,#a6b46a 45%,#3c5420 100%)}
-.mk-board.leaf::before{content:'';position:absolute;inset:0;pointer-events:none;
-  background:repeating-linear-gradient(112deg,rgba(255,255,255,.07) 0 1px,transparent 1px 9px);mix-blend-mode:soft-light}
 .mk-board.leaf>*{position:relative}
 .mk-board.leaf .sh{text-shadow:0 1px 18px rgba(20,40,10,.4)}
 .mk-board.tight{padding-top:clamp(24px,3vw,40px);padding-bottom:clamp(24px,3vw,40px)}
