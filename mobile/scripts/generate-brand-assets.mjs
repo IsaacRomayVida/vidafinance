@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|intros|loops|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|intros|loops|all [--out dir] [--pro]
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -83,6 +83,27 @@ const IMAGES = [
     file: 'cutout-paperbag.png', size: '1024x1024', transparent: true,
     prompt: `A small folded cream paper bag, the kind a pharmacy hands over the counter, isolated on a transparent background, soft diffused light, muted desaturated film grade, slight paper texture, photographic. ${NEG}`,
   },
+];
+
+// High-quality symbols to replace the folder glyphs: matte clay objects in
+// cream and sage, one per real thing in the operation, on transparent ground.
+const ICON_STYLE = 'Matte clay 3D icon, cream paper and pale sage green, soft studio light from the upper left, slight tilt, isolated on a transparent background, muted desaturated grade, no text, no shadow on the ground, centred, product-render quality.';
+const ICONS = [
+  { file: 'icon-nomina.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a cream pay envelope with a sage band, slightly open.` },
+  { file: 'icon-quincena.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a small tear-off calendar block showing a single highlighted day in sage.` },
+  { file: 'icon-empleador.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a low modern hotel building, three storeys, cream with sage window bands.` },
+  { file: 'icon-condusef.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a rounded shield with a small sage check mark.` },
+  { file: 'icon-sat.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a folded cream receipt with a sage stamp.` },
+  { file: 'icon-cobranza.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: three cream coins stacked with one sage coin on top.` },
+  { file: 'icon-contrato.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a single cream document with a sage signature line and a small seal.` },
+  { file: 'icon-adelanto.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a cream card with an upward sage arrow.` },
+  { file: 'icon-kyc.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: an identity card silhouette with a sage circle where the photo would be.` },
+  { file: 'icon-hotel-key.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a hotel key card with a sage stripe on a small ring.` },
+];
+// Stage backgrounds — generated surfaces the crisp cards sit on.
+const STAGES = [
+  { file: 'stage-ops.png', size: '1536x1024', prompt: `Abstract photograph of a dark blue-charcoal surface fading into deep forest green, a soft green glow rising from the bottom edge, very fine film grain, faint depth like a dark studio backdrop, no subject, no text, no highlights blown out. ${NEG}` },
+  { file: 'stage-employer.png', size: '1536x1024', prompt: `Wide photograph of a hotel service corridor at dawn, empty, seen from low, soft cream light entering from the far end, deep forest and charcoal shadows, muted desaturated analog film grade, fine grain, no people, no text. ${NEG}` },
 ];
 
 const KITE_END = 'In the last second a small cream paper kite with a sage green cross rises across the top of the frame and holds against a pale cream sky.';
@@ -171,6 +192,8 @@ async function runAll(list, fn) {
   }
 }
 if (SET === 'imagery' || SET === 'all') await runAll(IMAGES, generateImage);
+if (SET === 'icons' || SET === 'all') await runAll(ICONS, generateImage);
+if (SET === 'stages' || SET === 'all') await runAll(STAGES, generateImage);
 if (SET === 'intros' || SET === 'all') await runAll(FILMS, generateFilm);
 if (SET === 'loops' || SET === 'all') await runAll(LOOPS, generateFilm);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }

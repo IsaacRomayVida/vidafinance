@@ -5,8 +5,8 @@
   --void:        #0b0d0b;
   --ink:         #1e201d;   /* never #000 on cream */
   --ink-soft:    #3a3d38;
-  --mute:        #a2aa9c;
-  --type-quiet:  #b9c6b1;   /* the quiet line in a headline */
+  --mute:        #6f7a6b;   /* darkened 2026-09-08 (Isaac): light-on-light was unreadable */
+  --type-quiet:  #7d8d77;   /* the quiet line in a headline — readable, still quiet */
 
   --font-text:   'Urbanist', system-ui, sans-serif;
   --font-dot:    'Doto', 'Matricha', monospace;   /* labels only */

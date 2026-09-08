@@ -11,8 +11,8 @@ const base = {
   void: '#0b0d0b',
   ink: '#1e201d',
   inkSoft: '#3a3d38',
-  mute: '#a2aa9c',
-  typeQuiet: '#b9c6b1',
+  mute: '#6f7a6b',
+  typeQuiet: '#7d8d77',
 
   cream: '#f3f4ec',
   creamMid: '#eaf0e3',
