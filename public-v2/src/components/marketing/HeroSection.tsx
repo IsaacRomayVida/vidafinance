@@ -2,6 +2,9 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Board, Statement, ArrowIcon } from './Board';
 
+/** The housekeeper stepping out at dawn — the reference shot for the brand. */
+const HERO_FILM = '/video/hero-doorway.mp4';
+
 /**
  * Statement board — the landing hero from funpay-ui. One big Urbanist
  * headline alternating ink and quiet lines, and two
@@ -29,9 +32,29 @@ export function HeroSection() {
               A real <video> so it actually moves; the still stands in under
               reduced motion or while it loads. */}
           <img className="mk-stage-still" src="/images/brand/home-doorway.jpg" alt="" />
-          <video className="mk-stage-film" autoPlay muted loop playsInline preload="metadata" poster="/images/brand/home-doorway.jpg">
-            <source src="/video/ambient-loop-wide.mp4" type="video/mp4" />
-          </video>
+          <video
+            className="mk-stage-film"
+            ref={(el) => {
+              // muted BEFORE a source exists, or the browser evaluates the
+              // element as unmuted, refuses autoplay and freezes frame 1.
+              if (!el) return;
+              el.muted = true;
+              el.defaultMuted = true;
+              el.setAttribute('muted', '');
+              el.playsInline = true;
+              if (el.getAttribute('src') !== HERO_FILM) {
+                el.setAttribute('src', HERO_FILM);
+                el.load();
+                el.play().catch(() => {});
+              }
+            }}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            poster="/images/brand/home-doorway.jpg"
+          />
           <div className="mk-float mk-capture" style={{ left: '4%', top: '16%', transform: 'rotate(-3deg)' }}>
             <div className="ic on">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z" /></svg>
