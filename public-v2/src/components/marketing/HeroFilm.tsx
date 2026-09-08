@@ -33,6 +33,12 @@ function arm(el: HTMLVideoElement, src: string) {
   }
 }
 
+/** play() does not always return a promise (jsdom returns undefined). */
+function safePlay(el: HTMLVideoElement) {
+  const r = el.play?.();
+  if (r && typeof r.catch === 'function') r.catch(() => {});
+}
+
 export function HeroFilm({ reel, className }: { reel: Film[]; className?: string }) {
   const a = useRef<HTMLVideoElement>(null);
   const b = useRef<HTMLVideoElement>(null);
@@ -50,7 +56,7 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
     if (!showing || !waiting) return;
 
     arm(showing, reel[index % reel.length].film);
-    showing.play().catch(() => {});
+    safePlay(showing);
 
     // Stage the next film behind the visible one so the swap has no gap.
     if (reel.length > 1) arm(waiting, reel[(index + 1) % reel.length].film);
@@ -58,11 +64,11 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
     const advance = () => {
       if (reel.length < 2) {
         showing.currentTime = 0;
-        showing.play().catch(() => {});
+        safePlay(showing);
         return;
       }
       waiting.currentTime = 0;
-      waiting.play().catch(() => {});
+      safePlay(waiting);
       setFront((f) => (f === 'a' ? 'b' : 'a'));
       setIndex((i) => (i + 1) % reel.length);
     };

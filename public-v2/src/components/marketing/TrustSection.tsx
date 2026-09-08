@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { BoardFilm } from './BoardFilm';
 import { Link } from 'react-router-dom';
 import { Board, BoardHead, ArrowIcon } from './Board';
 
@@ -17,7 +18,8 @@ export function TrustSection() {
   const { t } = useTranslation();
 
   return (
-    <Board tone="leaf" className="photo photo-backpack" id="trust">
+    <Board tone="leaf" className="film" id="trust">
+      <BoardFilm film="/video/live-backpack.mp4" still="/images/brand/moment-backpack.jpg" />
       <div className="mk-cols">
         <div className="sticky sh">
           <BoardHead kicker={t('trust_tag')} title={t('trust_h2')} lead={t('trust_p')} />

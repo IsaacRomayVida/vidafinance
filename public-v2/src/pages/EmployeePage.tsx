@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { BoardFilm } from '../components/marketing/BoardFilm';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Board, BoardHead, Statement, Rows, Figures, PillSteps, ArrowIcon } from '../components/marketing/Board';
@@ -89,7 +90,8 @@ export function EmployeePage() {
       </Board>
 
       {/* Use cases */}
-      <Board tone="leaf" className="photo photo-kitchen">
+      <Board tone="leaf" className="film">
+      <BoardFilm film="/video/live-kitchen.mp4" still="/images/brand/moment-kitchen.jpg" />
         <BoardHead kicker={t('lp_m_use_tag')} title={t('lp_m_use_h')} />
         <div className="mk-gap" />
         <Rows columns={2} items={[1, 2, 3, 4].map((n) => ({ title: t(`lp_m_use_${n}_t`), desc: t(`lp_m_use_${n}_d`) }))} />

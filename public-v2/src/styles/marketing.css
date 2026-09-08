@@ -561,3 +561,26 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
   .mk-board.mk-hero .mk-float{display:none}
   .mk-board.mk-hero .mk-btn.ghost{color:#f4f7ee;border-color:rgba(244,247,238,.5)}
 }
+
+/* ─── A board whose background is a film ──────────────────────────────
+   The still sits under the film so the board is never empty; the scrim is
+   fixed rather than inherited from whatever the frame is doing, so type
+   over motion keeps a contrast floor. */
+.mk-board.film{position:relative;isolation:isolate;color:#f4f7ee}
+.mk-board-film{position:absolute;inset:0;z-index:-1;overflow:hidden;border-radius:inherit}
+.mk-board-film img,.mk-board-film video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.mk-board-film video{filter:saturate(.92)}
+.mk-board-scrim{position:absolute;inset:0;display:block;
+  background:linear-gradient(180deg,rgba(16,24,14,.62) 0%,rgba(16,24,14,.72) 55%,rgba(16,24,14,.86) 100%)}
+.mk-board.film .mk-title,.mk-board.film .mk-h1,.mk-board.film h2,.mk-board.film h3{color:#f4f7ee;text-shadow:0 2px 18px rgba(8,14,8,.55)}
+.mk-board.film .mk-lead,.mk-board.film p,.mk-board.film li{color:rgba(244,247,238,.96)}
+.mk-board.film .mk-kicker,.mk-board.film .mk-board-title{color:rgba(244,247,238,.94)}
+.mk-board.film .mk-row{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2)}
+.mk-board.film .mk-row .t b{color:#f4f7ee}
+.mk-board.film .mk-row .t p,.mk-board.film .mk-row .t span{color:rgba(244,247,238,.94)}
+.mk-board.film .mk-row .a{background:rgba(255,255,255,.9);color:#2f4a22}
+.mk-board.film .mk-fig{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2)}
+.mk-board.film .mk-fig b{color:#f4f7ee}
+.mk-board.film .mk-fig span{color:rgba(244,247,238,.94)}
+.mk-board.film .mk-btn.ghost{color:#f4f7ee;border-color:rgba(244,247,238,.6)}
+@media (prefers-reduced-motion:reduce){.mk-board-film video{display:none}}

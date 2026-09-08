@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { BoardFilm } from './BoardFilm';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { MIN_CREDIT_LINE, selectableCreditLine } from '../../lib/creditLine';
@@ -50,7 +51,8 @@ export function ROICalculator() {
   }, []);
 
   return (
-    <Board tone="leaf" className="photo photo-pharmacy" id="cost">
+    <Board tone="leaf" className="film" id="cost">
+      <BoardFilm film="/video/live-pharmacy.mp4" still="/images/brand/moment-pharmacy.jpg" />
       <div className="mk-cols">
         <div className="sticky">
           <BoardHead kicker={t('calc_tag')} title={t('calc_h2')} lead={t('calc_p')} />
