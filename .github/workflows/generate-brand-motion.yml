@@ -98,8 +98,10 @@ jobs:
           for f in graded/*.mp4; do
             [ -f "$f" ] || continue
             b=$(basename "${f%.mp4}")
-            ffmpeg -loglevel error -y -ss 1.2 -i "$f" -frames:v 1 -vf "scale=480:-2" "frames/$b-a.jpg"
-            ffmpeg -loglevel error -y -ss 4.5 -i "$f" -frames:v 1 -vf "scale=480:-2" "frames/$b-b.jpg"
+            dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f" 2>/dev/null || echo 5)
+            late=$(awk -v d="$dur" 'BEGIN{printf "%.2f", (d>1.5? d-0.4 : d/2)}')
+            ffmpeg -loglevel error -y -ss 0.6 -i "$f" -frames:v 1 -vf "scale=480:-2" "frames/$b-a.jpg"
+            ffmpeg -loglevel error -y -ss "$late" -i "$f" -frames:v 1 -vf "scale=480:-2" "frames/$b-b.jpg"
           done
           ls -la graded frames
 
