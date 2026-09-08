@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FunPay · Todos los videos generados</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;400;500;600&family=Doto:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1e201d;--ink-soft:#3a3d38;--mute:#5f6a5c;--cream:#f3f4ec;--sage:#dbe9d6;--cta:#2fc04e;--mark:#d7f0dc;--mark-ink:#2c6a3c}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Urbanist,system-ui,sans-serif;background:var(--cream);color:var(--ink);padding:20px;-webkit-font-smoothing:antialiased}
+h1{font-size:clamp(26px,4vw,40px);font-weight:400;letter-spacing:-.02em;max-width:16ch}
+.dot{font-family:Doto,monospace;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);font-size:13px}
+.lead{font-size:15px;font-weight:300;color:var(--ink-soft);max-width:62ch;margin-top:10px;line-height:1.55}
+.bar{position:sticky;top:0;z-index:5;background:var(--cream);padding:14px 0 12px;margin-top:18px;border-bottom:1px solid rgba(30,32,29,.1);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font:inherit;font-size:14px;border:0;cursor:pointer;padding:9px 16px;border-radius:40px;background:#e9ebe1;color:var(--ink-soft)}
+button.on{background:var(--ink);color:var(--cream)}
+button.go{background:var(--cta);color:var(--ink);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:20px}
+figure{background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 12px 30px -18px rgba(30,60,30,.4);position:relative}
+video{width:100%;aspect-ratio:9/16;object-fit:cover;display:block;background:#111;cursor:pointer}
+figure.wide video{aspect-ratio:16/9}
+figcaption{padding:11px 13px 13px}
+.scene{font-size:15px;font-weight:600;text-transform:capitalize}
+.meta{font-size:12px;color:var(--mute);margin-top:3px}
+.tag{position:absolute;top:9px;left:9px;background:rgba(30,32,29,.82);color:var(--cream);font-size:11px;padding:4px 9px;border-radius:20px;font-family:Doto,monospace;letter-spacing:.06em}
+.pick{position:absolute;top:9px;right:9px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.9);display:grid;place-items:center;font-size:15px;color:var(--mute);border:0;cursor:pointer;padding:0}
+figure.sel{outline:3px solid var(--cta)}
+figure.sel .pick{background:var(--cta);color:#fff}
+#out{position:fixed;left:0;right:0;bottom:0;background:var(--ink);color:var(--cream);padding:14px 20px;font-size:14px;display:none;z-index:9;align-items:center;gap:14px;flex-wrap:wrap}
+#out.show{display:flex}
+#out code{background:rgba(255,255,255,.12);padding:5px 10px;border-radius:8px;font-size:13px}
+.legend{font-size:13px;color:var(--ink-soft);margin-top:14px;line-height:1.8}
+.legend b{font-family:Doto,monospace;font-weight:600;letter-spacing:.06em;background:var(--mark);color:var(--mark-ink);padding:2px 7px;border-radius:6px;margin-right:6px}
+</style></head><body>
+<span class="dot">FunPay · Revisión de video</span>
+<h1>Todos los videos generados.</h1>
+<p class="lead">Cada versión que se generó, agrupada por intento. Pasa el cursor (o toca) para reproducir. Marca las que quieras conservar con el círculo y abajo aparece la lista para copiarme.</p>
+<p class="legend">
+<b>B1</b>Primer intento: personas + papalote ilustrado<br>
+<b>B2</b>Se añadió contexto de México; termina con el papalote<br>
+<b>B3</b>Fotográfico; papalote eliminado; loops de ambiente<br>
+<b>B4</b>México reforzado, gradación suave (0.85)<br>
+<b>B5</b>México reforzado, gradación fuerte (0.42) — lo que está publicado
+</p>
+<div class="bar">
+  <span class="dot">Filtrar</span>
+  <button data-f="all" class="on">Todos</button>
+  <button data-f="B5">B5 publicado</button>
+  <button data-f="B4">B4</button>
+  <button data-f="B3">B3</button>
+  <button data-f="B2">B2</button>
+  <button data-f="B1">B1</button>
+  <button class="go" id="playall">Reproducir todo</button>
+</div>
+<div class="grid" id="grid"></div>
+<div id="out"><span class="dot">Seleccionados</span><code id="list"></code><button id="copy">Copiar</button></div>
+<script>
+fetch('index.json').then(r=>r.json()).then(items=>{
+  const grid=document.getElementById('grid');
+  items.forEach(it=>{
+    const wide=it.scene.includes('wide');
+    const fig=document.createElement('figure');
+    if(wide) fig.className='wide';
+    fig.dataset.batch=it.batch;
+    fig.innerHTML=`<span class="tag">${it.batch}</span>
+      <button class="pick" title="seleccionar">○</button>
+      <video muted loop playsinline preload="metadata" poster=""></video>
+      <figcaption><div class="scene">${it.scene.replace('intro-','').replace('ambient-','ambiente ').replace('-',' ')}</div>
+      <div class="meta">${it.note} · ${it.graded?'gradado':'sin gradar'} · ${it.kb} KB</div></figcaption>`;
+    const v=fig.querySelector('video');
+    // muted BEFORE the source, or the browser refuses to autoplay it.
+    v.muted=true;v.defaultMuted=true;v.setAttribute('muted','');v.playsInline=true;
+    v.setAttribute('src','files/'+it.file);
+    const play=()=>v.play().catch(()=>{});
+    fig.addEventListener('mouseenter',play);
+    fig.addEventListener('mouseleave',()=>v.pause());
+    v.addEventListener('click',()=>v.paused?play():v.pause());
+    fig.querySelector('.pick').onclick=e=>{e.stopPropagation();fig.classList.toggle('sel');
+      fig.querySelector('.pick').textContent=fig.classList.contains('sel')?'✓':'○';report();};
+    fig.dataset.name=it.batch+' '+it.scene;
+    grid.appendChild(fig);
+  });
+  function report(){const sel=[...document.querySelectorAll('figure.sel')].map(f=>f.dataset.name);
+    document.getElementById('out').classList.toggle('show',sel.length>0);
+    document.getElementById('list').textContent=sel.join('  ·  ');}
+  document.querySelectorAll('.bar button[data-f]').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('.bar button[data-f]').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('figure').forEach(f=>f.style.display=(b.dataset.f==='all'||f.dataset.batch===b.dataset.f)?'':'none');});
+  document.getElementById('playall').onclick=()=>document.querySelectorAll('figure:not([style*="none"]) video').forEach(v=>v.play().catch(()=>{}));
+  document.getElementById('copy').onclick=()=>navigator.clipboard.writeText(document.getElementById('list').textContent);
+});
+</script></body></html>
