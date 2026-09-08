@@ -29,6 +29,33 @@
         ]
       },
       {
+        "source": "/images/brand/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=60, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/video/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=60, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/videos/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=60, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "**/*.html",
         "headers": [
           {
