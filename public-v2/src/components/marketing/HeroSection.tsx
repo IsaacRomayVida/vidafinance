@@ -11,7 +11,8 @@ import { HeroFilm, type Film } from './HeroFilm';
 const LANDSCAPE: Film[] = [
   { film: '/video/live-kitchen.mp4', still: '/images/brand/moment-kitchen.jpg' },
   { film: '/video/live-pharmacy.mp4', still: '/images/brand/moment-pharmacy.jpg' },
-  { film: '/video/live-backpack.mp4', still: '/images/brand/moment-backpack.jpg' },
+  // live-backpack is out: the child dissolves partway through the shot.
+  // The photograph still carries that story on the trust board.
 ];
 const PORTRAIT: Film[] = [
   { film: '/video/live-doorway.mp4', still: '/images/brand/home-doorway.jpg' },

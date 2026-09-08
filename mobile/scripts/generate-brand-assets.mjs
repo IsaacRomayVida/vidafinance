@@ -129,8 +129,8 @@ const ANIMATED = [
     prompt: `The hands complete the exchange of the paper bag and draw it in; a small settling of the fingers. ${MOTION}`,
   },
   {
-    file: 'live-backpack.mp4', image: `${SITE}/moment-backpack.jpg`, aspect: '16:9',
-    prompt: `The child steps forward through the doorway into the light while the parent stays kneeling; a soft shift of weight. ${MOTION}`,
+    file: 'live-backpack.mp4', image: `${SITE}/moment-backpack.jpg`, aspect: '16:9', duration: '3',
+    prompt: `Both people REMAIN in frame for the entire shot and neither fades, disappears or changes: the mother stays kneeling and the child stays standing in the doorway. The only movement is a small shift of weight and the plants beyond the door moving in the breeze. ${MOTION}`,
   },
   {
     file: 'live-kitchen.mp4', image: `${SITE}/moment-kitchen.jpg`, aspect: '16:9',
@@ -212,7 +212,7 @@ async function generateFilm(spec) {
   // With an `image`, the film starts from that exact photograph.
   const model = spec.image ? I2V_MODEL : VIDEO_MODEL;
   const body = spec.image
-    ? { prompt: spec.prompt, image_url: spec.image, resolution: PRO ? '1080p' : '720p', duration: '5' }
+    ? { prompt: spec.prompt, image_url: spec.image, resolution: PRO ? '1080p' : '720p', duration: spec.duration ?? '5' }
     : { prompt: spec.prompt, aspect_ratio: spec.aspect, resolution: PRO ? '1080p' : '720p', duration: '5' };
   const submit = await fetch(`https://queue.fal.run/${model}`, {
     method: 'POST', headers, body: JSON.stringify(body),
