@@ -47,7 +47,7 @@ const IMAGES = [
   },
   {
     file: 'home-kite.png', size: '1024x1536',
-    prompt: `Two Mexican hands releasing a small cream paper kite with a sage green cross into a pale Caribbean sky, seen from below, slight motion blur on the hands, no face, olive-clay skin tones desaturated toward clay, the sky filling the upper two thirds, muted desaturated analog film grade, fine grain, vertical. ${NEG}`,
+    prompt: `Two Mexican hands releasing a small handmade kite of off-white cream paper with a muted pale sage-green cross and a plain cream tail (no bright green, no emerald, no pink) into a pale Caribbean sky, seen from below, slight motion blur on the hands, no face, olive-clay skin tones desaturated toward clay, the sky filling the upper two thirds, muted desaturated analog film grade, fine grain, vertical. ${NEG}`,
   },
   // Moments — 4:3, for the credit-line / statement boards and the website.
   {
@@ -106,20 +106,27 @@ const STAGES = [
   { file: 'stage-employer.png', size: '1536x1024', prompt: `Wide photograph of a hotel service corridor at dawn, empty, seen from low, soft cream light entering from the far end, deep forest and charcoal shadows, muted desaturated analog film grade, fine grain, no people, no text. ${NEG}` },
 ];
 
-const KITE_END = 'In the last second a small cream paper kite with a sage green cross rises across the top of the frame and holds against a pale cream sky.';
-const GRADE = 'Muted desaturated analog film grade, olive and clay tones through moss to cream highlights, fine grain, soft diffused light, faces never legible, no saturated colour, no bright white, no text.';
+/** The motif, described tightly — Seedance rendered it emerald with pink
+ *  ribbons until every colour was spelled out. Outdoor scenes only: a kite
+ *  indoors reads as a hallucination, which is exactly what came back. */
+const KITE = 'a small handmade kite of off-white cream paper with a muted pale sage-green cross, a plain cream cloth tail, no bright green, no emerald, no pink, no coloured ribbons';
+const KITE_END = `In the last two seconds ${KITE} rises across the upper part of the frame against a pale cream sky.`;
+const GRADE = 'Muted desaturated analog film grade, olive and clay tones through moss to cream highlights, fine grain, soft diffused light, faces never legible, low saturation throughout, no bright or saturated colour, no neon, no pink, no bright white, no text.';
+const MX = 'Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified.';
 
 const FILMS = [
-  { file: 'intro-doorway.mp4', aspect: '9:16', prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A hotel housekeeper in a pale sage uniform steps out of a service door into early morning light, seen from behind, walking away with light motion blur, a pale cream sky above. ${GRADE} ${KITE_END}` },
-  { file: 'intro-pharmacy.mp4', aspect: '9:16', prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. Close-up of hands at a pharmacy counter receiving a small cream paper bag, soft focus, no faces, a quiet moment of relief, slow. ${GRADE} ${KITE_END}` },
-  { file: 'intro-backpack.mp4', aspect: '9:16', prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A parent kneels in a backlit doorway and hands a child a school backpack, both faces turned away and softly blurred, tender and unposed, slow. ${GRADE} ${KITE_END}` },
-  { file: 'intro-kitchen.mp4', aspect: '9:16', prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A person at a simple kitchen table at dawn, seen from the side, exhales with relief and sets a phone face-down, window light, face out of focus, slow. ${GRADE} ${KITE_END}` },
-  { file: 'intro-release.mp4', aspect: '9:16', prompt: `Two Mexican hands, on a Quintana Roo beach at dawn, let go of the string of a small cream paper kite with a sage green cross; the kite climbs slowly into a pale cream sky, seen from below, slight motion blur on the hands. ${GRADE}` },
+  // Outdoors — these end on the kite.
+  { file: 'intro-doorway.mp4', aspect: '9:16', prompt: `${MX} A hotel housekeeper in a pale sage uniform steps out of a service door into early morning light, seen from behind, walking away with light motion blur, a pale cream sky above. ${GRADE} ${KITE_END}` },
+  { file: 'intro-release.mp4', aspect: '9:16', prompt: `${MX} Two hands, on a Quintana Roo beach at dawn, let go of the string of ${KITE}; it climbs slowly into a pale cream sky, seen from below, slight motion blur on the hands. ${GRADE}` },
+  { file: 'intro-backpack.mp4', aspect: '9:16', prompt: `${MX} A mother kneels in the doorway of a modest Mexican home and helps her small child put on a school backpack; the child steps out into morning light. Both faces turned away and softly blurred, tender and unposed, slow. ${GRADE} ${KITE_END}` },
+  // Interiors — NO kite: it floated inside the room and read as a mistake.
+  { file: 'intro-pharmacy.mp4', aspect: '9:16', prompt: `${MX} Close-up of hands at a small pharmacy counter receiving a cream paper bag of medicine, soft focus, no faces, a quiet moment of relief, the hands close around the bag, slow. Interior only, nothing flying, no kite. ${GRADE}` },
+  { file: 'intro-kitchen.mp4', aspect: '9:16', prompt: `${MX} A person at a simple kitchen table at dawn, seen from the side, exhales with relief and sets a phone face-down on the table, window light, face out of focus, slow. Interior only, nothing flying, no kite. ${GRADE}` },
 ];
 
 const LOOPS = [
-  { file: 'kite-loop.mp4', aspect: '9:16', prompt: `A small cream paper kite with a sage green cross drifting very slowly in a pale cream sky, gentle ambient motion, no camera movement, seamless and calm, vertical. ${GRADE}` },
-  { file: 'kite-loop-wide.mp4', aspect: '16:9', prompt: `A small cream paper kite with a sage green cross drifting very slowly in a pale cream sky, gentle ambient motion, no camera movement, seamless and calm, wide. ${GRADE}` },
+  { file: 'kite-loop.mp4', aspect: '9:16', prompt: `${KITE}, drifting very slowly in a pale cream sky over a Quintana Roo beach horizon, gentle ambient motion, no camera movement, seamless and calm, vertical. ${GRADE}` },
+  { file: 'kite-loop-wide.mp4', aspect: '16:9', prompt: `${KITE}, drifting very slowly in a pale cream sky over a Quintana Roo beach horizon, gentle ambient motion, no camera movement, seamless and calm, wide. ${GRADE}` },
 ];
 
 // ---------------------------------------------------------------- stills
