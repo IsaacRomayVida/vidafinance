@@ -89,6 +89,17 @@ jobs:
             echo "::error::__PORTAL_VERSION__ survived substitution"; exit 1
           fi
 
+      - name: Collect generated films for the review gallery
+        if: ${{ github.event.inputs.mode == 'deploy' && github.event.inputs.video_runs != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p mobile/web-portal/public/videos/files
+          for RID in ${{ github.event.inputs.video_runs }}; do
+            gh run download "$RID" --repo "${{ github.repository }}" -D "/tmp/v/$RID" || true
+          done
+          node scripts/build-video-gallery.mjs /tmp/v mobile/web-portal/public/videos
+
       - name: Deploy hosting
         if: ${{ github.event.inputs.mode == 'deploy' }}
         env:
