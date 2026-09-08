@@ -1,10 +1,11 @@
+import { Doto_600SemiBold } from '@expo-google-fonts/doto';
 import {
-  DMSans_400Regular,
-  DMSans_500Medium,
-  DMSans_700Bold,
-} from '@expo-google-fonts/dm-sans';
-import { DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
-import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+  Urbanist_300Light,
+  Urbanist_400Regular,
+  Urbanist_500Medium,
+  Urbanist_600SemiBold,
+} from '@expo-google-fonts/urbanist';
+import { DefaultTheme, NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
@@ -17,7 +18,7 @@ import { BrandIntro } from './src/components/BrandIntro';
 import { FunpayMark } from './src/components/FunpayLogo';
 import { WebTopBar } from './src/components/WebLayout';
 import { AuthProvider, useAuth } from './src/hooks/useAuth';
-import { readWebMode, useLayout } from './src/lib/layout';
+import { readInitialScreen, readWebMode, useLayout } from './src/lib/layout';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LoansScreen } from './src/screens/LoansScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -27,6 +28,9 @@ import { colors } from './src/theme';
 import type { AuthStackParamList, RootStackParamList } from './src/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const navRef = createNavigationContainerRef<RootStackParamList>();
+// Dev web only: lets the review tooling drive navigation from the console.
+if (__DEV__ && typeof window !== 'undefined') (window as unknown as { __nav?: unknown }).__nav = navRef;
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 
 // Screens own their full canvas (Backdrop + glass headers), so the
@@ -62,6 +66,20 @@ function Splash() {
 
 function Root() {
   const { user, ready, onboardingHold } = useAuth();
+
+  // `?screen=` (web only): once the signed-in stack is on screen, jump to the
+  // requested screen. Reviewers deep-link; the server still enforces every
+  // eligibility rule.
+  const signedIn = !!user && !onboardingHold;
+  React.useEffect(() => {
+    if (!signedIn) return;
+    const target = readInitialScreen();
+    if (target === 'Home') return;
+    const id = setTimeout(() => {
+      if (navRef.isReady()) navRef.navigate(target as never);
+    }, 50);
+    return () => clearTimeout(id);
+  }, [signedIn]);
 
   // Until persistence answers, show the brand splash — never flash the login
   // screen at a signed-in borrower on cold start.
@@ -101,11 +119,11 @@ function Root() {
       }}
     >
       <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Inicio' }} />
-      <Stack.Screen name="Loans" component={LoansScreen} options={{ title: 'Mis préstamos' }} />
+      <Stack.Screen name="Loans" component={LoansScreen} options={{ title: 'Créditos' }} />
       <Stack.Screen
         name="RequestLoan"
         component={RequestLoanScreen}
-        options={{ title: 'Solicitar préstamo' }}
+        options={{ title: 'Solicitar' }}
       />
     </Stack.Navigator>
   );
@@ -126,13 +144,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  // The brand's own faces (public-v2 loads the same pair from Google Fonts).
-  // Until they're ready, the splash holds — mixed-font flashes read as broken.
+  // Urbanist for everything read, Doto for labels — the same pair the
+  // website loads from Google Fonts. Until ready the splash holds.
   const [fontsLoaded] = useFonts({
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_700Bold,
-    DMSerifDisplay_400Regular,
+    Urbanist_300Light,
+    Urbanist_400Regular,
+    Urbanist_500Medium,
+    Urbanist_600SemiBold,
+    Doto_600SemiBold,
   });
   // The web frames (`?ui=web`) are a website: content first, no brand film.
   const [introDone, setIntroDone] = React.useState(readWebMode());
@@ -148,7 +167,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer theme={navTheme}>
+        <NavigationContainer ref={navRef} theme={navTheme}>
           <StatusBar style="dark" />
           <Shell>
             <Root />

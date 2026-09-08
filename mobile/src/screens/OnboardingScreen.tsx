@@ -33,8 +33,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { checkEmailAvailability, lookupEmployerByCode } from '../api/callables';
 import { CountUpMxn } from '../components/CountUp';
 import { Field } from '../components/Field';
-import { GoldBurst } from '../components/GoldBurst';
-import { Backdrop, GlassCard } from '../components/Glass';
+import { Backdrop } from '../components/Glass';
+import { DotLabel, PaperCard } from '../components/Ui';
 import { KycWebView, type KycResult } from '../components/KycWebView';
 import { FadeSlideIn, PressableScale } from '../components/motion';
 import { GhostButton, PrimaryButton } from '../components/PrimaryButton';
@@ -66,7 +66,7 @@ import {
   type EmploymentTenure,
   type PayFrequency,
 } from '../lib/validation';
-import { colors, fonts, microLabel, radii, spacing, type } from '../theme';
+import { colors, fonts, microLabel, radii, spacing, type, shadowFloat } from '../theme';
 import type { AuthStackParamList } from '../types';
 
 type CodeStatus = 'idle' | 'searching' | 'found' | 'not_found';
@@ -293,15 +293,12 @@ export function OnboardingScreen({
   // ── Success ──────────────────────────────────────────────────────────────
   if (done) {
     return (
-      <Backdrop>
+      <Backdrop variant="paper">
         <View style={[styles.center, { paddingTop: insets.top }]}>
-          <GoldBurst />
           <FadeSlideIn>
-            <GlassCard>
+            <PaperCard style={{ padding: 0 }}>
               <View style={styles.successInner}>
-                <View style={styles.successBadge}>
-                  <Text style={styles.successBadgeText}>{t('onboarding.stepDone.badge')}</Text>
-                </View>
+                <DotLabel size={14} style={{ marginBottom: spacing.m }}>{t('onboarding.stepDone.label')}</DotLabel>
                 <Text style={styles.successTitle}>{t('onboarding.stepDone.title')}</Text>
                 <CountUpMxn value={preview} style={styles.successAmount} duration={900} />
                 <Text style={styles.subtitleCenter}>{t('onboarding.stepDone.subtitle')}</Text>
@@ -312,7 +309,7 @@ export function OnboardingScreen({
                   testID="onb-done"
                 />
               </View>
-            </GlassCard>
+            </PaperCard>
           </FadeSlideIn>
         </View>
       </Backdrop>
@@ -322,11 +319,11 @@ export function OnboardingScreen({
   // ── Full-screen web KYC (Expo Go fallback / native-path failure) ─────────
   if (showWebKyc) {
     return (
-      <Backdrop>
+      <Backdrop variant="paper">
         <View style={{ flex: 1, paddingTop: insets.top }}>
           <View style={styles.headerRow}>
             <BackButton onPress={() => { setShowWebKyc(false); setKycState('not_started'); }} />
-            <Text style={styles.headerTitle}>{t('onboarding.stepKyc.title')}</Text>
+            <DotLabel size={14} style={{ flex: 1, textAlign: 'center' }}>{t('onboarding.label')}</DotLabel>
             <View style={{ width: 42 }} />
           </View>
           <KycWebView
@@ -347,7 +344,7 @@ export function OnboardingScreen({
   }
 
   return (
-    <Backdrop>
+    <Backdrop variant="paper">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -494,18 +491,18 @@ export function OnboardingScreen({
                 title={t('onboarding.stepKyc.title')}
                 subtitle={t('onboarding.stepKyc.subtitle')}
               >
-                <GlassCard>
+                <PaperCard style={{ padding: 0 }}>
                   <View style={styles.kycInner}>
                     <View
                       style={[
                         styles.kycIcon,
-                        kycState === 'pending_review' && { backgroundColor: colors.aquaTint },
+                        kycState === 'pending_review' && { backgroundColor: colors.mark },
                       ]}
                     >
                       <Ionicons
                         name={kycState === 'pending_review' ? 'shield-checkmark' : 'shield-outline'}
                         size={30}
-                        color={kycState === 'pending_review' ? colors.brandLight : colors.gold}
+                        color={kycState === 'pending_review' ? colors.markInk : colors.ink}
                       />
                     </View>
                     {kycState === 'pending_review' ? (
@@ -528,7 +525,7 @@ export function OnboardingScreen({
                       <Text style={styles.trustText}>{t('onboarding.stepKyc.trust2')}</Text>
                     </View>
                   </View>
-                </GlassCard>
+                </PaperCard>
                 {kycState !== 'pending_review' ? (
                   <>
                     <Text style={styles.laterNote}>{t('onboarding.stepKyc.laterNote')}</Text>
@@ -546,7 +543,7 @@ export function OnboardingScreen({
                 subtitle={t('onboarding.stepWork.subtitle')}
               >
                 {salary > 0 ? (
-                  <GlassCard style={{ marginBottom: spacing.l }}>
+                  <PaperCard style={{ marginBottom: spacing.l, padding: 0 }}>
                     <View style={styles.previewInner}>
                       <View style={{ flex: 1 }}>
                         <Text style={microLabel}>{t('onboarding.stepWork.previewLabel')}</Text>
@@ -559,7 +556,7 @@ export function OnboardingScreen({
                         </Text>
                       </View>
                     </View>
-                  </GlassCard>
+                  </PaperCard>
                 ) : null}
                 <Field
                   label={t('onboarding.stepWork.salary')}
@@ -763,9 +760,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: radii.pill,
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
+    backgroundColor: colors.paper,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -773,23 +768,25 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fonts.display,
     fontSize: type.display,
-    color: colors.text,
-    letterSpacing: -0.3,
+    lineHeight: 44,
+    color: colors.ink,
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontFamily: fonts.sans,
-    fontSize: type.body,
-    color: colors.subtle,
+    fontFamily: fonts.sansLight,
+    fontSize: 17,
+    color: colors.inkSoft,
     marginTop: spacing.s,
     marginBottom: spacing.l,
-    lineHeight: 22,
+    lineHeight: 25,
+    maxWidth: 340,
   },
   subtitleCenter: {
-    fontFamily: fonts.sans,
-    fontSize: type.body,
-    color: colors.subtle,
+    fontFamily: fonts.sansLight,
+    fontSize: 17,
+    color: colors.inkSoft,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 25,
   },
   fieldGap: { marginBottom: spacing.l },
   codeInput: {
@@ -799,71 +796,67 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   codeStatusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, marginTop: spacing.m },
-  codeStatusText: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.subtle },
+  codeStatusText: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkSoft },
   kycInner: { padding: spacing.l, alignItems: 'center', gap: spacing.m },
   kycIcon: {
     width: 64,
     height: 64,
     borderRadius: radii.pill,
-    backgroundColor: colors.goldTint,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  kycDone: { fontFamily: fonts.sansBold, fontSize: 16, color: colors.brandLight },
+  kycDone: { fontFamily: fonts.sansBold, fontSize: 16, color: colors.markInk },
   trustRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  trustText: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.faint },
+  trustText: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSoft },
   laterNote: {
     fontFamily: fonts.sans,
     fontSize: 13,
-    color: colors.faint,
+    color: colors.inkSoft,
     lineHeight: 19,
     marginTop: spacing.l,
     textAlign: 'center',
   },
   previewInner: { padding: spacing.l, flexDirection: 'row', alignItems: 'center' },
   previewAmount: {
-    fontFamily: fonts.sansBold,
-    fontSize: 30,
-    color: colors.brand,
-    letterSpacing: -0.5,
+    fontFamily: fonts.sans,
+    fontSize: 36,
+    color: colors.ink,
+    letterSpacing: -1,
     marginVertical: 4,
     fontVariant: ['tabular-nums'],
   },
   previewBadge: {
-    backgroundColor: colors.goldTint,
+    backgroundColor: colors.mark,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.m,
     paddingVertical: 6,
   },
-  previewBadgeText: { fontFamily: fonts.sansBold, fontSize: 12, color: colors.gold },
+  previewBadgeText: { fontFamily: fonts.sansBold, fontSize: 12, color: colors.markInk },
   groupLabel: { marginBottom: spacing.s, marginTop: spacing.xs },
   pillGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s, marginBottom: spacing.l },
   pill: {
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.m,
+    paddingHorizontal: 18,
     paddingVertical: 10,
-    backgroundColor: colors.glassStrong,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    minHeight: 40,
+    backgroundColor: colors.paper,
+    minHeight: 42,
     justifyContent: 'center',
   },
-  pillActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  pillText: { fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.subtle },
-  pillTextActive: { color: colors.onBrand },
+  pillActive: { backgroundColor: '#ffffff', ...shadowFloat },
+  pillText: { fontFamily: fonts.sans, fontSize: 15, color: colors.inkSoft },
+  pillTextActive: { color: colors.ink },
   termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.m, paddingVertical: spacing.s },
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: colors.hairline,
-    backgroundColor: colors.glassStrong,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.paper,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
   },
-  checkboxOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  checkboxOn: { backgroundColor: colors.ink },
   termsText: { flex: 1, fontFamily: fonts.sans, fontSize: 13.5, color: colors.subtle, lineHeight: 19 },
   error: { fontFamily: fonts.sans, color: colors.danger, marginTop: spacing.m, lineHeight: 19 },
   signInRow: {
@@ -872,32 +865,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.m,
   },
-  signInHint: { fontFamily: fonts.sans, fontSize: 14, color: colors.faint },
+  signInHint: { fontFamily: fonts.sans, fontSize: 14, color: colors.inkSoft },
   successInner: { padding: spacing.l, alignItems: 'center' },
-  successBadge: {
-    backgroundColor: colors.goldTint,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.m,
-    paddingVertical: 6,
-    marginBottom: spacing.m,
-  },
-  successBadgeText: {
-    fontFamily: fonts.sansBold,
-    fontSize: 11,
-    letterSpacing: 1.8,
-    color: colors.gold,
-  },
   successTitle: {
     fontFamily: fonts.display,
-    fontSize: 30,
-    color: colors.brand,
+    fontSize: 34,
+    lineHeight: 40,
+    color: colors.ink,
     textAlign: 'center',
+    letterSpacing: -0.4,
   },
   successAmount: {
-    fontFamily: fonts.sansBold,
-    fontSize: 44,
-    color: colors.text,
-    letterSpacing: -1,
+    fontFamily: fonts.sans,
+    fontSize: type.numeral,
+    color: colors.ink,
+    letterSpacing: -1.5,
     marginVertical: spacing.m,
     fontVariant: ['tabular-nums'],
   },

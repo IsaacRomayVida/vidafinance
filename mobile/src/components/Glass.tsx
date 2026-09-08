@@ -1,50 +1,71 @@
 /**
- * The glassmorphism primitives: a dawn-lit ground and frosted panes that
- * float over it.
+ * Surfaces of the funpay-ui language.
  *
- * The ground is the brand's freedom metaphor made literal — first light:
- * cool aqua-mint air at the top falling to a warm gold glow low on the
- * horizon (the papalote's sky). No decorative blobs; the light itself is
- * the atmosphere.
+ * Backdrop 'board' — the cream→sage vertical gradient every borrower screen
+ * sits on. 'paper' — flat cream for capture screens (request, repayment,
+ * forms). 'leaf' — the painted macro-botanical: olive and chartreuse rising
+ * from the bottom, cream light in the upper third, soft-light vein stripes
+ * at ~112°. It stands in for photography until a graded image exists.
  *
- * Real backdrop blur (expo-blur) frosts whatever sits behind the card,
- * which is what sells the glass. The translucent fill and the bright
- * hairline border carry the look even where blur is unavailable (older
- * Android), so the design degrades to "airy", never to "broken".
+ * GlassCard — the frosted chip: thin white fill, real blur, hairline edge,
+ * inset top highlight. Only over the leaf; never glass over flat colour.
  */
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Defs, Ellipse, Line, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg';
 
-import { colors, radii } from '../theme';
+import { boardGradient, colors, radii } from '../theme';
 
-/** Full-screen dawn: cool light above, warm gold rising from the horizon. */
-export function Backdrop({ children }: { children: React.ReactNode }) {
+export function Backdrop({
+  children,
+  variant = 'board',
+}: {
+  children: React.ReactNode;
+  variant?: 'board' | 'paper' | 'leaf';
+}) {
+  if (variant === 'paper') {
+    return <View style={[styles.fill, { backgroundColor: colors.cream }]}>{children}</View>;
+  }
+  if (variant === 'leaf') {
+    return (
+      <LinearGradient colors={['#d6dfb2', '#a6b46a', '#3c5420']} locations={[0, 0.45, 1]} style={styles.fill}>
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none" width="100%" height="100%">
+          <Defs>
+            <RadialGradient id="l1" cx="62%" cy="38%" rx="75%" ry="55%">
+              <Stop offset="0%" stopColor="#6e8a3c" stopOpacity="0.85" />
+              <Stop offset="70%" stopColor="#6e8a3c" stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id="l2" cx="50%" cy="50%" rx="40%" ry="75%">
+              <Stop offset="0%" stopColor="#47611f" stopOpacity="1" />
+              <Stop offset="80%" stopColor="#47611f" stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id="l3" cx="30%" cy="85%" rx="60%" ry="40%">
+              <Stop offset="0%" stopColor="#dfe8b4" stopOpacity="1" />
+              <Stop offset="70%" stopColor="#dfe8b4" stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id="l4" cx="80%" cy="8%" rx="70%" ry="50%">
+              <Stop offset="0%" stopColor="#ecf0d6" stopOpacity="1" />
+              <Stop offset="75%" stopColor="#ecf0d6" stopOpacity="0" />
+            </RadialGradient>
+            {/* vein stripes: 1px lines every 9px, tilted like a leaf's veins */}
+            <Pattern id="veins" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(112)">
+              <Line x1="0" y1="0" x2="0" y2="9" stroke="#ffffff" strokeOpacity="0.07" strokeWidth="1" />
+            </Pattern>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#l4)" />
+          <Rect width="100%" height="100%" fill="url(#l3)" />
+          <Ellipse cx="50%" cy="50%" rx="40%" ry="75%" fill="url(#l2)" />
+          <Ellipse cx="62%" cy="38%" rx="75%" ry="55%" fill="url(#l1)" />
+          <Rect width="100%" height="100%" fill="url(#veins)" />
+        </Svg>
+        {children}
+      </LinearGradient>
+    );
+  }
   return (
-    <LinearGradient
-      colors={['#f2f9f7', '#f7fbfa', '#faf3e6']}
-      locations={[0, 0.55, 1]}
-      style={styles.fill}
-    >
-      {/* The sun below the horizon: one soft gold radiance, low and wide,
-          and the cool morning air above. */}
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <RadialGradient id="dawn" cx="50%" cy="100%" rx="80%" ry="55%">
-            <Stop offset="0%" stopColor={colors.gold} stopOpacity="0.28" />
-            <Stop offset="55%" stopColor={colors.gold} stopOpacity="0.10" />
-            <Stop offset="100%" stopColor={colors.gold} stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="air" cx="18%" cy="0%" rx="70%" ry="45%">
-            <Stop offset="0%" stopColor={colors.aqua} stopOpacity="0.30" />
-            <Stop offset="100%" stopColor={colors.aqua} stopOpacity="0" />
-          </RadialGradient>
-        </Defs>
-        <Ellipse cx="50%" cy="108%" rx="95%" ry="60%" fill="url(#dawn)" />
-        <Ellipse cx="18%" cy="-6%" rx="80%" ry="48%" fill="url(#air)" />
-      </Svg>
+    <LinearGradient colors={boardGradient} locations={[0, 0.48, 1]} style={styles.fill}>
       {children}
     </LinearGradient>
   );
@@ -67,8 +88,7 @@ function useReducedTransparency(): boolean {
   return reduced;
 }
 
-/** A frosted card: blurred backdrop, translucent fill, lit top edge, shaded
- * bottom edge. */
+/** The frosted chip (the skill's `.trip`): thin fill, blur, lit top edge. */
 export function GlassCard({
   children,
   style,
@@ -80,13 +100,10 @@ export function GlassCard({
 }) {
   const solid = useReducedTransparency();
   return (
-    <View style={[styles.cardShadow, style]}>
+    <View style={style}>
       <BlurView intensity={solid ? 0 : intensity} tint="light" style={styles.cardClip}>
         <View style={[styles.cardFill, solid && styles.cardSolid]}>
-          {/* The pane's light-catching top edge and shaded lower edge — the
-              pair that sells glass over tint. */}
           <View style={styles.topEdge} />
-          <View style={styles.bottomEdge} />
           {children}
         </View>
       </BlurView>
@@ -96,37 +113,21 @@ export function GlassCard({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  cardShadow: {
-    borderRadius: radii.l,
-    shadowColor: colors.brand,
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
-  },
-  cardClip: { borderRadius: radii.l, overflow: 'hidden' },
+  cardClip: { borderRadius: radii.m, overflow: 'hidden' },
   cardFill: {
-    backgroundColor: colors.glass,
-    borderRadius: radii.l,
+    backgroundColor: colors.glassLight,
+    borderRadius: radii.m,
     borderWidth: 1,
-    borderColor: colors.glassBorder,
+    borderColor: 'rgba(255,255,255,0.22)',
     overflow: 'hidden',
   },
-  cardSolid: { backgroundColor: colors.bg2 },
+  cardSolid: { backgroundColor: 'rgba(255,255,255,0.86)' },
   topEdge: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: colors.glassHighlight,
-  },
-  bottomEdge: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: colors.glassShade,
+    backgroundColor: 'rgba(255,255,255,0.3)',
   },
 });

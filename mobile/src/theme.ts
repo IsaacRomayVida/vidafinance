@@ -1,82 +1,109 @@
 /**
- * FunPay design tokens — the brand's own palette (public-v2
- * styles/legacy.css :root + public/favicon.svg) composed in the
- * light-glassmorphism language of the reference fintech interfaces:
- * a light aqua-lit ground, frosted translucent surfaces floating over
- * soft color, and the deep brand teal as the DARK element on top — the
- * hero card and the CTAs — never as the ground.
+ * FunPay design tokens — the funpay-ui direction (.claude/skills/funpay-ui).
+ *
+ * Borrower side: cream→sage boards, ink (never #000) for type, Urbanist for
+ * everything read and Doto for labels only, pill radii, and ONE saturated
+ * control per screen in --cta green. Green is semantic — active, approved,
+ * received — never decoration. The legacy aliases at the bottom keep every
+ * untouched call site compiling and landing in the palette.
  */
-export const colors = {
-  // Brand core (web: --brand / --brand-mid / --brand-light)
-  brand: '#194445',
-  brandMid: '#1d5253',
-  brandLight: '#247a6e',
-  // Accents (web: --aqua / --aqua-soft / --gold)
-  aqua: '#a8d5d0',
-  aquaSoft: '#dceeed',
-  gold: '#a28657',
-  goldSoft: '#f4ede1',
-  // Light ground (web: --bg / --bg2) — the gradient backdrop runs
-  // bgTop → bgBottom with color blobs behind the glass.
-  bg: '#f7fbfa',
-  bgTop: '#f7fbfa',
-  bgBottom: '#e3f0ee',
-  // Glass surfaces: translucent white over the lit ground.
-  // Glass reads as glass when the FILL is thin and the frost does the work
-  // (glassmorphism rule: ~0.1-0.2 alpha panels; inputs stay near-opaque for
-  // contrast — never stack two light translucents).
-  glass: 'rgba(255,255,255,0.30)',
-  glassStrong: 'rgba(255,255,255,0.82)',
-  glassBorder: 'rgba(255,255,255,0.65)',
-  glassHighlight: 'rgba(255,255,255,0.95)',
-  glassShade: 'rgba(12,30,31,0.10)',
-  hairline: 'rgba(25,68,69,0.10)',
-  // Text scale (web: --t1 / --t2 / --t3)
-  text: '#0c1e1f',
-  subtle: '#4a6364',
-  faint: '#93aaa9',
+const base = {
+  void: '#0b0d0b',
+  ink: '#1e201d',
+  inkSoft: '#3a3d38',
+  mute: '#a2aa9c',
+  typeQuiet: '#b9c6b1',
+
+  cream: '#f3f4ec',
+  creamMid: '#eaf0e3',
+  sage: '#dbe9d6',
+  mint: '#c9ecdc',
+  moss: '#6f8a4a',
+  mossDeep: '#2f4a22',
+  peach: '#f2c4a0',
+  sky: '#bcdde9',
+  mark: '#d7f0dc',
+  markInk: '#2c6a3c',
+  cta: '#2fc04e',
+
+  leafLight: '#e6ead0',
+  leafMid: '#a6b46a',
+  leafDark: '#354a1a',
+
+  paper: '#e9ebe1',
+  paperDark: '#f2f5f0',
+  charcoal: '#000b1a',
+  forest: '#1c4a30',
+  harmony: '#68e78e',
+
+  glassLight: 'rgba(255,255,255,0.14)',
+  glassPass: 'rgba(255,255,255,0.34)',
+  glassDark: 'rgba(20,24,20,0.72)',
+  glassEdge: 'rgba(255,255,255,0.28)',
+
   danger: '#b3261e',
-  dangerSoft: 'rgba(179,38,30,0.12)',
-  onBrand: '#ffffff',
-  // Tinted chip fills over glass
-  aquaTint: 'rgba(36,122,110,0.14)',
-  goldTint: 'rgba(162,134,87,0.16)',
-  neutralTint: 'rgba(25,68,69,0.08)',
-  // Aliases kept for existing styles
-  primary: '#194445',
-  primaryText: '#ffffff',
-  chipBg: '#dceeed',
-  bg2: '#eef5f3',
-  border: 'rgba(25,68,69,0.10)',
+  dangerSoft: 'rgba(179,38,30,0.10)',
 };
 
-/** The dark hero-card / CTA gradient: brand teal into its living green. */
-export const gradient = ['#194445', '#247a6e'] as [string, string];
+export const colors = {
+  ...base,
+  // ---- legacy aliases ----
+  brand: base.ink,
+  brandMid: base.inkSoft,
+  brandLight: base.mossDeep,
+  text: base.ink,
+  subtle: base.inkSoft,
+  faint: base.mute,
+  onBrand: base.cream,
+  bg: base.cream,
+  bgTop: base.cream,
+  bgBottom: base.sage,
+  bg2: base.creamMid,
+  gold: base.peach,
+  goldSoft: '#f8f1ea',
+  aqua: base.sage,
+  aquaSoft: base.mint,
+  glass: base.glassLight,
+  glassStrong: 'rgba(255,255,255,0.72)',
+  glassBorder: 'rgba(255,255,255,0.55)',
+  glassHighlight: 'rgba(255,255,255,0.85)',
+  glassShade: 'rgba(20,24,20,0.10)',
+  hairline: 'rgba(30,32,29,0.10)',
+  aquaTint: 'rgba(47,74,34,0.10)',
+  goldTint: 'rgba(242,196,160,0.35)',
+  neutralTint: 'rgba(30,32,29,0.07)',
+  primary: base.ink,
+  primaryText: base.cream,
+  chipBg: base.paper,
+  border: 'rgba(30,32,29,0.10)',
+};
 
-/** The backdrop wash behind everything. */
-export const backdropGradient = ['#f7fbfa', '#e3f0ee'] as [string, string];
+/** Ink pill gradient (kept for the few dark pills). */
+export const gradient = [base.ink, base.inkSoft] as [string, string];
+/** The board: cream at the top falling to sage. */
+export const boardGradient = [base.cream, base.creamMid, base.sage] as [string, string, string];
+export const backdropGradient = [base.cream, base.sage] as [string, string];
+/** Acetate gradients — three-stop pastels, no blur. */
+export const assistGradient = ['#cfe8d0', '#f3d2b4', '#c4e2ea'] as [string, string, string];
+export const identGradient = ['#9fd8c2', '#cfe4c8', '#f0c8a4'] as [string, string, string];
 
 // expo-google-fonts family names — use fontFamily alone, never with
 // fontWeight (Android would substitute a synthetic weight).
 export const fonts = {
-  display: 'DMSerifDisplay_400Regular',
-  sans: 'DMSans_400Regular',
-  sansMedium: 'DMSans_500Medium',
-  sansBold: 'DMSans_700Bold',
+  display: 'Urbanist_400Regular',
+  sans: 'Urbanist_400Regular',
+  sansLight: 'Urbanist_300Light',
+  sansMedium: 'Urbanist_500Medium',
+  sansBold: 'Urbanist_600SemiBold',
+  dot: 'Doto_600SemiBold',
 };
 
-// Minimal rounding, per Isaac: cards are panes, not pebbles. Only pills stay
-// fully round.
-export const radii = { s: 4, m: 6, l: 10, xl: 12, pill: 999 } as const;
+// Pills and boards: nothing under 18px — cards are panes, controls are pills.
+export const radii = { s: 18, m: 20, l: 20, xl: 26, pill: 40 } as const;
 
 export const spacing = { xs: 4, s: 8, m: 16, l: 24, xl: 32 } as const;
 
-/**
- * Motion vocabulary — one timing language for the whole app.
- * Fast enough to be felt, never watched; entrances rise 12–16pt and fade,
- * presses settle at 0.97. Anything slower than 300ms is for rare moments
- * (the success screen), not for controls.
- */
+/** Motion: the caret blinks, the hero drifts, nothing else moves. */
 export const motion = {
   press: 120,
   enter: 220,
@@ -84,24 +111,37 @@ export const motion = {
   stagger: 45,
   rise: 14,
   pressScale: 0.97,
+  caretBlink: 1100,
 } as const;
 
-/** Type scale (minor third off a 15px body; display sizes track tighter). */
+/** Type scale from the skill: numeral hero, headline, title, body, label. */
 export const type = {
-  display: 32,
-  title: 24,
+  numeral: 50,
+  amount: 64,
+  display: 40,
+  title: 22,
   heading: 19,
   body: 15,
   small: 13,
   micro: 11,
 } as const;
 
-/** Uppercase letterspaced micro-label, the web app's form-label idiom. */
-export const microLabel = {
-  fontFamily: fonts.sansBold,
-  fontSize: 11,
-  letterSpacing: 1.8,
+/** The Doto label: uppercase, +6% tracking, muted. Labels only — never a
+ *  sentence, never a button. */
+export const dotLabel = {
+  fontFamily: fonts.dot,
+  fontSize: 13,
+  letterSpacing: 0.8,
   textTransform: 'uppercase' as const,
-  // subtle, not faint: vibrancy rule — no low-contrast gray text on glass.
-  color: colors.subtle,
+  color: base.mute,
 };
+export const microLabel = dotLabel;
+
+/** Shadows exist for floating and glass elements only. */
+export const shadowFloat = {
+  shadowColor: '#1e3c1e',
+  shadowOpacity: 0.28,
+  shadowRadius: 24,
+  shadowOffset: { width: 0, height: 16 },
+  elevation: 6,
+} as const;

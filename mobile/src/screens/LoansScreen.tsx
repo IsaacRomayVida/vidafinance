@@ -1,4 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
+/**
+ * Créditos — the repayment board on paper. Each credit is its amount as the
+ * title, its term as the quiet line, a summary that names the employer as
+ * the deductor, and its deductions as pills: done (ink circle, struck
+ * through), next (white, floating), upcoming (paper). Filter pills at the
+ * top. The pay control is an ink pill — green is spent on the active state.
+ */
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -6,73 +13,34 @@ import { FlatList, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchPaymentUrl } from '../api/callables';
-import { PageColumn } from '../components/WebLayout';
-import { useColumn } from '../lib/layout';
-import { Backdrop, GlassCard } from '../components/Glass';
+import { Backdrop } from '../components/Glass';
 import { GlassHeader } from '../components/GlassHeader';
 import { FadeSlideIn } from '../components/motion';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Skeleton } from '../components/Skeleton';
+import { Pill } from '../components/Ui';
+import { PageColumn } from '../components/WebLayout';
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../lib/firebase';
+import { useColumn } from '../lib/layout';
 import { daysUntilDue, isPayableStatus, statusLabelKey } from '../lib/loanStatus';
-import { formatDate, formatMxn } from '../lib/money';
-import { colors, fonts, radii, spacing } from '../theme';
+import { isActiveLoan, isPaidLoan, numeral, principalOf, shortDate, totalOf, type LoanDoc } from '../lib/loanView';
+import { colors, fonts, radii, shadowFloat, spacing, type } from '../theme';
+import type { RootStackParamList } from '../types';
 
-interface LoanDoc {
-  id: string;
-  status?: string;
-  amount?: number;
-  principalAmount?: number;
-  totalRepaymentAmount?: number;
-  total?: number;
-  createdAt?: { seconds: number };
-  dueDate?: { seconds: number };
-  loanRef?: string;
-}
+type Filter = 'all' | 'active' | 'paid';
 
-// Countdown look: calm aqua while far, gold as the date nears, red when due
-// or past — the same status vocabulary the chips already speak.
-function dueLook(days: number): { bg: string; fg: string } {
-  if (days > 7) return { bg: colors.aquaTint, fg: colors.brandLight };
-  if (days > 2) return { bg: colors.goldTint, fg: colors.gold };
-  return { bg: colors.dangerSoft, fg: colors.danger };
-}
-
-// Tint + icon per status family — gold while money is in flight, brand
-// aqua while a loan is live, quiet neutral once settled, red when
-// something needs attention. Unknown statuses read neutral, never alarming.
-function statusLook(status?: string): { bg: string; fg: string; icon: keyof typeof Ionicons.glyphMap } {
-  switch (status) {
-    case 'active':
-    case 'disbursed':
-      return { bg: colors.aquaTint, fg: colors.brandLight, icon: 'trending-up' };
-    case 'pending':
-    case 'under_review':
-    case 'approved':
-    case 'disbursement_queued':
-      return { bg: colors.goldTint, fg: colors.gold, icon: 'hourglass-outline' };
-    case 'overdue':
-    case 'in_collections':
-    case 'disbursement_failed':
-      return { bg: colors.dangerSoft, fg: colors.danger, icon: 'alert-circle-outline' };
-    case 'repaid':
-      return { bg: colors.neutralTint, fg: colors.subtle, icon: 'checkmark-circle-outline' };
-    default:
-      return { bg: colors.neutralTint, fg: colors.subtle, icon: 'ellipse-outline' };
-  }
-}
-
-export function LoansScreen() {
+export function LoansScreen({ route }: NativeStackScreenProps<RootStackParamList, 'Loans'>) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const column = useColumn(760);
+  const column = useColumn(560);
   const [loans, setLoans] = useState<LoanDoc[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryToken, setRetryToken] = useState(0);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payError, setPayError] = useState('');
+  const [filter, setFilter] = useState<Filter>(route.params?.filter ?? 'all');
 
   const uid = user?.uid;
   useEffect(() => {
@@ -107,16 +75,22 @@ export function LoansScreen() {
     }
   };
 
+  const header = (
+    <View style={{ paddingTop: insets.top }}>
+      <PageColumn maxWidth={560}>
+        <GlassHeader title={t('loans.label')} />
+      </PageColumn>
+    </View>
+  );
+
   if (status === 'loading') {
     return (
-      <Backdrop>
-        <View style={{ paddingTop: insets.top }}>
-          <GlassHeader title={t('loans.title')} />
-        </View>
-        <View style={{ padding: spacing.l, paddingTop: spacing.s, gap: spacing.m }}>
-          <Skeleton height={120} radius={radii.l} />
-          <Skeleton height={120} radius={radii.l} />
-          <Skeleton height={120} radius={radii.l} />
+      <Backdrop variant="paper">
+        {header}
+        <View style={[styles.list, column]}>
+          <Skeleton height={44} radius={radii.pill} />
+          <Skeleton height={140} radius={radii.m} style={{ marginTop: spacing.l }} />
+          <Skeleton height={140} radius={radii.m} style={{ marginTop: spacing.m }} />
         </View>
       </Backdrop>
     );
@@ -124,7 +98,7 @@ export function LoansScreen() {
 
   if (status === 'error') {
     return (
-      <Backdrop>
+      <Backdrop variant="paper">
         <View style={styles.center}>
           <Text style={styles.error}>{t('loans.loadError')}</Text>
           <PrimaryButton label={t('common.retry')} onPress={() => setRetryToken((n) => n + 1)} />
@@ -133,85 +107,112 @@ export function LoansScreen() {
     );
   }
 
+  const activeCount = loans.filter(isActiveLoan).length;
+  const paidCount = loans.filter(isPaidLoan).length;
+  const shown = loans.filter((l) => (filter === 'active' ? isActiveLoan(l) : filter === 'paid' ? isPaidLoan(l) : true));
+  const counts: Record<Filter, number> = { all: loans.length, active: activeCount, paid: paidCount };
+
   return (
-    <Backdrop>
-      <View style={{ paddingTop: insets.top }}>
-        <PageColumn maxWidth={760}>
-          <GlassHeader title={t('loans.title')} />
-        </PageColumn>
-      </View>
+    <Backdrop variant="paper">
+      {header}
       <FlatList
-        style={styles.list}
-        contentContainerStyle={[{ padding: spacing.l, paddingTop: spacing.s, flexGrow: 1 }, column]}
-        data={loans}
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.list, { flexGrow: 1 }, column]}
+        data={shown}
         keyExtractor={(loan) => loan.id}
-        ListEmptyComponent={
-          <FadeSlideIn style={styles.emptyWrap}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="leaf-outline" size={28} color={colors.brandLight} />
+        ListHeaderComponent={
+          <View>
+            <View style={styles.pills}>
+              {(['all', 'active', 'paid'] as Filter[]).map((f) => (
+                <Pill
+                  key={f}
+                  label={t(f === 'all' ? 'home.filterAll' : f === 'active' ? 'home.filterActive' : 'home.filterPaid')}
+                  active={filter === f}
+                  count={counts[f]}
+                  onPress={() => setFilter(f)}
+                  testID={`loans-filter-${f}`}
+                />
+              ))}
             </View>
-            <Text style={styles.emptyTitle}>{t('loans.emptyTitle')}</Text>
-            <Text style={styles.empty}>{t('loans.empty')}</Text>
+            {payError ? <Text style={styles.error}>{payError}</Text> : null}
+          </View>
+        }
+        ListEmptyComponent={
+          <FadeSlideIn style={styles.empty}>
+            <Text style={styles.title}>{t('loans.emptyTitle')}</Text>
+            <Text style={styles.quiet}>{t('loans.empty')}</Text>
           </FadeSlideIn>
         }
-        ListHeaderComponent={payError ? <Text style={styles.error}>{payError}</Text> : null}
         renderItem={({ item, index }) => {
-          const look = statusLook(item.status);
+          const paid = isPaidLoan(item);
+          const active = isActiveLoan(item);
+          const days = isPayableStatus(item.status) ? daysUntilDue(item.dueDate) : null;
+          const schedule =
+            item.repaymentSchedule && item.repaymentSchedule.length > 0
+              ? item.repaymentSchedule
+              : [{ number: 1, amount: totalOf(item) ?? 0, dueDate: item.dueDate ?? null }];
+          const total = totalOf(item);
           return (
-            <FadeSlideIn index={Math.min(index, 6)}>
-              <GlassCard style={{ marginBottom: spacing.m }}>
-                <View style={styles.cardInner}>
-                  <View style={styles.cardTop}>
-                    <View style={[styles.iconCircle, { backgroundColor: look.bg }]}>
-                      <Ionicons name={look.icon} size={20} color={look.fg} />
-                    </View>
-                    <View style={styles.cardMain}>
-                      <Text style={styles.amount}>
-                        {formatMxn(item.principalAmount ?? item.amount)}
-                      </Text>
-                      <Text style={styles.meta}>
-                        {t('loans.total')}: {formatMxn(item.totalRepaymentAmount ?? item.total)}
-                      </Text>
-                      <Text style={styles.meta}>
-                        {t('loans.requested')}: {formatDate(item.createdAt)}
-                      </Text>
-                    </View>
-                    <View style={[styles.chip, { backgroundColor: look.bg }]}>
-                      <Text style={[styles.chipText, { color: look.fg }]}>
-                        {t(statusLabelKey(item.status))}
-                      </Text>
-                    </View>
-                  </View>
-                  {(() => {
-                    const days = isPayableStatus(item.status) ? daysUntilDue(item.dueDate) : null;
-                    if (days === null) return null;
-                    const look = dueLook(days);
-                    const label =
-                      days > 1
-                        ? t('loans.dueIn', { days })
-                        : days === 1
-                          ? t('loans.dueTomorrow')
-                          : days === 0
-                            ? t('loans.dueToday')
-                            : t('loans.overdueDays', { days: Math.abs(days) });
-                    return (
-                      <View style={[styles.dueChip, { backgroundColor: look.bg }]}>
-                        <Ionicons name="time-outline" size={13} color={look.fg} />
-                        <Text style={[styles.dueText, { color: look.fg }]}>{label}</Text>
+            <FadeSlideIn index={Math.min(index, 6)} style={styles.item}>
+              <View style={styles.itemHead}>
+                <Text style={styles.amount}>
+                  {numeral(principalOf(item))}
+                  <Text style={styles.amountUnit}> {t('common.mxn')}</Text>
+                </Text>
+                <Text style={[styles.status, active && { color: colors.markInk }, item.status === 'overdue' && { color: colors.danger }]}>
+                  {t(statusLabelKey(item.status))}
+                </Text>
+              </View>
+              <Text style={styles.quietLine}>
+                {t('loans.requested')} {shortDate(item.createdAt)} · {t('loans.total').toLowerCase()} {numeral(total)} {t('common.mxn')}
+              </Text>
+              <Text style={styles.summary}>
+                {item.employerName ? t('loans.deductedByNamed', { employer: item.employerName }) : t('loans.deductedBy')}
+                {days !== null ? (
+                  <Text style={styles.summaryBold}>
+                    {' '}
+                    {days > 1
+                      ? t('loans.dueIn', { days })
+                      : days === 1
+                        ? t('loans.dueTomorrow')
+                        : days === 0
+                          ? t('loans.dueToday')
+                          : t('loans.overdueDays', { days: Math.abs(days) })}
+                    .
+                  </Text>
+                ) : null}
+              </Text>
+              <View style={styles.timeline}>
+                {schedule.slice(0, 4).map((step, i) => {
+                  const done = paid;
+                  const now = !paid && active && i === 0;
+                  return (
+                    <View key={step.number} style={[styles.step, now && styles.stepNow]}>
+                      <View style={[styles.stepDot, done && styles.stepDotDone]}>
+                        <Text style={[styles.stepDotText, done && { color: colors.cream }]}>{done ? '✓' : step.number}</Text>
                       </View>
-                    );
-                  })()}
-                  {isPayableStatus(item.status) ? (
-                    <PrimaryButton
-                      label={payingId === item.id ? t('loans.paying') : t('loans.pay')}
-                      onPress={() => void pay(item.id)}
-                      disabled={payingId !== null && payingId !== item.id}
-                      busy={payingId === item.id}
-                      style={{ marginTop: spacing.m }}
-                    />
-                  ) : null}
-                </View>
-              </GlassCard>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.stepDate}>{shortDate(step.dueDate)}</Text>
+                        <Text style={styles.stepSub}>
+                          {t('loans.deduction', { n: step.number })}
+                          {now ? ` · ${t('loans.nextPayday')}` : ''}
+                        </Text>
+                      </View>
+                      <Text style={[styles.stepValue, done && styles.stepValueDone]}>{numeral(step.amount)}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+              {isPayableStatus(item.status) ? (
+                <PrimaryButton
+                  variant="ink"
+                  label={payingId === item.id ? t('loans.paying') : t('loans.pay', { amount: numeral(total) })}
+                  onPress={() => void pay(item.id)}
+                  disabled={payingId !== null && payingId !== item.id}
+                  busy={payingId === item.id}
+                  style={{ marginTop: spacing.m }}
+                />
+              ) : null}
             </FadeSlideIn>
           );
         }}
@@ -221,57 +222,29 @@ export function LoansScreen() {
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1 },
+  list: { paddingHorizontal: 28, paddingTop: spacing.s, paddingBottom: 28 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.l },
-  emptyWrap: { alignItems: 'center', marginTop: spacing.xl * 2, paddingHorizontal: spacing.l },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.pill,
-    backgroundColor: colors.aquaTint,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.m,
-  },
-  emptyTitle: { fontFamily: fonts.display, fontSize: 22, color: colors.text, marginBottom: spacing.s },
-  empty: { fontFamily: fonts.sans, color: colors.subtle, textAlign: 'center', lineHeight: 21 },
-  cardInner: { padding: spacing.m },
-  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.m },
-  iconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  cardMain: { flex: 1 },
-  amount: {
-    fontFamily: fonts.sansBold,
-    fontSize: 22,
-    color: colors.text,
-    letterSpacing: -0.3,
-    fontVariant: ['tabular-nums'],
-  },
-  meta: {
-    fontFamily: fonts.sans,
-    color: colors.subtle,
-    fontSize: 13.5,
-    marginTop: 3,
-    fontVariant: ['tabular-nums'],
-  },
-  chip: { borderRadius: radii.pill, paddingHorizontal: spacing.m, paddingVertical: 6 },
-  dueChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 5,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.m,
-    paddingVertical: 5,
-    marginTop: spacing.m,
-  },
-  dueText: { fontFamily: fonts.sansBold, fontSize: 12.5, fontVariant: ['tabular-nums'] },
-  chipText: { fontFamily: fonts.sansBold, fontSize: 12 },
+  pills: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: spacing.l },
+  empty: { marginTop: spacing.xl * 2 },
+  title: { fontFamily: fonts.display, fontSize: type.display, lineHeight: 44, color: colors.ink, letterSpacing: -0.4 },
+  quiet: { fontFamily: fonts.sansLight, fontSize: 17, lineHeight: 25, color: colors.inkSoft, marginTop: spacing.m, maxWidth: 320 },
+  item: { marginBottom: spacing.xl },
+  itemHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  amount: { fontFamily: fonts.sans, fontSize: 34, letterSpacing: -1, color: colors.ink, fontVariant: ['tabular-nums'] },
+  amountUnit: { fontFamily: fonts.sansLight, fontSize: 16, letterSpacing: 0, color: colors.mute },
+  status: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.inkSoft },
+  quietLine: { fontFamily: fonts.sansLight, fontSize: 15, color: colors.mute, marginTop: 2 },
+  summary: { fontFamily: fonts.sansLight, fontSize: 15, lineHeight: 23, color: colors.inkSoft, marginTop: spacing.m, maxWidth: 340 },
+  summaryBold: { fontFamily: fonts.sansBold, color: colors.ink },
+  timeline: { marginTop: spacing.l, gap: 8 },
+  step: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 12, borderRadius: radii.pill, backgroundColor: colors.paper },
+  stepNow: { backgroundColor: '#ffffff', ...shadowFloat },
+  stepDot: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.mark, alignItems: 'center', justifyContent: 'center' },
+  stepDotDone: { backgroundColor: colors.ink },
+  stepDotText: { fontFamily: fonts.sansBold, fontSize: 11, color: colors.markInk },
+  stepDate: { fontFamily: fonts.sans, fontSize: 14, color: colors.ink },
+  stepSub: { fontFamily: fonts.sans, fontSize: 12, color: colors.mute },
+  stepValue: { fontFamily: fonts.sansBold, fontSize: 14, color: colors.ink, fontVariant: ['tabular-nums'] },
+  stepValueDone: { fontFamily: fonts.sans, color: colors.mute, textDecorationLine: 'line-through' },
   error: { fontFamily: fonts.sans, color: colors.danger, marginBottom: spacing.m, textAlign: 'center' },
 });

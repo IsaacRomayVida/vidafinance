@@ -183,7 +183,7 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
                 : [{ translateY: word.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
             }}
           >
-            <FunpayWordmark size={27} />
+            <FunpayWordmark size={18} color="#f4f7ee" />
           </Animated.View>
         </View>
       </Pressable>
@@ -192,7 +192,7 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  layer: { zIndex: 10, backgroundColor: colors.bg },
+  layer: { zIndex: 10, backgroundColor: colors.cream },
   artwork: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   center: {
     position: 'absolute',
@@ -209,6 +209,6 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     borderWidth: 2,
-    borderColor: colors.gold,
+    borderColor: 'rgba(255,255,255,0.8)',
   },
 });

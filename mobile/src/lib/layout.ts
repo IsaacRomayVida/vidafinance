@@ -21,6 +21,19 @@ export function readWebMode(): boolean {
   }
 }
 
+/** `?screen=Loans|RequestLoan` — the first screen to show once signed in.
+ *  Web only, for reviewers and screenshots; the server still enforces every
+ *  eligibility rule, so landing on a screen grants nothing. */
+export function readInitialScreen(): 'Home' | 'Loans' | 'RequestLoan' {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return 'Home';
+  try {
+    const v = new URLSearchParams(window.location.search).get('screen');
+    return v === 'Loans' || v === 'RequestLoan' ? v : 'Home';
+  } catch {
+    return 'Home';
+  }
+}
+
 // Read once: the query string does not change while the app is mounted
 // (react-navigation runs without linking here).
 const WEB_MODE = readWebMode();
