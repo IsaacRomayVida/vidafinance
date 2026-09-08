@@ -7,8 +7,7 @@ interface SkeletonLineProps {
 
 /**
  * Single animated skeleton placeholder.
- * Uses the `skeletonPulse` keyframes (defined in index.css Phase 3).
- * Already works if skeletonPulse is in legacy.css.
+ * Uses the `skeletonPulse` keyframes (defined in index.css).
  */
 export function SkeletonLine({
   width = '100%',
@@ -23,7 +22,7 @@ export function SkeletonLine({
         width,
         height,
         borderRadius,
-        background: 'rgba(25,68,69,0.05)',
+        background: 'rgba(30,32,29,0.07)',
         animation: 'skeletonPulse 1.5s ease-in-out infinite',
         animationDelay: `${delay}s`,
       }}
@@ -44,8 +43,8 @@ export function SkeletonRows({ rows = 3 }: SkeletonRowProps) {
           <div
             aria-hidden="true"
             style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: 'rgba(25,68,69,0.04)',
+              width: 36, height: 36, borderRadius: 18,
+              background: 'rgba(30,32,29,0.06)',
               animation: 'skeletonPulse 1.5s ease-in-out infinite',
               animationDelay: `${i * 0.15}s`,
               flexShrink: 0,

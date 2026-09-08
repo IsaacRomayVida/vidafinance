@@ -1,158 +1,57 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { RichText } from '../shared/RichText';
+import { Board, Statement, ArrowIcon } from './Board';
 
+/**
+ * Statement board — the landing hero from funpay-ui. One big Urbanist
+ * headline alternating ink and quiet lines with an inline avatar, and two
+ * floating elements over the stage: the capture bar (dark pill, icon
+ * circles, active one cream) at −3° and the identity card (employee ·
+ * payroll · lender) at +5°. No photography, no video.
+ */
 export function HeroSection() {
   const { t } = useTranslation();
 
   return (
-    <section className="hero">
-      <div className="hero-video-wrap" aria-hidden="true">
-        <video
-          className="hero-video"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
-          poster="/video/hero-poster.jpg"
-        >
-          <source src="/video/hero.mp4" type="video/mp4" />
-        </video>
-        <div className="hero-video-scrim" />
-      </div>
-      <div className="hero-blob b1" />
-      <div className="hero-blob b2" />
-      <div className="hero-blob b3" />
-      <div className="hero-inner">
-        <div className="hero-text">
-          <div className="hero-badge">
-            <span className="badge-dot" />
-            <span className="badge-text">{t('hero_badge')}</span>
+    <Board label={t('hero_badge')} id="top">
+      <div className="mk-statement">
+        <Statement html={t('hero_h1')}>
+          <div className="mk-actions">
+            <Link to="/#how" className="mk-btn">{t('hero_cta_employee')} {ArrowIcon}</Link>
+            <Link to="/employers" className="mk-btn ghost">{t('hero_cta_employer')}</Link>
           </div>
-          <h1><RichText html={t('hero_h1')} /></h1>
-          <p className="hero-sub">{t('hero_sub')}</p>
-          <div className="hero-actions">
-            <Link to="/onboarding" className="hero-cta">
-              Comenzar
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-            </Link>
-            <Link to="/login" className="hero-cta-2">{t('nav_login')}</Link>
-          </div>
-          {/* Social proof */}
-          <div className="hero-social" style={{
-            display: 'flex', alignItems: 'center', gap: 12, marginTop: 32,
-            opacity: 0, animation: 'fu .9s ease .7s forwards',
-          }}>
-            {/* Avatar stack */}
-            <div className="avatar-stack" aria-hidden="true">
-              {['M', 'G', 'A', 'R'].map((initial) => (
-                <div key={initial} className="avatar-stack__item">
-                  {initial}
-                </div>
-              ))}
-            </div>
-            <div>
-              <div className="hero-social-title">
-                12+ empresas ya confían en Funpay
-              </div>
-              <div className="hero-social-sub">
-                Manufactura, retail y servicios en México
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="hero-widget">
-          {/* Worker photo with decorative gradient */}
-          <div className="hero-worker-img" style={{
-            position: 'absolute', left: -80, bottom: 0,
-            zIndex: 1, pointerEvents: 'none',
-          }}>
-            {/* Decorative gradient circle behind person */}
-            <div style={{
-              position: 'absolute', bottom: -30, left: '50%', transform: 'translateX(-50%)',
-              width: 300, height: 300, borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(168,213,208,0.12) 0%, rgba(168,213,208,0.03) 50%, transparent 70%)',
-              filter: 'blur(20px)',
-              pointerEvents: 'none',
-            }} />
-            <picture style={{ display: 'block' }}>
-              <source srcSet="/images/worker.webp" type="image/webp" />
-              <img src="/images/worker.png" alt="Trabajador usando Funpay"
-                fetchPriority="high"
-                style={{
-                  width: 340, position: 'relative',
-                  filter: 'drop-shadow(0 20px 40px rgba(25,68,69,0.12))',
-                }}
-              />
-            </picture>
-          </div>
-          <div className="phone-ring" />
-          <div className="phone-ring-2" />
-          <div className="phone-glow" />
+          <p className="mk-disclose">{t('hero_sub')}</p>
+        </Statement>
 
-          <div className="chip chip-1">
-            <div className="chip-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5">
-                <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
-              </svg>
+        <div className="mk-stage" aria-hidden="true">
+          <div className="mk-float mk-capture" style={{ left: '4%', top: '16%', transform: 'rotate(-3deg)' }}>
+            <div className="ic on">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z" /></svg>
             </div>
-            <div className="chip-text">
-              <div className="chip-val">{t('chip_24hrs')}</div>
-              <div className="chip-lbl">{t('chip_disbursement')}</div>
+            <div className="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+            </div>
+            <div className="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="3" /><path d="M3 10h18" /></svg>
+            </div>
+            <div className="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z" /></svg>
             </div>
           </div>
 
-          <div className="chip chip-2">
-            <div className="chip-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="1.5">
-                <path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" />
-              </svg>
-            </div>
-            <div className="chip-text">
-              <div className="chip-val">{t('chip_0fees')}</div>
-              <div className="chip-lbl">{t('chip_transparent')}</div>
-            </div>
+          <div className="mk-float mk-ticket" style={{ left: '10%', bottom: '6%', transform: 'rotate(2deg)' }}>
+            <div className="lbl">{t('hero_ticket_label')}</div>
+            <div className="big">3,000<small>MXN</small></div>
+            <div className="line"><b>{t('hero_ticket_total')}</b> · {t('hero_ticket_cat')}</div>
           </div>
 
-          <div className="chip chip-3">
-            <div className="chip-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5">
-                <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
-              </svg>
-            </div>
-            <div className="chip-text">
-              <div className="chip-val">{t('chip_encrypted')}</div>
-              <div className="chip-lbl">{t('chip_bankgrade')}</div>
-            </div>
-          </div>
-
-          <div className="phone-mock">
-            <div className="pm-head">
-              <span className="pm-label">{t('phone_available')}</span>
-              <div className="pm-active"><span className="pm-dot" />{t('phone_active')}</div>
-            </div>
-            <div className="pm-amount"><div className="pm-big"><span className="cur">$</span>5,000</div></div>
-            <div className="pm-unit">{t('phone_currency')}</div>
-            <div className="pm-div" />
-            <div className="pm-rows">
-              <div className="pm-row"><span className="pm-row-label">{t('phone_repayment')}</span><span className="pm-row-val">{t('phone_repayment_val')}</span></div>
-              <div className="pm-row"><span className="pm-row-label">{t('phone_disbursement')}</span><span className="pm-row-val">{t('phone_disbursement_val')}</span></div>
-              <div className="pm-row"><span className="pm-row-label">{t('phone_deduction')}</span><span className="pm-row-val">{t('phone_deduction_val')}</span></div>
-            </div>
-            <div className="pm-progress">
-              <div className="pm-prog-top"><span>{t('phone_utilization')}</span><span>60%</span></div>
-              <div className="pm-prog-bar"><div className="pm-prog-fill" /></div>
-            </div>
-            <Link to="/onboarding" className="pm-btn">
-              {t('phone_request')}{' '}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </Link>
+          <div className="mk-float mk-ident" style={{ right: '2%', top: '30%', transform: 'rotate(5deg)' }}>
+            <div className="row"><span className="a">MH</span>M. Herrera<span>{t('ident_row_employee')}</span></div>
+            <div className="row"><span className="a">HP</span>Hotel Playa<span>{t('ident_row_payroll')}</span></div>
+            <div className="row"><span className="a">AC</span>Aliados<span>{t('ident_row_lender')}</span></div>
           </div>
         </div>
       </div>
-    </section>
+    </Board>
   );
 }

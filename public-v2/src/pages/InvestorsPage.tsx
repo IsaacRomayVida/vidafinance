@@ -1,80 +1,44 @@
 import { useTranslation } from 'react-i18next';
-import { RichText } from '../components/shared/RichText';
-import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import { Board, BoardHead, Statement, Rows, Figures } from '../components/marketing/Board';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export function InvestorsPage() {
   const { t } = useTranslation();
-  useRevealOnScroll();
-  useDocumentTitle(`Funpay — ${t('pg_inv_badge')}`);
+  useDocumentTitle(`FunPay — ${t('pg_inv_badge')}`);
 
   return (
     <>
+      <Board label={t('pg_inv_badge')}>
+        <Statement html={t('pg_inv_h1')} lead={t('pg_inv_sub')} />
+      </Board>
 
-      {/* Hero */}
-      <section className="hero" style={{ padding: '100px 0 80px' }}>
-        <div className="hero-blob b1" />
-        <div className="hero-blob b2" />
-        <div className="wrap text-center">
-          <span className="badge rv">{t('pg_inv_badge')}</span>
-          <h1 className="rv d1"><RichText html={t('pg_inv_h1')} /></h1>
-          <p className="sub rv d2">{t('pg_inv_sub')}</p>
-        </div>
-      </section>
+      <Board tone="paper">
+        <BoardHead kicker={t('pg_inv_market_tag')} title={t('pg_inv_market_h')} lead={t('pg_inv_market_p')} />
+        <div className="mk-gap" />
+        <Figures items={[1, 2, 3, 4].map((n) => ({ value: t(`pg_inv_market_${n}_v`), label: t(`pg_inv_market_${n}_l`) }))} />
+      </Board>
 
-      {/* Market */}
-      <section className="section tinted">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_inv_market_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_inv_market_h')} /></h2>
-          <p className="sp rv d2">{t('pg_inv_market_p')}</p>
-          <div className="metrics rv d2">
-            {[1, 2, 3, 4].map((i) => (
-              <div className="metric" key={i}>
-                <div className="metric-v">{t(`pg_inv_market_${i}_v`)}</div>
-                <div className="metric-l">{t(`pg_inv_market_${i}_l`)}</div>
-              </div>
-            ))}
+      <Board>
+        <div className="mk-cols">
+          <div className="sticky">
+            <BoardHead kicker={t('pg_inv_model_tag')} title={t('pg_inv_model_h')} />
           </div>
+          <Rows items={[1, 2, 3, 4].map((n) => ({ title: t(`pg_inv_model_${n}_t`), desc: t(`pg_inv_model_${n}_d`) }))} />
         </div>
-      </section>
+      </Board>
 
-      {/* Model */}
-      <section className="section">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_inv_model_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_inv_model_h')} /></h2>
-          <div className="trust-grid rv d2">
-            {[1, 2, 3, 4].map((i) => (
-              <div className="trust-item" key={i}>
-                <div>
-                  <div className="trust-t">{t(`pg_inv_model_${i}_t`)}</div>
-                  <div className="trust-d">{t(`pg_inv_model_${i}_d`)}</div>
-                </div>
-              </div>
-            ))}
+      <Board tone="paper">
+        <BoardHead kicker={t('pg_inv_gov_tag')} title={t('pg_inv_gov_h')} />
+        <p className="mk-body" style={{ marginTop: 20 }}>{t('pg_inv_gov_p')}</p>
+      </Board>
+
+      <Board tone="sage">
+        <Statement html={t('pg_inv_cta')} center>
+          <div className="mk-actions">
+            <a href={`mailto:${t('pg_inv_cta_email')}`} className="mk-btn">{t('pg_inv_cta_email')}</a>
           </div>
-        </div>
-      </section>
-
-      {/* Governance */}
-      <section className="section tinted">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_inv_gov_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_inv_gov_h')} /></h2>
-          <p className="sp rv d2">{t('pg_inv_gov_p')}</p>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="section">
-        <div className="wrap text-center">
-          <h2 className="sh rv"><RichText html={t('pg_inv_cta')} /></h2>
-          <a href={`mailto:${t('pg_inv_cta_email')}`} className="btn rv d1">
-            {t('pg_inv_cta_email')}
-          </a>
-        </div>
-      </section>
+        </Statement>
+      </Board>
     </>
   );
 }

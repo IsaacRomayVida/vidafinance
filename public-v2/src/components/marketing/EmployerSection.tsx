@@ -1,63 +1,73 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { Board, BoardHead } from './Board';
 
+/**
+ * Employer section on the ops-side board: charcoal→forest, dark glass
+ * tags, the spatial folder stack with the current quincena lit Harmony
+ * Green, a floating progress card, three KPIs and ONE white pill action.
+ * The stack and the figures are an illustrative view, labelled as such.
+ */
 export function EmployerSection() {
   const { t } = useTranslation();
 
+  const folders = [
+    { i: -3, n: '4', label: 'Hotel Playa' },
+    { i: -2, n: '6', label: 'Grupo Caribe' },
+    { i: -1, n: '2', label: 'Villas del Sol' },
+    { i: 0, n: '12', label: t('emp_folder_batch'), lit: true },
+    { i: 1, n: '3', label: t('emp_folder_aml') },
+    { i: 2, n: '1', label: 'CONDUSEF' },
+  ];
+
   return (
-    <section className="section" id="employers">
-      <div className="wrap">
-        <div className="emp-grid">
-          <div className="emp-text">
-            <div className="tag rv">{t('emp_tag')}</div>
-            <h2 className="sh rv d1">{t('emp_h2')}</h2>
-            <p className="sp rv d2">{t('emp_p')}</p>
-            <Link to="/employers" className="section-link rv d3">
-              {t('emp_link')}{' '}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </Link>
+    <Board tone="ops" id="employers-board">
+      <BoardHead kicker={t('emp_tag')} title={t('emp_h2')} lead={t('emp_p')} />
+      <div className="mk-gap" />
+
+      <div className="mk-ops-grid">
+        <div className="mk-panel stage" aria-hidden="true">
+          <div className="mk-brand-ops"><b>F</b>FunPay · Ops</div>
+          <div className="mk-tags">
+            <span className="mk-tag"><i />{t('emp_tag_collections')}</span>
+            <span className="mk-tag">{t('emp_tag_employers')}</span>
+            <span className="mk-tag">CONDUSEF</span>
           </div>
-          <div>
-            <div className="chart rv d3" id="chart">
-              {[28, 36, 48, 42, 56, 50, 66, 85].map((h, i) => (
-                <div key={i} className={`bar${i === 7 ? ' hi' : ''}`} style={{ height: `${h}%` }} />
-              ))}
-            </div>
-            <div className="metrics rv d4">
-              <div className="metric">
-                <div className="metric-v">94.2%</div>
-                <div className="metric-l">{t('emp_retention')}</div>
-                <div className="metric-c">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                    <path d="M12 19V5M5 12l7-7 7 7" />
-                  </svg>+3.1%
-                </div>
+          <div className="mk-stack">
+            {folders.map((f) => (
+              <div key={f.i} className={`mk-folder${f.lit ? ' lit' : ''}`} style={{ ['--i' as string]: f.i }}>
+                <div className="doc"><i /><i /><i /></div>
+                <span className="n">{f.n}</span>
+                <span className="lbl">{f.label}</span>
               </div>
-              <div className="metric">
-                <div className="metric-v">$0</div>
-                <div className="metric-l">{t('emp_liability')}</div>
-                <div className="metric-c">{t('emp_liability_c')}</div>
-              </div>
-              <div className="metric">
-                <div className="metric-v">2 {t('calc_days')}</div>
-                <div className="metric-l">{t('emp_integration')}</div>
-                <div className="metric-c">{t('emp_integration_c')}</div>
-              </div>
-              <div className="metric">
-                <div className="metric-v">87%</div>
-                <div className="metric-l">{t('emp_adoption')}</div>
-                <div className="metric-c">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                    <path d="M12 19V5M5 12l7-7 7 7" />
-                  </svg>+8.6%
-                </div>
-              </div>
-            </div>
+            ))}
+          </div>
+          <div className="mk-prog">
+            <div className="h"><span>{t('emp_folder_batch')}</span><span>↗</span></div>
+            <div className="d">{t('emp_prog_sub')}</div>
+            <div className="v">92<b>%</b></div>
+            <span className="dotg" />
           </div>
         </div>
+
+        <div className="mk-panel data">
+          <span className="mk-tag" style={{ alignSelf: 'flex-start' }}>{t('emp_tag_panel')}</span>
+          <div className="mk-kpis">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="mk-kpi">
+                <small>{t(`emp_kpi_${n}_l`)}</small>
+                <b>{t(`emp_kpi_${n}_v`)}</b>
+              </div>
+            ))}
+          </div>
+          <h3>{t('emp_rows_h')}</h3>
+          <div className="mk-batch"><span className="fl g" /><span className="t">Hotel Playa<small>412 · {t('emp_batch_received')}</small></span><span className="p g">98%</span></div>
+          <div className="mk-batch"><span className="fl g" /><span className="t">Grupo Caribe<small>288 · {t('emp_batch_received')}</small></span><span className="p g">95%</span></div>
+          <div className="mk-batch"><span className="fl" /><span className="t">Villas del Sol<small>190 · {t('emp_batch_pending')}</small></span><span className="p">—</span></div>
+          <div className="mk-due"><i /><span>{t('emp_due')}<small>{t('emp_due_sub')}</small></span></div>
+          <Link to="/employers" className="mk-btn white"><i />{t('emp_link')}</Link>
+        </div>
       </div>
-    </section>
+    </Board>
   );
 }
