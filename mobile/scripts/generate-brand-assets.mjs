@@ -105,7 +105,7 @@ const STAGES = [
  * housekeeper stepping out at dawn is the reference for all of them.
  */
 const GRADE = 'Shot on 35mm film, documentary photography, muted desaturated grade, olive and clay tones through moss to cream highlights, fine natural grain, soft diffused natural light, shallow depth of field, faces never legible, low saturation, no bright or saturated colour, no neon, no pink, no bright white, no text, no illustration, no cartoon, no graphic overlay, no CGI.';
-const MX = 'Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified.';
+const MX = 'MEXICO, Riviera Maya, Quintana Roo. Mexican people with brown skin and dark hair. Mexican Caribbean architecture: painted stucco walls, concrete block, corrugated roofing, rebar, plastic chairs, papel picado, bougainvillea, coconut palms. Working-class Mexican neighbourhood, humble and dignified, hot humid Caribbean morning. NOT Europe, NOT Mediterranean, NOT Italy or Provence, NOT Asia, no tile roofs, no manicured hedges, no mountains, no stone villas.';
 
 const FILMS = [
   { file: 'intro-doorway.mp4', aspect: '9:16', prompt: `${MX} A hotel housekeeper in a pale sage uniform steps through a service doorway into early morning light, seen from behind, carrying a linen basket, walking slowly away down a path; misty hills and soft cream sky beyond; the camera holds still. ${GRADE}` },

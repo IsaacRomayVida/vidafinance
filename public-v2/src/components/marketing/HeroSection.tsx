@@ -2,8 +2,9 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Board, Statement, ArrowIcon } from './Board';
 
-/** The housekeeper stepping out at dawn — the reference shot for the brand. */
-const HERO_FILM = '/video/hero-doorway.mp4';
+/** Ambient: morning light and palm shadows moving down a hotel corridor.
+ *  Empty on purpose — a background has to carry type. */
+const HERO_FILM = '/video/ambient-loop-wide.mp4';
 
 /**
  * Statement board — the landing hero from funpay-ui. One big Urbanist

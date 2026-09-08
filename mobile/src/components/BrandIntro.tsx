@@ -25,6 +25,7 @@ const artwork = require('../../assets/brand/home-doorway.jpg');
 // Five moments of freedom, each ending on the cream-and-sage kite
 // (~0.4 MB each after grading). One is drawn per cold start.
 const SCENES = [
+  require('../../assets/intros/intro-market.mp4'),
   require('../../assets/intros/intro-doorway.mp4'),
   require('../../assets/intros/intro-pharmacy.mp4'),
   require('../../assets/intros/intro-backpack.mp4'),
