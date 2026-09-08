@@ -243,7 +243,15 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-object b{display:block;font-size:14.5px;font-weight:600;margin-top:12px}
 .mk-object span{display:block;font-size:12.5px;color:rgba(242,245,240,.85);line-height:1.35;margin-top:2px}
 .mk-object.lit{background:rgba(104,231,142,.22);border-color:rgba(160,255,190,.55);box-shadow:0 24px 50px -20px rgba(104,231,142,.45)}
-@media (max-width:600px){.mk-objects{grid-template-columns:1fr 1fr}.mk-object:last-child{grid-column:span 2}}
+/* Below the wide layout the cards join the flow — absolutely positioned
+   they ran up over the tag pills. */
+@media (max-width:900px){
+  .mk-objects{position:static;margin-top:22px;grid-template-columns:1fr 1fr}
+  .mk-object{min-height:0}
+  .mk-object img{width:44px;height:44px}
+  .mk-panel.stage.photo{min-height:0;padding-bottom:24px}
+}
+@media (max-width:520px){.mk-objects{grid-template-columns:1fr}}
 .mk-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .mk-kpi{padding:14px 12px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
 .mk-kpi small{display:block;font-size:11px;color:rgba(242,245,240,.82);letter-spacing:.04em;text-transform:uppercase}
