@@ -1,11 +1,12 @@
 /**
- * Cold-start brand film: one of seven "Amanecer" scenes — dignified moments
- * of Mexican family life, each ending on the teal-and-gold papalote — plays
- * full-bleed, and as the kite holds the sky the mark blooms with a gold ring
- * pulse and a soft haptic, the wordmark rises, and the curtain fades the app
- * in. A scene is drawn at random per cold start, so the opening stays alive.
+ * Cold-start brand film: one of five moments of freedom — the service door
+ * at dawn, the pharmacy counter, the school backpack, the kitchen exhale,
+ * hands letting go — each ending on the cream-and-sage paper kite. As the
+ * kite holds the sky the mark blooms with a soft ring and a haptic, the
+ * label rises, and the curtain fades the app in. Drawn at random per cold
+ * start so the opening stays alive.
  *
- * The dawn artwork sits under the video as poster and failure fallback.
+ * The kite still sits under the video as poster and failure fallback.
  * ~5.8s total, tap anywhere to skip. Under reduced motion: artwork only,
  * fast opacity fade, no video.
  */
@@ -19,17 +20,17 @@ import { colors } from '../theme';
 import { FunpayMark, FunpayWordmark } from './FunpayLogo';
 import { useReducedMotion } from './motion';
 
-// Metro needs static requires — the whole set ships (~7 MB total).
+// Metro needs static requires — the whole set ships (~2 MB total).
 /* eslint-disable @typescript-eslint/no-var-requires */
-const artwork = require('../../assets/splash-artwork.png');
+const artwork = require('../../assets/brand/home-kite.jpg');
+// Five moments of freedom, each ending on the cream-and-sage kite
+// (~0.4 MB each after grading). One is drawn per cold start.
 const SCENES = [
-  require('../../assets/intros/scene-1.mp4'),
-  require('../../assets/intros/scene-2.mp4'),
-  require('../../assets/intros/scene-3.mp4'),
-  require('../../assets/intros/scene-4.mp4'),
-  require('../../assets/intros/scene-5.mp4'),
-  require('../../assets/intros/scene-6.mp4'),
-  require('../../assets/intros/scene-7.mp4'),
+  require('../../assets/intros/intro-doorway.mp4'),
+  require('../../assets/intros/intro-pharmacy.mp4'),
+  require('../../assets/intros/intro-backpack.mp4'),
+  require('../../assets/intros/intro-kitchen.mp4'),
+  require('../../assets/intros/intro-release.mp4'),
 ];
 /* eslint-enable @typescript-eslint/no-var-requires */
 
