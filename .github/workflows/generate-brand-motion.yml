@@ -48,10 +48,11 @@ jobs:
         run: |
           node mobile/scripts/generate-brand-assets.mjs --set "${{ github.event.inputs.set }}" --out brand-assets ${{ github.event.inputs.pro == 'true' && '--pro' || '' }} 2>&1 | tee generate.log
 
-      - name: Grade and transcode (ffmpeg on the runner)
+      - name: Grade and transcode (ffmpeg)
         if: always()
         run: |
           set -e
+          command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null; }
           cd brand-assets || exit 0
           mkdir -p graded
           # Universal grade from imagery.md: saturation −25%, blacks lifted, faint grain.
