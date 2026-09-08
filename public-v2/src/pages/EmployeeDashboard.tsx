@@ -14,12 +14,111 @@ import { CreditWidget } from '../components/employee/CreditWidget';
 import { LoanTable } from '../components/employee/LoanTable';
 import { PaymentModal } from '../components/employee/PaymentModal';
 import type { EmployeeData, Loan, Repayment } from '../components/employee/types';
-import { fmt } from '../components/employee/types';
+import { fmt, fmtShortDate, initials, nextScheduledDeduction } from '../components/employee/types';
 
 const IN_FLIGHT_STATUSES = [
   'pending', 'under_review', 'approved', 'active',
   'disbursement_queued', 'disbursed', 'escalated', 'overdue',
 ];
+const SETTLED_STATUSES = ['paid', 'repaid', 'completed'];
+
+type LoanFilter = 'all' | 'active' | 'paid';
+
+/**
+ * The companion card: acetate, opened by the user, three chips that are
+ * facts or offers — never questions back to the borrower. Every figure on a
+ * chip is read from the employee document or the loan document; a chip whose
+ * figure cannot be read is not shown. The sparkle on the open button is the
+ * one sparkle in the product.
+ */
+function Companion({
+  employee,
+  activeLoan,
+  totalPaid,
+}: {
+  employee: EmployeeData;
+  activeLoan: Loan | undefined;
+  totalPaid: number;
+}) {
+  const { t, i18n } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  const limit = employee.creditLimit ?? 0;
+  const available = employee.availableCredit ?? 0;
+  const used = Math.max(0, limit - available);
+  const employer = employee.employerName || activeLoan?.employerName || t('dash_your_employer');
+
+  // Next deduction: the first scheduled step not yet covered by what was paid.
+  const next = activeLoan ? nextScheduledDeduction(activeLoan.repaymentSchedule, totalPaid) : null;
+  const nextAmount = next ? next.amount : null;
+  const nextDate = next && activeLoan ? fmtShortDate(next.dueDate ?? activeLoan.dueDate, i18n.language) : null;
+  const totalOwed = activeLoan ? activeLoan.repaymentAmount || activeLoan.total || 0 : 0;
+
+  const chips: { chip: string; fact: string }[] = [];
+  if (activeLoan && nextAmount !== null && nextDate) {
+    chips.push({
+      chip: t('dash_chip_next_deduction', { amount: fmt(nextAmount), date: nextDate }),
+      fact: t('dash_fact_next_deduction', { amount: fmt(nextAmount), date: nextDate, employer }),
+    });
+  } else if (!activeLoan) {
+    chips.push({
+      chip: t('dash_chip_available', { available: fmt(available), limit: fmt(limit) }),
+      fact: t('dash_fact_available', { available: fmt(available) }),
+    });
+  }
+  chips.push({
+    chip: t('dash_chip_why_limit', { limit: fmt(limit) }),
+    fact: t('dash_fact_why_limit', { limit: fmt(limit), used: fmt(used), available: fmt(available) }),
+  });
+  chips.push({
+    chip: t('dash_chip_deducted_by', { employer }),
+    fact:
+      activeLoan && totalOwed > 0
+        ? t('dash_fact_deducted_by_active', { employer, total: fmt(totalOwed) })
+        : t('dash_fact_deducted_by', { employer }),
+  });
+
+  return (
+    <section className="bo-companion" aria-label={t('dash_companion')}>
+      <div className="top">
+        <span className="dot">{t('dash_companion')}</span>
+        <button
+          type="button"
+          className="bo-exp"
+          aria-expanded={open}
+          aria-controls="bo-companion-facts"
+          aria-label={t('dash_companion')}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z" />
+          </svg>
+        </button>
+      </div>
+      <div className="bo-qs">
+        {chips.map((c) => (
+          <button
+            key={c.chip}
+            type="button"
+            className="bo-q"
+            aria-expanded={open}
+            aria-controls="bo-companion-facts"
+            onClick={() => setOpen((o) => !o)}
+          >
+            {c.chip}
+          </button>
+        ))}
+      </div>
+      {open && (
+        <div className="bo-facts" id="bo-companion-facts">
+          {chips.map((c) => (
+            <div key={c.chip} className="bo-fact">{c.fact}</div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function EmployeeDashboard() {
   const { t } = useTranslation();
@@ -32,6 +131,7 @@ export function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [paymentLoan, setPaymentLoan] = useState<Loan | null>(null);
   const [pageState, setPageState] = useState<'loading' | 'dashboard'>('loading');
+  const [filter, setFilter] = useState<LoanFilter>('all');
   // Two independent reads can take this page down — the employee document and
   // the loans listener — and each owns its OWN error string. They used to
   // share one, which was safe only while the clear happened synchronously at
@@ -141,6 +241,11 @@ export function EmployeeDashboard() {
     return acc;
   }, {});
 
+  const completedPaid = (loanId: string) =>
+    (repaymentsByLoan[loanId] || [])
+      .filter((r) => r.status === 'completed')
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+
   // Requesting a loan navigates to the wizard rather than opening a modal
   // (#446). There is one priced surface, so there is one place a borrower can
   // be quoted a fee, a due date and a CAT. The dashboard reloads the employee
@@ -152,11 +257,13 @@ export function EmployeeDashboard() {
   // 'loading', so an error branch placed after it would be unreachable.
   if (dashboardError) {
     return (
-      <div className="mx-auto max-w-lg py-20 text-center">
+      <div className="bo-screen paper" style={{ minHeight: 0 }}>
         <ErrorBanner message={dashboardError} style={{ textAlign: 'left', marginBottom: 16 }} />
-        <button onClick={retry} className="btn-primary">
-          {t('dash_retry', 'Reintentar')}
-        </button>
+        <div>
+          <button type="button" onClick={retry} className="bo-ghost">
+            {t('dash_retry', 'Reintentar')}
+          </button>
+        </div>
       </div>
     );
   }
@@ -171,39 +278,53 @@ export function EmployeeDashboard() {
 
   if (needsEmailVerification) {
     return (
-      <div className="mx-auto max-w-lg py-20 text-center">
-        <h2 className="text-xl font-bold text-teal-900">{t('dash_verify_email')}</h2>
-        <p className="mt-4 text-sm text-gray-500">{t('dash_verify_email_desc')}</p>
-        <button
-          onClick={() => signOut(auth).then(() => navigate('/login'))}
-          className="mt-6 rounded-lg bg-teal-700 px-6 py-2 text-sm font-medium text-white hover:bg-teal-800"
-        >
-          {t('dash_back_to_login')}
-        </button>
+      <div className="bo-screen paper">
+        <div className="bo-head"><span className="dot">{t('dash_home_label')}</span></div>
+        <div className="bo-center">
+          <h2>{t('dash_verify_email')}</h2>
+          <p>{t('dash_verify_email_desc')}</p>
+        </div>
+        <div className="bo-actions">
+          <button
+            type="button"
+            onClick={() => signOut(auth).then(() => navigate('/login'))}
+            className="bo-ghost"
+          >
+            {t('dash_back_to_login')}
+          </button>
+        </div>
       </div>
     );
   }
 
   if (!employee) return null;
 
-  const activeLoans = loans.filter((l) => l.status === 'active' || l.status === 'overdue');
-  const nextRepayment = activeLoans
-    .filter((l) => l.dueDate)
-    .sort((a, b) => (a.dueDate!.seconds - b.dueDate!.seconds))[0];
+  const activeLoan = loans.find((l) => l.status === 'active' || l.status === 'overdue');
+  const counts: Record<LoanFilter, number> = {
+    all: loans.length,
+    active: loans.filter((l) => IN_FLIGHT_STATUSES.includes(l.status)).length,
+    paid: loans.filter((l) => SETTLED_STATUSES.includes(l.status)).length,
+  };
+  const visibleLoans =
+    filter === 'active'
+      ? loans.filter((l) => IN_FLIGHT_STATUSES.includes(l.status))
+      : filter === 'paid'
+        ? loans.filter((l) => SETTLED_STATUSES.includes(l.status))
+        : loans;
+  const filters: { key: LoanFilter; label: string }[] = [
+    { key: 'all', label: t('dash_filter_all') },
+    { key: 'active', label: t('dash_filter_active') },
+    { key: 'paid', label: t('dash_filter_paid') },
+  ];
 
   return (
-    <div>
+    <div className="bo-screen leaf">
       {/* Header */}
-      <div className="dash-header">
-        <h1>
-          {t('dash_welcome')}, {employee.name || user?.displayName || user?.email}
-        </h1>
-        <div className="dash-user">
-          <span>{employee.employerName}</span>
-          <div className="dash-avatar">
-            {employee.name?.charAt(0) || 'E'}
-          </div>
-        </div>
+      <div className="bo-head">
+        <span className="dot">{t('dash_home_label')}</span>
+        <span className="bo-av" aria-label={employee.name || user?.displayName || user?.email || ''}>
+          {initials(employee.name || user?.displayName, 'FP')}
+        </span>
       </div>
 
       {/* KYC Banner */}
@@ -211,80 +332,68 @@ export function EmployeeDashboard() {
         <KYCBanner kycStatus={employee.kycStatus} />
       )}
 
-      {/* Content */}
-      <div className="dash-content">
-        {repaymentsError && (
-          <div style={{ marginBottom: 20 }}>
-            <ErrorBanner
-              message={t(
-                'dash_repayments_error',
-                'No pudimos cargar tu historial de pagos. Los saldos mostrados podrían estar incompletos.',
-              )}
-            />
-          </div>
-        )}
-
-        <CreditWidget
-          employee={employee}
-          loans={loans}
-          hasActiveLoan={hasActiveLoan}
-          onOpenModal={goToApply}
-        />
-
-        {/* Loan Status Card */}
-        {statusCardLoan && (
-          <LoanStatusCard
-            loan={statusCardLoan}
-            totalPaid={
-              (repaymentsByLoan[statusCardLoan.id] || [])
-                .filter((r) => r.status === 'completed')
-                .reduce((sum, r) => sum + (r.amount || 0), 0)
-            }
-            onRequestAnother={
-              ['paid', 'repaid', 'completed'].includes(statusCardLoan.status)
-                ? goToApply
-                : undefined
-            }
+      {repaymentsError && (
+        <div style={{ marginTop: 16 }}>
+          <ErrorBanner
+            style={{ borderRadius: 20, background: '#fbeeed', border: '1px solid rgba(139,32,32,.12)', color: '#8b2020' }}
+            message={t(
+              'dash_repayments_error',
+              'No pudimos cargar tu historial de pagos. Los saldos mostrados podrían estar incompletos.',
+            )}
           />
-        )}
+        </div>
+      )}
 
-        {/* Next Repayment */}
-        {nextRepayment && (
-          <div style={{
-            borderTop: '1px solid rgba(25,68,69,0.06)',
-            borderBottom: '1px solid rgba(25,68,69,0.06)',
-            padding: '20px 0',
-            marginBottom: 24,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 12,
-          }}>
-            <div>
-              <div className="stat-label" style={{ marginBottom: 4 }}>{t('modal_due_date')}</div>
-              <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
-                {new Date(nextRepayment.dueDate!.seconds * 1000).toLocaleDateString('es-MX')}
-              </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div className="stat-label" style={{ marginBottom: 4 }}>{t('dash_th_repayment')}</div>
-              <div className="money" style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
-                ${fmt(nextRepayment.repaymentAmount || nextRepayment.total || 0)}
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Capture first: the available credit, then the one green control */}
+      <CreditWidget
+        employee={employee}
+        loans={loans}
+        hasActiveLoan={hasActiveLoan}
+        onOpenModal={goToApply}
+      />
 
-        {/* Loans Table */}
-        <LoanTable
-          loans={loans}
-          repaymentsByLoan={repaymentsByLoan}
-          loading={loading}
-          onOpenModal={goToApply}
-          onPayLoan={setPaymentLoan}
+      {/* The credit in flight (or the last settled one), as a frosted chip */}
+      {statusCardLoan && (
+        <LoanStatusCard
+          loan={statusCardLoan}
+          totalPaid={completedPaid(statusCardLoan.id)}
+          onRequestAnother={
+            ['paid', 'repaid', 'completed'].includes(statusCardLoan.status)
+              ? goToApply
+              : undefined
+          }
         />
+      )}
+
+      {/* The companion works after: a card the user opens */}
+      <Companion
+        employee={employee}
+        activeLoan={activeLoan}
+        totalPaid={activeLoan ? completedPaid(activeLoan.id) : 0}
+      />
+
+      {/* Filter pills + the credit list */}
+      <div className="bo-pills" role="group" aria-label={t('dash_your_loans')}>
+        {filters.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={filter === key}
+            className={`bo-pill${filter === key ? ' on' : ''}`}
+            onClick={() => setFilter(key)}
+          >
+            {filter === key && <span className="bo-cnt">{counts[key]}</span>}
+            {label}
+          </button>
+        ))}
       </div>
+      <LoanTable
+        loans={visibleLoans}
+        repaymentsByLoan={repaymentsByLoan}
+        loading={loading}
+        onOpenModal={goToApply}
+        onPayLoan={setPaymentLoan}
+      />
 
       {/* Modals */}
       <AnimatePresence>

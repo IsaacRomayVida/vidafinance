@@ -167,14 +167,8 @@ function PriceShimmer({ width = 72 }: { width?: number }) {
     <span
       aria-busy="true"
       data-testid="price-shimmer"
-      style={{
-        display: 'inline-block',
-        width,
-        height: '1em',
-        verticalAlign: 'middle',
-        borderRadius: 4,
-        background: 'rgba(25,68,69,0.08)',
-      }}
+      className="bo-shimmer"
+      style={{ width }}
     />
   );
 }
@@ -182,9 +176,9 @@ function PriceShimmer({ width = 72 }: { width?: number }) {
 /**
  * One money (or CAT) value on the quote. `value === null` means the rate is
  * unavailable: shimmer while loading, neutral "no disponible" on failure. The
- * failure copy is deliberately NOT --danger — the red belongs to the one banner
- * that explains the failure, so a transient pricing outage does not render as a
- * card full of broken fields, or as a rejection.
+ * failure copy is deliberately NOT a danger colour — the emphasis belongs to
+ * the one banner that explains the failure, so a transient pricing outage does
+ * not render as a card full of broken fields, or as a rejection.
  */
 function PriceValue({
   value,
@@ -192,36 +186,101 @@ function PriceValue({
   prefix = '$',
   suffix = '',
   shimmerWidth,
-  style,
+  className,
 }: {
   value: number | string | null;
   status: ConfigStatus;
   prefix?: string;
   suffix?: string;
   shimmerWidth?: number;
-  style?: React.CSSProperties;
+  className?: string;
 }) {
   const { t } = useTranslation();
   if (value === null) {
     if (status === 'loading') return <PriceShimmer width={shimmerWidth} />;
-    // --t2, not --t3 (#443). This is the reserved state: the one string that
-    // stands in for a figure the borrower came here to read. --t3 (#93aaa9) is
-    // 2.45:1 on --bg and 2.29:1 on --bg2 — under AA's 4.5:1 for body text and
-    // under even the 3:1 floor that applies to non-text UI. A reserved state
+    // The reserved state: the one string that stands in for a figure the
+    // borrower came here to read. It is ink-soft (#443) — a reserved state
     // nobody can read is indistinguishable from an empty slot, which is the
     // exact failure this component exists to prevent.
     return (
-      <span data-testid="price-unavailable" style={{ color: 'var(--t2)', ...style }}>
+      <span data-testid="price-unavailable" className={`bo-unavail${className ? ` ${className}` : ''}`}>
         {t('wiz_price_unavailable')}
       </span>
     );
   }
   return (
-    <span style={style}>
+    <span className={className}>
       {prefix}
       {typeof value === 'number' ? fmt(value) : value}
       {suffix}
     </span>
+  );
+}
+
+/**
+ * Cost in plain sight — the disclosure line.
+ *
+ * Every step of the request shows, directly under the memo, at 13px, without
+ * a tap: the total to repay, the per-deduction amount, and the CAT labelled
+ * informational, followed by the standardised-measure note and the CONDUSEF
+ * reference (LTOSF Art. 8). All three figures are READ from getLoanConfig —
+ * `feeRate` prices the total, the published `installments` split it, and
+ * `catPercent` is rendered exactly as published. Nothing here derives a rate;
+ * a figure that could not be read renders as missing (`CAT — informativo ·
+ * pendiente`), never as a number.
+ *
+ * One component rather than three copies of the same markup: the disclosure
+ * had already drifted once (a block on one step, a bare row on the next).
+ */
+function CatDisclosure({
+  total,
+  deduction,
+  cat,
+  status,
+}: {
+  total: number | null;
+  deduction: number | null;
+  cat: string | null;
+  status: ConfigStatus;
+}) {
+  const { t } = useTranslation();
+  const slot = (value: number | null, render: (v: number) => string, width: number) => {
+    if (value === null) {
+      if (status === 'loading') return <PriceShimmer width={width} />;
+      return (
+        <span data-testid="price-unavailable" className="bo-unavail">
+          {t('cost_pending')}
+        </span>
+      );
+    }
+    return render(value);
+  };
+  return (
+    <div data-testid="cat-disclosure" className="bo-disc">
+      <div>
+        <b>{t('cost_label')}</b>{' '}
+        {slot(total, (v) => t('cost_total', { total: fmt(v) }), 72)}
+        {' · '}
+        {slot(deduction, (v) => t('cost_per_deduction', { amount: fmt(v) }), 88)}
+        {' · '}
+        {cat === null && status !== 'loading' ? (
+          <span data-testid="price-unavailable" className="bo-unavail">{t('cost_cat_pending')}</span>
+        ) : (
+          <>
+            {t('modal_cat_label')}{' '}
+            <PriceValue value={cat} status={status} prefix="" suffix="%" shimmerWidth={56} />
+            {' '}
+            {t('cost_cat_suffix')}
+          </>
+        )}
+      </div>
+      <div>
+        {t('modal_cat_note')}{' '}
+        <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener noreferrer">
+          {t('modal_cat_condusef')}
+        </a>
+      </div>
+    </div>
   );
 }
 
@@ -231,138 +290,18 @@ function PriceValue({
  * it says plainly that nothing was charged and nothing about the borrower's
  * application changed — this is our fault, not a decision about them.
  *
- * It deliberately uses NO semantic status pair (#422). `--danger-bg`/
- * `--danger-text` is what LoanStatusCard renders `denied` in, and
- * `--warning-bg`/`--warning-text` is what it renders `pending_review` and
- * `escalated` in — both borrower-facing, both reachable in the same session as
- * this wizard. A banner whose entire purpose is to stop our outage from reading
- * as a verdict cannot be painted in a verdict's colours: the red pair reads as
- * "I was rejected", and the amber pair reads as "my application is under
- * review", which is worse here because it is plausible at this exact moment.
- *
- * So the emphasis comes from WEIGHT — a solid border and more air on a neutral
- * surface — with `--warning` used only as a border accent. It is not used for
- * text: #b08420 on white is 3.4:1, which clears the 3:1 bar for a non-text UI
- * boundary but fails AA for body copy. Text stays on --t1/--t2.
+ * It deliberately uses NO semantic status pair (#422): `--danger-*` is what a
+ * denial renders in and `--warning-*` is what "under review" renders in, both
+ * reachable in the same session. Emphasis comes from WEIGHT — a solid ink
+ * border on a white surface — never from a verdict's colour.
  */
-/**
- * The CAT disclosure.
- *
- * Deliberately NOT a row in the quote breakdown. The CAT is a regulated
- * disclosure (LTOSF Art. 8), not a line item of the quote: it is the one figure
- * a borrower can carry to another lender and compare, it is the only non-peso
- * value in a column of pesos, and at this product's rate it is four digits, so
- * inline it stops reading as a line item and becomes the first thing the eye
- * lands on.
- *
- * It is a component rather than two copies of the same markup because it had
- * already drifted: the step-3 card rendered it as this block while the step-4
- * summary rendered it as an inline row, so the same disclosure had two
- * treatments in one flow. One definition means the next change reaches both.
- *
- * Its text is --t2, never --t3 (#443). The rule Design and I settled on is
- * categorical rather than positional: --t3 may not carry a regulated
- * disclosure, a reserved state or a confidence qualifier, on any page, in any
- * file. It stays what it is good for — decorative chrome. Scoping the rule by
- * file would not have survived the next screen someone builds; scoping it by
- * what the text IS does.
- */
-function CatDisclosure({ cat, status }: { cat: string | null; status: ConfigStatus }) {
-  const { t } = useTranslation();
-  return (
-    <div
-      data-testid="cat-disclosure"
-      style={{
-        background: 'var(--bg2)',
-        borderRadius: 12,
-        padding: '14px 16px',
-        border: '1px solid rgba(25,68,69,0.04)',
-        marginBottom: 24,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 6,
-        }}
-      >
-        <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_cat_label')}</span>
-        <span className="cat-highlight">
-          <PriceValue
-            value={cat}
-            status={status}
-            prefix=""
-            suffix={t('modal_cat_annual')}
-            shimmerWidth={56}
-          />
-        </span>
-      </div>
-      <p style={{ fontSize: 11, color: 'var(--t2)', margin: 0, lineHeight: 1.5 }}>
-        {t('modal_cat_note')}{' '}
-        <a
-          href="https://www.condusef.gob.mx"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: 'var(--brand)' }}
-        >
-          {t('modal_cat_condusef')}
-        </a>
-      </p>
-    </div>
-  );
-}
-
 function PricingErrorBanner({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <div
-      role="alert"
-      data-testid="pricing-error-banner"
-      style={{
-        background: 'var(--bg)',
-        border: '1.5px solid var(--warning)',
-        borderRadius: 12,
-        padding: '18px 20px',
-        marginBottom: 16,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 13.5,
-          fontWeight: 700,
-          color: 'var(--t1)',
-          marginBottom: 6,
-        }}
-      >
-        {t('wiz_price_error_title')}
-      </div>
-      <p
-        style={{
-          fontSize: 12.5,
-          color: 'var(--t2)',
-          margin: '0 0 14px',
-          lineHeight: 1.5,
-        }}
-      >
-        {t('wiz_price_error_body')}
-      </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        style={{
-          padding: '8px 16px',
-          borderRadius: 10,
-          border: '1.5px solid var(--warning)',
-          background: 'transparent',
-          color: 'var(--t1)',
-          fontSize: 13,
-          fontWeight: 600,
-          fontFamily: 'var(--db)',
-          cursor: 'pointer',
-        }}
-      >
+    <div role="alert" data-testid="pricing-error-banner" className="bo-price-err">
+      <b>{t('wiz_price_error_title')}</b>
+      <p>{t('wiz_price_error_body')}</p>
+      <button type="button" onClick={onRetry} className="bo-btn">
         {t('wiz_price_retry')}
       </button>
     </div>
@@ -669,23 +608,72 @@ export function LoanWizard() {
     }
   };
 
+  // ── Presentation ──────────────────────────────────────────────────────────
+  // Everything below is markup. The wizard is the Request board from the
+  // design reference: "Se descuenta de tu nómina", the term as `1 descuento ·
+  // 1,300 cada uno` with the count in the avatar circle, the amount at 64px
+  // with a blinking caret, the memo as a highlighted <mark>, the disclosure
+  // line directly under it, and ONE green pill per step.
+
+  const stepIndicator = (
+    <>
+      <div className="bo-head">
+        <span className="dot">{t('wiz_title')}</span>
+        <span className="dot">{t('wiz_step_indicator', { current: step, total: TOTAL_STEPS })}</span>
+      </div>
+      <div className="bo-steps" aria-hidden="true">
+        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
+          <i key={s} data-testid="step-segment" className={s <= step ? 'on' : ''} />
+        ))}
+      </div>
+    </>
+  );
+
+  /** `1 descuento · 1,300 cada uno`, the count in the avatar circle. */
+  const termLine = (
+    <div className="bo-who">
+      <span className="bo-av" aria-hidden="true">{installmentCount ?? '·'}</span>
+      {installmentCount === null ? (
+        <span>{configStatus === 'loading' ? <PriceShimmer width={120} /> : t('wiz_term_pending')}</span>
+      ) : (
+        <span>
+          {installmentCount === 1 ? t('wiz_term_one') : t('wiz_term_many', { count: installmentCount })}
+          {' · '}
+          <PriceValue value={deductionAmount} status={configStatus} prefix="" shimmerWidth={56} />
+          {' '}
+          {t('wiz_term_each')}
+        </span>
+      )}
+    </div>
+  );
+
+  const disclosure = (
+    <CatDisclosure total={total} deduction={deductionAmount} cat={cat} status={configStatus} />
+  );
+
+  const deductionDateRow = (
+    <>
+      <div className="r">
+        <span>{t('wiz_deduction_date_label')}</span>
+        <b>
+          <PriceValue value={deductionDateText} status={configStatus} prefix="" shimmerWidth={140} />
+        </b>
+      </div>
+      {deductionDateText !== null && deductionCadenceAssumed && (
+        <p data-testid="deduction-cadence-assumed" className="fine">
+          {t('wiz_deduction_date_note')}
+        </p>
+      )}
+    </>
+  );
+
   // ── Loading state ──
   if (loading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '80px 0',
-        }}
-      >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
         <span
           className="spinner"
-          style={{
-            borderColor: 'rgba(25,68,69,0.1)',
-            borderTopColor: 'var(--brand)',
-          }}
+          style={{ borderColor: 'rgba(30,32,29,0.1)', borderTopColor: 'var(--ink)' }}
         />
       </div>
     );
@@ -694,70 +682,16 @@ export function LoanWizard() {
   // ── Eligibility error ──
   if (eligibilityError) {
     return (
-      <div style={{ maxWidth: 520, margin: '0 auto', padding: '48px 20px' }}>
-        <div
-          style={{
-            background: '#fff',
-            borderRadius: 20,
-            padding: '48px 32px',
-            boxShadow: '0 2px 8px rgba(25,68,69,0.02)',
-            border: '1px solid rgba(25,68,69,0.04)',
-            textAlign: 'center',
-          }}
-        >
-          {/* Warning icon */}
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: '50%',
-              background: 'rgba(220,80,60,0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 24px',
-            }}
-          >
-            <svg
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#dc503c"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 8v4M12 16h.01" />
-            </svg>
-          </div>
-
-          <h3
-            style={{
-              fontFamily: 'var(--df)',
-              fontSize: 24,
-              color: 'var(--t1)',
-              margin: '0 0 12px',
-            }}
-          >
-            {t('wiz_title')}
-          </h3>
-          <p
-            style={{
-              fontSize: 14,
-              color: 'var(--t2)',
-              margin: '0 0 28px',
-              lineHeight: 1.6,
-            }}
-          >
-            {eligibilityError}
-          </p>
-
-          <button
-            onClick={() => navigate('/employee', { replace: true })}
-            className="btn-primary"
-          >
+      <div className="bo-screen paper">
+        <div className="bo-head">
+          <span className="dot">{t('wiz_title')}</span>
+        </div>
+        <div className="bo-center">
+          <h2>{t('wiz_title')}</h2>
+          <p>{eligibilityError}</p>
+        </div>
+        <div className="bo-actions">
+          <button type="button" onClick={() => navigate('/employee', { replace: true })} className="bo-cta">
             {t('wiz_success_back')}
           </button>
         </div>
@@ -772,193 +706,40 @@ export function LoanWizard() {
       : t('status_pending');
 
     return (
-      <div style={{ maxWidth: 520, margin: '0 auto', padding: '48px 20px' }}>
-        <div
-          style={{
-            background: '#fff',
-            borderRadius: 20,
-            padding: '48px 32px',
-            boxShadow: '0 2px 8px rgba(25,68,69,0.02)',
-            border: '1px solid rgba(25,68,69,0.04)',
-            textAlign: 'center',
-          }}
-        >
-          {/* Success icon */}
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: '50%',
-              background: 'rgba(36,122,110,0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 24px',
-            }}
-          >
-            <svg
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#247a6e"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-          </div>
-
-          <h3
-            style={{
-              fontFamily: 'var(--df)',
-              fontSize: 24,
-              color: 'var(--t1)',
-              margin: '0 0 8px',
-            }}
-          >
-            {t('wiz_success_title')}
-          </h3>
-          <p
-            style={{
-              fontSize: 14,
-              color: 'var(--t2)',
-              margin: '0 0 28px',
-              lineHeight: 1.6,
-            }}
-          >
-            {t('wiz_success_desc')}
-          </p>
-
-          {/* Reference number */}
-          <div
-            style={{
-              background: 'var(--bg2)',
-              borderRadius: 12,
-              padding: '16px 20px',
-              marginBottom: 20,
-              border: '1px solid rgba(25,68,69,0.04)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: 2.2,
-                color: 'var(--gold)',
-                marginBottom: 8,
-              }}
-            >
-              {t('wiz_success_ref')}
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--mono, monospace)',
-                fontSize: 15,
-                fontWeight: 600,
-                color: 'var(--t1)',
-                letterSpacing: 0.5,
-              }}
-            >
-              {success.loanRef}
-            </div>
-          </div>
-
-          {/* Real-time status badge */}
-          <div
-            style={{
-              background: 'var(--bg2)',
-              borderRadius: 12,
-              padding: '16px 20px',
-              marginBottom: 28,
-              border: '1px solid rgba(25,68,69,0.04)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: 2.2,
-                color: 'var(--gold)',
-                marginBottom: 8,
-              }}
-            >
-              {t('dash_th_status')}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span
-                className={`badge badge-${pendingLoan?.status || 'pending'}`}
-                style={{ fontSize: 13 }}
-              >
-                {statusLabel}
-              </span>
-            </div>
-            {statusStale && (
-              <div
-                role="status"
-                style={{ fontSize: 12, color: 'var(--t2)', marginTop: 8, lineHeight: 1.5 }}
-              >
-                {t(
-                  'wizard_status_stale',
-                  'Perdimos la conexión en vivo; este estado podría no estar actualizado. Consulta Mis Préstamos.',
-                )}
-              </div>
+      <div className="bo-screen paper">
+        <div className="bo-head">
+          <span className="dot">{t('wiz_title')}</span>
+          <span className={`bo-badge ${pendingLoan?.status || 'pending'}`}>{statusLabel}</span>
+        </div>
+        <div className="bo-center">
+          <h2>{t('wiz_success_title')}</h2>
+          <p>{t('wiz_success_desc')}</p>
+        </div>
+        {statusStale && (
+          <p role="status" className="bo-note">
+            {t(
+              'wizard_status_stale',
+              'Perdimos la conexión en vivo; este estado podría no estar actualizado. Consulta Mis Créditos.',
             )}
+          </p>
+        )}
+        <div className="bo-ref">
+          <span className="dot">{t('wiz_success_ref')}</span>
+          <b>{success.loanRef}</b>
+        </div>
+        <div className="bo-quote">
+          <div className="r">
+            <span>{t('modal_loan_amount')}</span>
+            <b className="money">${fmt(amount)}</b>
           </div>
-
-          {/* Summary */}
-          <div
-            style={{
-              borderTop: '1px solid rgba(25,68,69,0.06)',
-              padding: '20px 0 0',
-              marginBottom: 28,
-              display: 'flex',
-              justifyContent: 'space-around',
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: 2.2,
-                  color: 'var(--gold)',
-                  marginBottom: 4,
-                }}
-              >
-                {t('modal_loan_amount')}
-              </div>
-              <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
-                ${fmt(amount)}
-              </div>
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: 2.2,
-                  color: 'var(--gold)',
-                  marginBottom: 4,
-                }}
-              >
-                {t('modal_total')}
-              </div>
-              <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
-                <PriceValue value={total} status={configStatus} />
-              </div>
-            </div>
+          <div className="r total">
+            <span>{t('modal_total')}</span>
+            <b className="money"><PriceValue value={total} status={configStatus} /></b>
           </div>
-
-          <button
-            onClick={() => navigate('/employee', { replace: true })}
-            className="btn-primary"
-          >
+        </div>
+        {disclosure}
+        <div className="bo-actions">
+          <button type="button" onClick={() => navigate('/employee', { replace: true })} className="bo-cta">
             {t('wiz_success_back')}
           </button>
         </div>
@@ -968,656 +749,203 @@ export function LoanWizard() {
 
   // ── Wizard steps ──
   return (
-    <div style={{ maxWidth: 520, margin: '0 auto', padding: '48px 20px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h1
-          style={{
-            fontFamily: 'var(--df)',
-            fontSize: 28,
-            color: 'var(--t1)',
-            margin: '0 0 8px',
-          }}
-        >
-          {t('wiz_title')}
-        </h1>
-        {employee?.name && (
-          <p style={{ fontSize: 14, color: 'var(--t2)', margin: 0 }}>
-            {t('wiz_subtitle', { name: employee.name })}
+    <div className="bo-screen paper">
+      {stepIndicator}
+
+      {/* ─── Step 1: Amount ─── */}
+      {step === 1 && (
+        <>
+          <p className="bo-payto">
+            <span className="sr-only">{t('wiz_step_1_label')} · </span>
+            {t('wiz_pay_to')}
           </p>
-        )}
-      </div>
+          {termLine}
 
-      {/* Step indicator */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
-        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
-          <div
-            key={s}
-            data-testid="step-segment"
-            style={{
-              flex: 1,
-              height: 3,
-              borderRadius: 10,
-              background: s <= step ? 'var(--brand)' : 'rgba(25,68,69,0.08)',
-              transition: 'background 0.3s ease',
-            }}
-          />
-        ))}
-      </div>
+          <div className="bo-amount money" aria-live="polite">
+            {fmt(amount)}<small>MXN</small><i aria-hidden="true" />
+          </div>
 
-      {/* Card */}
-      <div
-        style={{
-          background: '#fff',
-          borderRadius: 20,
-          padding: '32px 28px',
-          boxShadow: '0 2px 8px rgba(25,68,69,0.02)',
-          border: '1px solid rgba(25,68,69,0.04)',
-        }}
-      >
-        {/* ─── Step 1: Amount ─── */}
-        {step === 1 && (
-          <div>
-            <div
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: 2.2,
-                color: 'var(--gold)',
-                marginBottom: 8,
-              }}
-            >
-              {t('wiz_step_1_label')}
+          {/* Slider */}
+          <div className="bo-range">
+            <div className="track">
+              <div className="fill" style={{ width: `${Math.min(100, Math.max(0, sliderPct))}%` }} />
             </div>
-            <h3
-              style={{
-                fontFamily: 'var(--df)',
-                fontSize: 20,
-                color: 'var(--t1)',
-                margin: '0 0 24px',
-              }}
-            >
-              {t('wiz_step_1_title')}
-            </h3>
+            <input
+              id="lw-amount-range"
+              type="range"
+              aria-label={t('a11y_loan_amount_slider')}
+              min={MIN_AMOUNT}
+              max={cappedMax}
+              step={STEP}
+              value={amount}
+              onChange={(e) => setAmount(parseInt(e.target.value))}
+            />
+          </div>
+          <div className="bo-range-l money">
+            <span>{fmt(MIN_AMOUNT)}</span>
+            <span>{fmt(cappedMax)}</span>
+          </div>
 
-            {/* Amount display */}
-            <div style={{ textAlign: 'center', marginBottom: 28 }}>
-              <div
-                style={{
-                  fontFamily: 'var(--df)',
-                  fontSize: 48,
-                  color: 'var(--t1)',
-                  lineHeight: 1,
-                  marginBottom: 4,
-                }}
-              >
-                ${fmt(amount)}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--t2)' }}>MXN</div>
-            </div>
+          {/* Salary cap note */}
+          {employee?.monthlySalary && cappedMax < MAX_AMOUNT && (
+            <p className="bo-note">{t('wiz_step_1_max_note', { max: fmt(cappedMax) })}</p>
+          )}
 
-            {/* Slider */}
-            <div className="slider-wrap">
-              <div className="sw">
-                <div
-                  className="sw-fill"
-                  style={{ width: `${Math.min(100, Math.max(0, sliderPct))}%` }}
-                />
-              </div>
-              <input
-                id="lw-amount-range"
-                type="range"
-                aria-label={t('a11y_loan_amount_slider')}
-                min={MIN_AMOUNT}
-                max={cappedMax}
-                step={STEP}
-                value={amount}
-                onChange={(e) => setAmount(parseInt(e.target.value))}
-              />
-              <div className="sw-labels">
-                <span>${fmt(MIN_AMOUNT)}</span>
-                <span>${fmt(cappedMax)}</span>
-              </div>
-            </div>
+          {disclosure}
 
-            {/* Salary cap note */}
-            {employee?.monthlySalary && cappedMax < MAX_AMOUNT && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--t2)',
-                  textAlign: 'center',
-                  marginTop: 8,
-                }}
-              >
-                {t('wiz_step_1_max_note', { max: fmt(cappedMax) })}
-              </div>
-            )}
-
-            {/* Quick amount buttons */}
-            <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-              {[500, 1000, 2000, 3000, 5000]
-                .filter((v) => v <= cappedMax)
-                .map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setAmount(v)}
-                    style={{
-                      flex: '1 1 auto',
-                      padding: '10px 0',
-                      borderRadius: 10,
-                      border:
-                        amount === v
-                          ? '1.5px solid var(--brand)'
-                          : '1.5px solid rgba(25,68,69,0.08)',
-                      background: amount === v ? 'var(--brand)' : 'transparent',
-                      color: amount === v ? '#fff' : 'var(--t2)',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      fontFamily: 'var(--db)',
-                      cursor: 'pointer',
-                      transition: 'all 0.25s ease',
-                      minWidth: 60,
-                    }}
-                  >
-                    ${fmt(v)}
-                  </button>
-                ))}
-            </div>
-
-            <button
-              onClick={() => setStep(2)}
-              className="btn-primary"
-              style={{ marginTop: 28 }}
-            >
+          {/* Quick amounts as a pill pad, ending in the one green control */}
+          <div className="bo-pad">
+            {[500, 1000, 2000, 3000, 5000]
+              .filter((v) => v <= cappedMax)
+              .map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setAmount(v)}
+                  className={`money${amount === v ? ' on' : ''}`}
+                  aria-pressed={amount === v}
+                >
+                  {fmt(v)}
+                </button>
+              ))}
+            <button type="button" onClick={() => setStep(2)} className="bo-cta">
               {t('wiz_next')}
             </button>
           </div>
-        )}
+        </>
+      )}
 
+      {/* ─── Step 2: Repayment Preview ─── */}
+      {step === 2 && (
+        <>
+          <p className="bo-payto">
+            <span className="sr-only">{t('wiz_step_2_label')} · </span>
+            {t('wiz_pay_to')}
+          </p>
+          {termLine}
+          <div className="bo-amount title money">
+            {fmt(amount)}<small>MXN</small>
+          </div>
 
-        {/* ─── Step 2: Repayment Preview ─── */}
-        {step === 2 && (
-          <div>
-            <div
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: 2.2,
-                color: 'var(--gold)',
-                marginBottom: 8,
-              }}
-            >
-              {t('wiz_step_2_label')}
+          {/* Breakdown */}
+          <div className="bo-quote">
+            <div className="r">
+              <span>{t('modal_loan_amount')}</span>
+              <b className="money">${fmt(amount)}</b>
             </div>
-            <h3
-              style={{
-                fontFamily: 'var(--df)',
-                fontSize: 20,
-                color: 'var(--t1)',
-                margin: '0 0 24px',
-              }}
-            >
-              {t('wiz_step_2_title')}
-            </h3>
-
-            {/* Term & fee summary row */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 12,
-                marginBottom: 24,
-              }}
-            >
-              <div
-                style={{
-                  background: 'var(--bg2)',
-                  borderRadius: 12,
-                  padding: '16px 14px',
-                  border: '1px solid rgba(25,68,69,0.04)',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: 2.2,
-                    color: 'var(--gold)',
-                    marginBottom: 6,
-                  }}
-                >
-                  {t('modal_term')}
-                </div>
-                <div style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>
-                  <PriceValue
-                    value={termDays}
-                    status={configStatus}
-                    prefix=""
-                    suffix={` ${t('calc_days')}`}
-                    shimmerWidth={64}
-                  />
-                </div>
-              </div>
-              <div
-                style={{
-                  background: 'var(--bg2)',
-                  borderRadius: 12,
-                  padding: '16px 14px',
-                  border: '1px solid rgba(25,68,69,0.04)',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: 2.2,
-                    color: 'var(--gold)',
-                    marginBottom: 6,
-                  }}
-                >
-                  {feeLabel}
-                </div>
-                <div style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)' }}>
-                  <PriceValue
-                    value={feeRatePct}
-                    status={configStatus}
-                    prefix=""
-                    suffix="%"
-                    shimmerWidth={48}
-                  />
-                </div>
-              </div>
+            <div className="r">
+              <span>{feeLabel}</span>
+              <b className="money"><PriceValue value={fee} status={configStatus} /></b>
             </div>
-
-            {/* Breakdown */}
-            <div
-              style={{
-                borderTop: '1px solid rgba(25,68,69,0.06)',
-                borderBottom: '1px solid rgba(25,68,69,0.06)',
-                padding: '16px 0',
-                marginBottom: 20,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '8px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                  {t('modal_loan_amount')}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  ${fmt(amount)}
-                </span>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '8px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                  {feeLabel}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  <PriceValue value={fee} status={configStatus} />
-                </span>
-              </div>
-              <div
-                style={{
-                  height: 1,
-                  background: 'rgba(25,68,69,0.06)',
-                  margin: '4px 0',
-                }}
-              />
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '8px 0',
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: 'var(--df)',
-                    fontSize: 15,
-                    color: 'var(--t1)',
-                  }}
-                >
-                  {t('modal_total')}
-                </span>
-                <span
-                  style={{
-                    fontFamily: 'var(--df)',
-                    fontSize: 18,
-                    color: 'var(--t1)',
-                  }}
-                >
-                  <PriceValue value={total} status={configStatus} />
-                </span>
-              </div>
-              {!singleCharge && (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    padding: '8px 0',
-                  }}
-                >
-                  <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                    {t('wiz_payroll_deduction')}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                    <PriceValue
-                      value={deductionAmount}
-                      status={configStatus}
-                      suffix={` × ${installmentCount}`}
-                    />
-                  </span>
-                </div>
-              )}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '8px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                  {t('wiz_deduction_date_label')}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  <PriceValue
-                    value={deductionDateText}
-                    status={configStatus}
-                    prefix=""
-                    shimmerWidth={140}
-                  />
-                </span>
-              </div>
-              {deductionDateText !== null && deductionCadenceAssumed && (
-                <p
-                  data-testid="deduction-cadence-assumed"
-                  style={{ fontSize: 11, color: 'var(--t2)', margin: '2px 0 0', lineHeight: 1.5 }}
-                >
-                  {t('wiz_deduction_date_note')}
-                </p>
-              )}
+            <div className="r total">
+              <span>{t('modal_total')}</span>
+              <b className="money"><PriceValue value={total} status={configStatus} /></b>
             </div>
-
+            <div className="r">
+              <span>{t('modal_term')}</span>
+              <b>
+                <PriceValue
+                  value={termDays}
+                  status={configStatus}
+                  prefix=""
+                  suffix={` ${t('calc_days')}`}
+                  shimmerWidth={64}
+                />
+              </b>
+            </div>
+            {!singleCharge && (
+              <div className="r">
+                <span>{t('wiz_payroll_deduction')}</span>
+                <b className="money">
+                  <PriceValue
+                    value={deductionAmount}
+                    status={configStatus}
+                    suffix={` × ${installmentCount}`}
+                  />
+                </b>
+              </div>
+            )}
+            {deductionDateRow}
             {/* One charge, not a payment plan — stated only while the published
                 schedule actually is one installment. */}
-            {singleCharge && (
-              <p
-                style={{
-                  fontSize: 12,
-                  color: 'var(--t2)',
-                  lineHeight: 1.5,
-                  margin: '0 0 16px',
-                }}
-              >
-                {t('wiz_single_charge_notice')}
-              </p>
-            )}
-
-            <CatDisclosure cat={cat} status={configStatus} />
-
-            {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setStep(1)}
-                type="button"
-                style={{
-                  flex: '0 0 auto',
-                  padding: '14px 20px',
-                  borderRadius: 12,
-                  border: '1.5px solid rgba(25,68,69,0.08)',
-                  background: 'transparent',
-                  color: 'var(--t2)',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  fontFamily: 'var(--db)',
-                  cursor: 'pointer',
-                }}
-              >
-                {t('wiz_back')}
-              </button>
-              <button
-                onClick={() => setStep(3)}
-                className="btn-primary"
-                style={{ flex: 1 }}
-                disabled={!pricingReady}
-              >
-                {t('wiz_next')}
-              </button>
-            </div>
+            {singleCharge && <p className="fine">{t('wiz_single_charge_notice')}</p>}
           </div>
-        )}
 
-        {/* ─── Step 3: Review & Confirm ─── */}
-        {step === 3 && (
-          <div>
-            <div
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: 2.2,
-                color: 'var(--gold)',
-                marginBottom: 8,
-              }}
-            >
-              {t('wiz_step_3_label')}
+          {disclosure}
+
+          {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
+          <div className="bo-actions">
+            <button onClick={() => setStep(1)} type="button" className="bo-ghost">
+              {t('wiz_back')}
+            </button>
+            <button onClick={() => setStep(3)} type="button" className="bo-cta" disabled={!pricingReady}>
+              {t('wiz_next')}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ─── Step 3: Review & Confirm ─── */}
+      {step === 3 && (
+        <>
+          <p className="bo-payto">
+            <span className="sr-only">{t('wiz_step_3_label')} · </span>
+            {t('wiz_pay_to')}
+          </p>
+          {termLine}
+          <div className="bo-amount title money">
+            {fmt(amount)}<small>MXN</small>
+          </div>
+
+          {/* Review summary */}
+          <div className="bo-quote">
+            <div className="r">
+              <span>{t('modal_loan_amount')}</span>
+              <b className="money">${fmt(amount)} MXN</b>
             </div>
-            <h3
-              style={{
-                fontFamily: 'var(--df)',
-                fontSize: 20,
-                color: 'var(--t1)',
-                margin: '0 0 24px',
-              }}
-            >
-              {t('wiz_step_3_title')}
-            </h3>
-
-            {/* Review summary */}
-            <div
-              style={{
-                background: 'var(--bg2)',
-                borderRadius: 12,
-                padding: '20px 16px',
-                border: '1px solid rgba(25,68,69,0.04)',
-                marginBottom: 20,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '6px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                  {t('modal_loan_amount')}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  ${fmt(amount)} MXN
-                </span>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '6px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                  {feeLabel}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  <PriceValue value={fee} status={configStatus} suffix=" MXN" />
-                </span>
-              </div>
-              <div
-                style={{
-                  height: 1,
-                  background: 'rgba(25,68,69,0.06)',
-                  margin: '8px 0',
-                }}
-              />
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '6px 0',
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: 'var(--df)',
-                    fontSize: 15,
-                    color: 'var(--t1)',
-                  }}
-                >
-                  {t('modal_total')}
-                </span>
-                <span
-                  style={{
-                    fontFamily: 'var(--df)',
-                    fontSize: 18,
-                    color: 'var(--t1)',
-                  }}
-                >
-                  <PriceValue value={total} status={configStatus} suffix=" MXN" />
-                </span>
-              </div>
-              <div
-                style={{
-                  height: 1,
-                  background: 'rgba(25,68,69,0.06)',
-                  margin: '8px 0',
-                }}
-              />
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '6px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                  {t('modal_term')}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  <PriceValue
-                    value={termDays}
-                    status={configStatus}
-                    prefix=""
-                    suffix={` ${t('calc_days')}`}
-                    shimmerWidth={64}
-                  />
-                </span>
-              </div>
-              {!singleCharge && (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    padding: '6px 0',
-                  }}
-                >
-                  <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                    {t('wiz_payroll_deduction')}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                    <PriceValue
-                      value={deductionAmount}
-                      status={configStatus}
-                      suffix={` × ${installmentCount}`}
-                    />
-                  </span>
-                </div>
-              )}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '6px 0',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-                  {t('wiz_deduction_date_label')}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-                  <PriceValue
-                    value={deductionDateText}
-                    status={configStatus}
-                    prefix=""
-                    shimmerWidth={140}
-                  />
-                </span>
-              </div>
-              {deductionDateText !== null && deductionCadenceAssumed && (
-                <p
-                  data-testid="deduction-cadence-assumed"
-                  style={{ fontSize: 11, color: 'var(--t2)', margin: '2px 0 0', lineHeight: 1.5 }}
-                >
-                  {t('wiz_deduction_date_note')}
-                </p>
-              )}
-              {singleCharge && (
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--t2)',
-                    lineHeight: 1.5,
-                    margin: '10px 0 0',
-                  }}
-                >
-                  {t('wiz_single_charge_notice')}
-                </p>
-              )}
+            <div className="r">
+              <span>{feeLabel}</span>
+              <b className="money"><PriceValue value={fee} status={configStatus} suffix=" MXN" /></b>
             </div>
+            <div className="r total">
+              <span>{t('modal_total')}</span>
+              <b className="money"><PriceValue value={total} status={configStatus} suffix=" MXN" /></b>
+            </div>
+            <div className="r">
+              <span>{t('modal_term')}</span>
+              <b>
+                <PriceValue
+                  value={termDays}
+                  status={configStatus}
+                  prefix=""
+                  suffix={` ${t('calc_days')}`}
+                  shimmerWidth={64}
+                />
+              </b>
+            </div>
+            {!singleCharge && (
+              <div className="r">
+                <span>{t('wiz_payroll_deduction')}</span>
+                <b className="money">
+                  <PriceValue
+                    value={deductionAmount}
+                    status={configStatus}
+                    suffix={` × ${installmentCount}`}
+                  />
+                </b>
+              </div>
+            )}
+            {deductionDateRow}
+            {singleCharge && <p className="fine">{t('wiz_single_charge_notice')}</p>}
+          </div>
 
-            <CatDisclosure cat={cat} status={configStatus} />
-
-            {/* Loan Purpose (optional) */}
-            <div style={{ marginBottom: 20 }}>
-              <label
-                htmlFor="lw-purpose"
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  color: 'var(--t2)',
-                  marginBottom: 8,
-                }}
-              >
-                {t('modal_purpose_label')}
-              </label>
-              <select
-                id="lw-purpose"
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px 14px',
-                  borderRadius: 10,
-                  border: '1.5px solid rgba(25,68,69,0.08)',
-                  fontSize: 14,
-                  color: 'var(--t1)',
-                  fontFamily: 'var(--db)',
-                  background: '#fff',
-                }}
-              >
+          {/* The memo: the purpose, highlighted the way the companion tags it */}
+          <label htmlFor="lw-purpose" className="bo-payto" style={{ marginTop: 18, fontSize: 13 }}>
+            {t('modal_purpose_label')}
+          </label>
+          <p className="bo-memo">
+            <mark>
+              <select id="lw-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)}>
                 <option value="">{t('modal_purpose_none')}</option>
                 {LOAN_PURPOSES.map((p) => (
                   <option key={p} value={p}>
@@ -1625,82 +953,50 @@ export function LoanWizard() {
                   </option>
                 ))}
               </select>
-            </div>
+            </mark>
+          </p>
 
-            {/* Terms checkbox */}
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 10,
-                marginBottom: 20,
-                cursor: 'pointer',
-                fontSize: 13,
-                color: 'var(--t2)',
-                lineHeight: 1.5,
-              }}
+          {disclosure}
+
+          {/* Terms checkbox */}
+          <label className="bo-check">
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+            />
+            <span>{t('modal_accept_terms')}</span>
+          </label>
+
+          {/* Error */}
+          {error && (
+            <div className="bo-err" role="alert">
+              {error}
+            </div>
+          )}
+
+          {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
+          <div className="bo-actions">
+            <button onClick={() => setStep(2)} type="button" className="bo-ghost">
+              {t('wiz_back')}
+            </button>
+            <button
+              onClick={handleConfirm}
+              type="button"
+              disabled={!termsAccepted || submitting || !pricingReady}
+              className="bo-cta money"
             >
-              <input
-                type="checkbox"
-                checked={termsAccepted}
-                onChange={(e) => setTermsAccepted(e.target.checked)}
-                style={{ marginTop: 2, flexShrink: 0 }}
-              />
-              <span>{t('modal_accept_terms')}</span>
-            </label>
-
-            {/* Error */}
-            {error && (
-              <div className="auth-error show" style={{ marginBottom: 12 }}>
-                {error}
-              </div>
-            )}
-
-            {configStatus === 'error' && <PricingErrorBanner onRetry={retryLoanConfig} />}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setStep(2)}
-                type="button"
-                style={{
-                  flex: '0 0 auto',
-                  padding: '14px 20px',
-                  borderRadius: 12,
-                  border: '1.5px solid rgba(25,68,69,0.08)',
-                  background: 'transparent',
-                  color: 'var(--t2)',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  fontFamily: 'var(--db)',
-                  cursor: 'pointer',
-                }}
-              >
-                {t('wiz_back')}
-              </button>
-              <button
-                onClick={handleConfirm}
-                disabled={!termsAccepted || submitting || !pricingReady}
-                className="btn-primary"
-                style={{ flex: 1 }}
-              >
-                {submitting ? (
-                  <>
-                    <span className="spinner" /> {t('modal_submitting')}
-                  </>
-                ) : (
-                  t('modal_confirm')
-                )}
-              </button>
-            </div>
+              {submitting ? (
+                <>
+                  <span className="spinner" aria-hidden="true" /> {t('modal_submitting')}
+                </>
+              ) : (
+                t('wiz_confirm_amount', { amount: fmt(amount) })
+              )}
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* Step description under card */}
-      <div style={{ textAlign: 'center', marginTop: 20 }}>
-        <span style={{ fontSize: 12, color: 'var(--t2)' }}>
-          {t('wiz_step_indicator', { current: step, total: TOTAL_STEPS })}
-        </span>
-      </div>
+        </>
+      )}
     </div>
   );
 }

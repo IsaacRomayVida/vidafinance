@@ -1,9 +1,12 @@
 import { useTranslation } from 'react-i18next';
 
-import { GROUP_COLORS, resolveGroup } from './loanStatusGroups';
+import { resolveGroup } from './loanStatusGroups';
+import { fmt, fmtShortDate, isQuincenal } from './employee/types';
+import type { Loan, ScheduledDeduction } from './employee/types';
 
 /**
- * Loan status values used by the status card.
+ * The active-credit chip on the Home board.
+ *
  * Maps issue spec names to Firestore status values:
  *   pending_review  → pending | under_review
  *   approved        → approved
@@ -12,41 +15,21 @@ import { GROUP_COLORS, resolveGroup } from './loanStatusGroups';
  *   repaid          → paid | repaid | completed
  *   denied          → rejected
  *   escalated       → escalated
+ *
+ * One frosted chip (`.bo-trip`), whatever the state. The active state is the
+ * progress chip from the design reference — `Crédito · 8,000 MXN`, a bar,
+ * `Total pagado X de Y`, `N quincenas restantes` — and every state that has a
+ * priced credit behind it carries the cost line: total to repay, next
+ * deduction, CAT labelled informational. All three are READ from the loan
+ * document (`total`, `repaymentSchedule`, `catPercent`, written once by
+ * requestLoan); nothing here derives a rate.
  */
 
-type LoanStatus = string;
-
-interface LoanStatusLoan {
-  id: string;
-  amount: number;
-  status: LoanStatus;
-  repaymentAmount?: number;
-  total?: number;
-  termDays?: number;
-  createdAt?: { seconds: number };
-  dueDate?: { seconds: number };
-  contractUrl?: string;
-  speiTrackingId?: string;
-  denialReason?: string;
-  deniedAt?: { seconds: number };
-  disbursedAt?: { seconds: number };
-  [key: string]: unknown;
-}
-
 interface LoanStatusCardProps {
-  loan: LoanStatusLoan;
+  loan: Loan;
   totalPaid?: number;
   onRequestAnother?: () => void;
 }
-
-function fmt(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-/* ── Status helpers ── */
-
-// resolveGroup/GROUP_COLORS live in ./loanStatusGroups — see that file for
-// why they aren't exported from here (react-refresh/only-export-components).
 
 /* ── Timeline steps for pending flow ── */
 
@@ -57,108 +40,24 @@ function getActiveIndex(status: string): number {
   return idx >= 0 ? idx : 0;
 }
 
-/* ── Icons (inline SVG) ── */
-
-function ClockIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-    </svg>
-  );
+/**
+ * Which scheduled deductions are already covered by what has been paid. A step
+ * is done once the cumulative schedule up to it is within the completed
+ * repayments; the first step not done is the next one.
+ */
+function scheduleProgress(schedule: ScheduledDeduction[] | undefined, totalPaid: number) {
+  if (!schedule || schedule.length === 0) return null;
+  let cumulative = 0;
+  let nextIdx = -1;
+  const done = schedule.map((s, i) => {
+    cumulative += s.amount || 0;
+    const isDone = totalPaid >= cumulative - 0.005;
+    if (!isDone && nextIdx === -1) nextIdx = i;
+    return isDone;
+  });
+  const remaining = done.filter((d) => !d).length;
+  return { next: nextIdx >= 0 ? schedule[nextIdx] : null, remaining };
 }
-
-function CheckCircleIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/>
-    </svg>
-  );
-}
-
-function SendIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9z"/>
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
-    </svg>
-  );
-}
-
-function CelebrationIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>
-    </svg>
-  );
-}
-
-function XCircleIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/>
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/>
-    </svg>
-  );
-}
-
-/* ── Progress Ring ── */
-
-function ProgressRing({ percent, size = 120 }: { percent: number; size?: number }) {
-  const r = (size - 16) / 2;
-  const circumference = 2 * Math.PI * r;
-  const offset = circumference * (1 - Math.min(percent, 100) / 100);
-
-  return (
-    <div style={{ position: 'relative', width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-        <circle
-          cx={size / 2} cy={size / 2} r={r}
-          fill="none" stroke="rgba(25,68,69,0.04)" strokeWidth="10"
-        />
-        <circle
-          cx={size / 2} cy={size / 2} r={r}
-          fill="none" stroke="url(#loanProgressGrad)" strokeWidth="10" strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.16,1,0.3,1)' }}
-        />
-        <defs>
-          <linearGradient id="loanProgressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#194445" />
-            <stop offset="100%" stopColor="#a8d5d0" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <div style={{
-        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <div style={{ fontFamily: 'var(--df)', fontSize: size * 0.28, color: 'var(--t1)', lineHeight: 1 }}>
-          {Math.round(percent)}%
-        </div>
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginTop: 4 }}>
-          pagado
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Timeline (vertical) ── */
 
 function StatusTimeline({ currentStatus }: { currentStatus: string }) {
   const { t } = useTranslation();
@@ -169,56 +68,24 @@ function StatusTimeline({ currentStatus }: { currentStatus: string }) {
     under_review: t('ls_step_under_review', 'En revisión'),
     approved: t('ls_step_approved', 'Aprobado'),
     disbursement_queued: t('ls_step_disbursing', 'Desembolso en proceso'),
-    active: t('ls_step_active', 'Préstamo activo'),
+    active: t('ls_step_active', 'Crédito activo'),
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div className="bo-tl" aria-label={t('ls_label', 'Estado')}>
       {TIMELINE_STEPS.map((step, i) => {
-        const isDone = i < activeIdx;
-        const isCurrent = i === activeIdx;
-        const isFuture = i > activeIdx;
-
+        const cls = i < activeIdx ? 'done' : i === activeIdx ? 'now' : '';
         return (
-          <div key={step} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-            {/* Dot + line column */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 20, flexShrink: 0 }}>
-              <div style={{
-                width: isCurrent ? 14 : 10,
-                height: isCurrent ? 14 : 10,
-                borderRadius: '50%',
-                background: isDone ? 'var(--brand)' : isCurrent ? 'var(--brand)' : 'rgba(25,68,69,0.08)',
-                border: isCurrent ? '3px solid var(--aqua)' : 'none',
-                transition: 'all 0.3s',
-                flexShrink: 0,
-              }} />
-              {i < TIMELINE_STEPS.length - 1 && (
-                <div style={{
-                  width: 2,
-                  height: 24,
-                  background: isDone ? 'var(--brand)' : 'rgba(25,68,69,0.08)',
-                  transition: 'background 0.3s',
-                }} />
-              )}
-            </div>
-            {/* Label */}
-            <div style={{
-              fontSize: 13,
-              fontWeight: isCurrent ? 700 : isDone ? 600 : 400,
-              color: isFuture ? 'var(--t3)' : 'var(--t1)',
-              paddingBottom: i < TIMELINE_STEPS.length - 1 ? 14 : 0,
-              lineHeight: 1.2,
-            }}>
-              {labels[step] || step}
-            </div>
-          </div>
+          <span key={step} className={cls} aria-current={i === activeIdx ? 'step' : undefined}>
+            {labels[step] || step}
+          </span>
         );
       })}
     </div>
   );
 }
 
-/* ── Cooldown timer (for denied state, 90-day wait) ── */
+/* ── Cooldown (for denied state, 90-day wait) ── */
 
 function CooldownDisplay({ deniedAt }: { deniedAt?: { seconds: number } }) {
   const { t } = useTranslation();
@@ -231,16 +98,8 @@ function CooldownDisplay({ deniedAt }: { deniedAt?: { seconds: number } }) {
   if (daysLeft === 0) return null;
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '10px 14px', borderRadius: 10,
-      background: 'rgba(25,68,69,0.03)',
-      marginTop: 12,
-    }}>
-      <ClockIcon />
-      <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-        {t('ls_cooldown', 'Puedes solicitar de nuevo en {{days}} días', { days: daysLeft })}
-      </span>
+    <div className="note">
+      {t('ls_cooldown', 'Puedes solicitar de nuevo en {{days}} días', { days: daysLeft })}
     </div>
   );
 }
@@ -248,71 +107,56 @@ function CooldownDisplay({ deniedAt }: { deniedAt?: { seconds: number } }) {
 /* ── Main component ── */
 
 export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanStatusCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const group = resolveGroup(loan.status);
-  const colors = GROUP_COLORS[group];
 
   const totalOwed = loan.repaymentAmount || loan.total || 0;
-  const repayPercent = totalOwed > 0 ? (totalPaid / totalOwed) * 100 : 0;
-  const remaining = Math.max(0, totalOwed - totalPaid);
+  const repayPercent = totalOwed > 0 ? Math.min(100, (totalPaid / totalOwed) * 100) : 0;
+  const progress = scheduleProgress(loan.repaymentSchedule, totalPaid);
+  const nextDeduction = progress?.next ?? loan.repaymentSchedule?.[0] ?? null;
+  const nextDate = fmtShortDate(nextDeduction?.dueDate ?? loan.dueDate, i18n.language);
+  const cat = typeof loan.catPercent === 'number' ? loan.catPercent : null;
+  const quincenal = isQuincenal(loan);
 
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '28px 24px',
-    border: '1px solid rgba(25,68,69,0.04)',
-    boxShadow: '0 2px 8px rgba(25,68,69,0.02)',
-    marginBottom: 24,
-  };
+  /** `Total adeudado 1,300 · Próximo descuento 1,300 el 15 sep · CAT 2334% informativo` */
+  const costLine = (
+    <div className="cost">
+      {t('pay_total_owed')} {totalOwed > 0 ? fmt(totalOwed) : t('cost_pending')}
+      {' · '}
+      {nextDeduction && nextDate
+        ? t('ls_next_deduction_value', { amount: fmt(nextDeduction.amount), date: nextDate })
+        : `${t('ls_next_deduction')} ${t('cost_pending')}`}
+      {' · '}
+      {cat === null ? t('cost_cat_pending') : t('cost_cat', { cat: String(cat) })}
+    </div>
+  );
 
-  const headerStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 20,
-  };
-
-  const iconWrapStyle: React.CSSProperties = {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    background: colors.bg,
-    color: colors.accent,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10,
-    fontWeight: 700,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    color: 'var(--gold)',
-    marginBottom: 4,
-  };
+  const label = <div className="dot">{t('ls_label', 'Estado')}</div>;
+  const amountRow = (
+    <div className="kv">
+      <div>
+        {t('dash_th_amount', 'Monto')}
+        <b>{fmt(loan.amount)} MXN</b>
+      </div>
+      {totalOwed > 0 && (
+        <div>
+          {t('modal_total', 'Total a pagar')}
+          <b>{fmt(totalOwed)} MXN</b>
+        </div>
+      )}
+    </div>
+  );
 
   /* ── pending_review ── */
   if (group === 'pending_review') {
     return (
-      <div style={cardStyle} className="loan-status-card">
-        <div style={headerStyle}>
-          <div style={iconWrapStyle}><ClockIcon /></div>
-          <div>
-            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
-              {t('ls_pending_title', 'Solicitud en revisión')}
-            </div>
-          </div>
-        </div>
+      <div className="bo-trip loan-status-card">
+        {label}
+        <div className="title">{t('ls_pending_title', 'Solicitud en revisión')}</div>
         <StatusTimeline currentStatus={loan.status} />
-        <div style={{
-          marginTop: 16, padding: '12px 14px', borderRadius: 10,
-          background: 'rgba(25,68,69,0.02)', fontSize: 13, color: 'var(--t2)', lineHeight: 1.5,
-        }}>
-          {t('ls_pending_desc', 'Tu solicitud ha sido recibida. Te notificaremos cuando haya una decisión.')}
-        </div>
+        <div className="desc">{t('ls_pending_desc', 'Tu solicitud ha sido recibida. Te notificaremos cuando haya una decisión.')}</div>
+        {amountRow}
+        {costLine}
       </div>
     );
   }
@@ -320,63 +164,18 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
   /* ── approved ── */
   if (group === 'approved') {
     return (
-      <div style={cardStyle} className="loan-status-card">
-        <div style={headerStyle}>
-          <div style={iconWrapStyle}><FileIcon /></div>
-          <div>
-            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
-              {t('ls_approved_title', 'Contrato listo para firmar')}
-            </div>
-          </div>
-        </div>
+      <div className="bo-trip loan-status-card">
+        {label}
+        <div className="title">{t('ls_approved_title', 'Contrato listo para firmar')}</div>
         <StatusTimeline currentStatus={loan.status} />
-        <div style={{
-          marginTop: 16, padding: '16px', borderRadius: 12,
-          background: colors.bg, border: `1px solid ${colors.accent}20`,
-        }}>
-          <div style={{ fontSize: 13, color: colors.text, marginBottom: 12, lineHeight: 1.5 }}>
-            {t('ls_approved_desc', 'Tu préstamo ha sido aprobado. Firma tu contrato para recibir los fondos.')}
-          </div>
-          {loan.contractUrl && (
-            <a
-              href={loan.contractUrl as string}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                padding: '12px 24px', borderRadius: 10, border: 'none',
-                background: 'var(--brand)', color: '#fff',
-                fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif",
-                textDecoration: 'none',
-                boxShadow: '0 4px 16px rgba(25,68,69,0.15)',
-                transition: 'all 0.3s',
-              }}
-            >
-              <FileIcon />
-              {t('ls_sign_contract', 'Firmar contrato')}
-            </a>
-          )}
-        </div>
-        {/* Loan summary */}
-        <div style={{ marginTop: 16, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
-              {t('dash_th_amount', 'Monto')}
-            </div>
-            <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
-              ${fmt(loan.amount)}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
-              {t('modal_total', 'Total a pagar')}
-            </div>
-            <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
-              ${fmt(totalOwed)}
-            </div>
-          </div>
-        </div>
+        <div className="desc">{t('ls_approved_desc', 'Tu crédito fue aprobado. Firma tu contrato para recibir los fondos.')}</div>
+        {loan.contractUrl ? (
+          <a href={loan.contractUrl as string} target="_blank" rel="noopener noreferrer" className="link">
+            {t('ls_sign_contract', 'Firmar contrato')}
+          </a>
+        ) : null}
+        {amountRow}
+        {costLine}
       </div>
     );
   }
@@ -384,107 +183,45 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
   /* ── disbursing ── */
   if (group === 'disbursing') {
     return (
-      <div style={cardStyle} className="loan-status-card">
-        <div style={headerStyle}>
-          <div style={iconWrapStyle}><SendIcon /></div>
-          <div>
-            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
-              {t('ls_disbursing_title', 'Fondos en camino')}
-            </div>
-          </div>
-        </div>
+      <div className="bo-trip loan-status-card">
+        {label}
+        <div className="title">{t('ls_disbursing_title', 'Fondos en camino')}</div>
         <StatusTimeline currentStatus={loan.status} />
-        <div style={{
-          marginTop: 16, padding: '16px', borderRadius: 12,
-          background: colors.bg, border: `1px solid ${colors.accent}20`,
-        }}>
-          <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5 }}>
-            {t('ls_disbursing_desc', 'Tu transferencia SPEI está siendo procesada. Los fondos llegarán a tu cuenta en minutos.')}
+        <div className="desc">{t('ls_disbursing_desc', 'Tu transferencia SPEI está en proceso. Los fondos llegarán a tu cuenta en minutos.')}</div>
+        {loan.speiTrackingId ? (
+          <div className="note">
+            {t('ls_spei_tracking', 'Rastreo SPEI')}: <b>{loan.speiTrackingId as string}</b>
           </div>
-          {loan.speiTrackingId && (
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--t2)' }}>
-              {t('ls_spei_tracking', 'Rastreo SPEI')}: <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--t1)' }}>{loan.speiTrackingId as string}</span>
-            </div>
-          )}
-        </div>
-        <div style={{ marginTop: 16, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
-              {t('dash_th_amount', 'Monto')}
-            </div>
-            <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>
-              ${fmt(loan.amount)}
-            </div>
-          </div>
-        </div>
+        ) : null}
+        {amountRow}
+        {costLine}
       </div>
     );
   }
 
   /* ── active ── */
   if (group === 'active') {
+    const remainingLabel =
+      progress === null
+        ? null
+        : t(quincenal ? 'ls_remaining_quincenas' : 'ls_remaining_deductions', { count: progress.remaining });
     return (
-      <div style={cardStyle} className="loan-status-card">
-        <div style={headerStyle}>
-          <div style={iconWrapStyle}><CheckCircleIcon /></div>
-          <div>
-            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
-              {t('ls_active_title', 'Préstamo activo')}
-            </div>
-          </div>
-          {loan.status === 'overdue' && (
-            <span className="badge badge-overdue" style={{ marginLeft: 'auto' }}>
-              {t('status_overdue', 'Vencido')}
-            </span>
-          )}
+      <div className="bo-trip loan-status-card">
+        <div className="t">
+          <b>{t('ls_credit_label', 'Crédito')} · {fmt(loan.amount)} MXN</b>
+          <span>
+            {loan.status === 'overdue' ? `${t('status_overdue', 'Vencido')} · ` : ''}
+            {Math.round(repayPercent)}%
+          </span>
         </div>
-
-        <div className="loan-status-active-grid" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 24, alignItems: 'center' }}>
-          {/* Progress ring */}
-          <ProgressRing percent={repayPercent} size={120} />
-
-          {/* Stats */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
-                {t('pay_remaining', 'Saldo restante')}
-              </div>
-              <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--t1)' }}>
-                ${fmt(remaining)} <span style={{ fontSize: 12, color: 'var(--t2)', fontFamily: "'DM Sans'" }}>MXN</span>
-              </div>
-            </div>
-            {loan.dueDate && (
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 4 }}>
-                  {t('ls_next_deduction', 'Próxima deducción')}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: loan.status === 'overdue' ? 'var(--danger)' : 'var(--t1)' }}>
-                  {new Date(loan.dueDate.seconds * 1000).toLocaleDateString()}
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 20 }}>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 2 }}>
-                  {t('pay_total_paid', 'Total pagado')}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--success)' }}>
-                  ${fmt(totalPaid)}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 2 }}>
-                  {t('pay_total_owed', 'Total adeudado')}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>
-                  ${fmt(totalOwed)}
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="bo-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(repayPercent)}>
+          <i style={{ width: `${repayPercent}%` }} />
         </div>
+        <div className="m">
+          <span>{t('ls_progress_paid', { paid: fmt(totalPaid), total: fmt(totalOwed) })}</span>
+          {remainingLabel && <span>{remainingLabel}</span>}
+        </div>
+        {costLine}
       </div>
     );
   }
@@ -492,48 +229,15 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
   /* ── repaid ── */
   if (group === 'repaid') {
     return (
-      <div style={cardStyle} className="loan-status-card">
-        <div style={headerStyle}>
-          <div style={iconWrapStyle}><CelebrationIcon /></div>
-          <div>
-            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
-              {t('ls_repaid_title', 'Préstamo liquidado')}
-            </div>
-          </div>
-        </div>
-
-        <div style={{
-          textAlign: 'center', padding: '24px 16px', borderRadius: 12,
-          background: 'linear-gradient(135deg, var(--success-bg) 0%, #e8f6f6 100%)',
-        }}>
-          <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--success)', marginBottom: 8 }}>
-            {t('ls_repaid_congrats', '!Felicidades!')}
-          </div>
-          <div style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.5, marginBottom: 20 }}>
-            {t('ls_repaid_desc', 'Has liquidado tu préstamo de ${{amount}} MXN exitosamente.', { amount: fmt(loan.amount) })}
-          </div>
-          {onRequestAnother && (
-            <button
-              onClick={onRequestAnother}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                padding: '14px 28px', borderRadius: 12, border: 'none',
-                background: 'linear-gradient(135deg, var(--brand) 0%, var(--brand-mid) 100%)',
-                color: '#fff', fontSize: 14, fontWeight: 700,
-                fontFamily: "'DM Sans', sans-serif",
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(25,68,69,0.15)',
-                transition: 'all 0.3s',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
-              </svg>
-              {t('ls_request_another', 'Solicitar otro préstamo')}
-            </button>
-          )}
-        </div>
+      <div className="bo-trip loan-status-card">
+        {label}
+        <div className="title">{t('ls_repaid_title', 'Crédito liquidado')}</div>
+        <div className="desc">{t('ls_repaid_desc', 'Liquidaste tu crédito de {{amount}} MXN.', { amount: fmt(loan.amount) })}</div>
+        {onRequestAnother && (
+          <button type="button" onClick={onRequestAnother} className="link">
+            {t('ls_request_another', 'Solicitar otro crédito')}
+          </button>
+        )}
       </div>
     );
   }
@@ -541,33 +245,15 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
   /* ── denied ── */
   if (group === 'denied') {
     return (
-      <div style={cardStyle} className="loan-status-card">
-        <div style={headerStyle}>
-          <div style={iconWrapStyle}><XCircleIcon /></div>
-          <div>
-            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
-              {t('ls_denied_title', 'Solicitud rechazada')}
-            </div>
+      <div className="bo-trip loan-status-card">
+        {label}
+        <div className="title">{t('ls_denied_title', 'Solicitud rechazada')}</div>
+        {loan.denialReason ? (
+          <div className="desc">
+            {t('ls_denial_reason', 'Motivo')}: {loan.denialReason as string}
           </div>
-        </div>
-
-        {loan.denialReason && (
-          <div style={{
-            padding: '14px 16px', borderRadius: 10,
-            background: colors.bg, border: `1px solid ${colors.accent}20`,
-            marginBottom: 12,
-          }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--t2)', marginBottom: 6 }}>
-              {t('ls_denial_reason', 'Motivo')}
-            </div>
-            <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5 }}>
-              {loan.denialReason as string}
-            </div>
-          </div>
-        )}
-
-        <CooldownDisplay deniedAt={loan.deniedAt} />
+        ) : null}
+        <CooldownDisplay deniedAt={loan.deniedAt as { seconds: number } | undefined} />
       </div>
     );
   }
@@ -575,25 +261,10 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
   /* ── escalated ── */
   if (group === 'escalated') {
     return (
-      <div style={cardStyle} className="loan-status-card">
-        <div style={headerStyle}>
-          <div style={iconWrapStyle}><AlertIcon /></div>
-          <div>
-            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
-              {t('ls_escalated_title', 'Revisión adicional')}
-            </div>
-          </div>
-        </div>
-
-        <div style={{
-          padding: '16px', borderRadius: 12,
-          background: colors.bg, border: `1px solid ${colors.accent}20`,
-        }}>
-          <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5 }}>
-            {t('ls_escalated_desc', 'Estamos revisando detalles adicionales de tu solicitud. No se requiere ninguna acción de tu parte. Te notificaremos cuando haya una actualización.')}
-          </div>
-        </div>
+      <div className="bo-trip loan-status-card">
+        {label}
+        <div className="title">{t('ls_escalated_title', 'Revisión adicional')}</div>
+        <div className="desc">{t('ls_escalated_desc', 'Estamos revisando detalles adicionales de tu solicitud. No necesitas hacer nada. Te avisaremos cuando haya una actualización.')}</div>
       </div>
     );
   }
@@ -601,16 +272,9 @@ export function LoanStatusCard({ loan, totalPaid = 0, onRequestAnother }: LoanSt
   /* ── other (interim: status line only, no narrative claim) ── */
   if (group === 'other') {
     return (
-      <div style={cardStyle} className="loan-status-card">
-        <div style={headerStyle}>
-          <div style={iconWrapStyle}><AlertIcon /></div>
-          <div>
-            <div style={labelStyle}>{t('ls_label', 'Estado del préstamo')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>
-              {t(`status_${loan.status}`, loan.status)}
-            </div>
-          </div>
-        </div>
+      <div className="bo-trip loan-status-card">
+        {label}
+        <div className="title">{t(`status_${loan.status}`, loan.status)}</div>
       </div>
     );
   }
