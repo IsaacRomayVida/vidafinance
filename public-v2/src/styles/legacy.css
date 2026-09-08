@@ -14,24 +14,28 @@
 /* Sprint 1: prevent mobile horizontal overflow */
 html,body{overflow-x:hidden}
 :root{
-  --brand:#194445;--brand-mid:#1d5253;--brand-light:#247a6e;
-  --aqua:#a8d5d0;--aqua-soft:#dceeed;--gold:#a28657;
-  --bg:#ffffff;--bg2:#f5f8f7;
-  --t1:#0c1e1f;--t2:#4a6364;--t3:#93aaa9;
-  --df:'DM Serif Display',Georgia,serif;--db:'DM Sans',sans-serif;--sf:'DM Sans',sans-serif;
+  /* funpay-ui remap — the legacy variables now resolve to tokens.css.
+     --brand is ink (dark pills, nav, footer); the ONE green control per
+     screen uses --cta directly. Green is semantic (active/approved) only. */
+  --brand:var(--ink);--brand-mid:var(--ink-soft);--brand-light:var(--moss-deep);
+  --aqua:var(--sage);--aqua-soft:var(--mint);--gold:var(--peach);
+  --bg:var(--cream);--bg2:var(--cream-mid);
+  --t1:var(--ink);--t2:var(--ink-soft);--t3:var(--mute);
+  --df:var(--font-text);--db:var(--font-text);--sf:var(--font-text);
   --mx:1200px;
-  --danger:#dc503c;--success:#247a6e;
-  --teal:#194445;
-  --canvas:#f5f1eb;
+  --danger:#b3261e;--success:var(--mark-ink);
+  --teal:var(--ink);
+  --canvas:var(--cream);
   /* Semantic status tokens (dashboards / pills) */
-  --success-bg:#edf7f0;--success-text:#1a5e3a;
-  --danger-bg:#fdf0f0;--danger-text:#8b2020;
-  --warning:#b08420;--warning-bg:#fdf7e8;--warning-text:#7a5a10;
+  --success-bg:var(--mark);--success-text:var(--mark-ink);
+  --danger-bg:#fbeeed;--danger-text:#8b2020;
+  --warning:#b08420;--warning-bg:#f8f1e3;--warning-text:#7a5a10;
   --info:#3b6cd4;--info-bg:#e8f0fd;--info-text:#1a3a8b;
 }
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
-body,#root{font-family:var(--db);background:var(--bg);min-height:100vh;overflow-x:hidden}
+body,#root{font-family:var(--db);background:var(--bg);color:var(--ink);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+.dot{font-family:var(--font-dot);font-weight:600;letter-spacing:var(--dot-track);text-transform:uppercase}
 a{color:inherit;text-decoration:none}
 button{border:none;cursor:pointer;font-family:var(--db)}
 input,select,textarea{font-family:var(--db)}
