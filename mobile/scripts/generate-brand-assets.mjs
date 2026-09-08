@@ -38,6 +38,10 @@ mkdirSync(OUT, { recursive: true });
 const NEG =
   'No text, no watermark, no logo, no saturated colours, no neon, no bright white, no sharp face, no eye contact, no bouquet, no multiple subjects, no stock photo lighting, no HDR.';
 
+/** Where every human scene is set, and who is in it. Declared here because
+ *  both the stills and the films reference it. */
+const MX = 'MEXICO, Riviera Maya, Quintana Roo. CASTING: Mexican adults between 25 and 45 years old, healthy and fit, well groomed, neat hair, clean pressed clothing. Resort and five-star hotel staff in crisp tailored uniforms, and off duty in simple modern clothes. SETTING: a mix — some scenes inside a well-kept upscale resort (clean stucco, polished concrete, coquina stone, good architecture, designed landscaping) and some in a modest but tidy, dignified Mexican home. Warm Caribbean morning light, coconut palms, bougainvillea. NOT Europe, NOT Mediterranean, NOT Asia. No elderly or frail people, no run-down or dilapidated buildings, no rubbish, no poverty cues.';
+
 const IMAGES = [
   // Home backgrounds — 9:16, a clear lighter upper third for the numeral,
   // a darker mass in the lower third for the chips. A person, never legible.
@@ -141,7 +145,6 @@ const ANIMATED = [
  * housekeeper stepping out at dawn is the reference for all of them.
  */
 const GRADE = 'Shot on 35mm film, documentary photography, muted desaturated grade, olive and clay tones through moss to cream highlights, fine natural grain, soft diffused natural light, shallow depth of field, faces never legible, low saturation, no bright or saturated colour, no neon, no pink, no bright white, no text, no illustration, no cartoon, no graphic overlay, no CGI.';
-const MX = 'MEXICO, Riviera Maya, Quintana Roo. CASTING: Mexican adults between 25 and 45 years old, healthy and fit, well groomed, neat hair, clean pressed clothing. Resort and five-star hotel staff in crisp tailored uniforms, and off duty in simple modern clothes. SETTING: a mix — some scenes inside a well-kept upscale resort (clean stucco, polished concrete, coquina stone, good architecture, designed landscaping) and some in a modest but tidy, dignified Mexican home. Warm Caribbean morning light, coconut palms, bougainvillea. NOT Europe, NOT Mediterranean, NOT Asia. No elderly or frail people, no run-down or dilapidated buildings, no rubbish, no poverty cues.';
 
 const FILMS = [
   { file: 'intro-doorway.mp4', aspect: '9:16', prompt: `${MX} A hotel housekeeper in a pale sage uniform steps through a service doorway into early morning light, seen from behind, carrying a linen basket, walking slowly away down a path; misty hills and soft cream sky beyond; the camera holds still. ${GRADE}` },

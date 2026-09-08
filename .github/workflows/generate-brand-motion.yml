@@ -64,6 +64,7 @@ jobs:
           FAL_KEY: ${{ secrets.FAL_AI }}
           OPENAI_API_KEY: ${{ secrets.OPEN_API }}
         run: |
+          set -o pipefail
           node mobile/scripts/generate-brand-assets.mjs --set "${{ github.event.inputs.set }}" --out brand-assets ${{ github.event.inputs.pro == 'true' && '--pro' || '' }} 2>&1 | tee generate.log
 
       - name: Grade and transcode (ffmpeg)
