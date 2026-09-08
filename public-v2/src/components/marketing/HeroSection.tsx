@@ -4,7 +4,7 @@ import { Board, Statement, ArrowIcon } from './Board';
 
 /**
  * Statement board — the landing hero from funpay-ui. One big Urbanist
- * headline alternating ink and quiet lines with an inline avatar, and two
+ * headline alternating ink and quiet lines, and two
  * floating elements over the stage: the capture bar (dark pill, icon
  * circles, active one cream) at −3° and the identity card (employee ·
  * payroll · lender) at +5°. No photography, no video.
@@ -46,8 +46,8 @@ export function HeroSection() {
           </div>
 
           <div className="mk-float mk-ident" style={{ right: '2%', top: '30%', transform: 'rotate(5deg)' }}>
-            <div className="row"><span className="a">MH</span>M. Herrera<span>{t('ident_row_employee')}</span></div>
-            <div className="row"><span className="a">HP</span>Hotel Playa<span>{t('ident_row_payroll')}</span></div>
+            <div className="row"><span className="a">TÚ</span>{t('ident_you')}<span>{t('ident_row_employee')}</span></div>
+            <div className="row"><span className="a">TE</span>{t('ident_your_company')}<span>{t('ident_row_payroll')}</span></div>
             <div className="row"><span className="a">AC</span>Aliados<span>{t('ident_row_lender')}</span></div>
           </div>
         </div>

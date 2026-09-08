@@ -60,7 +60,7 @@ export function BoardHead({ kicker, title, lead, as = 'h2', center, className }:
 
 interface StatementProps {
   kicker?: string;
-  /** Statement HTML — `<em>` is the quiet line, `<i class="ava"></i>` the inline avatar. */
+  /** Statement HTML — `<em>` is the quiet line. */
   html: string;
   lead?: string;
   center?: boolean;

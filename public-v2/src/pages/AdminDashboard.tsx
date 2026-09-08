@@ -67,6 +67,12 @@ interface EmployerGroup {
   status?: string;
 }
 
+
+/** Which rendered object stands for each thing on the stage. */
+function stageIcon(kind: 'quincena' | 'empleador' | 'kyc' | 'contrato' | 'condusef' | 'sat' | 'cobranza'): string {
+  return `/images/brand/icon-${kind}.png`;
+}
+
 export function AdminDashboard() {
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
@@ -180,11 +186,11 @@ export function AdminDashboard() {
     .sort((a, b) => b.active - a.active || b.pending - a.pending)
     .slice(0, 6);
   const stackEmployers = employerRows.slice(0, 3);
-  const folders: { i: number; label: string; n: number; lit?: boolean }[] = [
-    ...stackEmployers.map((g, idx) => ({ i: idx - stackEmployers.length, label: g.name, n: g.active })),
-    { i: 0, label: curLabel, n: inDeduction.length, lit: true },
-    { i: 1, label: t('ops_folder_review'), n: pendingLoans.length },
-    { i: 2, label: t('ops_folder_signups'), n: pendingEmployers.length },
+  const folders: { i: number; label: string; n: number; lit?: boolean; kind: 'quincena' | 'empleador' | 'contrato' }[] = [
+    ...stackEmployers.map((g, idx) => ({ i: idx - stackEmployers.length, label: g.name, n: g.active, kind: 'empleador' as const })),
+    { i: 0, label: curLabel, n: inDeduction.length, lit: true, kind: 'quincena' },
+    { i: 1, label: t('ops_folder_review'), n: pendingLoans.length, kind: 'contrato' },
+    { i: 2, label: t('ops_folder_signups'), n: pendingEmployers.length, kind: 'empleador' },
   ];
 
   return (
@@ -196,12 +202,12 @@ export function AdminDashboard() {
           <h1 id="ops-stage-title" className="ops-title">{t('admin_title')}</h1>
           <p className="ops-sub">{t('admin_subtitle')}</p>
 
-          <div className="ops-stack" aria-hidden="true">
+          <div className="ops-objects" aria-hidden="true">
             {folders.map((f) => (
-              <div key={f.i} className={`ops-folder${f.lit ? ' lit' : ''}`} style={{ '--i': f.i } as React.CSSProperties}>
-                <div className="doc"><i /><i /><i /></div>
-                <span className="n">{f.n}</span>
-                <span className="lbl">{f.label}</span>
+              <div key={f.i} className={`ops-object${f.lit ? ' lit' : ''}`}>
+                <img src={stageIcon(f.kind)} alt="" loading="lazy" />
+                <b>{f.n}</b>
+                <span>{f.label}</span>
               </div>
             ))}
           </div>

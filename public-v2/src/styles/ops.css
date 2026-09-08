@@ -20,13 +20,13 @@
      (the "approved" colour on these pages) become Harmony; everything else is
      paper at three strengths. */
   --t1:var(--paper-dark);
-  --t2:rgba(242,245,240,.75);
-  --t3:rgba(242,245,240,.75);
+  --t2:rgba(242,245,240,.88);
+  --t3:rgba(242,245,240,.88);
   --brand:var(--paper-dark);
-  --brand-mid:rgba(242,245,240,.85);
+  --brand-mid:rgba(242,245,240,.92);
   --brand-light:var(--harmony);
   --teal:var(--paper-dark);
-  --gold:rgba(242,245,240,.75);
+  --gold:rgba(242,245,240,.88);
   --bg:rgba(255,255,255,.04);
   --bg2:rgba(255,255,255,.04);
   --canvas:transparent;
@@ -61,16 +61,16 @@
 }
 .ops-brand{display:inline-flex;align-items:center;gap:8px;font-size:17px;font-weight:500;white-space:nowrap;text-decoration:none}
 .ops-brand b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--harmony);color:var(--charcoal);font-size:11px;font-weight:700}
-.ops-brand span{font-weight:300;color:rgba(242,245,240,.75)}
+.ops-brand span{font-weight:300;color:rgba(242,245,240,.88)}
 .ops-tags{display:flex;gap:8px;flex-wrap:wrap;flex:1}
 .ops-top-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
-.ops-link{background:none;border:0;padding:9px 6px;font-size:13px;color:rgba(242,245,240,.75);cursor:pointer}
+.ops-link{background:none;border:0;padding:9px 6px;font-size:13px;color:rgba(242,245,240,.88);cursor:pointer}
 .ops-link:hover{color:var(--paper-dark)}
 
 /* tag pill (dark glass); the live one carries the only green dot */
 .ops-tag{
   display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:var(--r-pill);
-  font-size:13px;line-height:1.2;color:rgba(242,245,240,.85);text-decoration:none;white-space:nowrap;
+  font-size:13px;line-height:1.2;color:rgba(242,245,240,.92);text-decoration:none;white-space:nowrap;
   background:var(--glass-tag);backdrop-filter:var(--blur-sm);-webkit-backdrop-filter:var(--blur-sm);
   border:1px solid rgba(255,255,255,.08);cursor:pointer;
 }
@@ -84,10 +84,10 @@
 .ops-page{max-width:880px;margin:0 auto}
 
 /* labels — the dot face, never a sentence */
-.ops-eyebrow{font-size:13px;color:rgba(242,245,240,.75)}
+.ops-eyebrow{font-size:13px;color:rgba(242,245,240,.88)}
 .ops-title{font-size:clamp(28px,4vw,40px);font-weight:400;letter-spacing:-.01em;line-height:1.05;margin:12px 0 6px}
 .ops-title.sm{font-size:clamp(24px,3vw,32px)}
-.ops-sub{font-size:14px;font-weight:300;color:rgba(242,245,240,.75);line-height:1.5;max-width:56ch}
+.ops-sub{font-size:14px;font-weight:300;color:rgba(242,245,240,.88);line-height:1.5;max-width:56ch}
 .ops-sub strong{font-weight:500;color:var(--paper-dark)}
 .ops-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding:14px 4px 22px}
 
@@ -96,49 +96,31 @@
 .ops-board{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-bottom:10px}
 .ops-panel{position:relative;border-radius:var(--r-panel);overflow:hidden;min-height:520px;padding:26px 24px;color:var(--paper-dark)}
 .ops-panel.stage{background:var(--stage-grad);min-height:560px}
-.ops-panel.data{background:rgba(0,11,26,.55);border:1px solid rgba(255,255,255,.06)}
+.ops-panel.data{background:rgba(0,11,26,.78);border:1px solid rgba(255,255,255,.06)}
 .ops-panel.data > .ops-tag{align-self:flex-start}
 
 /* a plain dark card for everything that is not the board */
-.ops-card{position:relative;border-radius:var(--r-panel);background:rgba(0,11,26,.55);border:1px solid rgba(255,255,255,.06);padding:24px;margin-bottom:10px;color:var(--paper-dark)}
+.ops-card{position:relative;border-radius:var(--r-panel);background:rgba(0,11,26,.78);border:1px solid rgba(255,255,255,.06);padding:24px;margin-bottom:10px;color:var(--paper-dark)}
 .ops-card.quiet{background:rgba(255,255,255,.04)}
 
-/* ───────────────────────── the spatial stack ───────────────────────── */
-
-.ops-stack{position:absolute;left:0;right:0;bottom:-30px;height:360px;perspective:1100px;perspective-origin:60% 30%;pointer-events:none}
-.ops-folder{
-  position:absolute;left:50%;bottom:70px;width:200px;height:140px;margin-left:-100px;
-  border-radius:16px;
-  background:var(--glass-folder);
-  backdrop-filter:blur(10px) saturate(140%);-webkit-backdrop-filter:blur(10px) saturate(140%);
-  border:1px solid var(--glass-edge);
-  box-shadow:var(--shadow-stack),inset 0 1px 0 rgba(255,255,255,.45);
-  transform-style:preserve-3d;
-  transform:rotateY(-42deg) rotateX(10deg) translateX(calc(var(--i)*118px)) translateZ(calc(var(--i)*-46px));
-  padding:34px 14px 12px;
-}
-.ops-folder::before{ /* tab */
-  content:'';position:absolute;left:14px;top:-12px;width:60px;height:14px;border-radius:7px 7px 0 0;
-  background:inherit;border:1px solid var(--glass-edge);border-bottom:0;
-}
-.ops-folder .doc{
-  position:absolute;left:18px;right:18px;top:-24px;height:70px;border-radius:8px;
-  background:rgba(255,255,255,.82);box-shadow:0 6px 14px rgba(0,0,0,.25);transform:rotate(-2deg);
-}
-.ops-folder .doc i{display:block;height:3px;border-radius:2px;background:rgba(0,11,26,.18);margin:9px 10px 0}
-.ops-folder .doc i:nth-child(1){width:50%}.ops-folder .doc i:nth-child(2){width:80%}.ops-folder .doc i:nth-child(3){width:65%}
-.ops-folder .lbl{position:absolute;left:16px;bottom:12px;max-width:170px;font-size:14px;line-height:1.15;color:rgba(242,245,240,.9);transform:rotate(-8deg);transform-origin:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ops-folder .n{position:absolute;right:14px;top:36px;font-size:12px;color:rgba(242,245,240,.75);font-variant-numeric:tabular-nums}
-.ops-folder.lit{
-  background:var(--glass-lit);border-color:rgba(160,255,190,.7);
-  box-shadow:0 30px 70px -20px rgba(104,231,142,.5),inset 0 1px 0 rgba(255,255,255,.7);
-}
-.ops-folder.lit .lbl,.ops-folder.lit .n{color:#05140a}
-.ops-folder.lit .doc i{background:rgba(5,20,10,.22)}
+/* ───────────────────────── the stage objects ─────────────────────────
+   The generated stage photograph carries the atmosphere; the objects on it
+   are crisp: a rendered clay icon per real thing in the operation, a count,
+   a label. Exactly one object is lit Harmony Green — the current batch. */
+.ops-panel.stage{background:linear-gradient(180deg,rgba(0,11,26,.6) 0%,rgba(0,11,26,.2) 40%,rgba(0,11,26,.7) 100%),url('/images/brand/stage-ops.jpg') center/cover,var(--stage-grad)}
+.ops-objects{position:absolute;left:22px;right:22px;bottom:22px;display:flex;gap:10px;flex-wrap:wrap}
+.ops-object{flex:1 1 150px;min-width:150px;max-width:220px;padding:14px 14px 12px;border-radius:18px;
+  background:rgba(255,255,255,.1);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid rgba(255,255,255,.14);color:var(--paper-dark);display:flex;flex-direction:column;gap:8px}
+.ops-object img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 8px 12px rgba(0,0,0,.35))}
+.ops-object b{font-size:24px;font-weight:400;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.ops-object span{font-size:13px;line-height:1.3;color:rgba(242,245,240,.88);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ops-object.lit{background:rgba(104,231,142,.24);border-color:rgba(160,255,190,.6);box-shadow:0 24px 50px -20px rgba(104,231,142,.5)}
+.ops-object.lit b{color:#fff}
 
 /* the floating light-glass progress card */
 .ops-prog{
-  position:absolute;right:26px;bottom:250px;width:210px;padding:18px 18px 16px;border-radius:22px;
+  position:absolute;right:26px;top:26px;width:210px;padding:18px 18px 16px;border-radius:22px;
   background:var(--glass-prog);
   backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);
   border:1px solid rgba(255,255,255,.7);
@@ -151,7 +133,7 @@
   filter:blur(6px);mix-blend-mode:screen;
 }
 .ops-prog .h{display:flex;justify-content:space-between;gap:8px;font-size:16px}
-.ops-prog .d{font-size:12.5px;color:rgba(0,11,26,.55);margin-top:2px;line-height:1.35}
+.ops-prog .d{font-size:12.5px;color:rgba(0,11,26,.78);margin-top:2px;line-height:1.35}
 .ops-prog .v{font-size:40px;letter-spacing:-.03em;font-weight:300;margin-top:14px;line-height:1;font-variant-numeric:tabular-nums}
 .ops-prog .v b{font-weight:400}
 .ops-prog .dotg{position:absolute;right:16px;bottom:18px;width:12px;height:12px;border-radius:50%;background:var(--harmony);box-shadow:0 0 0 6px rgba(104,231,142,.25)}
@@ -160,35 +142,34 @@
 
 .ops-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:22px}
 .ops-kpi{padding:14px 12px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);min-width:0}
-.ops-kpi small{display:block;font-size:11px;color:rgba(242,245,240,.75);letter-spacing:.04em;text-transform:uppercase;line-height:1.3;min-height:2.6em}
+.ops-kpi small{display:block;font-size:11px;color:rgba(242,245,240,.88);letter-spacing:.04em;text-transform:uppercase;line-height:1.3;min-height:2.6em}
 .ops-kpi b{display:block;font-size:22px;font-weight:400;letter-spacing:-.02em;margin-top:6px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ops-kpi b span{font-size:12px;color:var(--harmony);margin-left:6px}
 .ops-kpi.warn b{color:#f2c4a0}
 .ops-kpis.four{grid-template-columns:repeat(4,1fr)}
 .ops-kpis.two{grid-template-columns:repeat(2,1fr)}
-.ops-kpi-line{margin-top:10px;font-size:12.5px;color:rgba(242,245,240,.75);line-height:1.6}
+.ops-kpi-line{margin-top:10px;font-size:12.5px;color:rgba(242,245,240,.88);line-height:1.6}
 .ops-kpi-line span{color:var(--paper-dark);font-variant-numeric:tabular-nums}
 
-.ops-h3{font-size:15px;font-weight:500;margin:26px 0 10px;color:rgba(242,245,240,.85)}
+.ops-h3{font-size:15px;font-weight:500;margin:26px 0 10px;color:rgba(242,245,240,.92)}
 .ops-h3:first-child{margin-top:0}
 
 /* batch / list rows */
 .ops-batch{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:rgba(255,255,255,.04);margin-bottom:6px;font-size:14px;color:var(--paper-dark);text-decoration:none}
 a.ops-batch:hover,button.ops-batch:hover{background:rgba(255,255,255,.07)}
-.ops-batch .fl{width:26px;height:20px;border-radius:5px;background:rgba(255,255,255,.14);flex:none;position:relative}
-.ops-batch .fl::before{content:'';position:absolute;left:4px;top:-4px;width:10px;height:5px;border-radius:2px 2px 0 0;background:inherit}
-.ops-batch .fl.g{background:var(--harmony)}
+.ops-batch .fl{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.12) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f2f5f0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='18' height='14' rx='3'/><path d='M3 8l9 6 9-6'/></svg>") center/18px no-repeat;flex:none}
+.ops-batch .fl.g{background:var(--harmony) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2305140a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='18' height='14' rx='3'/><path d='M3 8l9 6 9-6'/></svg>") center/18px no-repeat}
 .ops-batch .t{flex:1;min-width:0}
-.ops-batch .t small{display:block;font-size:12px;color:rgba(242,245,240,.75);margin-top:1px}
+.ops-batch .t small{display:block;font-size:12px;color:rgba(242,245,240,.88);margin-top:1px}
 .ops-batch .t,.ops-batch .t > span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ops-batch .p{font-variant-numeric:tabular-nums;color:rgba(242,245,240,.85);white-space:nowrap}
+.ops-batch .p{font-variant-numeric:tabular-nums;color:rgba(242,245,240,.92);white-space:nowrap}
 .ops-batch .p.g{color:var(--harmony)}
-.ops-batch .p small{display:block;font-size:11px;color:rgba(242,245,240,.75);text-align:right}
+.ops-batch .p small{display:block;font-size:11px;color:rgba(242,245,240,.88);text-align:right}
 
 /* the dashed due-item */
 .ops-due{margin-top:18px;padding:14px;border-radius:16px;border:1px dashed rgba(104,231,142,.4);font-size:13.5px;display:flex;gap:12px;align-items:center;color:var(--paper-dark)}
 .ops-due i{width:8px;height:8px;border-radius:50%;background:var(--harmony);flex:none}
-.ops-due small{display:block;color:rgba(242,245,240,.75);font-size:12px}
+.ops-due small{display:block;color:rgba(242,245,240,.88);font-size:12px}
 
 /* the ONE white action pill */
 .ops-go{display:inline-flex;align-items:center;gap:8px;margin-top:22px;padding:11px 18px;border-radius:var(--r-pill);background:#fff;color:var(--charcoal);font-size:14px;font-weight:600;border:0;cursor:pointer;text-decoration:none;white-space:nowrap}
@@ -200,7 +181,7 @@ a.ops-batch:hover,button.ops-batch:hover{background:rgba(255,255,255,.07)}
 .ops-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 18px;border-radius:var(--r-pill);font-size:13px;font-weight:500;line-height:1.2;color:var(--paper-dark);background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.1);cursor:pointer;text-decoration:none;white-space:nowrap}
 .ops-btn:hover{background:rgba(255,255,255,.18)}
 .ops-btn:disabled{opacity:.5;cursor:not-allowed}
-.ops-btn.ghost{background:transparent;border:1px dashed rgba(255,255,255,.25);color:rgba(242,245,240,.75)}
+.ops-btn.ghost{background:transparent;border:1px dashed rgba(255,255,255,.25);color:rgba(242,245,240,.88)}
 .ops-btn.ghost:hover{border-style:solid;color:var(--paper-dark)}
 .ops-btn.sm{padding:6px 14px;font-size:12px}
 .ops-btn.block{width:100%}
@@ -220,47 +201,47 @@ a.ops-batch:hover,button.ops-batch:hover{background:rgba(255,255,255,.07)}
 .ops-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
 .ops-choice{display:flex;flex-direction:column;gap:4px;text-align:left;padding:14px 16px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:var(--paper-dark);cursor:pointer}
 .ops-choice b{font-size:14px;font-weight:500}
-.ops-choice small{font-size:12px;color:rgba(242,245,240,.75);line-height:1.4}
+.ops-choice small{font-size:12px;color:rgba(242,245,240,.88);line-height:1.4}
 .ops-choice:hover{background:rgba(255,255,255,.07)}
 .ops-choice.on{background:rgba(255,255,255,.1);border-color:#fff}
 @media (max-width:640px){.ops-choices{grid-template-columns:1fr}}
 
 /* filter chips */
 .ops-chips{display:flex;gap:8px;flex-wrap:wrap}
-.ops-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--r-pill);font-size:12.5px;color:rgba(242,245,240,.75);background:var(--glass-tag);border:1px solid rgba(255,255,255,.08);cursor:pointer;white-space:nowrap}
+.ops-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--r-pill);font-size:12.5px;color:rgba(242,245,240,.88);background:var(--glass-tag);border:1px solid rgba(255,255,255,.08);cursor:pointer;white-space:nowrap}
 .ops-chip:hover{color:var(--paper-dark);background:rgba(255,255,255,.1)}
 .ops-chip.on{background:#fff;color:var(--charcoal);border-color:#fff}
 .ops-chip .cnt{min-width:20px;height:20px;padding:0 6px;border-radius:10px;display:inline-grid;place-items:center;font-size:11px;background:rgba(255,255,255,.12)}
 .ops-chip.on .cnt{background:var(--mark);color:var(--mark-ink)}
 
 /* status pill — green only for the states that mean approved / received / current */
-.ops-status{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:var(--r-pill);font-size:11.5px;font-weight:500;letter-spacing:.01em;background:rgba(255,255,255,.08);color:rgba(242,245,240,.85);white-space:nowrap}
+.ops-status{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:var(--r-pill);font-size:11.5px;font-weight:500;letter-spacing:.01em;background:rgba(255,255,255,.08);color:rgba(242,245,240,.92);white-space:nowrap}
 .ops-status.g{background:rgba(104,231,142,.16);color:var(--harmony)}
 .ops-status.warn{background:rgba(242,196,160,.14);color:#f2c4a0}
 .ops-status.bad{background:rgba(244,169,161,.14);color:#f4a9a1}
-.ops-status.mute{color:rgba(242,245,240,.75)}
+.ops-status.mute{color:rgba(242,245,240,.88)}
 
 /* pill fields (dark paper forms) */
-.ops-field{display:flex;flex-direction:column;gap:8px;font-size:13px;color:rgba(242,245,240,.75)}
-.ops-field > span,.ops-label{font-size:12px;color:rgba(242,245,240,.75);letter-spacing:.02em}
+.ops-field{display:flex;flex-direction:column;gap:8px;font-size:13px;color:rgba(242,245,240,.88)}
+.ops-field > span,.ops-label{font-size:12px;color:rgba(242,245,240,.88);letter-spacing:.02em}
 .ops-input,.ops-shell input.ops-input,.ops-shell select.ops-input,.ops-shell textarea.ops-input{
   width:100%;padding:12px 18px;border-radius:var(--r-pill);font-size:14px;line-height:1.3;color:var(--paper-dark);
   background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);outline:none;
 }
-.ops-input::placeholder{color:rgba(242,245,240,.6)}
+.ops-input::placeholder{color:rgba(242,245,240,.85)}
 .ops-input:focus{border-color:rgba(255,255,255,.35);background:rgba(255,255,255,.08)}
 .ops-input.error{border-color:rgba(244,169,161,.6)}
 .ops-input.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}
 .ops-shell textarea.ops-input{border-radius:20px;min-height:96px;resize:vertical}
-.ops-shell select.ops-input{appearance:none;-webkit-appearance:none;padding-right:40px;background-image:linear-gradient(45deg,transparent 50%,rgba(242,245,240,.7) 50%),linear-gradient(135deg,rgba(242,245,240,.7) 50%,transparent 50%);background-position:calc(100% - 22px) 50%,calc(100% - 16px) 50%;background-size:6px 6px;background-repeat:no-repeat}
+.ops-shell select.ops-input{appearance:none;-webkit-appearance:none;padding-right:40px;background-image:linear-gradient(45deg,transparent 50%,rgba(242,245,240,.88) 50%),linear-gradient(135deg,rgba(242,245,240,.88) 50%,transparent 50%);background-position:calc(100% - 22px) 50%,calc(100% - 16px) 50%;background-size:6px 6px;background-repeat:no-repeat}
 .ops-shell input[type="date"].ops-input{color-scheme:dark}
 .ops-error{font-size:12.5px;color:#f4a9a1;line-height:1.5}
-.ops-note{font-size:12.5px;color:rgba(242,245,240,.75);line-height:1.5}
+.ops-note{font-size:12.5px;color:rgba(242,245,240,.88);line-height:1.5}
 .ops-drop{border:1px dashed rgba(255,255,255,.22);border-radius:22px;padding:40px 24px;text-align:center;cursor:pointer;background:rgba(255,255,255,.03)}
 .ops-drop.on{border-color:rgba(104,231,142,.6);background:rgba(104,231,142,.06)}
 .ops-drop.has{border-style:solid;border-color:rgba(255,255,255,.18)}
 .ops-drop b{display:block;font-size:15px;font-weight:500;margin-bottom:4px}
-.ops-drop small{display:block;font-size:13px;color:rgba(242,245,240,.75)}
+.ops-drop small{display:block;font-size:13px;color:rgba(242,245,240,.88)}
 
 /* progress line */
 .ops-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
@@ -270,8 +251,8 @@ a.ops-batch:hover,button.ops-batch:hover{background:rgba(255,255,255,.07)}
 @keyframes ops-run{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
 .ops-bar-row{margin-bottom:14px}
 .ops-bar-meta{display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:6px}
-.ops-bar-meta span:last-child{color:rgba(242,245,240,.75);font-variant-numeric:tabular-nums;white-space:nowrap}
-.ops-kpi em{display:block;font-style:normal;font-size:12px;color:rgba(242,245,240,.75);margin-top:4px;white-space:normal;line-height:1.4}
+.ops-bar-meta span:last-child{color:rgba(242,245,240,.88);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ops-kpi em{display:block;font-style:normal;font-size:12px;color:rgba(242,245,240,.88);margin-top:4px;white-space:normal;line-height:1.4}
 
 /* file glyph (drop zone) — green once the file is received */
 .ops-file{display:block;width:34px;height:26px;border-radius:6px;background:rgba(255,255,255,.14);position:relative;margin:0 auto 14px}
@@ -301,7 +282,7 @@ a.ops-batch:hover,button.ops-batch:hover{background:rgba(255,255,255,.07)}
 
 .ops-shell .table-wrap,.ops-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:16px}
 .ops-shell table{width:100%;border-collapse:separate;border-spacing:0 6px;font-size:13.5px}
-.ops-shell table th{text-align:left;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:rgba(242,245,240,.75);padding:6px 12px;border:0;white-space:nowrap}
+.ops-shell table th{text-align:left;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:rgba(242,245,240,.88);padding:6px 12px;border:0;white-space:nowrap}
 .ops-shell table th:not(:first-child){padding-left:12px}
 .ops-shell table td{padding:12px;font-size:13.5px;color:var(--paper-dark);border:0;background:rgba(255,255,255,.04);white-space:nowrap}
 .ops-shell table td:not(:first-child){padding-left:12px}
@@ -312,21 +293,21 @@ a.ops-batch:hover,button.ops-batch:hover{background:rgba(255,255,255,.07)}
 .ops-shell table td.num,.ops-shell table th.num{text-align:right;font-variant-numeric:tabular-nums}
 
 /* legacy badges → status pills */
-.ops-shell .badge{display:inline-flex;align-items:center;padding:4px 11px;border-radius:var(--r-pill);font-size:11.5px;font-weight:500;letter-spacing:.01em;background:rgba(255,255,255,.08);color:rgba(242,245,240,.85);animation:none}
+.ops-shell .badge{display:inline-flex;align-items:center;padding:4px 11px;border-radius:var(--r-pill);font-size:11.5px;font-weight:500;letter-spacing:.01em;background:rgba(255,255,255,.08);color:rgba(242,245,240,.92);animation:none}
 .ops-shell .badge-approved,.ops-shell .badge-active,.ops-shell .badge-disbursed,.ops-shell .badge-disbursement_queued,.ops-shell .badge-paid,.ops-shell .badge-repaid,.ops-shell .badge-completed{background:rgba(104,231,142,.16);color:var(--harmony)}
 .ops-shell .badge-pending,.ops-shell .badge-under_review,.ops-shell .badge-escalated,.ops-shell .badge-disbursement_failed{background:rgba(242,196,160,.14);color:#f2c4a0}
 .ops-shell .badge-rejected,.ops-shell .badge-rejected_ml,.ops-shell .badge-overdue,.ops-shell .badge-in_collections{background:rgba(244,169,161,.14);color:#f4a9a1}
-.ops-shell .badge-written_off,.ops-shell .badge-cancelled{background:rgba(255,255,255,.06);color:rgba(242,245,240,.75)}
+.ops-shell .badge-written_off,.ops-shell .badge-cancelled{background:rgba(255,255,255,.06);color:rgba(242,245,240,.88)}
 
 /* legacy cards / stats / headers that pages still use */
-.ops-shell .card{background:rgba(0,11,26,.55);border:1px solid rgba(255,255,255,.06);border-radius:var(--r-panel);box-shadow:none;padding:24px;margin-bottom:10px;color:var(--paper-dark)}
-.ops-shell .card-title{font-size:15px;font-weight:500;letter-spacing:0;text-transform:none;color:rgba(242,245,240,.85);margin-bottom:16px}
+.ops-shell .card{background:rgba(0,11,26,.78);border:1px solid rgba(255,255,255,.06);border-radius:var(--r-panel);box-shadow:none;padding:24px;margin-bottom:10px;color:var(--paper-dark)}
+.ops-shell .card-title{font-size:15px;font-weight:500;letter-spacing:0;text-transform:none;color:rgba(242,245,240,.92);margin-bottom:16px}
 .ops-shell .stat-grid{gap:8px;margin-bottom:10px}
 .ops-shell .stat-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:16px;box-shadow:none;padding:14px 12px}
-.ops-shell .stat-card .stat-label{font-size:11px;font-weight:500;letter-spacing:.04em;color:rgba(242,245,240,.75);margin-bottom:6px}
+.ops-shell .stat-card .stat-label{font-size:11px;font-weight:500;letter-spacing:.04em;color:rgba(242,245,240,.88);margin-bottom:6px}
 .ops-shell .stat-card .stat-value{font-size:22px;font-weight:400;letter-spacing:-.02em;color:var(--paper-dark);font-variant-numeric:tabular-nums}
 .ops-shell .stat-card .stat-change{font-size:12px;font-weight:400;color:var(--harmony);margin-top:4px}
-.ops-shell .empty-state{text-align:center;padding:40px 20px;color:rgba(242,245,240,.75);font-size:14px;line-height:1.6}
+.ops-shell .empty-state{text-align:center;padding:40px 20px;color:rgba(242,245,240,.88);font-size:14px;line-height:1.6}
 .ops-shell .empty-state svg{opacity:.4;margin-bottom:12px}
 .ops-shell .empty-state strong{color:var(--paper-dark)}
 .ops-shell .spinner{border-color:rgba(255,255,255,.12)!important;border-top-color:#fff!important}
@@ -334,17 +315,17 @@ a.ops-batch:hover,button.ops-batch:hover{background:rgba(255,255,255,.07)}
 .ops-shell .btn-primary:hover{background:rgba(255,255,255,.18);transform:none;box-shadow:none}
 
 /* the Part B / CURP forms on the employer dashboard */
-.ops-shell .partb-sub{color:rgba(242,245,240,.75);font-weight:300}
-.ops-shell .partb-label{color:rgba(242,245,240,.75);text-transform:none;letter-spacing:.02em;font-weight:400}
+.ops-shell .partb-sub{color:rgba(242,245,240,.88);font-weight:300}
+.ops-shell .partb-label{color:rgba(242,245,240,.88);text-transform:none;letter-spacing:.02em;font-weight:400}
 .ops-shell .partb-input{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:var(--r-pill);color:var(--paper-dark);padding:12px 18px;font-weight:500;letter-spacing:.06em}
-.ops-shell .partb-input::placeholder{color:rgba(242,245,240,.6)}
+.ops-shell .partb-input::placeholder{color:rgba(242,245,240,.85)}
 .ops-shell .partb-input:focus{border-color:rgba(255,255,255,.35);box-shadow:none}
 .ops-shell .partb-input-error{border-color:rgba(244,169,161,.6)}
 .ops-shell .partb-error{color:#f4a9a1}
 .ops-shell .partb-btn{width:auto;padding:10px 18px;border-radius:var(--r-pill);background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.1);color:var(--paper-dark);font-size:13px;font-weight:500}
 .ops-shell .partb-btn:hover{background:rgba(255,255,255,.18);transform:none}
 .ops-shell .partb-card .card-title{font-size:15px}
-.ops-shell .partb-pending{color:rgba(242,245,240,.75)}
+.ops-shell .partb-pending{color:rgba(242,245,240,.88)}
 .ops-shell .partb-pending-icon svg{stroke:#f2c4a0}
 
 /* skeletons / error banner on dark */

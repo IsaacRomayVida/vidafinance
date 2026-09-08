@@ -3,22 +3,26 @@ import { Link } from 'react-router-dom';
 import { Board, BoardHead } from './Board';
 
 /**
- * Employer section on the ops-side board: charcoal→forest, dark glass
- * tags, the spatial folder stack with the current quincena lit Harmony
- * Green, a floating progress card, three KPIs and ONE white pill action.
- * The stack and the figures are an illustrative view, labelled as such.
+ * Employer section on the ops-side board. The stage is a generated
+ * photograph (stage-employer) with crisp objects on top: the three real
+ * things in the operation, each a rendered clay icon. The data panel states
+ * product facts (0 MXN for the company, one file per cut-off, the 30% cap)
+ * and the cycle — never an invented employer, figure or percentage.
  */
+const OBJECTS = [
+  { icon: 'icon-nomina', t: 'emp_obj_1_t', d: 'emp_obj_1_d', lit: true },
+  { icon: 'icon-quincena', t: 'emp_obj_2_t', d: 'emp_obj_2_d' },
+  { icon: 'icon-condusef', t: 'emp_obj_3_t', d: 'emp_obj_3_d' },
+] as const;
+
+const CYCLE = [
+  { icon: 'icon-nomina', t: 'emp_cycle_1_t', d: 'emp_cycle_1_d' },
+  { icon: 'icon-cobranza', t: 'emp_cycle_2_t', d: 'emp_cycle_2_d' },
+  { icon: 'icon-contrato', t: 'emp_cycle_3_t', d: 'emp_cycle_3_d' },
+] as const;
+
 export function EmployerSection() {
   const { t } = useTranslation();
-
-  const folders = [
-    { i: -3, n: '4', label: 'Hotel Playa' },
-    { i: -2, n: '6', label: 'Grupo Caribe' },
-    { i: -1, n: '2', label: 'Villas del Sol' },
-    { i: 0, n: '12', label: t('emp_folder_batch'), lit: true },
-    { i: 1, n: '3', label: t('emp_folder_aml') },
-    { i: 2, n: '1', label: 'CONDUSEF' },
-  ];
 
   return (
     <Board tone="ops" id="employers-board">
@@ -26,27 +30,21 @@ export function EmployerSection() {
       <div className="mk-gap" />
 
       <div className="mk-ops-grid">
-        <div className="mk-panel stage" aria-hidden="true">
+        <div className="mk-panel stage photo" aria-hidden="true">
           <div className="mk-brand-ops"><b>F</b>FunPay · Ops</div>
           <div className="mk-tags">
             <span className="mk-tag"><i />{t('emp_tag_collections')}</span>
             <span className="mk-tag">{t('emp_tag_employers')}</span>
             <span className="mk-tag">CONDUSEF</span>
           </div>
-          <div className="mk-stack">
-            {folders.map((f) => (
-              <div key={f.i} className={`mk-folder${f.lit ? ' lit' : ''}`} style={{ ['--i' as string]: f.i }}>
-                <div className="doc"><i /><i /><i /></div>
-                <span className="n">{f.n}</span>
-                <span className="lbl">{f.label}</span>
+          <div className="mk-objects">
+            {OBJECTS.map((o) => (
+              <div key={o.icon} className={`mk-object${'lit' in o && o.lit ? ' lit' : ''}`}>
+                <img src={`/images/brand/${o.icon}.png`} alt="" loading="lazy" />
+                <b>{t(o.t)}</b>
+                <span>{t(o.d)}</span>
               </div>
             ))}
-          </div>
-          <div className="mk-prog">
-            <div className="h"><span>{t('emp_folder_batch')}</span><span>↗</span></div>
-            <div className="d">{t('emp_prog_sub')}</div>
-            <div className="v">92<b>%</b></div>
-            <span className="dotg" />
           </div>
         </div>
 
@@ -61,9 +59,12 @@ export function EmployerSection() {
             ))}
           </div>
           <h3>{t('emp_rows_h')}</h3>
-          <div className="mk-batch"><span className="fl g" /><span className="t">Hotel Playa<small>412 · {t('emp_batch_received')}</small></span><span className="p g">98%</span></div>
-          <div className="mk-batch"><span className="fl g" /><span className="t">Grupo Caribe<small>288 · {t('emp_batch_received')}</small></span><span className="p g">95%</span></div>
-          <div className="mk-batch"><span className="fl" /><span className="t">Villas del Sol<small>190 · {t('emp_batch_pending')}</small></span><span className="p">—</span></div>
+          {CYCLE.map((c, i) => (
+            <div key={c.icon} className="mk-batch">
+              <span className={`fl${i === 0 ? ' g' : ''}`}><img src={`/images/brand/${c.icon}.png`} alt="" loading="lazy" /></span>
+              <span className="t">{t(c.t)}<small>{t(c.d)}</small></span>
+            </div>
+          ))}
           <div className="mk-due"><i /><span>{t('emp_due')}<small>{t('emp_due_sub')}</small></span></div>
           <Link to="/employers" className="mk-btn white"><i />{t('emp_link')}</Link>
         </div>

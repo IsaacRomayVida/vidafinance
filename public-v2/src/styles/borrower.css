@@ -42,7 +42,7 @@
 
 /* Board header: Doto name left, avatar right */
 .bo-head{display:flex;justify-content:space-between;align-items:center;font-size:14px;min-height:34px}
-.bo-head .dot{font-size:14px;color:rgba(30,32,29,.6)}
+.bo-head .dot{font-size:14px;color:rgba(30,32,29,.78)}
 .leaf .bo-head .dot{color:rgba(244,247,238,.92)}
 .bo-av{width:34px;height:34px;border-radius:50%;background:var(--grad-ident);display:grid;place-items:center;font-size:12px;font-weight:600;color:#25352a;flex:none}
 
@@ -83,19 +83,19 @@
 
 /* Status timeline inside the chip (pending → active) */
 .bo-tl{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.bo-tl span{padding:6px 11px;border-radius:20px;font-size:12px;background:rgba(255,255,255,.14);opacity:.7}
+.bo-tl span{padding:6px 11px;border-radius:20px;font-size:12px;background:rgba(255,255,255,.14);opacity:.85}
 .bo-tl span.done{background:rgba(255,255,255,.3);opacity:1}
 .bo-tl span.now{background:#fff;color:var(--ink);opacity:1;font-weight:600}
 
 /* Companion card (acetate, no blur) */
 .bo-companion{margin-top:18px;padding:12px;border-radius:var(--r-card);background:var(--grad-assist);color:var(--ink);box-shadow:var(--shadow-float);text-shadow:none}
 .bo-companion .top{display:flex;justify-content:space-between;align-items:center}
-.bo-companion .top .dot{font-size:15px;color:rgba(20,40,20,.55)}
+.bo-companion .top .dot{font-size:15px;color:rgba(20,40,20,.75)}
 .bo-exp{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.55);display:grid;place-items:center;border:none;cursor:pointer;color:var(--ink);padding:0}
 .bo-exp svg{width:13px;height:13px}
 .bo-qs{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px}
 .bo-q{font-size:12px;padding:6px 10px;border-radius:20px;background:rgba(255,255,255,.64);color:var(--ink-soft);border:none;cursor:pointer;font-family:var(--font-text);text-align:left;font-variant-numeric:tabular-nums}
-.bo-q::after{content:'+';margin-left:6px;opacity:.55}
+.bo-q::after{content:'+';margin-left:6px;opacity:.85}
 .bo-q[aria-expanded="true"]{background:#fff;color:var(--ink)}
 .bo-q[aria-expanded="true"]::after{content:'–'}
 .bo-facts{margin:6px 0 2px;display:grid;gap:6px}
@@ -119,7 +119,7 @@
 .bo-row .sub small{display:block;font-size:12px;opacity:.92;margin-top:3px}
 .bo-row .act{display:flex;align-items:center;gap:6px;flex:none}
 .bo-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 16px;border-radius:var(--r-pill);background:var(--ink);color:var(--cream);font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:var(--font-text);text-decoration:none}
-.bo-btn:disabled{opacity:.6;cursor:wait}
+.bo-btn:disabled{opacity:.85;cursor:wait}
 .bo-btn.light{background:#fff;color:var(--ink)}
 .bo-btn.text{background:transparent;color:inherit;padding:0 8px;font-weight:500;text-decoration:underline;text-underline-offset:3px}
 .bo-badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.02em;background:rgba(255,255,255,.5);color:var(--ink)}
@@ -181,7 +181,7 @@
 .bo-shimmer{display:inline-block;height:1em;vertical-align:middle;border-radius:20px;background:rgba(30,32,29,.08)}
 .bo-unavail{color:var(--ink-soft)}
 .bo-ref{margin-top:18px;padding:14px 16px;border-radius:var(--r-card);background:#e9ebe1;font-size:14px;display:flex;justify-content:space-between;gap:12px;align-items:center}
-.bo-ref .dot{font-size:12px;color:rgba(30,32,29,.6)}
+.bo-ref .dot{font-size:12px;color:rgba(30,32,29,.78)}
 .bo-ref b{font-weight:600;letter-spacing:.04em}
 .bo-center{margin-top:auto;text-align:left}
 .bo-center h2{font-size:32px;font-weight:400;letter-spacing:-.02em;line-height:1.1;margin:0}
@@ -220,7 +220,7 @@
 
 /* History table (MyLoans) — rows restyled as pills, still a table */
 .bo-history{margin-top:26px}
-.bo-history .dot{font-size:13px;color:rgba(30,32,29,.6)}
+.bo-history .dot{font-size:13px;color:rgba(30,32,29,.78)}
 .bo-table{width:100%;border-collapse:separate;border-spacing:0 8px;margin-top:6px;font-size:14px;font-variant-numeric:tabular-nums}
 .bo-table th{text-align:left;font-size:12px;font-weight:500;color:var(--ink-soft);padding:0 10px 2px;white-space:normal;text-transform:none;letter-spacing:0}
 .bo-table td{padding:10px 10px;background:#e9ebe1;vertical-align:middle;white-space:nowrap}
@@ -257,7 +257,7 @@
 .bo-modal .bo-quote{margin-top:14px}
 .bo-modal .bo-cta{margin-top:18px}
 .bo-ready{margin-top:18px;padding:16px;border-radius:var(--r-card);background:#e9ebe1;text-align:left}
-.bo-ready .dot{font-size:12px;color:rgba(30,32,29,.6)}
+.bo-ready .dot{font-size:12px;color:rgba(30,32,29,.78)}
 .bo-ready p{font-size:13.5px;line-height:1.5;color:var(--ink-soft);margin:6px 0 12px}
 .bo-ready .bo-cta{margin-top:0;text-decoration:none}
 .bo-modal .bo-hist{padding:14px 0 0}

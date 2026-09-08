@@ -519,6 +519,12 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
 }
 
 
+
+/** Which rendered object stands for each thing on the stage. */
+function stageIcon(kind: 'quincena' | 'empleador' | 'kyc' | 'contrato' | 'condusef' | 'sat' | 'cobranza'): string {
+  return `/images/brand/icon-${kind}.png`;
+}
+
 export function EmployerDashboard() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -753,13 +759,13 @@ export function EmployerDashboard() {
   const onSchedule = stats ? Math.max(0, stats.activeLoans - stats.overdueCount) : 0;
   const pct = stats && stats.activeLoans > 0 ? Math.round((onSchedule / stats.activeLoans) * 100) : null;
 
-  const folders: { i: number; label: string; n: number; lit?: boolean }[] = [
-    { i: -3, label: employer?.companyName ?? '', n: stats?.totalEmployees ?? employer?.totalEmployees ?? 0 },
-    { i: -2, label: label(prev2), n: countIn(prev2) },
-    { i: -1, label: label(prev1), n: countIn(prev1) },
-    { i: 0, label: curLabel, n: countIn(cur), lit: true },
-    { i: 1, label: t('ops_folder_curp'), n: employer?.curpConfig?.prefixes?.length ?? 0 },
-    { i: 2, label: t('ops_folder_imss'), n: employer?.sampleCurps?.length ?? 0 },
+  const folders: { i: number; label: string; n: number; lit?: boolean; kind: 'quincena' | 'empleador' | 'kyc' | 'contrato' }[] = [
+    { i: -3, label: employer?.companyName ?? '', n: stats?.totalEmployees ?? employer?.totalEmployees ?? 0, kind: 'empleador' },
+    { i: -2, label: label(prev2), n: countIn(prev2), kind: 'quincena' },
+    { i: -1, label: label(prev1), n: countIn(prev1), kind: 'quincena' },
+    { i: 0, label: curLabel, n: countIn(cur), lit: true, kind: 'quincena' },
+    { i: 1, label: t('ops_folder_curp'), n: employer?.curpConfig?.prefixes?.length ?? 0, kind: 'kyc' },
+    { i: 2, label: t('ops_folder_imss'), n: employer?.sampleCurps?.length ?? 0, kind: 'contrato' },
   ];
 
   const partB = employer?.partBStatus;
@@ -775,12 +781,12 @@ export function EmployerDashboard() {
             {t('dash_employer_code')} · <strong>{employer?.employerCode}</strong>
           </p>
 
-          <div className="ops-stack" aria-hidden="true">
+          <div className="ops-objects" aria-hidden="true">
             {folders.map((f) => (
-              <div key={f.i} className={`ops-folder${f.lit ? ' lit' : ''}`} style={{ '--i': f.i } as React.CSSProperties}>
-                <div className="doc"><i /><i /><i /></div>
-                <span className="n">{f.n}</span>
-                <span className="lbl">{f.label}</span>
+              <div key={f.i} className={`ops-object${f.lit ? ' lit' : ''}`}>
+                <img src={stageIcon(f.kind)} alt="" loading="lazy" />
+                <b>{f.n}</b>
+                <span>{f.label}</span>
               </div>
             ))}
           </div>
