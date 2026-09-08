@@ -56,7 +56,7 @@ const IMAGES = [
   },
   {
     file: 'moment-backpack.png', size: '1536x1024',
-    prompt: `Setting: Quintana Roo, Mexico — a Mexican family, Caribbean morning light, tropical shadows, humble and dignified. A parent kneeling in a doorway handing a child a school backpack, backlit by morning light, both faces turned away and softly blurred, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial, tender and unposed. ${NEG}`,
+    prompt: `${MX} A mother in her early thirties, in a neat blouse, kneels in the doorway of a tidy modern Mexican home and helps her child shoulder a school backpack; the child wears a clean school uniform and proper school shoes. Polished concrete or tiled floor, painted walls, a potted plant, a paved path outside. Both faces turned away and softly blurred, backlit morning light, tender and unposed. Comfortable working-family home — no dirt floor, no bare feet, no bamboo or makeshift fencing, nothing run-down. Muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
   },
   {
     file: 'moment-kitchen.png', size: '1536x1024',
