@@ -50,7 +50,7 @@ export function ROICalculator() {
   }, []);
 
   return (
-    <Board id="cost">
+    <Board tone="leaf" className="photo photo-pharmacy" id="cost">
       <div className="mk-cols">
         <div className="sticky">
           <BoardHead kicker={t('calc_tag')} title={t('calc_h2')} lead={t('calc_p')} />
