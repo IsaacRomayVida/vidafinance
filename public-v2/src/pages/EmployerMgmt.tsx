@@ -36,20 +36,21 @@ function formatDate(ts?: { seconds: number }): string {
   });
 }
 
-function statusBadge(status: string): { label: string; bg: string; text: string } {
+/** Green only for an approved employer. */
+function statusBadge(status: string): { label: string; cls: string } {
   switch (status) {
     case 'pending_verification':
     case 'pending_review':
-      return { label: 'Pending', bg: 'rgba(212,160,60,0.10)', text: 'var(--warning)' };
+      return { label: 'Pending', cls: ' warn' };
     case 'active':
     case 'approved':
-      return { label: 'Approved', bg: 'rgba(36,122,110,0.08)', text: 'var(--brand-light)' };
+      return { label: 'Approved', cls: ' g' };
     case 'rejected':
-      return { label: 'Rejected', bg: 'rgba(220,80,60,0.08)', text: 'var(--danger)' };
+      return { label: 'Rejected', cls: ' bad' };
     case 'suspended':
-      return { label: 'Suspended', bg: 'rgba(147,170,169,0.10)', text: '#6b8382' };
+      return { label: 'Suspended', cls: ' mute' };
     default:
-      return { label: status, bg: 'rgba(147,170,169,0.10)', text: 'var(--t2)' };
+      return { label: status, cls: '' };
   }
 }
 
@@ -122,49 +123,6 @@ export function EmployerMgmt() {
     return list;
   }, [employers, filter, search]);
 
-  /* ── styles (matching AdminDashboard design system) ────────────────────── */
-
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '28px',
-    border: '1px solid rgba(25,68,69,0.04)',
-    boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
-    marginBottom: 20,
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '2.2px',
-    color: 'var(--gold)',
-    marginBottom: 10,
-  };
-
-  const valueStyle: React.CSSProperties = {
-    fontFamily: 'var(--df)',
-    fontSize: 36,
-    color: 'var(--t1)',
-    letterSpacing: '-0.03em',
-    fontWeight: 400,
-    lineHeight: 1,
-  };
-
-  const pillBtn = (color: string, textColor: string): React.CSSProperties => ({
-    background: color,
-    color: textColor,
-    borderRadius: 60,
-    padding: '10px 24px',
-    fontSize: 12,
-    fontWeight: 600,
-    border: 'none',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    letterSpacing: '0.2px',
-    opacity: actionLoading ? 0.6 : 1,
-  });
-
   const filters: { key: typeof filter; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'pending', label: 'Pending' },
@@ -176,175 +134,140 @@ export function EmployerMgmt() {
   /* ── render ─────────────────────────────────────────────────────────────── */
 
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
+    <div className="ops-page">
       {/* Header */}
-      <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-          Employer Management
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
-          View all registered employers and manage approval status.
-        </p>
+      <div className="ops-head">
+        <div>
+          <div className="dot ops-eyebrow">Operaciones</div>
+          <h1 className="ops-title">Employer Management</h1>
+          <p className="ops-sub">View all registered employers and manage approval status.</p>
+        </div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16, marginBottom: 32 }}>
-        <div style={cardStyle}>
-          <div style={labelStyle}>Total</div>
-          <div style={valueStyle}>{stats.total}</div>
+      <div className="ops-kpis four" style={{ marginTop: 0, marginBottom: 10 }}>
+        <div className="ops-kpi">
+          <small>Total</small>
+          <b>{stats.total}</b>
         </div>
-        <div style={cardStyle}>
-          <div style={labelStyle}>Pending</div>
-          <div style={{ ...valueStyle, color: stats.pending > 0 ? 'var(--warning)' : 'var(--t1)' }}>{stats.pending}</div>
+        <div className={`ops-kpi${stats.pending > 0 ? ' warn' : ''}`}>
+          <small>Pending</small>
+          <b>{stats.pending}</b>
         </div>
-        <div style={cardStyle}>
-          <div style={labelStyle}>Approved</div>
-          <div style={{ ...valueStyle, color: stats.approved > 0 ? 'var(--brand-light)' : 'var(--t1)' }}>{stats.approved}</div>
+        <div className="ops-kpi">
+          <small>Approved</small>
+          <b>{stats.approved}</b>
         </div>
-        <div style={cardStyle}>
-          <div style={labelStyle}>Employees</div>
-          <div style={valueStyle}>{fmt(stats.totalEmployees)}</div>
+        <div className="ops-kpi">
+          <small>Employees</small>
+          <b>{fmt(stats.totalEmployees)}</b>
         </div>
       </div>
 
       {/* Search + filter */}
-      <div style={{ marginBottom: 24 }}>
-        <input
-          type="text"
-          aria-label="Search employers by company name"
-          placeholder="Search by company name..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '12px 16px',
-            fontSize: 14,
-            color: 'var(--t1)',
-            border: '1px solid rgba(25,68,69,0.10)',
-            borderRadius: 14,
-            background: '#fff',
-            outline: 'none',
-            fontFamily: "'DM Sans',sans-serif",
-            boxSizing: 'border-box',
-            marginBottom: 16,
-          }}
-        />
-
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {filters.map(f => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              style={{
-                fontSize: 11,
-                fontWeight: filter === f.key ? 700 : 500,
-                color: filter === f.key ? 'var(--brand)' : 'var(--t3)',
-                background: filter === f.key ? 'rgba(25,68,69,0.06)' : 'transparent',
-                border: '1px solid',
-                borderColor: filter === f.key ? 'rgba(25,68,69,0.12)' : 'rgba(25,68,69,0.06)',
-                borderRadius: 20,
-                padding: '6px 16px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}
-            >
-              {f.label}
-            </button>
-          ))}
+      <div className="ops-card quiet" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '14px 16px' }}>
+        <div style={{ flex: '1 1 240px' }}>
+          <input
+            type="text"
+            className="ops-input"
+            aria-label="Search employers by company name"
+            placeholder="Search by company name..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="ops-chips">
+          {filters.map(f => {
+            const on = filter === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={`ops-chip${on ? ' on' : ''}`}
+                aria-pressed={on}
+              >
+                {f.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Loading */}
-      {loading && (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
-          <p style={{ fontSize: 14 }}>Loading employers...</p>
-        </div>
-      )}
-
-      {/* Empty */}
-      {!loading && filtered.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
-          <p style={{ fontSize: 14 }}>
-            {search || filter !== 'all' ? 'No employers match your filters.' : 'No employers registered yet.'}
-          </p>
-        </div>
-      )}
-
-      {/* Section label */}
-      {!loading && filtered.length > 0 && (
-        <div style={{ ...labelStyle, marginBottom: 16 }}>
-          {filter === 'all' ? 'All Employers' : filter.charAt(0).toUpperCase() + filter.slice(1)} ({filtered.length})
-        </div>
-      )}
-
-      {/* Employer cards */}
-      {filtered.map(emp => {
-        const badge = statusBadge(emp.status);
-        const pending = isPending(emp.status);
-        const empCount = Number(emp.employeeCount) || Number(emp.totalEmployees) || 0;
-
-        return (
-          <div key={emp.id} style={{ ...cardStyle, padding: '24px 28px' }}>
-            {/* Top row: company + status */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
-                  {emp.companyName}
-                </div>
-                {emp.contactName && (
-                  <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 2 }}>{emp.contactName}</div>
-                )}
-                <div style={{ fontSize: 12, color: 'var(--t3)' }}>{emp.email}</div>
-              </div>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: '4px 12px',
-                  borderRadius: 20,
-                  background: badge.bg,
-                  color: badge.text,
-                  whiteSpace: 'nowrap',
-                  marginLeft: 12,
-                }}
-              >
-                {badge.label}
-              </span>
-            </div>
-
-            {/* Detail row */}
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--t3)', marginBottom: pending ? 16 : 0 }}>
-              {emp.tier && <span>Tier: <strong style={{ color: 'var(--t2)' }}>{emp.tier}</strong></span>}
-              <span>Employees: <strong style={{ color: 'var(--t2)' }}>{fmt(empCount)}</strong></span>
-              {emp.companySize && <span>Size: <strong style={{ color: 'var(--t2)' }}>{emp.companySize}</strong></span>}
-              {emp.employerCode && <span>Code: <strong style={{ color: 'var(--t2)' }}>{emp.employerCode}</strong></span>}
-              <span>Registered: <strong style={{ color: 'var(--t2)' }}>{formatDate(emp.createdAt)}</strong></span>
-            </div>
-
-            {/* Actions for pending employers */}
-            {pending && (
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button
-                  onClick={() => handleDecision(emp.id, true)}
-                  disabled={!!actionLoading}
-                  style={pillBtn('var(--brand)', '#fff')}
-                >
-                  {actionLoading === emp.id ? 'Processing...' : 'Approve'}
-                </button>
-                <button
-                  onClick={() => handleDecision(emp.id, false)}
-                  disabled={!!actionLoading}
-                  style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}
-                >
-                  Reject
-                </button>
-              </div>
-            )}
+      <section className="ops-card">
+        {/* Loading */}
+        {loading && (
+          <div className="empty-state" aria-busy="true">
+            <p>Loading employers...</p>
           </div>
-        );
-      })}
+        )}
+
+        {/* Empty */}
+        {!loading && filtered.length === 0 && (
+          <div className="empty-state">
+            <p>{search || filter !== 'all' ? 'No employers match your filters.' : 'No employers registered yet.'}</p>
+          </div>
+        )}
+
+        {/* Section label */}
+        {!loading && filtered.length > 0 && (
+          <h2 className="ops-h3">
+            {filter === 'all' ? 'All Employers' : filter.charAt(0).toUpperCase() + filter.slice(1)} ({filtered.length})
+          </h2>
+        )}
+
+        {/* Employer rows — folder glyph is green only once approved */}
+        {filtered.map(emp => {
+          const badge = statusBadge(emp.status);
+          const pending = isPending(emp.status);
+          const empCount = Number(emp.employeeCount) || Number(emp.totalEmployees) || 0;
+
+          return (
+            <div key={emp.id} className="ops-batch" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <span className={`fl${badge.cls === ' g' ? ' g' : ''}`} aria-hidden="true" style={{ marginTop: 2 }} />
+              <span className="t" style={{ whiteSpace: 'normal' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 500 }}>{emp.companyName}</span>
+                  <span className={`ops-status${badge.cls}`}>{badge.label}</span>
+                </span>
+                {emp.contactName && (
+                  <small style={{ whiteSpace: 'normal' }}>{emp.contactName}</small>
+                )}
+                <small style={{ whiteSpace: 'normal' }}>{emp.email}</small>
+                <small style={{ whiteSpace: 'normal', marginTop: 4 }}>
+                  {emp.tier && <>Tier {emp.tier} · </>}
+                  Employees {fmt(empCount)}
+                  {emp.companySize && <> · Size {emp.companySize}</>}
+                  {emp.employerCode && <> · Code {emp.employerCode}</>}
+                  {' · '}Registered {formatDate(emp.createdAt)}
+                </small>
+              </span>
+
+              {/* Actions for pending employers */}
+              {pending && (
+                <span className="ops-actions">
+                  <button
+                    type="button"
+                    className="ops-btn sm"
+                    onClick={() => handleDecision(emp.id, true)}
+                    disabled={!!actionLoading}
+                  >
+                    {actionLoading === emp.id ? 'Processing...' : 'Approve'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ops-btn sm ghost danger"
+                    onClick={() => handleDecision(emp.id, false)}
+                    disabled={!!actionLoading}
+                  >
+                    Reject
+                  </button>
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </section>
     </div>
   );
 }

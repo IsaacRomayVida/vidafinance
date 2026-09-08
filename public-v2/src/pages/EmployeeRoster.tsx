@@ -491,7 +491,7 @@ export function EmployeeRoster() {
                       </td>
                       <td style={{ whiteSpace: 'normal' }}>
                         <div style={{ fontSize: 12.5, color: 'rgba(242,245,240,.75)', lineHeight: 1.5 }}>{emp.email ?? '—'}</div>
-                        <div style={{ fontSize: 12, color: 'rgba(242,245,240,.62)' }}>{emp.phone ?? ''}</div>
+                        <div style={{ fontSize: 12, color: 'rgba(242,245,240,.75)' }}>{emp.phone ?? ''}</div>
                       </td>
                       <td style={{ color: 'rgba(242,245,240,.75)' }}>{fmtDate(emp.createdAt)}</td>
                       <td><KycBadge status={emp.kycStatus} /></td>

@@ -337,7 +337,7 @@ export function PayrollUpload() {
                       </td>
                       <td className="num">{r.deductionAmount != null ? `$${r.deductionAmount.toLocaleString('es-MX')}` : '\u2014'}</td>
                       <td className="num">{r.newBalance != null ? `$${r.newBalance.toLocaleString('es-MX')}` : '\u2014'}</td>
-                      <td style={{ color: r.error ? '#f4a9a1' : 'rgba(242,245,240,.62)', whiteSpace: 'normal' }}>{r.error || '\u2014'}</td>
+                      <td style={{ color: r.error ? '#f4a9a1' : 'rgba(242,245,240,.75)', whiteSpace: 'normal' }}>{r.error || '\u2014'}</td>
                     </tr>
                   ))}
                 </tbody>
