@@ -2,6 +2,7 @@
 @import "./tokens.css";
 @import "./borrower.css";
 @import "./ops.css";
+@import "./marketing.css";
 
 @theme {
   /* funpay-ui — the Tailwind scale is aliased onto the skill tokens

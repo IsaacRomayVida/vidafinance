@@ -1,0 +1,149 @@
+name: Deploy team portal (funpay-alfa hosting)
+
+# Builds the mobile app's web export from the given ref, wraps it in the
+# phone-frame portal, and deploys to the funpay-alfa Firebase Hosting site
+# with the production service account.
+#
+#   mode=deploy   build + publish
+#   mode=domain   also attach `domain` and print the DNS records to create
+#   mode=release  DETACH `domain` from this site so another Firebase site
+#                 can claim it (a custom domain belongs to exactly one site
+#                 across all projects)
+#
+# FunPay's portal was originally parked on alfa.funtrip.mx — Funtrip's
+# domain — because funpay.mx was not on Cloudflare and could not be
+# automated. It is now, so FunPay moves to alfa.funpay.mx and releases
+# alfa.funtrip.mx back to Funtrip. Do the move in that order: the new
+# certificate should be ACTIVE before the old domain is given up.
+#
+# DNS for both zones is created with the vidatravel repo's
+# `cloudflare-dns.yml` workflow, which holds the Cloudflare API token; its
+# token now sees funpay.mx as well.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch to build the app from"
+        required: true
+        default: "mobile-motion-pass"
+        type: string
+      mode:
+        description: "deploy | domain | release"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - domain
+          - release
+          - feedback
+      domain:
+        description: "Custom domain for mode=domain / mode=release"
+        required: false
+        default: "alfa.funpay.mx"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Auth
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}
+        run: printf '%s' "$SA" > /tmp/sa.json
+
+      - name: Ensure hosting site exists
+        if: ${{ github.event.inputs.mode == 'deploy' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: |
+          npx firebase-tools hosting:sites:create funpay-alfa --project vida-finance 2>&1 | tee /tmp/site.log || true
+          grep -qiE "already exists|has been created" /tmp/site.log
+
+      - name: Build app web export
+        if: ${{ github.event.inputs.mode == 'deploy' }}
+        run: |
+          cd mobile
+          npm ci --no-audit --no-fund
+          npx expo export --platform web
+          rm -rf web-portal/public/app
+          cp -r dist web-portal/public/app
+          VERSION="$(git rev-parse --short HEAD) · $(date -u '+%Y-%m-%d %H:%M UTC')"
+          sed -i "s/__PORTAL_VERSION__/$VERSION/" web-portal/public/index.html
+          if grep -q "__PORTAL_VERSION__" web-portal/public/index.html; then
+            echo "::error::__PORTAL_VERSION__ survived substitution"; exit 1
+          fi
+
+      - name: Deploy hosting
+        if: ${{ github.event.inputs.mode == 'deploy' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: |
+          cd mobile/web-portal
+          npx firebase-tools deploy --only hosting:funpay-alfa --project vida-finance --non-interactive
+
+      - name: Register custom domain
+        if: ${{ github.event.inputs.mode == 'domain' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+          PORTAL_DOMAIN: ${{ github.event.inputs.domain }}
+        run: node scripts/register-portal-domain.mjs | tee /tmp/domain.log
+
+      - name: Release custom domain
+        if: ${{ github.event.inputs.mode == 'release' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+          PORTAL_DOMAIN: ${{ github.event.inputs.domain }}
+          PORTAL_RELEASE: "1"
+        run: node scripts/register-portal-domain.mjs | tee /tmp/domain.log
+
+      - name: Read latest feedback (mode=feedback)
+        if: ${{ github.event.inputs.mode == 'feedback' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: node scripts/read-qa-feedback.mjs | tee /tmp/feedback.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## FunPay team portal"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Mode | \`${{ github.event.inputs.mode }}\` |"
+            echo "| Domain | \`${{ github.event.inputs.domain }}\` |"
+            echo "| Direct | https://funpay-alfa.web.app |"
+            if [ -f /tmp/domain.log ]; then
+              echo ""
+              echo '```'
+              cat /tmp/domain.log
+              echo '```'
+            fi
+            if [ -f /tmp/feedback.log ]; then
+              echo ""
+              echo "### Latest feedback"
+              echo '```'
+              cat /tmp/feedback.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/sa.json

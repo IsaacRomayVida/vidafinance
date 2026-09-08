@@ -1,16 +1,29 @@
 name: Generate brand motion (fal.ai)
 
-# On-demand: generates the Seedance ambient brand loop with the FAL_AI repo
-# secret and uploads it as an artifact for review — nothing is committed.
-# See mobile/scripts/generate-brand-motion.mjs.
+# On-demand brand assets in the funpay-ui direction. Stills via OpenAI Images
+# (OPEN_API secret), films via fal.ai Seedance (FAL_AI secret). Everything is
+# uploaded as an artifact for review; nothing is committed by this workflow.
+# See mobile/scripts/generate-brand-assets.mjs (prompts live there, taken
+# from .claude/skills/funpay-ui/references/imagery.md).
 
 on:
   workflow_dispatch:
     inputs:
-      prompt:
-        description: "Override the default brand prompt"
+      set:
+        description: "Which assets: imagery (stills) | intros (5 films) | loops (2 leaf loops) | all"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - imagery
+          - intros
+          - loops
+          - all
+      pro:
+        description: "Seedance pro at 1080p (slower, costlier) instead of lite 720p"
         required: false
-        type: string
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -18,7 +31,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
 
@@ -29,15 +42,43 @@ jobs:
       - name: Generate
         env:
           FAL_KEY: ${{ secrets.FAL_AI }}
+          OPENAI_API_KEY: ${{ secrets.OPEN_API }}
         run: |
-          if [ -n "${{ github.event.inputs.prompt }}" ]; then
-            node mobile/scripts/generate-brand-motion.mjs --prompt "${{ github.event.inputs.prompt }}"
-          else
-            node mobile/scripts/generate-brand-motion.mjs
-          fi
+          node mobile/scripts/generate-brand-assets.mjs --set "${{ github.event.inputs.set }}" --out brand-assets ${{ github.event.inputs.pro == 'true' && '--pro' || '' }} 2>&1 | tee generate.log
+
+      - name: Grade and transcode (ffmpeg on the runner)
+        if: always()
+        run: |
+          set -e
+          cd brand-assets || exit 0
+          mkdir -p graded
+          # Universal grade from imagery.md: saturation −25%, blacks lifted, faint grain.
+          for f in leaf-home-calla leaf-home-fern portrait-clay figure-green dark-abstract; do
+            [ -f "$f.png" ] || continue
+            ffmpeg -loglevel error -y -i "$f.png" -vf "eq=saturation=0.75:brightness=0.02:contrast=0.97,noise=alls=5:allf=t" -q:v 2 "graded/$f.jpg"
+            ffmpeg -loglevel error -y -i "graded/$f.jpg" -vf "scale=1080:-2" -q:v 3 "graded/$f-1080.jpg"
+          done
+          # Cutouts keep their alpha: grade the colour, merge the original alpha back.
+          for f in cutout-leaf cutout-frond cutout-kite; do
+            [ -f "$f.png" ] || continue
+            ffmpeg -loglevel error -y -i "$f.png" -filter_complex "[0:v]format=rgba,split[c][a];[a]alphaextract[al];[c]format=rgb24,eq=saturation=0.8[cg];[cg][al]alphamerge,format=rgba" "graded/$f.png"
+          done
+          # Films: compact H.264 for the app bundle (intros ≈ 1 MB each), loops looped-friendly.
+          for f in *.mp4; do
+            [ -f "$f" ] || continue
+            ffmpeg -loglevel error -y -i "$f" -vf "scale='if(gt(iw,ih),1280,720)':-2,eq=saturation=0.85,noise=alls=4:allf=t" -c:v libx264 -preset slow -crf 27 -pix_fmt yuv420p -movflags +faststart -an "graded/$f"
+          done
+          ls -la graded
+
+      - name: Summary
+        if: always()
+        run: |
+          { echo "## Brand assets (${{ github.event.inputs.set }})"; echo; echo '```'; cat generate.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: brand-loop
-          path: mobile/assets/brand-loop.mp4
+          name: brand-assets-${{ github.event.inputs.set }}
+          path: brand-assets
           retention-days: 7
+          if-no-files-found: warn

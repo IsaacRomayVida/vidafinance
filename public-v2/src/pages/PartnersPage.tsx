@@ -1,88 +1,45 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { RichText } from '../components/shared/RichText';
-import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import { Board, BoardHead, Statement, Rows, Figures, PillSteps } from '../components/marketing/Board';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export function PartnersPage() {
   const { t } = useTranslation();
-  useRevealOnScroll();
-  useDocumentTitle(`Funpay — ${t('pg_part_badge')}`);
+  useDocumentTitle(`FunPay — ${t('pg_part_badge')}`);
 
   return (
     <>
-
-      {/* Hero */}
-      <section className="hero" style={{ padding: '100px 0 80px' }}>
-        <div className="hero-blob b1" />
-        <div className="hero-blob b2" />
-        <div className="wrap text-center">
-          <span className="badge rv">{t('pg_part_badge')}</span>
-          <h1 className="rv d1"><RichText html={t('pg_part_h1')} /></h1>
-          <p className="sub rv d2">{t('pg_part_sub')}</p>
-          <Link to="/contact" className="btn rv d3">{t('pg_part_cta')}</Link>
-        </div>
-      </section>
-
-      {/* Who */}
-      <section className="section tinted">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_part_who_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_part_who_h')} /></h2>
-          <div className="trust-grid rv d2">
-            {[1, 2, 3, 4].map((i) => (
-              <div className="trust-item" key={i}>
-                <div>
-                  <div className="trust-t">{t(`pg_part_who_${i}_t`)}</div>
-                  <div className="trust-d">{t(`pg_part_who_${i}_d`)}</div>
-                </div>
-              </div>
-            ))}
+      <Board label={t('pg_part_badge')}>
+        <Statement html={t('pg_part_h1')} lead={t('pg_part_sub')}>
+          <div className="mk-actions">
+            <Link to="/contact" className="mk-btn">{t('pg_part_cta')}</Link>
           </div>
-        </div>
-      </section>
+        </Statement>
+      </Board>
 
-      {/* How */}
-      <section className="section">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_part_how_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_part_how_h')} /></h2>
-          <div className="steps">
-            {[1, 2, 3].map((i) => (
-              <div className={`step rv d${i}`} key={i}>
-                <div className="step-n">{i}</div>
-                <div>
-                  <div className="trust-t">{t(`pg_part_how_${i}_t`)}</div>
-                  <div className="trust-d">{t(`pg_part_how_${i}_d`)}</div>
-                </div>
-              </div>
-            ))}
+      <Board tone="paper">
+        <BoardHead kicker={t('pg_part_who_tag')} title={t('pg_part_who_h')} />
+        <div className="mk-gap" />
+        <Rows columns={2} items={[1, 2, 3, 4].map((n) => ({ title: t(`pg_part_who_${n}_t`), desc: t(`pg_part_who_${n}_d`) }))} />
+      </Board>
+
+      <Board>
+        <div className="mk-cols">
+          <div className="sticky">
+            <BoardHead kicker={t('pg_part_how_tag')} title={t('pg_part_how_h')} />
           </div>
+          <PillSteps items={[1, 2, 3].map((n) => ({ title: t(`pg_part_how_${n}_t`), sub: t(`pg_part_how_${n}_d`) }))} />
         </div>
-      </section>
+      </Board>
 
-      {/* Benefits */}
-      <section className="section tinted">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_part_ben_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_part_ben_h')} /></h2>
-          <div className="metrics rv d2">
-            {[1, 2, 3, 4].map((i) => (
-              <div className="metric" key={i}>
-                <div className="metric-v">{t(`pg_part_ben_${i}_v`)}</div>
-                <div className="metric-l">{t(`pg_part_ben_${i}_l`)}</div>
-              </div>
-            ))}
-          </div>
+      <Board tone="paper">
+        <BoardHead kicker={t('pg_part_ben_tag')} title={t('pg_part_ben_h')} />
+        <div className="mk-gap" />
+        <Figures items={[1, 2, 3, 4].map((n) => ({ value: t(`pg_part_ben_${n}_v`), label: t(`pg_part_ben_${n}_l`) }))} />
+        <div className="mk-actions">
+          <Link to="/contact" className="mk-btn">{t('pg_part_cta')}</Link>
         </div>
-      </section>
-
-      {/* Closing CTA */}
-      <section className="section">
-        <div className="wrap text-center">
-          <Link to="/contact" className="btn rv">{t('pg_part_cta')}</Link>
-        </div>
-      </section>
+      </Board>
     </>
   );
 }
