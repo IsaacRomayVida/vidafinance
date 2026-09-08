@@ -75,7 +75,9 @@ jobs:
           cd brand-assets || exit 0
           mkdir -p graded
           # Universal grade from imagery.md: saturation −25%, blacks lifted, faint grain.
-          for f in home-doorway home-kite moment-pharmacy moment-backpack moment-kitchen figure-green dark-abstract stage-ops stage-employer; do
+          for f in *.png; do
+            case "$f" in cutout-*|icon-*) continue;; esac
+            f="${f%.png}"
             [ -f "$f.png" ] || continue
             ffmpeg -loglevel error -y -i "$f.png" -vf "eq=saturation=0.75:brightness=0.02:contrast=0.97,noise=alls=5:allf=t" -q:v 2 "graded/$f.jpg"
             ffmpeg -loglevel error -y -i "graded/$f.jpg" -vf "scale=1080:-2" -q:v 3 "graded/$f-1080.jpg"
