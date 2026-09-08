@@ -17,7 +17,7 @@ export function TrustSection() {
   const { t } = useTranslation();
 
   return (
-    <Board tone="leaf" id="trust">
+    <Board tone="leaf" className="photo photo-backpack" id="trust">
       <div className="mk-cols">
         <div className="sticky sh">
           <BoardHead kicker={t('trust_tag')} title={t('trust_h2')} lead={t('trust_p')} />

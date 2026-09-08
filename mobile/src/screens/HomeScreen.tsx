@@ -105,7 +105,7 @@ export function HomeScreen({
 
   if (status === 'loading') {
     return (
-      <Backdrop variant="leaf">
+      <Backdrop variant="photo" photo="kite">
         <View style={[styles.screen, { paddingTop: insets.top + spacing.l }]}>
           <View style={styles.head}>
             <Skeleton width={70} height={14} radius={radii.pill} style={{ opacity: 0.4 }} />
@@ -155,7 +155,7 @@ export function HomeScreen({
   const remaining = active?.repaymentSchedule?.length ?? (active ? 1 : 0);
 
   return (
-    <Backdrop variant="leaf">
+    <Backdrop variant="photo" photo="kite">
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top + spacing.l }]}

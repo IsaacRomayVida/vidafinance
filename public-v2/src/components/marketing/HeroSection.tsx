@@ -7,7 +7,7 @@ import { Board, Statement, ArrowIcon } from './Board';
  * headline alternating ink and quiet lines, and two
  * floating elements over the stage: the capture bar (dark pill, icon
  * circles, active one cream) at −3° and the identity card (employee ·
- * payroll · lender) at +5°. No photography, no video.
+ * payroll · lender) at +5°, over the kite film.
  */
 export function HeroSection() {
   const { t } = useTranslation();
@@ -24,6 +24,13 @@ export function HeroSection() {
         </Statement>
 
         <div className="mk-stage" aria-hidden="true">
+          {/* The freedom motif: the cream-and-sage kite drifting in a pale sky.
+              A real <video> so it actually moves; the still stands in under
+              reduced motion or while it loads. */}
+          <img className="mk-stage-still" src="/images/brand/home-kite.jpg" alt="" />
+          <video className="mk-stage-film" autoPlay muted loop playsInline preload="metadata" poster="/images/brand/home-kite.jpg">
+            <source src="/video/kite-loop-wide.mp4" type="video/mp4" />
+          </video>
           <div className="mk-float mk-capture" style={{ left: '4%', top: '16%', transform: 'rotate(-3deg)' }}>
             <div className="ic on">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z" /></svg>

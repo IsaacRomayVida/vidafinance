@@ -89,7 +89,7 @@ export function EmployeePage() {
       </Board>
 
       {/* Use cases */}
-      <Board tone="sage">
+      <Board tone="leaf" className="photo photo-kitchen">
         <BoardHead kicker={t('lp_m_use_tag')} title={t('lp_m_use_h')} />
         <div className="mk-gap" />
         <Rows columns={2} items={[1, 2, 3, 4].map((n) => ({ title: t(`lp_m_use_${n}_t`), desc: t(`lp_m_use_${n}_d`) }))} />

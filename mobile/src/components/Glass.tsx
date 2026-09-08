@@ -13,18 +13,42 @@
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
-import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, ImageBackground, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { boardGradient, colors, radii } from '../theme';
 
+/* eslint-disable @typescript-eslint/no-var-requires */
+const PHOTOS = {
+  kite: require('../../assets/brand/home-kite.jpg'),
+  doorway: require('../../assets/brand/home-doorway.jpg'),
+};
+/* eslint-enable @typescript-eslint/no-var-requires */
+
 export function Backdrop({
   children,
   variant = 'board',
+  photo = 'kite',
 }: {
   children: React.ReactNode;
-  variant?: 'board' | 'paper' | 'leaf';
+  variant?: 'board' | 'paper' | 'leaf' | 'photo';
+  /** Which graded photograph carries the 'photo' variant. */
+  photo?: keyof typeof PHOTOS;
 }) {
+  if (variant === 'photo') {
+    // The people photograph, with a scrim that keeps the upper third light
+    // and turns the lower half dark so cream type and the chips read.
+    return (
+      <ImageBackground source={PHOTOS[photo]} style={styles.fill} resizeMode="cover">
+        <LinearGradient
+          colors={['rgba(20,32,18,0.05)', 'rgba(20,32,18,0.35)', 'rgba(20,32,18,0.82)']}
+          locations={[0.15, 0.55, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        {children}
+      </ImageBackground>
+    );
+  }
   if (variant === 'paper') {
     return <View style={[styles.fill, { backgroundColor: colors.cream }]}>{children}</View>;
   }

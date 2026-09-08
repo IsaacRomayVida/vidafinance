@@ -114,7 +114,7 @@ export function LoginScreen({
     return (
       <View style={styles.split}>
         <View style={{ flex: 1.1 }}>
-          <Backdrop variant="leaf">
+          <Backdrop variant="photo" photo="doorway">
             <View style={styles.heroContent}>
               <View style={styles.heroHead}>
                 <FunpayMark size={40} tone="cream" />
