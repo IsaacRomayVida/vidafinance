@@ -540,12 +540,12 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
   .mk-board.mk-hero .mk-stage-still,
   .mk-board.mk-hero .mk-stage-film{border-radius:0}
   .mk-board.mk-hero::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
-    background:linear-gradient(180deg,rgba(20,30,18,.58) 0%,rgba(20,30,18,.72) 55%,rgba(20,30,18,.88) 100%)}
+    background:linear-gradient(180deg,rgba(18,26,16,.34) 0%,rgba(18,26,16,.58) 48%,rgba(18,26,16,.84) 100%)}
   .mk-board.mk-hero .mk-statement{grid-template-columns:1fr;min-height:min(88vh,720px);align-content:center}
-  .mk-board.mk-hero .mk-h1{color:#f4f7ee;text-shadow:0 1px 16px rgba(10,20,10,.45)}
+  .mk-board.mk-hero .mk-h1{color:#f4f7ee;text-shadow:0 2px 20px rgba(8,16,8,.62)}
   .mk-board.mk-hero .mk-h1 .quiet,.mk-board.mk-hero .mk-h1 em{color:rgba(244,247,238,.92)}
   .mk-board.mk-hero .mk-kicker,.mk-board.mk-hero .mk-board-title{color:rgba(244,247,238,.92)}
-  .mk-board.mk-hero .mk-disclose{color:rgba(244,247,238,.92)}
+  .mk-board.mk-hero .mk-disclose{color:rgba(244,247,238,.92);text-shadow:0 1px 12px rgba(8,16,8,.6)}
   .mk-board.mk-hero .mk-float{display:none}
   .mk-board.mk-hero .mk-btn.ghost{color:#f4f7ee;border-color:rgba(244,247,238,.5)}
 }
