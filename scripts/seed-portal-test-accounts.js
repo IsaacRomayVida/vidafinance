@@ -38,6 +38,16 @@
  *   QA_EMPLOYER_PASSWORD=… QA_OPS_PASSWORD=… \
  *   node scripts/seed-portal-test-accounts.js [--dry-run]
  *
+ * THE EMPLOYEE ACCOUNT IS ONLY UNBLOCKED, NEVER RE-CREATED
+ * --------------------------------------------------------
+ * The QA borrower was made through the app's own signup wizard, which is the
+ * point of it — it proves the real flow. That path leaves emailVerified
+ * false, and public-v2's Login.tsx refuses any unverified account with
+ * "verifica tu correo" before it ever looks at the role, so the employee
+ * portal was unreachable with the one account meant to reach it. This script
+ * flips that flag and touches nothing else about the account: not its
+ * password, not its claim, not its employee document.
+ *
  * Re-running is safe and idempotent. Unlike bootstrap-test-accounts.js this
  * one DOES reset the password of an account that already exists: these two
  * are disposable QA credentials whose whole purpose is that the caller knows
@@ -69,6 +79,10 @@ const ACCOUNTS = [
     password: process.env.QA_OPS_PASSWORD,
   },
 ];
+
+// Created by the signup wizard, not by this script. Only its emailVerified
+// flag is managed here.
+const VERIFY_ONLY = ['qa-ui-1788773545173@demo-diagnostic.funpay.mx'];
 
 let serviceAccount;
 try {
@@ -181,6 +195,26 @@ async function run() {
     });
 
     console.log(`[OK]      ${acct.email} role=${acct.role} claim + users/${user.uid} synced`);
+  }
+
+  for (const email of VERIFY_ONLY) {
+    let user;
+    try {
+      user = await auth.getUserByEmail(email);
+    } catch {
+      console.warn(`[SKIP]    ${email} does not exist — nothing to unblock.`);
+      continue;
+    }
+    if (user.emailVerified) {
+      console.log(`[OK]      ${email} already verified`);
+      continue;
+    }
+    if (dryRun) {
+      console.log(`[DRY-RUN] would set emailVerified on ${email} (uid=${user.uid})`);
+      continue;
+    }
+    await auth.updateUser(user.uid, { emailVerified: true });
+    console.log(`[VERIFY]  ${email} (uid=${user.uid}) — can now pass Login.tsx`);
   }
 
   if (dryRun) {
