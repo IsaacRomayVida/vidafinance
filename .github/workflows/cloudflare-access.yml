@@ -1,0 +1,85 @@
+name: Cloudflare Access (alfa portal)
+
+# Puts alfa.funpay.mx behind Cloudflare Access: Google sign-in plus an
+# explicit email allowlist, enforced at Cloudflare's edge BEFORE the request
+# reaches Firebase Hosting. That is the difference that matters — the portal
+# page carries working passwords for every environment, so a gate rendered
+# inside the page would still ship those passwords to anyone with curl.
+# Access refuses the request outright.
+#
+#   mode=status  what is configured, including whether DNS is proxied
+#   mode=idp     create/update the Google identity provider from secrets
+#   mode=apply   create/update the application + allowlist policy
+#   mode=verify  prove it: an anonymous request must not get the page
+#   mode=remove  delete the application (the site becomes public again)
+#
+# Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ACCESS_TOKEN — an ACCOUNT-scoped
+# token with "Access: Apps and Policies → Edit" (and "Access: Organizations,
+# Identity Providers and Groups → Edit" for mode=idp). vidatravel's
+# CLOUDFLARE_API_TOKEN is zone/DNS-scoped and cannot manage Access.
+#
+# mode=idp additionally needs GOOGLE_OAUTH_CLIENT_ID and
+# GOOGLE_OAUTH_CLIENT_SECRET from a Google Cloud OAuth web client whose
+# redirect URI is https://<team>.cloudflareaccess.com/cdn-cgi/access/callback
+#
+# DNS for funpay.mx lives in the vidatravel repo's cloudflare-dns.yml — the
+# record must be PROXIED for any of this to bite. mode=status and mode=apply
+# both say so when it is not.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "status | idp | apply | verify | remove"
+        required: true
+        default: status
+        type: choice
+        options: [status, idp, apply, verify, remove]
+      emails:
+        description: "Comma-separated allowlist, e.g. a@vidateam.mx,b@gmail.com"
+        required: false
+        default: ""
+        type: string
+      domains:
+        description: "Comma-separated email domains to allow (leave empty for named addresses only)"
+        required: false
+        default: ""
+        type: string
+      hostname:
+        description: "Hostname to protect"
+        required: false
+        default: "alfa.funpay.mx"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-access
+  cancel-in-progress: false
+
+jobs:
+  access:
+    name: ${{ inputs.mode }} ${{ inputs.hostname }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Manage Access
+        env:
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_ACCESS_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          MODE: ${{ inputs.mode }}
+          EMAILS: ${{ inputs.emails }}
+          DOMAINS: ${{ inputs.domains }}
+          HOSTNAME: ${{ inputs.hostname }}
+        run: |
+          set -o pipefail
+          node scripts/cloudflare-access.mjs | tee -a "$GITHUB_STEP_SUMMARY"
