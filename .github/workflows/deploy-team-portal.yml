@@ -108,8 +108,13 @@ jobs:
           npx expo export --platform web
           grep -q "\"$EXPO_PORTAL_BASE/_expo/" dist/index.html \
             || { echo "::error::web export is not based at $EXPO_PORTAL_BASE"; exit 1; }
-          rm -rf web-portal/public/app
+          rm -rf web-portal/public/app web-portal/public/funpay/app
           cp -r dist web-portal/public/app
+          # A second copy at the prefix the build was compiled against, so
+          # FunPay's own domain can serve a URL that matches it. The holding
+          # portal strips /funpay before the origin, and reaches the first.
+          mkdir -p web-portal/public/funpay
+          cp -r dist web-portal/public/funpay/app
           VERSION="$(git rev-parse --short HEAD) · $(date -u '+%Y-%m-%d %H:%M UTC')"
           sed -i "s/__PORTAL_VERSION__/$VERSION/" web-portal/public/index.html
           if grep -q "__PORTAL_VERSION__" web-portal/public/index.html; then
@@ -130,8 +135,10 @@ jobs:
           npm ci --legacy-peer-deps --no-audit --no-fund
           npm run build
           cd ..
-          rm -rf mobile/web-portal/public/web
+          rm -rf mobile/web-portal/public/web mobile/web-portal/public/funpay/web
           cp -r public-v2/dist mobile/web-portal/public/web
+          mkdir -p mobile/web-portal/public/funpay
+          cp -r public-v2/dist mobile/web-portal/public/funpay/web
           # The site references /images, /video and the favicon by absolute
           # path in code; serve those from the portal root too.
           for p in images video favicon.svg icons.svg; do

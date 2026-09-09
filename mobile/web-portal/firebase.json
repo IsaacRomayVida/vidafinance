@@ -5,6 +5,14 @@
     "cleanUrls": true,
     "rewrites": [
       {
+        "source": "/funpay/web/**",
+        "destination": "/funpay/web/index.html"
+      },
+      {
+        "source": "/funpay/app/**",
+        "destination": "/funpay/app/index.html"
+      },
+      {
         "source": "/app/**",
         "destination": "/app/index.html"
       },
@@ -153,13 +161,6 @@
             "value": "public, max-age=31536000, immutable"
           }
         ]
-      }
-    ],
-    "redirects": [
-      {
-        "source": "/funpay/:rest*",
-        "destination": "/:rest*",
-        "type": 301
       }
     ]
   }
