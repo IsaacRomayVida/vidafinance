@@ -204,16 +204,14 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 
   /* The Suena review portal proxies this origin to serve /funpay/*, so a
      Firebase redirect on "/" would bounce the proxy itself and loop. Keyed
-     on the hostname the browser actually shows, a person who lands on either
-     of FunPay's own hostnames is sent to the canonical portal and the proxied
-     copy is untouched.
+     on the hostname the browser actually shows, a person who lands on the
+     bare Firebase URL is sent to the canonical portal and the proxied copy is
+     untouched.
 
-     alfa.funpay.mx is in the list because it can no longer serve itself: the
-     build is based at /funpay/*, so its frames would ask this host for paths
-     that are not here and the portal would come up blank. One build cannot
-     answer to two mount points, and the Suena portal is the one that is
-     kept. */
-  if (['funpay-alfa.web.app', 'alfa.funpay.mx'].indexOf(location.hostname) !== -1) {
+     alfa.funpay.mx is NOT in this list. It is FunPay's own portal, with all
+     five surfaces, and it keeps working: the redirect rule below lets one
+     prefixed build serve it too. */
+  if (location.hostname === 'funpay-alfa.web.app') {
     location.replace('https://alfa.suena.ch/funpay/' + location.search + location.hash);
     return;
   }

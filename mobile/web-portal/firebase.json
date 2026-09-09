@@ -154,6 +154,13 @@
           }
         ]
       }
+    ],
+    "redirects": [
+      {
+        "source": "/funpay/:rest*",
+        "destination": "/:rest*",
+        "type": 301
+      }
     ]
   }
 }
