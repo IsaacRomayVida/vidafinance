@@ -31,6 +31,8 @@ const TOKEN = process.env.CF_TOKEN;
 const MODE = process.env.MODE || 'status';
 const HOSTNAME = process.env.HOSTNAME || 'alfa.funpay.mx';
 const APP_NAME = 'FunPay team portal';
+const ACME_APP_NAME = 'FunPay portal — ACME challenge (bypass)';
+const ACME_PATH = '/.well-known/acme-challenge';
 const POLICY_NAME = 'FunPay reviewers';
 
 const list = (v) => (v || '').split(',').map((x) => x.trim()).filter(Boolean);
@@ -125,6 +127,12 @@ if (MODE === 'status') {
   else if (dns.proxied) console.log('DNS: PROXIED — Cloudflare sees the traffic, Access can enforce.');
   else console.log('DNS: DNS-ONLY (grey cloud) — Access CANNOT enforce until this is proxied.');
 
+  const acmeApp = (apps || []).find((a) => a.domain === `${HOSTNAME}${ACME_PATH}`);
+  console.log(
+    acmeApp
+      ? 'ACME bypass: present — the origin certificate can still renew.'
+      : 'ACME bypass: MISSING — once proxied, certificate renewal will be answered with a login page.'
+  );
   if (!app) {
     console.log('\nNOT PROTECTED — no Access application for this hostname.');
   } else {
@@ -151,6 +159,8 @@ if (MODE === 'remove') {
     process.exit(0);
   }
   await cf('DELETE', `/accounts/${ACCOUNT}/access/apps/${app.id}`);
+  const acmeApp = (apps || []).find((a) => a.domain === `${HOSTNAME}${ACME_PATH}`);
+  if (acmeApp) await cf('DELETE', `/accounts/${ACCOUNT}/access/apps/${acmeApp.id}`);
   console.log(`REMOVED Access from ${HOSTNAME}. The site is public again.`);
   process.exit(0);
 }
@@ -208,6 +218,41 @@ app = app
   ? await cf('PUT', `/accounts/${ACCOUNT}/access/apps/${app.id}`, appPayload)
   : await cf('POST', `/accounts/${ACCOUNT}/access/apps`, appPayload);
 console.log(`Access application ready for ${HOSTNAME} (${app.id})`);
+
+/* Firebase Hosting renews the origin certificate itself, over an HTTP-01
+   challenge served from /.well-known/acme-challenge. Once this hostname is
+   proxied, that challenge arrives through Cloudflare — and if Access is
+   guarding the whole hostname it answers Let's Encrypt with a login page.
+   Nothing breaks on the day it is switched on; the certificate simply fails
+   to renew two months later and the origin goes untrusted. A bypass
+   application scoped to that one path, at higher precedence, keeps the
+   renewal reachable. It exposes only the challenge tokens, which are
+   public by design. */
+const acmeDomain = `${HOSTNAME}${ACME_PATH}`;
+let acme = (apps || []).find((a) => a.domain === acmeDomain);
+const acmePayload = {
+  name: ACME_APP_NAME,
+  domain: acmeDomain,
+  type: 'self_hosted',
+  session_duration: '24h',
+  app_launcher_visible: false,
+};
+acme = acme
+  ? await cf('PUT', `/accounts/${ACCOUNT}/access/apps/${acme.id}`, acmePayload)
+  : await cf('POST', `/accounts/${ACCOUNT}/access/apps`, acmePayload);
+const acmePolicies = await cf('GET', `/accounts/${ACCOUNT}/access/apps/${acme.id}/policies`);
+const acmeRule = {
+  name: 'Certificate renewal',
+  decision: 'bypass',
+  include: [{ everyone: {} }],
+  precedence: 1,
+};
+if (acmePolicies?.length) {
+  await cf('PUT', `/accounts/${ACCOUNT}/access/apps/${acme.id}/policies/${acmePolicies[0].id}`, acmeRule);
+} else {
+  await cf('POST', `/accounts/${ACCOUNT}/access/apps/${acme.id}/policies`, acmeRule);
+}
+console.log(`Bypass in place for ${acmeDomain} so the origin certificate keeps renewing.`);
 
 const include = [
   ...EMAILS.map((email) => ({ email: { email } })),
