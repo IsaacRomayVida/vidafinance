@@ -5,10 +5,6 @@
     "cleanUrls": true,
     "rewrites": [
       {
-        "source": "/funpay/app/**",
-        "destination": "/funpay/app/index.html"
-      },
-      {
         "source": "/app/**",
         "destination": "/app/index.html"
       },

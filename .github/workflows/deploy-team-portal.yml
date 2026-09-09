@@ -108,13 +108,8 @@ jobs:
           npx expo export --platform web
           grep -q "\"$EXPO_PORTAL_BASE/_expo/" dist/index.html \
             || { echo "::error::web export is not based at $EXPO_PORTAL_BASE"; exit 1; }
-          rm -rf web-portal/public/app web-portal/public/funpay/app
+          rm -rf web-portal/public/app
           cp -r dist web-portal/public/app
-          # A second copy at the prefix the build was compiled against, so
-          # FunPay's own domain can serve a URL that matches it. The holding
-          # portal strips /funpay before the origin, and reaches the first.
-          mkdir -p web-portal/public/funpay
-          cp -r dist web-portal/public/funpay/app
           VERSION="$(git rev-parse --short HEAD) · $(date -u '+%Y-%m-%d %H:%M UTC')"
           sed -i "s/__PORTAL_VERSION__/$VERSION/" web-portal/public/index.html
           if grep -q "__PORTAL_VERSION__" web-portal/public/index.html; then
@@ -125,7 +120,7 @@ jobs:
         if: ${{ github.event.inputs.mode == 'deploy' }}
         env:
           # Sub-path build; production deploys never set this and stay at '/'.
-          VITE_BASE_PATH: /web/
+          VITE_BASE_PATH: ${{ github.event.inputs.holding_prefix }}/web/
           VITE_LAUNCH_MODE: ${{ github.event.inputs.web_launch_mode || 'live' }}
           VITE_APP_VERSION: ${{ github.sha }}
           # No reCAPTCHA key on purpose: the Enterprise key is bound to the

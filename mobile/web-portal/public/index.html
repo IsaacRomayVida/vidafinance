@@ -90,7 +90,6 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
     <h3>No necesita cuenta</h3>
     <p class="why">El sitio público es anónimo — se recorre entero sin entrar. Para probar el registro, el código de la empresa de pruebas y un correo del dominio de diagnóstico.</p>
     <table>
-      <tr><td>Código de empresa</td><td><code>FUNQA1</code><button class="copy" data-c="FUNQA1">copiar</button></td></tr>
       <tr><td>Correo a usar</td><td><code>lo-que-sea@demo-diagnostic.funpay.mx</code></td></tr>
     </table>
     <p class="note">El registro crea una cuenta real en producción, sin verificación de identidad — puede ver su línea, pero no puede pedir dinero.</p>
@@ -103,8 +102,6 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
     <h3>Cuenta de prueba del empleado</h3>
     <p class="why">Cuenta real en producción, sin identidad verificada: puede entrar y ver todo, pero el servidor rechaza cualquier solicitud de dinero.</p>
     <table>
-      <tr><td>Correo</td><td><code>qa-ui-1788773545173@demo-diagnostic.funpay.mx</code><button class="copy" data-c="qa-ui-1788773545173@demo-diagnostic.funpay.mx">copiar</button></td></tr>
-      <tr><td>Contraseña</td><td><code>QaUi-2026-Prueba1</code><button class="copy" data-c="QaUi-2026-Prueba1">copiar</button></td></tr>
       <tr><td>Sin OTP</td><td>Solo correo y contraseña — no hay código por SMS.</td></tr>
     </table>
     <ol class="steps">
@@ -121,8 +118,6 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
     <h3>Mismos datos que la app</h3>
     <p class="why">El portal web del empleado usa la misma cuenta que la app. Entra y llega a <code>/web/employee</code>.</p>
     <table>
-      <tr><td>Correo</td><td><code>qa-ui-1788773545173@demo-diagnostic.funpay.mx</code><button class="copy" data-c="qa-ui-1788773545173@demo-diagnostic.funpay.mx">copiar</button></td></tr>
-      <tr><td>Contraseña</td><td><code>QaUi-2026-Prueba1</code><button class="copy" data-c="QaUi-2026-Prueba1">copiar</button></td></tr>
     </table>
     <ol class="steps">
       <li><code>/web/employee</code> — tablero, línea y crédito activo.</li>
@@ -138,8 +133,6 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
     <h3>Cuenta de prueba del empleador</h3>
     <p class="why">Atada a la empresa ficticia de QA: solo ve a los empleados de esa empresa de pruebas, nunca a un cliente real.</p>
     <table>
-      <tr><td>Correo</td><td><code>qa-empleador@demo-diagnostic.funpay.mx</code><button class="copy" data-c="qa-empleador@demo-diagnostic.funpay.mx">copiar</button></td></tr>
-      <tr><td>Contraseña</td><td><code>FunPay-Empleador-TDIUEdULUH</code><button class="copy" data-c="FunPay-Empleador-TDIUEdULUH">copiar</button></td></tr>
     </table>
   </div>
   <div class="creds" style="margin-top:14px">
@@ -163,8 +156,6 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
   <div class="creds">
     <h3>Cuenta de prueba de operaciones</h3>
     <table>
-      <tr><td>Correo</td><td><code>qa-ops@demo-diagnostic.funpay.mx</code><button class="copy" data-c="qa-ops@demo-diagnostic.funpay.mx">copiar</button></td></tr>
-      <tr><td>Contraseña</td><td><code>FunPay-Ops-M89jUYWQRW</code><button class="copy" data-c="FunPay-Ops-M89jUYWQRW">copiar</button></td></tr>
     </table>
   </div>
   <div class="creds" style="margin-top:14px">
@@ -182,7 +173,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 </div>
 
 <footer>
-  <strong>Esta página lleva contraseñas y no tiene login propio</strong> — cualquiera con el enlace entra. El enlace es interno: no lo publiques ni lo pegues fuera del equipo.<br>
+  <strong>Este origen es público y no puede protegerse.</strong> Las credenciales viven en el portal de Suena, detrás de Cloudflare Access. Aquí no va ninguna.<br>
   <strong>Este entorno apunta a producción.</strong> Mirar y registrarse con datos de prueba está bien; nunca ejecutar un pago, una dispersión ni una aprobación real.
   <div class="ver" id="ver">—</div>
 </footer>
@@ -211,7 +202,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
      alfa.funpay.mx is NOT in this list. It is FunPay's own portal, with all
      five surfaces, and it keeps working: the redirect rule below lets one
      prefixed build serve it too. */
-  if (location.hostname === 'funpay-alfa.web.app') {
+  if (location.hostname !== 'alfa.suena.ch') {
     location.replace('https://alfa.suena.ch/funpay/' + location.search + location.hash);
     return;
   }
@@ -228,13 +219,6 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
      resolve to "/web/" and frame the wrong host's SPA. */
   function resolve(path) {
     var dir = location.pathname.replace(/[^/]*$/, '');
-    /* Only the app carries the holding prefix — it is the one surface the
-       holding portal frames, and Expo bakes its mount point in absolutely.
-       The website is built at /web/ and needs no prefix anywhere, which is
-       what keeps a single copy of it on this origin: two copies meant a page
-       whose HTML came from one and whose chunks came from the other, so
-       react-router loaded twice and every route hook threw. */
-    if (path.indexOf('app/') === 0 && !/\/funpay\/$/.test(dir)) dir += 'funpay/';
     return new URL(path, location.origin + dir).href;
   }
 
