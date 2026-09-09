@@ -228,11 +228,13 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
      resolve to "/web/" and frame the wrong host's SPA. */
   function resolve(path) {
     var dir = location.pathname.replace(/[^/]*$/, '');
-    /* One build, compiled once against /funpay/. Its router and its assets
-       both expect that prefix in the URL, so the frame has to land on it
-       either way: the holding portal already serves this page from /funpay/,
-       FunPay's own domain serves it from the root and the prefix is added. */
-    if (!/\/funpay\/$/.test(dir)) dir += 'funpay/';
+    /* Only the app carries the holding prefix — it is the one surface the
+       holding portal frames, and Expo bakes its mount point in absolutely.
+       The website is built at /web/ and needs no prefix anywhere, which is
+       what keeps a single copy of it on this origin: two copies meant a page
+       whose HTML came from one and whose chunks came from the other, so
+       react-router loaded twice and every route hook threw. */
+    if (path.indexOf('app/') === 0 && !/\/funpay\/$/.test(dir)) dir += 'funpay/';
     return new URL(path, location.origin + dir).href;
   }
 

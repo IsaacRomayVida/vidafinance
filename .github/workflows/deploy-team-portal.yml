@@ -125,7 +125,7 @@ jobs:
         if: ${{ github.event.inputs.mode == 'deploy' }}
         env:
           # Sub-path build; production deploys never set this and stay at '/'.
-          VITE_BASE_PATH: ${{ github.event.inputs.holding_prefix }}/web/
+          VITE_BASE_PATH: /web/
           VITE_LAUNCH_MODE: ${{ github.event.inputs.web_launch_mode || 'live' }}
           VITE_APP_VERSION: ${{ github.sha }}
           # No reCAPTCHA key on purpose: the Enterprise key is bound to the
@@ -135,10 +135,8 @@ jobs:
           npm ci --legacy-peer-deps --no-audit --no-fund
           npm run build
           cd ..
-          rm -rf mobile/web-portal/public/web mobile/web-portal/public/funpay/web
+          rm -rf mobile/web-portal/public/web
           cp -r public-v2/dist mobile/web-portal/public/web
-          mkdir -p mobile/web-portal/public/funpay
-          cp -r public-v2/dist mobile/web-portal/public/funpay/web
           # The site references /images, /video and the favicon by absolute
           # path in code; serve those from the portal root too.
           for p in images video favicon.svg icons.svg; do
