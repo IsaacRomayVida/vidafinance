@@ -19,27 +19,54 @@ and build automation. Humans: see README.md; Claude-in-repo: CLAUDE.md.
   vidatravel repo and now sees all four zones; DNS for `funpay.mx` is
   created with that repo's `cloudflare-dns.yml` workflow.
 
-## The team-testing portal
+## Surfaces (what to register in the Suena review portal)
+
+FunPay is five surfaces, not one. Served behind the holding portal at
+`https://alfa.suena.ch/funpay/`; the paths below are relative to that.
+
+| Surface | Path | Frame | Sign in with |
+|---|---|---|---|
+| Sitio público | `web/` | escritorio **and** móvil | nothing — it is anonymous |
+| App (empleado) | `app/` | móvil only | employee account below |
+| Portal empleado | `web/login` → `web/employee` | escritorio | employee account below |
+| Portal empleador | `web/login` → `web/employer` | escritorio | employer account below |
+| Consola ops | `web/login` → `web/ops` | escritorio | ops account below |
+
+The app is a phone app: framing it at desktop width shows a stretched
+phone layout, not a web product. The other four are web and should offer
+both sizes. Shortcuts worth registering: `app/?screen=RequestLoan`,
+`app/?screen=Loans`, and for the web portals `web/employee/apply`,
+`web/employer/payroll`, `web/ops/review-queue`.
 
 | Thing | Value |
 |---|---|
-| Portal URL | https://alfa.funpay.mx (canonical) · https://funpay-alfa.web.app (direct) |
-| What it is | The mobile app (react-native-web export) rendered in a phone frame, live against production Firebase |
-| App-only URL | https://funpay-alfa.web.app/app/ (no frame — for automated UI drives) |
-| Rebuild/redeploy | GitHub Actions → `deploy-team-portal.yml` (inputs: `ref` branch, `mode` deploy\|domain\|release\|feedback, `domain`) |
+| Canonical | https://alfa.suena.ch/funpay/ (behind Cloudflare Access) |
+| Origin | https://funpay-alfa.web.app — serves the build; **not** gated, and it redirects a browser to the canonical portal |
+| Mount point | one build serves one prefix. `holding_prefix` sets `EXPO_PORTAL_BASE` and `VITE_BASE_PATH` together; a build made for `/funpay` renders blank anywhere else, with a 200 |
+| Rebuild/redeploy | Actions → `deploy-team-portal.yml`, **dispatched against the branch** (`--ref mobile-motion-pass`), inputs `ref`, `mode`, `holding_prefix=/funpay`, `web_launch_mode` |
 | Read feedback | dispatch `deploy-team-portal.yml` with `mode=feedback` — newest 25 reports print to the run summary (SA-authenticated; there is no anonymous read) |
 | Build identity | the portal footer shows `portal <git-sha> · <UTC time>`; quote it in bug reports |
+| Screen identity | every app screen sets `document.title` to `FunPay · <pantalla>`, so a report can name the surface it came from |
 
 ## QA fixtures (the only sanctioned test identities)
 
 - Employer code: **FUNQA1** → employer `qa-funpay-demo-employer`
   ("FunPay QA — interno, no usar", status pending_verification).
 - Test emails: anything `@demo-diagnostic.funpay.mx`.
-- Standing QA borrower: `qa-ui-1788773545173@demo-diagnostic.funpay.mx` /
+- **Employee**: `qa-ui-1788773545173@demo-diagnostic.funpay.mx` /
   `QaUi-2026-Prueba1` ("María Prueba QA", $4,500 line, identity
   unverified — cannot reach money paths, by design).
-- New QA borrowers: register through the portal wizard with FUNQA1 + a
-  demo email. Never verify identity (MetaMap) for a fixture.
+- **Employer admin**: `qa-empleador@demo-diagnostic.funpay.mx` /
+  `FunPay-Empleador-TDIUEdULUH`. Its uid *is* the employer document id
+  (`qa-funpay-demo-employer`), which is how the employer screens find
+  their data — it can only ever see the QA company's employees.
+- **Ops**: `qa-ops@demo-diagnostic.funpay.mx` / `FunPay-Ops-M89jUYWQRW`.
+  Not a fixture: `ops` reads every borrower's file and `approveEmployer`
+  writes to production. Look and navigate; never approve, reject or
+  disperse.
+- None of these use OTP — email and password only, no SMS code.
+- New QA borrowers: register through the wizard with FUNQA1 + a demo
+  email. Never verify identity (MetaMap) for a fixture.
 
 ## Feedback pipeline (`qa_feedback` Firestore collection)
 
