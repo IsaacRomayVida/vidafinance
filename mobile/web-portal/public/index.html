@@ -85,7 +85,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 </nav>
 
 <section class="surface on" data-s="marketing">
-  <div class="stage"><div class="frame desktop"><iframe data-src="/web/" title="Sitio público"></iframe></div></div>
+  <div class="stage"><div class="frame desktop"><iframe data-src="web/" title="Sitio público"></iframe></div></div>
   <div class="creds">
     <h3>No necesita cuenta</h3>
     <p class="why">El sitio público es anónimo — se recorre entero sin entrar. Para probar el registro, el código de la empresa de pruebas y un correo del dominio de diagnóstico.</p>
@@ -98,7 +98,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 </section>
 
 <section class="surface" data-s="app">
-  <div class="stage"><div class="frame phone fixed"><iframe data-src="/app/" title="App del empleado"></iframe></div></div>
+  <div class="stage"><div class="frame phone fixed"><iframe data-src="app/" title="App del empleado"></iframe></div></div>
   <div class="creds">
     <h3>Cuenta de prueba del empleado</h3>
     <p class="why">Cuenta real en producción, sin identidad verificada: puede entrar y ver todo, pero el servidor rechaza cualquier solicitud de dinero.</p>
@@ -116,7 +116,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 </section>
 
 <section class="surface" data-s="employee">
-  <div class="stage"><div class="frame desktop"><iframe data-src="/web/login" title="Portal del empleado"></iframe></div></div>
+  <div class="stage"><div class="frame desktop"><iframe data-src="web/login" title="Portal del empleado"></iframe></div></div>
   <div class="creds">
     <h3>Mismos datos que la app</h3>
     <p class="why">El portal web del empleado usa la misma cuenta que la app. Entra y llega a <code>/web/employee</code>.</p>
@@ -133,7 +133,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 </section>
 
 <section class="surface" data-s="employer">
-  <div class="stage"><div class="frame desktop"><iframe data-src="/web/login" title="Portal del empleador"></iframe></div></div>
+  <div class="stage"><div class="frame desktop"><iframe data-src="web/login" title="Portal del empleador"></iframe></div></div>
   <div class="creds">
     <h3>Cuenta de prueba del empleador</h3>
     <p class="why">Atada a la empresa ficticia de QA: solo ve a los empleados de esa empresa de pruebas, nunca a un cliente real.</p>
@@ -155,7 +155,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 </section>
 
 <section class="surface" data-s="ops">
-  <div class="stage"><div class="frame desktop"><iframe data-src="/web/login" title="Consola de operaciones"></iframe></div></div>
+  <div class="stage"><div class="frame desktop"><iframe data-src="web/login" title="Consola de operaciones"></iframe></div></div>
   <div class="warn">
     <b>Esta cuenta manda de verdad.</b>
     <p>La consola lee el expediente de cualquier persona y ejecuta acciones reales sobre producción — aprobar empleadores, decidir solicitudes. Mirar y navegar, sí. Aprobar, rechazar o dispersar, no.</p>
@@ -201,11 +201,32 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 <script>
 (function () {
   'use strict';
+
+  /* The Suena review portal proxies this origin to serve /funpay/*, so a
+     Firebase redirect on "/" would bounce the proxy itself and loop. Keyed
+     on the hostname the browser actually shows, a person who lands on the
+     bare Firebase URL is sent to the canonical portal and the proxied copy
+     is untouched. */
+  if (location.hostname === 'funpay-alfa.web.app') {
+    location.replace('https://alfa.suena.ch/funpay/' + location.search + location.hash);
+    return;
+  }
+
   var FS = 'https://firestore.googleapis.com/v1/projects/vida-finance/databases/(default)/documents/qa_feedback';
   var VERSION = '__PORTAL_VERSION__';
   document.getElementById('ver').textContent = 'portal ' + VERSION;
 
   var current = 'marketing', size = 'desktop';
+
+  /* Frame targets are relative so the portal works both on its own domain
+     and mounted under a holding prefix. Relative resolution needs a
+     directory URL: served at "/funpay" rather than "/funpay/", "web/" would
+     resolve to "/web/" and frame the wrong host's SPA. */
+  function resolve(path) {
+    var dir = location.pathname.replace(/[^/]*$/, '');
+    return new URL(path, location.origin + dir).href;
+  }
+
 
   /* An iframe's src is set on first view: loading five copies of the product
      at once would run five sessions against production. */
@@ -215,7 +236,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
     document.querySelectorAll('nav button[data-s]').forEach(function (b) { b.classList.toggle('on', b.dataset.s === name); });
     document.querySelector('.sizes').hidden = name === 'app';
     var f = document.querySelector('.surface[data-s="' + name + '"] iframe');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', f.dataset.src);
+    if (f && !f.getAttribute('src')) f.setAttribute('src', resolve(f.dataset.src));
   }
   function setSize(z) {
     size = z;

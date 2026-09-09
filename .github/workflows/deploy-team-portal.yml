@@ -48,6 +48,11 @@ on:
         required: false
         default: ""
         type: string
+      holding_prefix:
+        description: "Mount point when served behind a holding portal, e.g. /funpay (empty = own domain)"
+        required: false
+        default: ""
+        type: string
       web_launch_mode:
         description: "Website build: live (full marketing site) or coming-soon"
         required: false
@@ -92,10 +97,17 @@ jobs:
 
       - name: Build app web export
         if: ${{ github.event.inputs.mode == 'deploy' }}
+        env:
+          # Expo bakes this into the exported HTML as an absolute path, so a
+          # build made for /app renders blank behind /funpay/app — 200, no
+          # error, nothing in the response saying why.
+          EXPO_PORTAL_BASE: ${{ github.event.inputs.holding_prefix }}/app
         run: |
           cd mobile
           npm ci --no-audit --no-fund
           npx expo export --platform web
+          grep -q "\"$EXPO_PORTAL_BASE/_expo/" dist/index.html \
+            || { echo "::error::web export is not based at $EXPO_PORTAL_BASE"; exit 1; }
           rm -rf web-portal/public/app
           cp -r dist web-portal/public/app
           VERSION="$(git rev-parse --short HEAD) · $(date -u '+%Y-%m-%d %H:%M UTC')"
@@ -108,7 +120,7 @@ jobs:
         if: ${{ github.event.inputs.mode == 'deploy' }}
         env:
           # Sub-path build; production deploys never set this and stay at '/'.
-          VITE_BASE_PATH: /web/
+          VITE_BASE_PATH: ${{ github.event.inputs.holding_prefix }}/web/
           VITE_LAUNCH_MODE: ${{ github.event.inputs.web_launch_mode || 'live' }}
           VITE_APP_VERSION: ${{ github.sha }}
           # No reCAPTCHA key on purpose: the Enterprise key is bound to the
@@ -125,7 +137,8 @@ jobs:
           for p in images video favicon.svg icons.svg; do
             [ -e "public-v2/dist/$p" ] && cp -r "public-v2/dist/$p" "mobile/web-portal/public/$p"
           done
-          grep -q '/web/assets/' mobile/web-portal/public/web/index.html || { echo "::error::web build is not base-pathed"; exit 1; }
+          grep -q "$VITE_BASE_PATH""assets/" mobile/web-portal/public/web/index.html \
+            || { echo "::error::web build is not based at $VITE_BASE_PATH"; exit 1; }
 
       - name: Build the /videos/ review gallery
         if: ${{ github.event.inputs.mode == 'deploy' && github.event.inputs.video_runs != '' }}

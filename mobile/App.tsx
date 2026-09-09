@@ -47,6 +47,23 @@ const navTheme = {
   },
 };
 
+/**
+ * document.title, on web, is how a review portal names the surface a report
+ * came from. React Navigation already sets it from each screen's `title`,
+ * which was enough while FunPay had a portal to itself: "Entrar" could only
+ * mean one login screen.
+ *
+ * In the Suena portal it cannot — every company there has an "Entrar". The
+ * product name goes in front so a report says which one.
+ */
+function documentTitle(
+  options: { title?: string } | undefined,
+  route: { name?: string } | undefined
+) {
+  const screen = options?.title ?? route?.name;
+  return screen ? `FunPay · ${screen}` : 'FunPay';
+}
+
 function Splash() {
   return (
     <View
@@ -167,7 +184,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer ref={navRef} theme={navTheme}>
+        <NavigationContainer ref={navRef} theme={navTheme} documentTitle={{ formatter: documentTitle }}>
           <StatusBar style="dark" />
           <Shell>
             <Root />
