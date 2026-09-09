@@ -135,11 +135,12 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 <section class="surface" data-s="employer">
   <div class="stage"><div class="frame desktop"><iframe data-src="/web/login" title="Portal del empleador"></iframe></div></div>
   <div class="warn">
-    <b>Sin cuenta publicada todavía.</b>
-    <p>El portal del empleador muestra CURP, correo y teléfono de empleados reales. Publicar esa contraseña en esta página — que es pública — la haría accesible a cualquiera. Isaac decide: cuenta de demostración con datos ficticios, o entrega directa de credenciales.</p>
+    <b>La cuenta existe. La contraseña no se publica aquí.</b>
+    <p>Hay una cuenta de empleador de prueba, atada a la empresa ficticia de QA — solo ve a los empleados registrados con <code>FUNQA1</code>, nunca a un cliente real. Esta página no tiene login propio: cualquiera con el enlace la abre, así que los datos de acceso se entregan directamente, no aquí.</p>
   </div>
   <div class="creds">
     <h3>Qué se prueba aquí</h3>
+    <p class="why">Entra en la pantalla de arriba y camina estas rutas.</p>
     <table>
       <tr><td><code>/web/employer</code></td><td>Tablero: quincena actual, KPIs, archivos por corte</td></tr>
       <tr><td><code>/web/employer/employees</code></td><td>Padrón de empleados</td></tr>
@@ -152,11 +153,12 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 <section class="surface" data-s="ops">
   <div class="stage"><div class="frame desktop"><iframe data-src="/web/login" title="Consola de operaciones"></iframe></div></div>
   <div class="warn">
-    <b>Sin cuenta publicada todavía.</b>
-    <p>La consola de operaciones ejecuta acciones reales sobre producción — aprobar empleadores, revisar y decidir solicitudes. Una contraseña publicada aquí dejaría a cualquiera hacerlo. Isaac decide cómo entregarla.</p>
+    <b>La cuenta existe. La contraseña no se publica aquí.</b>
+    <p>La consola de operaciones lee el expediente de cualquier persona y ejecuta acciones reales sobre producción — aprobar empleadores, decidir solicitudes. El rol no tiene una versión reducida. Los datos de acceso se entregan directamente.</p>
   </div>
   <div class="creds">
     <h3>Qué se prueba aquí</h3>
+    <p class="why">Entra en la pantalla de arriba y camina estas rutas.</p>
     <table>
       <tr><td><code>/web/ops</code></td><td>Tablero del libro de crédito</td></tr>
       <tr><td><code>/web/ops/review-queue</code></td><td>Cola de revisión y detalle de cada solicitud</td></tr>
