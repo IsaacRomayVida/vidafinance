@@ -1,0 +1,51 @@
+name: Seed portal test accounts (production)
+
+# Creates the employer_admin and ops sign-in accounts the team portal needs,
+# using passwords supplied as repository secrets so nothing sensitive is ever
+# written to an Actions log. See scripts/seed-portal-test-accounts.js for the
+# safety posture — in particular why the employer account's uid is pinned and
+# why the ops credential must never appear on alfa.funpay.mx.
+#
+# Requires QA_EMPLOYER_PASSWORD and QA_OPS_PASSWORD repo secrets, and the QA
+# employer fixture from "Seed QA employer (production)".
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print what would change, write nothing"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install firebase-admin
+        run: npm install --no-save firebase-admin
+
+      - name: Seed portal accounts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}
+          QA_EMPLOYER_PASSWORD: ${{ secrets.QA_EMPLOYER_PASSWORD }}
+          QA_OPS_PASSWORD: ${{ secrets.QA_OPS_PASSWORD }}
+          DRY: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > /tmp/sa-key.json
+          ARGS=""
+          [ "$DRY" = "true" ] && ARGS="--dry-run"
+          SA_KEY_PATH=/tmp/sa-key.json OPERATOR="${{ github.actor }}" \
+            node scripts/seed-portal-test-accounts.js $ARGS
+          rm -f /tmp/sa-key.json
