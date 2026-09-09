@@ -2,6 +2,12 @@
   "expo": {
     "name": "FunPay",
     "slug": "funpay",
+    "owner": "vidateam",
+    "extra": {
+      "eas": {
+        "projectId": "a882e7fb-24bb-4363-9337-5e37825ade91"
+      }
+    },
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "funpay",
