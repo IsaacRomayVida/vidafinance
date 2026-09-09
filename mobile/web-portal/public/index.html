@@ -38,7 +38,6 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:8px 0;border-bottom:1px solid rgba(30,32,29,.07);vertical-align:top}
 td:first-child{color:var(--ink-soft);width:38%;padding-right:12px}
 code{background:#e9ebe1;padding:3px 8px;border-radius:6px;font-family:ui-monospace,monospace;font-size:13px;word-break:break-all}
-.copy{margin-left:8px;font:inherit;font-size:12px;border:0;background:var(--mark);color:var(--mark-ink);padding:3px 9px;border-radius:20px;cursor:pointer}
 .warn{background:#fdf3f2;border:1px solid rgba(179,38,30,.28);border-radius:var(--r);padding:16px 18px;max-width:760px;margin-bottom:14px}
 .warn b{color:var(--danger)}
 .warn p{font-size:13.5px;line-height:1.55;color:var(--ink-soft);margin-top:6px}
@@ -88,11 +87,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
   <div class="stage"><div class="frame desktop"><iframe data-src="/web/" title="Sitio público"></iframe></div></div>
   <div class="creds">
     <h3>No necesita cuenta</h3>
-    <p class="why">El sitio público es anónimo. Para probar el registro usa el código de empresa de pruebas y un correo del dominio de diagnóstico.</p>
-    <table>
-      <tr><td>Código de empresa</td><td><code>FUNQA1</code><button class="copy" data-c="FUNQA1">copiar</button></td></tr>
-      <tr><td>Correo a usar</td><td><code>lo-que-sea@demo-diagnostic.funpay.mx</code></td></tr>
-    </table>
+    <p class="why">El sitio público es anónimo — se recorre entero sin entrar. Para probar el registro hace falta el código de la empresa de pruebas, que se entrega aparte.</p>
     <p class="note">El registro crea una cuenta real en producción, sin verificación de identidad — puede ver su línea, pero no puede pedir dinero.</p>
   </div>
 </section>
@@ -101,14 +96,9 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
   <div class="stage"><div class="frame phone fixed"><iframe data-src="/app/" title="App del empleado"></iframe></div></div>
   <div class="creds">
     <h3>Cuenta de prueba del empleado</h3>
-    <p class="why">Cuenta real en producción, sin identidad verificada: puede entrar y ver todo, pero el servidor rechaza cualquier solicitud de dinero.</p>
-    <table>
-      <tr><td>Correo</td><td><code>qa-ui-1788773545173@demo-diagnostic.funpay.mx</code><button class="copy" data-c="qa-ui-1788773545173@demo-diagnostic.funpay.mx">copiar</button></td></tr>
-      <tr><td>Contraseña</td><td><code>QaUi-2026-Prueba1</code><button class="copy" data-c="QaUi-2026-Prueba1">copiar</button></td></tr>
-      <tr><td>Sin OTP</td><td>Solo correo y contraseña — no hay código por SMS.</td></tr>
-    </table>
+    <p class="why">Existe una cuenta de empleado de prueba: cuenta real en producción, sin identidad verificada, así que puede entrar y ver todo pero el servidor rechaza cualquier solicitud de dinero. Solo correo y contraseña — no hay código por SMS. Los datos se entregan aparte.</p>
     <ol class="steps">
-      <li>Entra con los datos de arriba.</li>
+      <li>Entra con la cuenta de prueba.</li>
       <li>Inicio muestra la línea disponible y el compañero.</li>
       <li><code>/app/?screen=RequestLoan</code> abre Solicitar directamente.</li>
     </ol>
@@ -119,11 +109,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
   <div class="stage"><div class="frame desktop"><iframe data-src="/web/login" title="Portal del empleado"></iframe></div></div>
   <div class="creds">
     <h3>Mismos datos que la app</h3>
-    <p class="why">El portal web del empleado usa la misma cuenta. Entra y llega a <code>/web/employee</code>.</p>
-    <table>
-      <tr><td>Correo</td><td><code>qa-ui-1788773545173@demo-diagnostic.funpay.mx</code><button class="copy" data-c="qa-ui-1788773545173@demo-diagnostic.funpay.mx">copiar</button></td></tr>
-      <tr><td>Contraseña</td><td><code>QaUi-2026-Prueba1</code><button class="copy" data-c="QaUi-2026-Prueba1">copiar</button></td></tr>
-    </table>
+    <p class="why">El portal web del empleado usa la misma cuenta que la app. Entra y llega a <code>/web/employee</code>.</p>
     <ol class="steps">
       <li><code>/web/employee</code> — tablero, línea y crédito activo.</li>
       <li><code>/web/employee/apply</code> — el asistente de solicitud con el costo a la vista.</li>
@@ -136,7 +122,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
   <div class="stage"><div class="frame desktop"><iframe data-src="/web/login" title="Portal del empleador"></iframe></div></div>
   <div class="warn">
     <b>La cuenta existe. La contraseña no se publica aquí.</b>
-    <p>Hay una cuenta de empleador de prueba, atada a la empresa ficticia de QA — solo ve a los empleados registrados con <code>FUNQA1</code>, nunca a un cliente real. Esta página no tiene login propio: cualquiera con el enlace la abre, así que los datos de acceso se entregan directamente, no aquí.</p>
+    <p>Hay una cuenta de empleador de prueba, atada a la empresa ficticia de QA — solo ve a los empleados de esa empresa de pruebas, nunca a un cliente real. Esta página no tiene login propio: cualquiera con el enlace la abre, así que los datos de acceso se entregan directamente, no aquí.</p>
   </div>
   <div class="creds">
     <h3>Qué se prueba aquí</h3>
@@ -171,6 +157,7 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
 </div>
 
 <footer>
+  <strong>Aquí no se publica ningún dato de acceso.</strong> Esta página no tiene login propio: cualquiera con el enlace la abre. Las cuentas de prueba existen y se entregan directamente.<br>
   <strong>Este entorno apunta a producción.</strong> Mirar y registrarse con datos de prueba está bien; nunca ejecutar un pago, una dispersión ni una aprobación real.
   <div class="ver" id="ver">—</div>
 </footer>
@@ -217,13 +204,6 @@ footer{max-width:1180px;margin:20px auto 0;font-size:12.5px;color:var(--ink-soft
   document.querySelectorAll('nav button[data-z]').forEach(function (b) { b.onclick = function () { setSize(b.dataset.z); }; });
   show('marketing');
 
-  document.querySelectorAll('.copy').forEach(function (b) {
-    b.onclick = function () {
-      navigator.clipboard.writeText(b.dataset.c).then(function () {
-        var t = b.textContent; b.textContent = 'copiado'; setTimeout(function () { b.textContent = t; }, 1200);
-      });
-    };
-  });
 
   /* The feedback label names the surface AND the route inside it, so a report
      says where it was filed even when the framed page titles itself. */
