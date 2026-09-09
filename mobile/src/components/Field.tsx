@@ -1,8 +1,7 @@
 /**
- * The form field of the design language: uppercase micro-label, a near-opaque
- * white input floating on glass, a brand focus ring, inline error line, and
- * an optional show/hide eye for passwords. One component so every form in the
- * app (login, onboarding) shares identical bones and states.
+ * The form field: a Doto label over a paper pill (#e9ebe1, no border). Focus
+ * lifts the pill to white; an error paints a single hairline in danger and
+ * says why beneath. One component so login and onboarding share bones.
  */
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
@@ -16,7 +15,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { colors, fonts, microLabel, radii, spacing } from '../theme';
+import { colors, dotLabel, fonts, radii, spacing } from '../theme';
 import { PressableScale } from './motion';
 
 export function Field({
@@ -28,11 +27,8 @@ export function Field({
   ...input
 }: TextInputProps & {
   label: string;
-  /** Inline error under the field; also paints the border. */
   error?: string;
-  /** Quiet helper line, shown when there is no error. */
   help?: string;
-  /** Password mode: masks input and adds the show/hide toggle. */
   secure?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
 }) {
@@ -61,8 +57,8 @@ export function Field({
             setFocused(false);
             input.onBlur?.(e);
           }}
-          selectionColor={colors.brandLight}
-          placeholderTextColor={colors.faint}
+          selectionColor={colors.ink}
+          placeholderTextColor={colors.mute}
         />
         {secure ? (
           <PressableScale
@@ -72,61 +68,33 @@ export function Field({
             style={styles.eye}
             hitSlop={10}
           >
-            <Ionicons
-              name={revealed ? 'eye-off-outline' : 'eye-outline'}
-              size={20}
-              color={colors.subtle}
-            />
+            <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.inkSoft} />
           </PressableScale>
         ) : null}
       </View>
-      {error ? (
-        <Text style={styles.error}>{error}</Text>
-      ) : help ? (
-        <Text style={styles.help}>{help}</Text>
-      ) : null}
+      {error ? <Text style={styles.error}>{error}</Text> : help ? <Text style={styles.help}>{help}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  label: { ...microLabel, marginBottom: spacing.s },
+  label: { ...dotLabel, marginBottom: spacing.s },
   input: {
-    backgroundColor: colors.glassStrong,
-    borderRadius: radii.m,
-    borderWidth: 1.5,
-    borderColor: colors.glassBorder,
-    paddingHorizontal: spacing.m,
-    paddingVertical: 13,
+    backgroundColor: colors.paper,
+    borderRadius: radii.s,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     fontFamily: fonts.sans,
     fontSize: 16,
-    color: colors.text,
-    minHeight: 50,
+    color: colors.ink,
+    minHeight: 52,
   },
-  inputWithEye: { paddingRight: 46 },
-  inputFocused: { borderColor: colors.brandLight },
+  inputWithEye: { paddingRight: 48 },
+  inputFocused: { backgroundColor: '#ffffff' },
   inputError: { borderColor: colors.danger },
-  eye: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  error: {
-    fontFamily: fonts.sans,
-    color: colors.danger,
-    fontSize: 13,
-    marginTop: spacing.s,
-    lineHeight: 18,
-  },
-  help: {
-    fontFamily: fonts.sans,
-    color: colors.faint,
-    fontSize: 13,
-    marginTop: spacing.s,
-    lineHeight: 18,
-  },
+  eye: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 48, alignItems: 'center', justifyContent: 'center' },
+  error: { fontFamily: fonts.sans, color: colors.danger, fontSize: 13, marginTop: spacing.s, lineHeight: 18 },
+  help: { fontFamily: fonts.sans, color: colors.inkSoft, fontSize: 13, marginTop: spacing.s, lineHeight: 18 },
 });

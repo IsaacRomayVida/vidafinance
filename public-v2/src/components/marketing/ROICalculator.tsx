@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
+import { BoardFilm } from './BoardFilm';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { MIN_CREDIT_LINE, selectableCreditLine } from '../../lib/creditLine';
 import { sliderFillPercent } from '../../lib/loanSlider';
+import { Board, BoardHead } from './Board';
 
 function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -17,6 +19,14 @@ function fmt(n: number): string {
 // anonymous callers is the fix; see outputs/PUBLIC_V2_AUDIT.md F3.
 const RATE = 0.30;
 
+/**
+ * Cost in plain sight. The visitor's salary sets the line (30% of salary,
+ * capped at 5,000 — the same rule the backend enforces), the slider picks
+ * the amount, and the total to repay appears on the same board, in the
+ * same type as the copy, without a tap. The CAT is a regulated figure the
+ * client must not compute or invent: until the product config publishes it
+ * to anonymous callers the line renders it as pending, not omitted.
+ */
 export function ROICalculator() {
   const { t } = useTranslation();
   const [credit, setCredit] = useState(3000);
@@ -33,7 +43,6 @@ export function ROICalculator() {
 
   const total = effectiveCredit * (1 + RATE);
   const whole = Math.floor(total);
-  const cents = ((total - whole) * 100).toFixed(0).padStart(2, '0');
   const fillPct = Math.min(100, Math.max(0, sliderFillPercent(effectiveCredit, maxCredit)));
 
   const handleSalaryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,109 +51,74 @@ export function ROICalculator() {
   }, []);
 
   return (
-    <section className="calc">
-      <div className="calc-glow" />
-      <div className="wrap">
-        <div className="calc-grid">
-          <div className="calc-text">
-            {/* Calculator person photo */}
-            <div className="calc-person-img" style={{
-              marginTop: 36, position: 'relative', display: 'inline-block',
-            }}>
-              {/* Decorative teal circle */}
-              <div style={{
-                position: 'absolute', bottom: 0, right: -20,
-                width: 200, height: 200, borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(168,213,208,0.1) 0%, transparent 65%)',
-                filter: 'blur(24px)', pointerEvents: 'none',
-              }} />
-              {/* Decorative gold accent dot */}
-              <div style={{
-                position: 'absolute', top: 20, left: -10,
-                width: 80, height: 80, borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(162,134,87,0.06) 0%, transparent 65%)',
-                filter: 'blur(12px)', pointerEvents: 'none',
-              }} />
-              <picture style={{ display: 'block' }}>
-                <source srcSet="/images/calculator-person.webp" type="image/webp" />
-                <img loading="lazy" src="/images/calculator-person.jpg" alt="Empleada calculando" style={{
-                  width: 380, position: 'relative',
-                  filter: 'drop-shadow(0 20px 44px rgba(25,68,69,0.12))',
-                }} />
-              </picture>
+    <Board className="film" id="cost">
+      <BoardFilm film="/video/live-pharmacy.mp4" still="/images/brand/moment-pharmacy.jpg" />
+      <div className="mk-cols">
+        <div className="sticky">
+          <BoardHead kicker={t('calc_tag')} title={t('calc_h2')} lead={t('calc_p')} />
+        </div>
+
+        <div>
+          <div className="mk-field">
+            <label htmlFor="calc-salary">{t('calc_salary')}</label>
+            <div className="mk-money">
+              <span className="pre" aria-hidden="true">$</span>
+              <input
+                id="calc-salary"
+                className="mk-input"
+                type="text"
+                inputMode="numeric"
+                aria-label={t('calc_salary')}
+                value={salary}
+                onChange={handleSalaryChange}
+                placeholder={t('calc_salary_placeholder')}
+              />
+              <span className="suf" aria-hidden="true">MXN</span>
             </div>
-            <div className="tag rv">{t('calc_tag')}</div>
-            <h2 className="sh rv d1">{t('calc_h2')}</h2>
-            <p className="sp rv d2">{t('calc_p')}</p>
           </div>
-          <div className="calc-form rv d3">
-            <div className="cf">
-              <div className="cf-label">{t('calc_salary')}</div>
-              <div className="sal-wrap">
-                <span className="sal-pre">$</span>
-                <input
-                  className="sal-in"
-                  type="text"
-                  inputMode="numeric"
-                  aria-label={t('calc_salary')}
-                  value={salary}
-                  onChange={handleSalaryChange}
-                  placeholder={t('calc_salary_placeholder')}
-                />
-                <span className="sal-suf">MXN</span>
-              </div>
+
+          <div className="mk-field">
+            <label htmlFor="calc-credit">{t('calc_credit')}</label>
+            <div className="mk-slider">
+              <div className="track" aria-hidden="true"><div className="fill" style={{ width: `${fillPct}%` }} /></div>
+              <input
+                id="calc-credit"
+                type="range"
+                aria-label={t('calc_credit')}
+                min={MIN_CREDIT_LINE}
+                max={eligible ? maxCredit : MIN_CREDIT_LINE}
+                step="100"
+                disabled={!eligible}
+                value={effectiveCredit}
+                onChange={(e) => setCredit(parseInt(e.target.value))}
+              />
             </div>
-            <div className="cf">
-              <div className="cf-row">
-                <span className="cf-label">{t('calc_credit')}</span>
-                <span className="cf-val">${fmt(effectiveCredit)}</span>
-              </div>
-              <div className="slider-wrap">
-                <div className="sw">
-                  <div className="sw-fill" style={{ width: `${fillPct}%` }} />
-                </div>
-                <input
-                  type="range"
-                  aria-label={t('calc_credit')}
-                  min={MIN_CREDIT_LINE}
-                  max={eligible ? maxCredit : MIN_CREDIT_LINE}
-                  step="100"
-                  disabled={!eligible}
-                  value={effectiveCredit}
-                  onChange={(e) => setCredit(parseInt(e.target.value))}
-                />
-                <div className="sw-labels">
-                  <span>${fmt(MIN_CREDIT_LINE)}</span>
-                  <span>${fmt(eligible ? maxCredit : MIN_CREDIT_LINE)}</span>
-                </div>
-              </div>
+            <div className="mk-slider-labels">
+              <span>{fmt(MIN_CREDIT_LINE)} MXN</span>
+              <span>{fmt(eligible ? maxCredit : MIN_CREDIT_LINE)} MXN</span>
             </div>
-            <div className="cf">
-              <div className="cf-row">
-                <span className="cf-label">{t('calc_term')}</span>
-                <span className="cf-val">30 {t('calc_days')} &middot; {t('calc_rate')}</span>
-              </div>
-            </div>
-            <div className="calc-line" />
-            <div className="calc-result">
-              <div className="calc-result-label">{t('calc_result_label')}</div>
-              {eligible ? (
-                <div className="calc-result-num">
-                  <span className="cr">$</span>{fmt(whole)}<span className="dc">.{cents}</span>
-                </div>
-              ) : (
-                <div className="calc-result-num">
-                  <span className="cr">$</span>—
-                </div>
-              )}
-            </div>
-            <div className="calc-note">
-              {eligible ? t('calc_note') : t('calc_note_below_min')}
-            </div>
-            <Link to="/onboarding" className="calc-cta">{t('calc_cta')}</Link>
+          </div>
+
+          <div className="mk-gap-sm" />
+          <p className="mk-quiet" style={{ fontSize: 15 }}>{t('calc_result_credit')}</p>
+          <div className="mk-num money" aria-live="polite">{eligible ? fmt(effectiveCredit) : '—'}<small>MXN</small></div>
+
+          <p className="mk-disclose">
+            {eligible ? (
+              <>
+                {t('calc_result_label')} <b>{fmt(whole)}</b> MXN · {t('calc_rate')} · {t('calc_term')} 30 {t('calc_days')} · {t('calc_disclose_charge')} · <b>{t('calc_cat_label')}</b> · {t('calc_cat_pending')}
+              </>
+            ) : (
+              t('calc_note_below_min')
+            )}
+          </p>
+          <p className="mk-disclose">{t('calc_note')} {t('calc_early')}</p>
+
+          <div className="mk-actions">
+            <Link to="/onboarding" className="mk-btn">{t('calc_cta')}</Link>
           </div>
         </div>
       </div>
-    </section>
+    </Board>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
@@ -141,46 +141,29 @@ function PasswordStrengthBar({ password, t }: { password: string; t: (k: string)
 }
 
 
-// ── Split-screen step context for left panel ──
-const STEP_CONTEXT: Record<string, { icon: string; title: string; sub: string; trust: string }[]> = {
+// ── Step context: the Doto step label at the top of the board ──
+const STEP_CONTEXT: Record<string, { title: string; sub: string; trust: string }[]> = {
   employer: [
-    { icon: 'briefcase', title: 'Tu empresa', sub: 'Comienza con el nombre de tu empresa.', trust: 'Proceso 100% digital — 10 minutos' },
-    { icon: 'mail', title: 'Datos de contacto', sub: 'Quién administrará la cuenta Funpay.', trust: 'Encriptación punto a punto' },
-    { icon: 'file', title: 'Datos fiscales', sub: 'RFC, estado y sector para validación.', trust: 'Cumplimiento CNBV y CONDUSEF' },
-    { icon: 'users', title: 'Equipo y nómina', sub: 'Determina créditos para tu equipo.', trust: 'Sin costo para tu empresa' },
-    { icon: 'bank', title: 'Datos bancarios', sub: 'CLABE para deducciones de nómina.', trust: 'Conexión bancaria segura' },
-    { icon: 'file', title: 'Documentos', sub: 'RFC, identificación y comprobante.', trust: 'Almacenamiento seguro' },
-    { icon: 'users', title: 'Empleados', sub: 'CURPs para pre-registro de empleados.', trust: 'Verificación automatizada' },
-    { icon: 'lock', title: 'Seguridad', sub: 'Contraseña y términos de servicio.', trust: 'Autenticación multi-factor' },
-    { icon: 'sparkles', title: '¡Listo!', sub: 'Tu cuenta ha sido creada.', trust: '' },
+    { title: 'Tu empresa', sub: 'Comienza con el nombre de tu empresa.', trust: 'Proceso 100% digital — 10 minutos' },
+    { title: 'Datos de contacto', sub: 'Quién administrará la cuenta Funpay.', trust: 'Encriptación punto a punto' },
+    { title: 'Datos fiscales', sub: 'RFC, estado y sector para validación.', trust: 'Cumplimiento CNBV y CONDUSEF' },
+    { title: 'Equipo y nómina', sub: 'Determina créditos para tu equipo.', trust: 'Sin costo para tu empresa' },
+    { title: 'Datos bancarios', sub: 'CLABE para deducciones de nómina.', trust: 'Conexión bancaria segura' },
+    { title: 'Documentos', sub: 'RFC, identificación y comprobante.', trust: 'Almacenamiento seguro' },
+    { title: 'Empleados', sub: 'CURPs para pre-registro de empleados.', trust: 'Verificación automatizada' },
+    { title: 'Seguridad', sub: 'Contraseña y términos de servicio.', trust: 'Autenticación multi-factor' },
+    { title: '¡Listo!', sub: 'Tu cuenta ha sido creada.', trust: '' },
   ],
   employee: [
-    { icon: 'key', title: 'Código de empresa', sub: 'Tu empleador te dio un código único.', trust: 'Tu empleador ya está verificado' },
-    { icon: 'person', title: 'Datos personales', sub: 'Nombre, correo y teléfono.', trust: 'Protegidos bajo la LFPDPPP' },
-    { icon: 'id', title: 'Identidad fiscal', sub: 'CURP y RFC para validación.', trust: 'Verificación KYC automatizada' },
-    { icon: 'wallet', title: 'Empleo y banco', sub: 'Salario y cuenta bancaria.', trust: 'Línea = hasta 30% de tu salario' },
-    { icon: 'lock', title: 'Seguridad', sub: 'Contraseña y términos.', trust: 'Tus datos están encriptados' },
-    { icon: 'sparkles', title: '¡Aprobado!', sub: 'Tu línea de crédito está lista.', trust: '' },
+    { title: 'Código de empresa', sub: 'Tu empleador te dio un código único.', trust: 'Tu empleador ya está verificado' },
+    { title: 'Datos personales', sub: 'Nombre, correo y teléfono.', trust: 'Protegidos bajo la LFPDPPP' },
+    { title: 'Identidad fiscal', sub: 'CURP y RFC para validación.', trust: 'Verificación KYC automatizada' },
+    { title: 'Empleo y banco', sub: 'Salario y cuenta bancaria.', trust: 'Línea = hasta 30% de tu salario' },
+    { title: 'Seguridad', sub: 'Contraseña y términos.', trust: 'Tus datos están encriptados' },
+    { title: '¡Aprobado!', sub: 'Tu línea de crédito está lista.', trust: '' },
   ],
 };
 
-function StepIcon({ name }: { name: string }) {
-  const icons: Record<string, React.ReactNode> = {
-    briefcase: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>,
-    mail: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>,
-    file: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>,
-    users: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
-    bank: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/></svg>,
-    lock: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
-    key: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
-    person: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
-    id: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2"/><path d="M14 10h4M14 14h2"/></svg>,
-    wallet: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 12V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2v-5z"/><path d="M16 12h.01"/></svg>,
-    sparkles: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z"/></svg>,
-    shield: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-  };
-  return icons[name] || icons.briefcase;
-}
 
 export function Onboarding() {
   const { t, i18n } = useTranslation();
@@ -702,7 +685,7 @@ export function Onboarding() {
         </button>
       </div>
 
-      <p className="onb-sub" style={{ marginTop: 32, marginBottom: 0, fontSize: 13 }}>
+      <p className="onb-sub" style={{ marginTop: 28, marginBottom: 0, fontSize: 14 }}>
         {t('onb_already_account')}{' '}
         <Link to="/login"><strong>{t('onb_login')}</strong></Link>
       </p>
@@ -1378,142 +1361,105 @@ export function Onboarding() {
     </>
   );
 
-  // Step context for left panel
+  // Step context for the Doto step label at the top of the board
   const stepCtxArr = role ? STEP_CONTEXT[role] || [] : [];
-  const stepCtx = stepCtxArr[Math.min(step - 1, stepCtxArr.length - 1)] || stepCtxArr[0] || { icon: 'briefcase', title: '', sub: '', trust: '' };
+  const stepCtx = stepCtxArr[Math.min(step - 1, stepCtxArr.length - 1)] || stepCtxArr[0] || { title: '', sub: '', trust: '' };
+  const stepLabel = role && step >= 1 && !isFinalStep
+    ? `${t('onb_step_label', { current: step, total: totalSteps })} · ${stepCtx.title}`
+    : 'FunPay';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, display: 'flex', background: 'var(--bg1, #faf9f7)', overflow: 'hidden' }}>
-
-      {/* ──── LEFT PANEL — Branded Context ──── */}
-      {role && !isFinalStep && (
-        <div className="onb-v2-left" style={{
-          width: '38%', minWidth: 320,
-          background: 'linear-gradient(170deg, #0f2a2b 0%, var(--brand) 55%, var(--brand-mid) 100%)',
-          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-          padding: '40px 44px', position: 'relative', overflow: 'hidden', flexShrink: 0,
-        }}>
-          <div style={{ position: 'absolute', width: 400, height: 400, top: -100, right: -100, borderRadius: '50%', background: 'radial-gradient(circle, rgba(168,213,208,0.06), transparent 65%)', filter: 'blur(40px)', animation: 'onbMeshDrift 18s ease-in-out infinite', pointerEvents: 'none' }} />
-          <div style={{ position: 'relative', zIndex: 2 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: 7, color: 'rgba(255,255,255,0.5)' }}>VID<span style={{ color: 'var(--gold)' }}>A</span></div>
-          </div>
-          <div key={step} style={{ position: 'relative', zIndex: 2, animation: 'onbFadeSlideIn 0.5s cubic-bezier(0.22,1,0.36,1)' }}>
-            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(168,213,208,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, color: 'var(--aqua)' }}>
-              <StepIcon name={stepCtx.icon} />
+    <div className="onb">
+      <div className="onb-board">
+        {/* Top bar */}
+        <div className="onb-top">
+          {!role ? (
+            <div className="onb-logo">
+              <span className="funpay-logo" aria-label="Funpay">
+                <span className="funpay-logo-text" aria-hidden="true">Funpay</span>
+              </span>
             </div>
-            <h2 style={{ fontFamily: 'var(--df)', fontSize: 28, color: 'white', lineHeight: 1.15, letterSpacing: '-0.02em', marginBottom: 12 }}>{stepCtx.title}</h2>
-            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7, maxWidth: 280 }}>{stepCtx.sub}</p>
-          </div>
-          <div style={{ position: 'relative', zIndex: 2 }}>
-            {stepCtx.trust && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <span style={{ color: 'rgba(168,213,208,0.4)' }}><StepIcon name="shield" /></span>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>{stepCtx.trust}</span>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 5 }}>
-              {Array.from({ length: totalSteps }, (_, i) => (
-                <div key={i} style={{
-                  width: step > i + 1 ? 18 : step === i + 1 ? 18 : 7, height: 3, borderRadius: 3,
-                  background: step > i + 1 ? 'rgba(168,213,208,0.35)' : step === i + 1 ? 'var(--aqua)' : 'rgba(255,255,255,0.06)',
-                  transition: 'all 0.5s cubic-bezier(0.22,1,0.36,1)',
-                }} />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ──── RIGHT PANEL — Form ──── */}
-      <div className="onb-page" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg1, #faf9f7)', overflow: 'auto', position: 'relative' }}>
-      {/* Background blobs */}
-      <div className="onb-blob ob1" />
-      <div className="onb-blob ob2" />
-
-      {/* Top bar */}
-      <div className="onb-top">
-        {!role && (
-          <div className="onb-logo">
-            <span className="funpay-logo" aria-label="Funpay">
-              <span className="funpay-logo-text" aria-hidden="true">Funpay</span>
-            </span>
-          </div>
-        )}
-        {role && <div />}
-        <div className="onb-top-right">
-          <Link to="/login">
-            {t('onb_already_account')} <strong>{t('onb_login')}</strong>
-          </Link>
-          <button className="nav-lang" onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); safeSetItem('vida_lang', next); }}>
-            {i18n.language === 'es' ? 'EN' : 'ES'}
-          </button>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div className="onb-progress">
-        <div className="onb-progress-fill" style={{ width: `${progressPct}%` }} />
-      </div>
-
-      {/* Invite banner */}
-      {inviteEmployerName && (
-        <div style={{
-          margin: '12px 20px 0', padding: '10px 14px', borderRadius: 10,
-          background: 'rgba(168,213,208,0.18)', border: '1px solid rgba(29,82,83,0.25)',
-          color: 'var(--brand)', fontSize: 13, textAlign: 'center', position: 'relative', zIndex: 10,
-        }}>
-          Has sido invitado por <strong>{inviteEmployerName}</strong>
-        </div>
-      )}
-      {inviteInvalid && (
-        <div style={{
-          margin: '12px 20px 0', padding: '10px 14px', borderRadius: 10,
-          background: 'rgba(220,170,50,0.15)', border: '1px solid rgba(180,130,20,0.35)',
-          color: '#6b4a10', fontSize: 13, textAlign: 'center', position: 'relative', zIndex: 10,
-        }}>
-          Esta invitación no es válida o ya expiró
-        </div>
-      )}
-
-      {/* Body */}
-      <div className="onb-body">
-        {/* Back button */}
-        {role && !isFinalStep && (
-          <button className="onb-back" onClick={goBack} aria-label={t('onb_go_back')}>
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-              <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        )}
-
-        {/* Role selection stage */}
-        <div className={!role ? 'onb-stage active' : 'onb-stage left'}>
-          {renderRoleSelection()}
-        </div>
-
-        {/* Employer flow stages */}
-        {role === 'employer' && renderEmployerSteps()}
-
-        {/* Employee flow stages */}
-        {role === 'employee' && renderEmployeeSteps()}
-      </div>
-
-      {/* Bottom action button */}
-      {role && !isFinalStep && step >= 1 && (
-        <div style={{ padding: '16px 20px', flexShrink: 0, position: 'relative', zIndex: 10 }}>
-          <div className="onb-content" style={{ margin: '0 auto' }}>
-            {error && <div className="onb-error show">{error}</div>}
+          ) : (
+            <span className="onb-step-label dot" aria-live="polite">{stepLabel}</span>
+          )}
+          <div className="onb-top-right">
+            <Link to="/login">
+              {t('onb_already_account')} <strong>{t('onb_login')}</strong>
+            </Link>
             <button
-              className="onb-btn"
-              onClick={handleNext}
-              disabled={!canProceed() || creating}
+              type="button"
+              className="mk-icon-btn"
+              aria-label={t('a11y_lang_toggle')}
+              onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); safeSetItem('vida_lang', next); }}
             >
-              {getActionLabel()}
+              {i18n.language === 'es' ? 'EN' : 'ES'}
             </button>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Progress */}
+        <div
+          className="onb-progress"
+          role="progressbar"
+          aria-label={t('onb_progress_label')}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progressPct)}
+        >
+          <div className="onb-progress-fill" style={{ width: `${progressPct}%` }} />
+        </div>
+
+        {/* Invite banner */}
+        {inviteEmployerName && (
+          <div className="onb-note">
+            Has sido invitado por <strong>{inviteEmployerName}</strong>
+          </div>
+        )}
+        {inviteInvalid && (
+          <div className="onb-note warn">
+            Esta invitación no es válida o ya expiró
+          </div>
+        )}
+
+        {/* Body */}
+        <div className="onb-body">
+          {/* Back button */}
+          {role && !isFinalStep && (
+            <button className="onb-back" onClick={goBack} aria-label={t('onb_go_back')}>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+
+          {/* Role selection stage */}
+          <div className={!role ? 'onb-stage active' : 'onb-stage left'}>
+            {renderRoleSelection()}
+          </div>
+
+          {/* Employer flow stages */}
+          {role === 'employer' && renderEmployerSteps()}
+
+          {/* Employee flow stages */}
+          {role === 'employee' && renderEmployeeSteps()}
+        </div>
+
+        {/* Bottom action button — the one green control on the screen */}
+        {role && !isFinalStep && step >= 1 && (
+          <div className="onb-foot">
+            <div className="onb-content">
+              {error && <div className="onb-error show" role="alert">{error}</div>}
+              <button
+                className="onb-btn"
+                onClick={handleNext}
+                disabled={!canProceed() || creating}
+              >
+                {getActionLabel()}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

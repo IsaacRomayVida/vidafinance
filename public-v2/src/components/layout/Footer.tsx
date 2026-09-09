@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { FunpayLogo } from '../shared/FunpayLogo';
 import { safeSetItem } from '../../lib/safeStorage';
 
+/** Footer on an ink board; CONDUSEF and lender lines as one-line disclosures. */
 export function Footer() {
   const { t, i18n } = useTranslation();
 
@@ -14,52 +15,59 @@ export function Footer() {
   };
 
   return (
-    <footer className="footer">
-      <div className="footer-inner">
-        <div className="ft-top">
-          <div className="ft-brand">
-            <div className="ft-logo"><FunpayLogo variant="footer" /></div>
-            <p className="ft-tag">{t('ft_tagline')}</p>
+    <footer className="mk-footer">
+      <div className="mk-inner">
+        <div className="mk-ft-top">
+          <div className="mk-ft-brand">
+            <FunpayLogo variant="footer" />
+            <p className="mk-ft-tag">{t('ft_tagline')}</p>
           </div>
-          <div className="ft-col">
-            <div className="ft-h">{t('ft_platform')}</div>
-            <Link to="/employers">{t('nav_employers')}</Link>
+          <div className="mk-ft-col">
+            <div className="mk-ft-h dot">{t('ft_platform')}</div>
             <Link to="/employees">{t('nav_employees')}</Link>
+            <Link to="/employers">{t('nav_employers')}</Link>
             <Link to="/partners">{t('nav_partners')}</Link>
             <Link to="/investors">{t('nav_investors')}</Link>
           </div>
-          <div className="ft-col">
-            <div className="ft-h">{t('ft_company')}</div>
+          <div className="mk-ft-col">
+            <div className="mk-ft-h dot">{t('ft_company')}</div>
             <Link to="/about">{t('ft_about')}</Link>
             <Link to="/security">{t('ft_security')}</Link>
             <Link to="/privacy">{t('ft_privacy')}</Link>
             <Link to="/terms">{t('ft_terms')}</Link>
           </div>
-          <div className="ft-col">
-            <div className="ft-h">{t('ft_connect')}</div>
+          <div className="mk-ft-col">
+            <div className="mk-ft-h dot">{t('ft_connect')}</div>
             <Link to="/contact">{t('nav_contact')}</Link>
-            <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer">LinkedIn</a>
             <Link to="/press">{t('ft_press')}</Link>
+            <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer">LinkedIn</a>
           </div>
         </div>
-        <div className="ft-btm">
-          <span>&copy; 2026 Funpay</span>
-          <div className="ft-btm-links">
-            <button onClick={toggleLang} aria-label={t('a11y_lang_toggle')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit' }}>
+
+        <div className="mk-ft-disclose">
+          <span>{t('ft_lender_line')}</span>
+          <span>
+            {t('ft_condusef_line')}{' '}
+            <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener noreferrer">condusef.gob.mx</a>
+            {' · '}
+            <a href="tel:018009998080">800 999 8080</a>
+          </span>
+        </div>
+
+        <div className="mk-ft-btm">
+          <span>&copy; 2026 FunPay</span>
+          <div className="mk-ft-btm-links">
+            <button type="button" className="mk-icon-btn" onClick={toggleLang} aria-label={t('a11y_lang_toggle')}>
               {t('lang_toggle')}
             </button>
             <Link to="/privacy">{t('ft_privacy_policy')}</Link>
             <Link to="/terms">{t('ft_terms_service')}</Link>
-            <span style={{ color: 'rgba(255,255,255,.3)' }}>&middot;</span>
-            <a href="https://www.condusef.gob.mx" target="_blank" rel="noopener noreferrer">CONDUSEF</a>
-            <span style={{ color: 'rgba(255,255,255,.3)' }}>&middot;</span>
-            <a href="tel:018009998080">01 800 999 8080</a>
+            <a href="https://suena.ch/en" target="_blank" rel="noopener noreferrer" className="mk-ft-venture">
+              <span>{t('ft_venture')}</span>
+              <b>Suena</b>
+            </a>
           </div>
         </div>
-        <a href="https://suena.ch/en" target="_blank" rel="noopener noreferrer" className="ft-venture" style={{ marginTop: 16 }}>
-          <span className="ft-venture-label">{t('ft_venture')}</span>
-          <span className="ft-venture-mark">Suena</span>
-        </a>
       </div>
     </footer>
   );

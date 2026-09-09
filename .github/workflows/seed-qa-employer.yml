@@ -1,0 +1,34 @@
+name: Seed QA employer (production)
+
+# Creates the single, clearly-labeled QA employer fixture
+# (employers/qa-funpay-demo-employer, code FUNQA1) so the mobile registration
+# wizard has a company code to test against. Idempotent — re-running prints
+# the existing code. See scripts/seed-qa-employer.js for the safety posture.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install firebase-admin
+        run: npm install --no-save firebase-admin
+
+      - name: Seed QA employer
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > /tmp/sa-key.json
+          SA_KEY_PATH=/tmp/sa-key.json OPERATOR="${{ github.actor }}" node scripts/seed-qa-employer.js
+          rm -f /tmp/sa-key.json

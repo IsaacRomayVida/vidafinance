@@ -1,78 +1,40 @@
 import { useTranslation } from 'react-i18next';
-import { RichText } from '../components/shared/RichText';
-import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import { Board, BoardHead, Statement, Rows, Figures } from '../components/marketing/Board';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export function SecurityPage() {
   const { t } = useTranslation();
-  useRevealOnScroll();
-  useDocumentTitle(`Funpay — ${t('pg_sec_badge')}`);
+  useDocumentTitle(`FunPay — ${t('pg_sec_badge')}`);
 
   return (
     <>
+      <Board label={t('pg_sec_badge')}>
+        <Statement html={t('pg_sec_h1')} lead={t('pg_sec_sub')} />
+      </Board>
 
-      <section className="hero" style={{ padding: '100px 0 80px' }}>
-        <div className="hero-blob b1" /><div className="hero-blob b2" />
-        <div className="hero-inner" style={{ gridTemplateColumns: '1fr', textAlign: 'center', maxWidth: 720, margin: '0 auto' }}>
-          <div className="hero-text" style={{ textAlign: 'center' }}>
-            <div className="hero-badge" style={{ justifyContent: 'center' }}>
-              <span className="badge-dot" /><span className="badge-text">{t('pg_sec_badge')}</span>
-            </div>
-            <h1 style={{ opacity: 0, animation: 'fu .9s ease .3s forwards' }}><RichText html={t('pg_sec_h1')} /></h1>
-            <p className="hero-sub" style={{ maxWidth: 520, margin: '0 auto', opacity: 0, animation: 'fu .9s ease .45s forwards' }}>{t('pg_sec_sub')}</p>
+      <Board tone="paper">
+        <div className="mk-cols">
+          <div className="sticky">
+            <BoardHead kicker={t('pg_sec_enc_tag')} title={t('pg_sec_enc_h')} />
           </div>
+          <Rows items={[1, 2, 3, 4].map((n) => ({ title: t(`pg_sec_enc_${n}_t`), desc: t(`pg_sec_enc_${n}_d`) }))} />
         </div>
-      </section>
+      </Board>
 
-      <section className="section">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_sec_enc_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_sec_enc_h')} /></h2>
-          <div className="trust-grid rv d2">
-            {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="trust-item">
-                <div>
-                  <div className="trust-t">{t(`pg_sec_enc_${n}_t`)}</div>
-                  <div className="trust-d">{t(`pg_sec_enc_${n}_d`)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <Board>
+        <BoardHead kicker={t('pg_sec_infra_tag')} title={t('pg_sec_infra_h')} lead={t('pg_sec_infra_p')} />
+        <div className="mk-gap" />
+        <Figures items={[1, 2, 3, 4, 5, 6].map((n) => ({ value: t(`pg_sec_infra_${n}_v`), label: t(`pg_sec_infra_${n}_l`) }))} />
+      </Board>
 
-      <section className="section tinted">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_sec_infra_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_sec_infra_h')} /></h2>
-          <p className="sp rv d2" style={{ maxWidth: 640, marginBottom: 40 }}>{t('pg_sec_infra_p')}</p>
-          <div className="metrics rv d3">
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <div key={n} className="metric">
-                <div className="metric-v">{t(`pg_sec_infra_${n}_v`)}</div>
-                <div className="metric-l">{t(`pg_sec_infra_${n}_l`)}</div>
-              </div>
-            ))}
+      <Board tone="paper">
+        <div className="mk-cols">
+          <div className="sticky">
+            <BoardHead kicker={t('pg_sec_practices_tag')} title={t('pg_sec_practices_h')} />
           </div>
+          <Rows items={[1, 2, 3, 4].map((n) => ({ title: t(`pg_sec_pr_${n}_t`), desc: t(`pg_sec_pr_${n}_d`) }))} />
         </div>
-      </section>
-
-      <section className="section">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_sec_practices_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_sec_practices_h')} /></h2>
-          <div className="trust-grid rv d2">
-            {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="trust-item">
-                <div>
-                  <div className="trust-t">{t(`pg_sec_pr_${n}_t`)}</div>
-                  <div className="trust-d">{t(`pg_sec_pr_${n}_d`)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      </Board>
     </>
   );
 }

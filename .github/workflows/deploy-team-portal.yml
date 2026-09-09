@@ -1,0 +1,211 @@
+name: Deploy team portal (funpay-alfa hosting)
+
+# Builds the mobile app's web export from the given ref, wraps it in the
+# phone-frame portal, and deploys to the funpay-alfa Firebase Hosting site
+# with the production service account.
+#
+#   mode=deploy   build + publish
+#   mode=domain   also attach `domain` and print the DNS records to create
+#   mode=release  DETACH `domain` from this site so another Firebase site
+#                 can claim it (a custom domain belongs to exactly one site
+#                 across all projects)
+#
+# FunPay's portal was originally parked on alfa.funtrip.mx — Funtrip's
+# domain — because funpay.mx was not on Cloudflare and could not be
+# automated. It is now, so FunPay moves to alfa.funpay.mx and releases
+# alfa.funtrip.mx back to Funtrip. Do the move in that order: the new
+# certificate should be ACTIVE before the old domain is given up.
+#
+# DNS for both zones is created with the vidatravel repo's
+# `cloudflare-dns.yml` workflow, which holds the Cloudflare API token; its
+# token now sees funpay.mx as well.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch to build the app from"
+        required: true
+        default: "mobile-motion-pass"
+        type: string
+      mode:
+        description: "deploy | domain | release"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - domain
+          - release
+          - feedback
+      domain:
+        description: "Custom domain for mode=domain / mode=release"
+        required: false
+        default: "alfa.funpay.mx"
+        type: string
+      video_runs:
+        description: "Space-separated generate-brand-motion run ids to publish at /videos/"
+        required: false
+        default: ""
+        type: string
+      holding_prefix:
+        description: "Mount point when served behind a holding portal, e.g. /funpay (empty = own domain)"
+        required: false
+        default: ""
+        type: string
+      web_launch_mode:
+        description: "Website build: live (full marketing site) or coming-soon"
+        required: false
+        default: "live"
+        type: choice
+        options:
+          - live
+          - coming-soon
+
+permissions:
+  contents: read
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: |
+            mobile/package-lock.json
+            public-v2/package-lock.json
+
+      - name: Auth
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION }}
+        run: printf '%s' "$SA" > /tmp/sa.json
+
+      - name: Ensure hosting site exists
+        if: ${{ github.event.inputs.mode == 'deploy' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: |
+          npx firebase-tools hosting:sites:create funpay-alfa --project vida-finance 2>&1 | tee /tmp/site.log || true
+          grep -qiE "already exists|has been created" /tmp/site.log
+
+      - name: Build app web export
+        if: ${{ github.event.inputs.mode == 'deploy' }}
+        env:
+          # Expo bakes this into the exported HTML as an absolute path, so a
+          # build made for /app renders blank behind /funpay/app — 200, no
+          # error, nothing in the response saying why.
+          EXPO_PORTAL_BASE: ${{ github.event.inputs.holding_prefix }}/app
+        run: |
+          cd mobile
+          npm ci --no-audit --no-fund
+          npx expo export --platform web
+          grep -q "\"$EXPO_PORTAL_BASE/_expo/" dist/index.html \
+            || { echo "::error::web export is not based at $EXPO_PORTAL_BASE"; exit 1; }
+          rm -rf web-portal/public/app
+          cp -r dist web-portal/public/app
+          VERSION="$(git rev-parse --short HEAD) · $(date -u '+%Y-%m-%d %H:%M UTC')"
+          sed -i "s/__PORTAL_VERSION__/$VERSION/" web-portal/public/index.html
+          if grep -q "__PORTAL_VERSION__" web-portal/public/index.html; then
+            echo "::error::__PORTAL_VERSION__ survived substitution"; exit 1
+          fi
+
+      - name: Build website (public-v2) for /web/
+        if: ${{ github.event.inputs.mode == 'deploy' }}
+        env:
+          # Sub-path build; production deploys never set this and stay at '/'.
+          VITE_BASE_PATH: ${{ github.event.inputs.holding_prefix }}/web/
+          VITE_LAUNCH_MODE: ${{ github.event.inputs.web_launch_mode || 'live' }}
+          VITE_APP_VERSION: ${{ github.sha }}
+          # No reCAPTCHA key on purpose: the Enterprise key is bound to the
+          # production domains, and a failing verifier is noisier than none.
+        run: |
+          cd public-v2
+          npm ci --legacy-peer-deps --no-audit --no-fund
+          npm run build
+          cd ..
+          rm -rf mobile/web-portal/public/web
+          cp -r public-v2/dist mobile/web-portal/public/web
+          # The site references /images, /video and the favicon by absolute
+          # path in code; serve those from the portal root too.
+          for p in images video favicon.svg icons.svg; do
+            [ -e "public-v2/dist/$p" ] && cp -r "public-v2/dist/$p" "mobile/web-portal/public/$p"
+          done
+          grep -q "$VITE_BASE_PATH""assets/" mobile/web-portal/public/web/index.html \
+            || { echo "::error::web build is not based at $VITE_BASE_PATH"; exit 1; }
+
+      - name: Build the /videos/ review gallery
+        if: ${{ github.event.inputs.mode == 'deploy' && github.event.inputs.video_runs != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for RID in ${{ github.event.inputs.video_runs }}; do
+            gh run download "$RID" --repo "${{ github.repository }}" -D "/tmp/vid/$RID" || true
+          done
+          node scripts/build-video-gallery.mjs /tmp/vid mobile/web-portal/public/videos
+
+      - name: Deploy hosting
+        if: ${{ github.event.inputs.mode == 'deploy' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: |
+          cd mobile/web-portal
+          npx firebase-tools deploy --only hosting:funpay-alfa --project vida-finance --non-interactive
+
+      - name: Register custom domain
+        if: ${{ github.event.inputs.mode == 'domain' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+          PORTAL_DOMAIN: ${{ github.event.inputs.domain }}
+        run: node scripts/register-portal-domain.mjs | tee /tmp/domain.log
+
+      - name: Release custom domain
+        if: ${{ github.event.inputs.mode == 'release' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+          PORTAL_DOMAIN: ${{ github.event.inputs.domain }}
+          PORTAL_RELEASE: "1"
+        run: node scripts/register-portal-domain.mjs | tee /tmp/domain.log
+
+      - name: Read latest feedback (mode=feedback)
+        if: ${{ github.event.inputs.mode == 'feedback' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+        run: node scripts/read-qa-feedback.mjs | tee /tmp/feedback.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## FunPay team portal"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Mode | \`${{ github.event.inputs.mode }}\` |"
+            echo "| Domain | \`${{ github.event.inputs.domain }}\` |"
+            echo "| Direct | https://funpay-alfa.web.app |"
+            echo "| Website frame | https://alfa.funpay.mx/web/ (\`${{ github.event.inputs.web_launch_mode }}\`) |"
+            if [ -f /tmp/domain.log ]; then
+              echo ""
+              echo '```'
+              cat /tmp/domain.log
+              echo '```'
+            fi
+            if [ -f /tmp/feedback.log ]; then
+              echo ""
+              echo "### Latest feedback"
+              echo '```'
+              cat /tmp/feedback.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/sa.json

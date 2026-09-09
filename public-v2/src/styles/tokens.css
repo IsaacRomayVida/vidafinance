@@ -1,0 +1,84 @@
+/* funpay-ui — design tokens, both sides. Paste verbatim as :root. */
+
+:root {
+  /* ---- shared ---- */
+  --void:        #0b0d0b;
+  --ink:         #1e201d;   /* never #000 on cream */
+  --ink-soft:    #3a3d38;
+  --mute:        #5f6a5c;   /* darkened 2026-09-08: light-on-light was unreadable */
+  --type-quiet:  #5c6a57;   /* the quiet line in a headline — readable, still quiet */
+
+  --font-text:   'Urbanist', system-ui, sans-serif;
+  --font-dot:    'Doto', 'Matricha', monospace;   /* labels only */
+  --dot-track:   0.06em;
+
+  --r-board:     26px;
+  --r-card:      20px;
+  --r-pill:      40px;
+  --r-panel:     22px;      /* ops panels */
+
+  /* ---- borrower side (light) ---- */
+  --cream:       #f3f4ec;
+  --cream-mid:   #eaf0e3;
+  --sage:        #dbe9d6;
+  --mint:        #c9ecdc;
+  --moss:        #6f8a4a;
+  --moss-deep:   #2f4a22;
+  --peach:       #f2c4a0;
+  --sky:         #bcdde9;
+  --mark:        #d7f0dc;   /* highlighter for companion-tagged text */
+  --mark-ink:    #2c6a3c;
+  --cta:         #2fc04e;   /* the only saturated colour on light; one control per screen */
+
+  --board-grad:  linear-gradient(180deg, var(--cream) 0%, var(--cream-mid) 48%, var(--sage) 100%);
+  --grad-assist: linear-gradient(160deg, #cfe8d0 0%, #f3d2b4 48%, #c4e2ea 100%);
+  --grad-ident:  linear-gradient(120deg, #9fd8c2 0%, #cfe4c8 45%, #f0c8a4 100%);
+
+  --leaf-light:  #e6ead0;
+  --leaf-mid:    #a6b46a;
+  --leaf-dark:   #354a1a;
+
+  /* ---- ops side (dark) ---- */
+  --charcoal:    #000b1a;   /* Blue Charcoal foundation */
+  --forest-deep: #0b2418;
+  --forest:      #1c4a30;
+  --forest-glow: #2b6b43;
+  --harmony:     #68e78e;   /* active / approved / received; never decoration */
+  --paper-dark:  #f2f5f0;   /* text on dark */
+
+  --ops-grad:    radial-gradient(70% 55% at 50% 100%, var(--forest-glow) 0%, rgba(43,107,67,0) 70%),
+                 linear-gradient(180deg, var(--charcoal) 0%, #061a10 45%, #1a5233 100%);
+  --stage-grad:  linear-gradient(180deg, var(--forest-deep) 0%, var(--forest) 55%, #2f7a4a 100%);
+
+  /* ---- glass ---- */
+  --glass-light: rgba(255,255,255,.14);
+  --glass-pass:  rgba(255,255,255,.34);
+  --glass-prog:  rgba(255,255,255,.52);
+  --glass-dark:  rgba(20,24,20,.72);
+  --glass-tag:   rgba(255,255,255,.06);
+  --glass-folder:rgba(255,255,255,.13);
+  --glass-lit:   rgba(104,231,142,.55);
+  --glass-edge:  rgba(255,255,255,.28);
+  --glass-hl:    inset 0 1px 0 rgba(255,255,255,.3);
+  --blur-sm:     blur(14px);
+  --blur-md:     blur(18px) saturate(160%);
+  --blur-lg:     blur(26px) saturate(170%);
+
+  /* ---- shadows: floating and glass only ---- */
+  --shadow-float: 0 30px 50px -22px rgba(30,60,30,.45);
+  --shadow-glass: 0 40px 80px -30px rgba(0,0,0,.6);
+  --shadow-stack: 0 30px 60px -20px rgba(0,0,0,.6);
+
+  /* ---- motion ---- */
+  --caret-blink: 1.1s;
+  --lerp:        0.06;
+}
+
+/* Fonts */
+/* <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;400;500;600&family=Doto:wght@400;600;700&display=swap" rel="stylesheet"> */
+
+/* Type scale */
+/* numeral hero 50–64px / 400 / -0.03em ; currency suffix 20–22px / 300
+   headline clamp(38px,7vw,64px) / 400 / -0.02em, quiet lines 300 in --type-quiet
+   title 40px / 400 / -0.01em ; body 13–15px / 300–400 / 1.5
+   label (Doto) 13–19px / 600 / uppercase / +0.06em */

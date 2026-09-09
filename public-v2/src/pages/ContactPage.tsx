@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { Board, BoardHead, Statement } from '../components/marketing/Board';
 import { RichText } from '../components/shared/RichText';
-import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ContactForm } from '../components/marketing/ContactForm';
 
@@ -8,66 +8,60 @@ const CHANNELS = ['general', 'employers', 'press', 'investors', 'privacy'] as co
 
 export function ContactPage() {
   const { t } = useTranslation();
-  useRevealOnScroll();
-  useDocumentTitle(`Funpay — ${t('pg_contact_badge')}`);
+  useDocumentTitle(`FunPay — ${t('pg_contact_badge')}`);
 
   return (
     <>
+      <Board label={t('pg_contact_badge')}>
+        <Statement html={t('pg_contact_h1')} lead={t('pg_contact_sub')} />
+      </Board>
 
-      {/* Hero */}
-      <section className="hero" style={{ padding: '100px 0 80px' }}>
-        <div className="hero-blob b1" />
-        <div className="hero-blob b2" />
-        <div className="wrap text-center">
-          <span className="badge rv">{t('pg_contact_badge')}</span>
-          <h1 className="rv d1"><RichText html={t('pg_contact_h1')} /></h1>
-          <p className="sub rv d2">{t('pg_contact_sub')}</p>
-        </div>
-      </section>
-
-      {/* Email Channels */}
-      <section className="section tinted">
-        <div className="wrap">
-          <div className="trust-grid rv d2">
+      <Board tone="paper">
+        <div className="mk-cols">
+          <div className="sticky">
+            <BoardHead kicker={t('pg_contact_channels_tag')} title={t('pg_contact_channels_h')} />
+          </div>
+          <ul className="mk-rows">
             {CHANNELS.map((ch) => (
-              <div className="trust-item" key={ch}>
-                <div>
-                  <div className="trust-t">{t(`pg_contact_${ch}_t`)}</div>
-                  <div className="trust-d">
-                    <a href={`mailto:${t(`pg_contact_${ch}_v`)}`}>
-                      {t(`pg_contact_${ch}_v`)}
-                    </a>
-                  </div>
+              <li className="mk-row" key={ch}>
+                <span className="a" aria-hidden="true">@</span>
+                <div className="t">
+                  <b>{t(`pg_contact_${ch}_t`)}</b>
+                  <span><a href={`mailto:${t(`pg_contact_${ch}_v`)}`}>{t(`pg_contact_${ch}_v`)}</a></span>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-      </section>
+      </Board>
 
-      {/* Offices */}
-      <section className="section">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_contact_office_tag')}</div>
-          <div className="trust-grid rv d2">
-            {['mx', 'ch'].map((loc) => (
-              <div className="trust-item" key={loc}>
-                <div>
-                  <div className="trust-t">{t(`pg_contact_office_${loc}_t`)}</div>
-                  <div className="trust-d">{t(`pg_contact_office_${loc}_d`)}</div>
+      <Board>
+        <div className="mk-cols">
+          <div className="sticky">
+            <BoardHead kicker={t('pg_contact_office_tag')} title={t('pg_contact_office_h')} />
+          </div>
+          <ul className="mk-rows">
+            {(['mx', 'ch'] as const).map((loc) => (
+              <li className="mk-row" key={loc}>
+                <span className="a" aria-hidden="true">{loc.toUpperCase()}</span>
+                <div className="t">
+                  <b>{t(`pg_contact_office_${loc}_t`)}</b>
+                  <p><RichText html={t(`pg_contact_office_${loc}_d`)} /></p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-      </section>
+      </Board>
 
-      {/* Contact Form */}
-      <section className="section tinted">
-        <div className="wrap">
+      <Board tone="paper" id="form">
+        <div className="mk-cols">
+          <div className="sticky">
+            <BoardHead kicker={t('pg_contact_form_tag')} title={t('pg_contact_form_h')} />
+          </div>
           <ContactForm />
         </div>
-      </section>
+      </Board>
     </>
   );
 }

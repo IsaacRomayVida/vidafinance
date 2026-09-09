@@ -9,10 +9,28 @@ import { httpsCallable } from 'firebase/functions';
 
 import { functions } from '../lib/firebase';
 
+/** One installment as the server publishes it: timing and share, no pesos. */
+export interface RepaymentInstallmentTerms {
+  number: number;
+  dueInDays: number;
+  shareOfTotal: number;
+}
+
+/** Repayment terms for one allowed term, including the CAT the server derived
+ *  from this schedule. The client never computes a CAT — it renders this one. */
+export interface RepaymentTerms {
+  termDays: number;
+  installments: RepaymentInstallmentTerms[];
+  catPercent?: number;
+}
+
 export interface LoanConfig {
   feeRate: number;
   defaultTermDays?: number;
-  repayment: unknown[];
+  allowedTermDays?: number[];
+  minAmount?: number;
+  maxAmount?: number;
+  repayment: RepaymentTerms[];
   [key: string]: unknown;
 }
 

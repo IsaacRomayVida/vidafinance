@@ -2,9 +2,14 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
+import { safeSetItem } from '../../lib/safeStorage';
 
+/**
+ * Aliados operations shell — the dark ops board. Brand mark plus tag-pill
+ * navigation; the current section is the one tag with the green dot.
+ */
 export function AdminLayout() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -15,51 +20,53 @@ export function AdminLayout() {
 
   const isActive = (path: string) => location.pathname === path || (path === '/ops/review-queue' && location.pathname.startsWith('/ops/review-queue/'));
 
+  const tabs = [
+    { path: '/ops', label: t('ops_nav_panel') },
+    { path: '/ops/review-queue', label: t('ops_nav_review') },
+    { path: '/ops/employers', label: t('ops_nav_employers') },
+    { path: '/ops/portfolio', label: t('ops_nav_portfolio') },
+    { path: '/ops/alerts', label: t('ops_nav_alerts') },
+    { path: '/ops/health', label: t('ops_nav_health') },
+  ];
+
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--canvas)' }}>
-      <header style={{ background: 'var(--t1)' }}>
-        <div style={{ maxWidth: 920, margin: '0 auto', padding: '0 24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 56 }}>
-            <Link to="/ops" style={{ fontFamily: 'var(--df)', fontSize: 24, fontWeight: 400, color: '#fff', textDecoration: 'none', letterSpacing: '-0.02em' }}>
-              Funpay <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--gold)', letterSpacing: 3, textTransform: 'uppercase' as const, marginLeft: 6, verticalAlign: 'middle' }}>OPS</span>
-            </Link>
-            <button
-              onClick={handleSignOut}
-              style={{ fontSize: 12, fontWeight: 500, color: 'rgba(168,213,208,0.4)', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              Sign out
-            </button>
-          </div>
-          <nav style={{ display: 'flex', gap: 32, borderTop: '1px solid rgba(168,213,208,0.08)', marginTop: -1 }}>
-            {[
-              { path: '/ops', label: t('admin_tab_dashboard', 'Panel') },
-              { path: '/ops/review-queue', label: t('admin_tab_review', 'Revisión') },
-              { path: '/ops/employers', label: t('admin_tab_employers', 'Empleadores') },
-              { path: '/ops/portfolio', label: t('admin_tab_loans', 'Préstamos') },
-              { path: '/ops/health', label: t('admin_tab_health', 'Salud') },
-            ].map(({ path, label }) => (
+    <div className="ops-shell">
+      <a href="#ops-main" className="ops-skip">{t('a11y_skip_content')}</a>
+      <header className="ops-top">
+        <Link to="/ops" className="ops-brand">
+          <b aria-hidden="true">F</b>FunPay <span>· {t('ops_side_ops')}</span>
+        </Link>
+        <nav className="ops-tags" aria-label={t('ops_nav_label')}>
+          {tabs.map(({ path, label }) => {
+            const on = isActive(path);
+            return (
               <Link
                 key={path}
                 to={path}
-                style={{
-                  fontSize: 12,
-                  fontWeight: isActive(path) ? 700 : 500,
-                  color: isActive(path) ? '#fff' : 'rgba(168,213,208,0.4)',
-                  textDecoration: 'none',
-                  padding: '14px 0',
-                  borderBottom: isActive(path) ? '2px solid var(--gold)' : '2px solid transparent',
-                  letterSpacing: '0.5px',
-                  textTransform: 'uppercase' as const,
-                  transition: 'all 0.2s',
-                }}
+                className={`ops-tag${on ? ' on' : ''}`}
+                aria-current={on ? 'page' : undefined}
               >
+                {on && <i aria-hidden="true" />}
                 {label}
               </Link>
-            ))}
-          </nav>
+            );
+          })}
+        </nav>
+        <div className="ops-top-actions">
+          <button
+            type="button"
+            className="ops-tag"
+            aria-label={t('a11y_lang_toggle')}
+            onClick={() => { const next = i18n.language === 'es' ? 'en' : 'es'; i18n.changeLanguage(next); safeSetItem('vida_lang', next); }}
+          >
+            {i18n.language === 'es' ? 'EN' : 'ES'}
+          </button>
+          <button type="button" className="ops-link" onClick={handleSignOut}>
+            {t('dash_signout')}
+          </button>
         </div>
       </header>
-      <main style={{ maxWidth: 920, margin: '0 auto', padding: '36px 24px 60px' }}>
+      <main id="ops-main" className="ops-main">
         <Outlet />
       </main>
     </div>
