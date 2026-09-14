@@ -45,12 +45,12 @@ design.
 | H2 | Home · How it works | Paper board, the steps are the content | — | none |
 | H3 | Home · Cost calculator | Sage board, nothing competes with the numbers | — | none |
 | H4 | Home · Employers | Dark ops board over the stage surface | `images/brand/stage-employer.jpg` | live |
-| H5 | Home · Trust | Dark ops board while re-cast — the lunch film (run 34857257196) was rejected: the backpack morphed open and the moment did not fit the copy | — | none (pending) |
+| H5 | Home · Trust | Film from its still (8 s), plays on screen | `video/board-trust-walk.mp4` (poster `images/brand/moment-school-walk.jpg`) — mother and son walk to school, seen from behind (still run 34860578121, film run 34862030441; the shadow on the wall is hers) | live |
 | H6 | Home · FAQ | Paper | — | none |
 | H7 | Home · Closing | Sage | — | none |
-| E0 | Employees · hero | Film from its stills (8 s, ends on the still) | phone `video/employee-hero-9x16.mp4` live (run 34860181217); desktop still `employee-hero-16x9.jpg` while its film is re-taken — a waiter starting his shift | partly live |
+| E0 | Employees · hero | Film from its stills (8 s, ends on the still) | `video/employee-hero-16x9.mp4` (run 34862026374, person frozen) and `employee-hero-9x16.mp4` (run 34860181217) — a waiter starting his shift | live |
 | E1 | Employees · Use cases | Still | `images/brand/moment-pharmacy.jpg` | live |
-| R0 | Employers · hero | Film from its stills (8 s, ends on the still) | phone `video/employer-hero-9x16.mp4` live (run 34860181217); desktop still `employer-hero-16x9.jpg` while its film is re-taken — payroll morning in a resort HR office | partly live |
+| R0 | Employers · hero | Film from its stills (8 s, ends on the still) | `video/employer-hero-16x9.mp4` (run 34862026374, person frozen) and `employer-hero-9x16.mp4` (run 34860181217) — payroll morning in a resort HR office | live |
 | R1 | Employers · Closing statement | Dark ops board | — | none |
 | O1 | Employer dashboard + ops console · stage panel | Stage surface | `images/brand/stage-ops.jpg` | live |
 

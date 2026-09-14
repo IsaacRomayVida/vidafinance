@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { BoardPhoto } from './BoardPhoto';
 import { Board, BoardHead } from './Board';
 import { ArrowIcon } from './ArrowIcon';
 
@@ -11,15 +12,16 @@ const icons = [
 ];
 
 /**
- * Trust on the dark board while its picture is re-cast: the lunch film was
- * rejected (the backpack morphed open, and the moment did not say "regulated
- * credit"). White title, frosted rows.
+ * Trust over the walk to school — a mother and her son hand in hand, seen
+ * from behind; safety and peace of mind (Isaac chose it). The film is
+ * generated from that exact still. White title, frosted rows.
  */
 export function TrustSection() {
   const { t } = useTranslation();
 
   return (
-    <Board tone="ops" id="trust">
+    <Board className="film" id="trust">
+      <BoardPhoto still="/images/brand/moment-school-walk.jpg" film="/video/board-trust-walk.mp4" />
       <div className="mk-cols">
         <div className="sticky sh">
           <BoardHead kicker={t('trust_tag')} title={t('trust_h2')} lead={t('trust_p')} />
