@@ -48,9 +48,9 @@ design.
 | H5 | Home · Trust | Dark ops board while re-cast — the lunch film (run 34857257196) was rejected: the backpack morphed open and the moment did not fit the copy | — | none (pending) |
 | H6 | Home · FAQ | Paper | — | none |
 | H7 | Home · Closing | Sage | — | none |
-| E0 | Employees · hero | Still, composed 16:9 + 9:16 | `images/brand/employee-hero-16x9.jpg`, `employee-hero-9x16.jpg` — a waiter starting his shift | live |
+| E0 | Employees · hero | Film from its stills (8 s, ends on the still) | phone `video/employee-hero-9x16.mp4` live (run 34860181217); desktop still `employee-hero-16x9.jpg` while its film is re-taken — a waiter starting his shift | partly live |
 | E1 | Employees · Use cases | Still | `images/brand/moment-pharmacy.jpg` | live |
-| R0 | Employers · hero | Still, composed 16:9 + 9:16 | `images/brand/employer-hero-16x9.jpg`, `employer-hero-9x16.jpg` — payroll morning in a resort HR office | live |
+| R0 | Employers · hero | Film from its stills (8 s, ends on the still) | phone `video/employer-hero-9x16.mp4` live (run 34860181217); desktop still `employer-hero-16x9.jpg` while its film is re-taken — payroll morning in a resort HR office | partly live |
 | R1 | Employers · Closing statement | Dark ops board | — | none |
 | O1 | Employer dashboard + ops console · stage panel | Stage surface | `images/brand/stage-ops.jpg` | live |
 

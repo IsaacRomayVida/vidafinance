@@ -10,7 +10,7 @@ import type { Film } from '../components/marketing/HeroFilm';
 
 // Empleados hero (docs/design/SHOT_LIST.md, E0): a waiter starting his shift.
 const HERO_WIDE: Film = { still: '/images/brand/employee-hero-16x9.jpg' };
-const HERO_TALL: Film = { still: '/images/brand/employee-hero-9x16.jpg' };
+const HERO_TALL: Film = { film: '/video/employee-hero-9x16.mp4', still: '/images/brand/employee-hero-9x16.jpg' };
 
 function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
