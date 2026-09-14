@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films[-desktop|-push]|trust-still|usecase-still|usecase-film|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films[-desktop|-push]|trust-still|usecase-still|usecase-film|app-intro-still|app-intro-film|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -204,6 +204,17 @@ const PHONE = 'Vertical composition for a phone screen: the subject is small and
 const EMPLOYEE_MOMENT = 'The start of a shift at a five-star resort: a waiter in the staff locker room buttoning the cuff of a crisp white uniform shirt, a neat row of pale lockers, soft morning light from a high window. Seen from behind, his face never visible. Calm, proud, ready.';
 const EMPLOYER_MOMENT = 'The human resources office of a five-star resort in the morning: an HR manager at a clean, calm desk reviewing the payroll on a laptop, seen from behind over the shoulder and out of focus, the screen content not legible, a window onto coconut palms, a neat folder and a coffee cup. Professional, orderly, unhurried.';
 const TRUST_STILL_NAME = 'moment-school-walk.png';
+// App cold-start intro (docs/design/SHOT_LIST.md, A1). The shipped clip was
+// 3 s while the intro runs ~6 s, so it froze before the mark appeared and
+// the splash looked stuck. 6 s, walking (no hands on objects), 9:16.
+const APP_INTRO_STILL = {
+  file: 'app-intro.png', size: '1024x1536',
+  prompt: `${MX} Dawn in a quiet, tidy Mexican market street: a woman in a pale sage apron walks calmly away from the camera down the middle of the empty street toward her small food stall, its shutter still closed, seen from BEHIND, her face never visible. Warm first light at the end of the street, soft haze, palms and low painted buildings, no readable signs or text, nobody else. Vertical composition for a phone screen: she is in the lower third, the upper two thirds are calm sky, haze and soft light — a clean field for a centred logo. ${GRADE} ${NEG}`,
+};
+const APP_INTRO_FILM = {
+  file: 'app-intro.mp4', imageFile: 'mobile/assets/brand/app-intro.jpg', aspect: '9:16', duration: '6',
+  prompt: `She keeps walking calmly away down the street toward her stall in a steady natural stride, staying inside the frame and getting a little smaller; the haze and the first light at the end of the street brighten very slightly; the palms move gently. She never turns around and her face is never visible. Nobody else appears, no other shadows of people, no readable signs. The stall shutter stays closed. ${MOTION}`,
+};
 // Empleados · "Lo que no puede esperar" (Isaac chose it, 2026-09-14): replaces
 // the pharmacy paper-bag still. Walking, no hands on objects, no faces.
 const USECASE_STILL = {
@@ -288,7 +299,7 @@ const BOARD_FILMS = [
 
 // Every human scene must reference MX rather than repeat the setting inline:
 // pasted copies went stale silently and a casting change reached nothing.
-for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS, ...PAGE_STILLS, USECASE_STILL]) {
+for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS, ...PAGE_STILLS, USECASE_STILL, APP_INTRO_STILL]) {
   if (/Quintana Roo/.test(spec.prompt) && !spec.prompt.startsWith(MX)) {
     throw new Error(`${spec.file}: hardcodes the setting — use \${MX} instead`);
   }
@@ -397,6 +408,8 @@ if (SET === 'page-films') await runAll(PAGE_FILMS, generateFilm);
 if (SET === 'page-films-desktop') await runAll(PAGE_FILMS.filter((x) => x.aspect === '16:9'), generateFilm);
 if (SET === 'page-films-push') await runAll(PAGE_FILMS_PUSH, generateFilm);
 if (SET === 'usecase-still') await runAll([USECASE_STILL], generateImage);
+if (SET === 'app-intro-still') await runAll([APP_INTRO_STILL], generateImage);
+if (SET === 'app-intro-film') await runAll([APP_INTRO_FILM], generateFilm);
 if (SET === 'usecase-film') await runAll([USECASE_FILM], generateFilm);
 if (SET === 'trust-still') await runAll(PAGE_STILLS.filter((x) => x.file === TRUST_STILL_NAME), generateImage);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }
