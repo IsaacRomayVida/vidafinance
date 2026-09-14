@@ -200,7 +200,7 @@ const HERO_FILMS = [
 const BOARD_FILMS = [
   {
     file: 'board-trust-backpack.mp4', imageFile: 'public-v2/public/images/brand/moment-backpack.jpg', aspect: '16:9', duration: '10',
-    prompt: `Both people REMAIN in frame for the entire shot and neither fades, disappears or changes: the mother, kneeling, settles the straps of the school backpack on her child's shoulders and smooths them; the child shifts their weight and adjusts a strap; morning light moves very slightly across the doorway and the plants outside sway gently. Neither turns toward the camera. ${MOTION}`,
+    prompt: `Both people REMAIN in frame for the entire shot and neither fades, disappears or changes. Their faces stay hidden the whole time: the boy keeps looking straight out through the open door, away from the camera, and the mother's face stays turned toward him and covered by her long hair; neither head turns, and no face becomes clear or sharp. The only movement: the mother gently settles the backpack straps on his shoulders and smooths his shirt; he shifts his weight slightly; the plants outside sway a little in the breeze. ${MOTION}`,
   },
 ];
 
