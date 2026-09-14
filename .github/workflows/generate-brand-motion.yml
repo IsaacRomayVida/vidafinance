@@ -32,6 +32,8 @@ on:
           - page-films-desktop
           - page-films-push
           - trust-still
+          - usecase-still
+          - usecase-film
           - all
       pro:
         description: "Seedance pro at 1080p (slower, costlier) instead of lite 720p"

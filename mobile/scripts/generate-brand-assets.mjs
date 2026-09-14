@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films[-desktop|-push]|trust-still|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films[-desktop|-push]|trust-still|usecase-still|usecase-film|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -204,6 +204,16 @@ const PHONE = 'Vertical composition for a phone screen: the subject is small and
 const EMPLOYEE_MOMENT = 'The start of a shift at a five-star resort: a waiter in the staff locker room buttoning the cuff of a crisp white uniform shirt, a neat row of pale lockers, soft morning light from a high window. Seen from behind, his face never visible. Calm, proud, ready.';
 const EMPLOYER_MOMENT = 'The human resources office of a five-star resort in the morning: an HR manager at a clean, calm desk reviewing the payroll on a laptop, seen from behind over the shoulder and out of focus, the screen content not legible, a window onto coconut palms, a neat folder and a coffee cup. Professional, orderly, unhurried.';
 const TRUST_STILL_NAME = 'moment-school-walk.png';
+// Empleados · "Lo que no puede esperar" (Isaac chose it, 2026-09-14): replaces
+// the pharmacy paper-bag still. Walking, no hands on objects, no faces.
+const USECASE_STILL = {
+  file: 'moment-clinic.png', size: '1536x1024',
+  prompt: `${MX} Early morning in a clean, well-kept Mexican neighbourhood: a father in a simple pressed shirt walks briskly along the sidewalk toward the glass entrance of a small, modern, tidy neighbourhood clinic, carrying his young daughter in his arms; her head is tucked into his shoulder with her face hidden against his neck, and both are seen from BEHIND, faces never visible. Urgent but calm. Soft warm light, a few palms and a low wall; no readable signs or text anywhere, nobody else in the scene. They are in the right half of the frame, walking away from the camera; the left side is calm. Wide shot that also works cropped to 16:9. ${GRADE} ${NEG}`,
+};
+const USECASE_FILM = {
+  file: 'board-usecase-clinic.mp4', imageFile: 'public-v2/public/images/brand/moment-clinic.jpg', aspect: '16:9', duration: '8',
+  prompt: `The father keeps walking briskly along the sidewalk toward the clinic entrance, carrying his daughter, in a steady natural stride; the palms move gently in the breeze. Both stay seen from behind for the entire shot: neither turns, the girl's face stays hidden in his shoulder, and no face is ever visible. Nobody else appears, no other shadows of people, no readable signs. Her body and his arms do not change shape. The exposure, brightness and colour stay constant. ${MOTION}`,
+};
 const PAGE_STILLS = [
   { file: 'employee-hero-16x9.png', size: '1536x1024', prompt: `${MX} ${EMPLOYEE_MOMENT} ${DESK} ${GRADE} ${NEG}` },
   { file: 'employee-hero-9x16.png', size: '1024x1536', prompt: `${MX} ${EMPLOYEE_MOMENT} ${PHONE} ${GRADE} ${NEG}` },
@@ -275,7 +285,7 @@ const BOARD_FILMS = [
 
 // Every human scene must reference MX rather than repeat the setting inline:
 // pasted copies went stale silently and a casting change reached nothing.
-for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS, ...PAGE_STILLS]) {
+for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS, ...PAGE_STILLS, USECASE_STILL]) {
   if (/Quintana Roo/.test(spec.prompt) && !spec.prompt.startsWith(MX)) {
     throw new Error(`${spec.file}: hardcodes the setting — use \${MX} instead`);
   }
@@ -383,5 +393,7 @@ if (SET === 'page-stills') await runAll(PAGE_STILLS, generateImage);
 if (SET === 'page-films') await runAll(PAGE_FILMS, generateFilm);
 if (SET === 'page-films-desktop') await runAll(PAGE_FILMS.filter((x) => x.aspect === '16:9'), generateFilm);
 if (SET === 'page-films-push') await runAll(PAGE_FILMS_PUSH, generateFilm);
+if (SET === 'usecase-still') await runAll([USECASE_STILL], generateImage);
+if (SET === 'usecase-film') await runAll([USECASE_FILM], generateFilm);
 if (SET === 'trust-still') await runAll(PAGE_STILLS.filter((x) => x.file === TRUST_STILL_NAME), generateImage);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }
