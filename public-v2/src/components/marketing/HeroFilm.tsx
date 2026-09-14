@@ -101,13 +101,15 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
   const poster = still ? publicAsset(still) : undefined;
   if (reduced || stillOnly) return <img className={className} src={poster} alt="" />;
 
-  // No autoPlay attribute: it would start the hidden reel on load. Playback
-  // is driven by the effect above; muted is applied there before any source.
+  // Only the reel for the current screen shape is mounted (HeroSection), so
+  // autoPlay is safe and backs up the effect's play() where a browser is
+  // stricter about script-started media. muted is also applied in arm().
   return (
     <>
       <video
         ref={a}
         className={`${className ?? ''} mk-film-layer${front === 'a' ? ' on' : ''}`}
+        autoPlay
         muted
         playsInline
         preload="auto"

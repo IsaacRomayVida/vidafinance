@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Board, Statement } from './Board';
 import { ArrowIcon } from './ArrowIcon';
 import { HeroFilm, type Film } from './HeroFilm';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 /**
  * The site's one film (docs/design/SHOT_LIST.md, H1): "the shift ends", one
@@ -29,6 +30,10 @@ const PORTRAIT: Film[] = [
  */
 export function HeroSection() {
   const { t } = useTranslation();
+  // Mount only the film for this screen shape (same breakpoint as the CSS).
+  // With both mounted, the hidden one still downloaded, and its playback
+  // hung on script alone.
+  const phone = useMediaQuery('(max-width: 860px)');
 
   return (
     <Board label={t('hero_badge')} id="top" className="mk-hero">
@@ -44,8 +49,11 @@ export function HeroSection() {
         <div className="mk-stage" aria-hidden="true">
           {/* The site's one film. A real <video> so it actually moves; the
               still stands in under reduced motion or while it loads. */}
-          <HeroFilm reel={LANDSCAPE} className="mk-stage-film wide" />
-          <HeroFilm reel={PORTRAIT} className="mk-stage-film tall" />
+          {phone ? (
+            <HeroFilm key="phone" reel={PORTRAIT} className="mk-stage-film tall" />
+          ) : (
+            <HeroFilm key="desktop" reel={LANDSCAPE} className="mk-stage-film wide" />
+          )}
         </div>
       </div>
     </Board>
