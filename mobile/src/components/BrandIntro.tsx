@@ -43,7 +43,10 @@ function SceneFilm({ source }: { source: number }) {
     const { WebVideo } = require('./WebVideo');
     const uri = Asset.fromModule(source).uri;
     const posterUri = Asset.fromModule(artwork).uri;
-    return <WebVideo uri={uri} loop={false} poster={posterUri} />;
+    // Positioned like the artwork: an in-flow <video> paints BENEATH the
+    // absolutely positioned still (CSS stacking), so the film played unseen
+    // behind a frozen photo — "the video is not playing".
+    return <WebVideo uri={uri} loop={false} poster={posterUri} style={{ position: 'absolute', top: 0, left: 0 }} />;
   }
   return <NativeScene source={source} />;
 }
