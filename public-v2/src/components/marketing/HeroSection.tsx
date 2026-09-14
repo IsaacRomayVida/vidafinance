@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Board, Statement, ArrowIcon } from './Board';
+import { Board, Statement } from './Board';
+import { ArrowIcon } from './ArrowIcon';
 import { HeroFilm, type Film } from './HeroFilm';
 
 /**

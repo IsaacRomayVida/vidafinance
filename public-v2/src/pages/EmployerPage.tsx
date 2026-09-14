@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { BoardFilm } from '../components/marketing/BoardFilm';
 import { Link } from 'react-router-dom';
-import { Board, BoardHead, Statement, Rows, Figures, PillSteps, ArrowIcon } from '../components/marketing/Board';
+import { Board, BoardHead, Statement, Rows, Figures, PillSteps } from '../components/marketing/Board';
+import { ArrowIcon } from '../components/marketing/ArrowIcon';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export function EmployerPage() {
