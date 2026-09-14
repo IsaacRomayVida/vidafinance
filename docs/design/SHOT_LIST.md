@@ -49,7 +49,7 @@ design.
 | H6 | Home · FAQ | Paper | — | none |
 | H7 | Home · Closing | Sage | — | none |
 | E0 | Employees · hero | Film from its stills (8 s, ends on the still) | `video/employee-hero-16x9.mp4` (run 34864341488, camera push-in; the frozen take read as a still) and `employee-hero-9x16.mp4` (run 34860181217) — a waiter starting his shift | live |
-| E1 | Employees · "Lo que no puede esperar" | Film from its still — a father carrying his daughter to the clinic (Isaac chose it) | pending: take 1 rejected (left frame, figure in glass); take 2 generating. Paper-bag still `moment-pharmacy.jpg` rejected and removed | none (pending) |
+| E1 | Employees · "Lo que no puede esperar" | Film from its still (8 s), plays on screen | `video/board-usecase-clinic.mp4` (poster `images/brand/moment-clinic.jpg`) — a father carrying his daughter down a long path to the clinic (still run 34865743300, film run 34866294117; take 1 rejected) | live |
 | R0 | Employers · hero | Film from its stills (8 s, ends on the still) | `video/employer-hero-16x9.mp4` (run 34864341488, camera push-in; the frozen take read as a still) and `employer-hero-9x16.mp4` (run 34860181217) — payroll morning in a resort HR office | live |
 | R1 | Employers · Closing statement | Dark ops board | — | none |
 | O1 | Employer dashboard + ops console · stage panel | Stage surface | `images/brand/stage-ops.jpg` | live |

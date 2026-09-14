@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { BoardPhoto } from '../components/marketing/BoardPhoto';
 import { Link } from 'react-router-dom';
 import { Board, BoardHead, Statement, Rows, Figures, PillSteps } from '../components/marketing/Board';
 import { ArrowIcon } from '../components/marketing/ArrowIcon';
@@ -96,9 +97,10 @@ export function EmployeePage() {
       </Board>
 
       {/* Use cases */}
-      {/* "Lo que no puede esperar": the paper-bag still was rejected; the
-          walk-to-the-clinic film replaces it once a take passes review. */}
-      <Board tone="paper">
+      {/* "Lo que no puede esperar": a father carrying his daughter to the
+          neighbourhood clinic (docs/design/SHOT_LIST.md, E1). */}
+      <Board className="film" id="use-cases">
+        <BoardPhoto still="/images/brand/moment-clinic.jpg" film="/video/board-usecase-clinic.mp4" />
         <BoardHead kicker={t('lp_m_use_tag')} title={t('lp_m_use_h')} />
         <div className="mk-gap" />
         <Rows columns={2} items={[1, 2, 3, 4].map((n) => ({ title: t(`lp_m_use_${n}_t`), desc: t(`lp_m_use_${n}_d`) }))} />
