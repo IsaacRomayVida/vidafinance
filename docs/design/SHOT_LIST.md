@@ -73,7 +73,7 @@ alfa.suena.ch/funpay.
 
 | ID | Output | Tool | Notes |
 |---|---|---|---|
-| G1 | `images/brand/hero-dawn-16x9.jpg`, `images/brand/hero-dawn-9x16.jpg` | OpenAI Images (`set=hero-stills`) | **Approved 2026-09-14** (run 34837062464), graded, cropped to exact 16:9 / 9:16. Calm sky left (desktop) / top (phone) for the headline. |
+| G1 | `images/brand/hero-dawn-16x9.jpg`, `images/brand/hero-dawn-9x16.jpg` | OpenAI Images (`set=hero-stills`) | **Approved 2026-09-14** — desktop from run 34837062464, phone redone in run 34838950151 with the figure in the bottom fifth (the first put her behind the buttons). Graded, cropped to exact 16:9 / 9:16. |
 | G2 | `video/hero-dawn-16x9.mp4`, `video/hero-dawn-9x16.mp4` | fal.ai Seedance **pro**, image-to-video from the committed G1 files (`set=hero-films`, `pro=true`), 10 s, camera fixed | **Blocked 2026-09-14: fal.ai balance exhausted** (run 34837507246, nothing generated). Then add `film` to both entries in `HeroSection.tsx`. |
 
 **G1/G2 brief — "the shift ends."** A hotel staff member at the end of the
