@@ -199,13 +199,16 @@ const HERO_FILMS = [
  */
 const BOARD_FILMS = [
   {
-    file: 'board-trust-backpack.mp4', imageFile: 'public-v2/public/images/brand/moment-backpack.jpg', aspect: '16:9', duration: '10',
+    file: 'board-trust-backpack.mp4', imageFile: 'public-v2/public/images/brand/moment-backpack.jpg', aspect: '16:9', duration: '6',
     // Takes 1 and 2 (runs 34853102093, 34853554543) turned the boy's face
     // into sharp profile as he looked at his mother. Cinemagraph instead: the
     // people hold still, the world around them moves, and the film must end
     // on the exact starting still, which leaves no room for a head to turn.
+    // Take 3 (run 34854557301) kept faces hidden but swung exposure from
+    // lightness 87 to 146 and snapped back at 7 s: exposure is pinned too,
+    // and 6 s leaves the model less time to wander between the two stills.
     endImageFile: 'public-v2/public/images/brand/moment-backpack.jpg',
-    prompt: `A living photograph. The mother and the boy hold almost perfectly still in exactly the pose of the first frame for the entire shot, like a paused moment: nobody turns their head, nobody looks around, the boy keeps facing out through the open door with his back to the camera, and the mother's face stays behind her hair. The only motion is around them: the plants and trees outside sway gently in a breeze, soft morning light and leaf shadows drift slowly across the floor and the doorway, and a strand of the mother's hair moves slightly. The last frame is identical to the first. ${MOTION}`,
+    prompt: `A living photograph. The mother and the boy hold almost perfectly still in exactly the pose of the first frame for the entire shot, like a paused moment: nobody turns their head, nobody looks around, the boy keeps facing out through the open door with his back to the camera, and the mother's face stays behind her hair. The only motion is around them: the plants and trees outside sway gently in a breeze, faint leaf shadows shift a little on the floor, and a strand of the mother's hair moves slightly. The exposure, brightness and colour of the whole frame stay exactly constant from the first frame to the last — no light brightening, no sun flare, no fade, no change in contrast. The last frame is identical to the first. ${MOTION}`,
   },
 ];
 
