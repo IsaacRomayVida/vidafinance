@@ -36,8 +36,8 @@ design.
 
 | ID | Where | Treatment | Asset | Status |
 |---|---|---|---|---|
-| H1 | Home · hero (desktop stage) | Film, plays once, holds | `images/brand/hero-dawn-16x9.jpg` (still until G2) | still live · film pending G2 |
-| H1 | Home · hero (phone background) | Same shot, 9:16 composition | `images/brand/hero-dawn-9x16.jpg` (still until G2) | still live · film pending G2 |
+| H1 | Home · hero (desktop stage) | Film, plays once, holds | `video/hero-dawn-16x9.mp4` (poster `images/brand/hero-dawn-16x9.jpg`) | live |
+| H1 | Home · hero (phone background) | Same shot, 9:16 composition | `video/hero-dawn-9x16.mp4` (poster `images/brand/hero-dawn-9x16.jpg`) | live |
 | H2 | Home · How it works | Paper board, the steps are the content | — | none |
 | H3 | Home · Cost calculator | Sage board, nothing competes with the numbers | — | none |
 | H4 | Home · Employers | Dark ops board over the stage surface | `images/brand/stage-employer.jpg` | live |
@@ -74,7 +74,7 @@ alfa.suena.ch/funpay.
 | ID | Output | Tool | Notes |
 |---|---|---|---|
 | G1 | `images/brand/hero-dawn-16x9.jpg`, `images/brand/hero-dawn-9x16.jpg` | OpenAI Images (`set=hero-stills`) | **Approved 2026-09-14** — desktop from run 34837062464, phone redone in run 34838950151 with the figure in the bottom fifth (the first put her behind the buttons). Graded, cropped to exact 16:9 / 9:16. |
-| G2 | `video/hero-dawn-16x9.mp4`, `video/hero-dawn-9x16.mp4` | fal.ai Seedance **pro**, image-to-video from the committed G1 files (`set=hero-films`, `pro=true`), 10 s, camera fixed | **Blocked 2026-09-14: fal.ai balance exhausted** (run 34837507246, nothing generated). Then add `film` to both entries in `HeroSection.tsx`. |
+| G2 | `video/hero-dawn-16x9.mp4`, `video/hero-dawn-9x16.mp4` | fal.ai Seedance pro image-to-video from the committed G1 stills, 10 s, camera fixed | **Live 2026-09-14** — generated in run 34848115253, graded to match the stills in run 34849041744 (frame-0 saturation within .02 of the still). |
 
 **G1/G2 brief — "the shift ends."** A hotel staff member at the end of the
 night shift steps out of the service entrance into first light, seen from

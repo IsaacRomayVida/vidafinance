@@ -7,14 +7,14 @@ import { HeroFilm, type Film } from './HeroFilm';
 /**
  * The site's one film (docs/design/SHOT_LIST.md, H1): "the shift ends", one
  * moment composed twice — 16:9 fills the desktop stage, 9:16 is the phone
- * background. It plays once and holds on its last frame. Until G2 generates
- * the films, the approved stills stand alone (add `film` to each entry).
+ * background. Each film starts from its still (also its poster), plays once
+ * while on screen, and holds on its last frame.
  */
 const LANDSCAPE: Film[] = [
-  { still: '/images/brand/hero-dawn-16x9.jpg' },
+  { film: '/video/hero-dawn-16x9.mp4', still: '/images/brand/hero-dawn-16x9.jpg' },
 ];
 const PORTRAIT: Film[] = [
-  { still: '/images/brand/hero-dawn-9x16.jpg' },
+  { film: '/video/hero-dawn-9x16.mp4', still: '/images/brand/hero-dawn-9x16.jpg' },
 ];
 
 /**
