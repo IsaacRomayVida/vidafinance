@@ -21,9 +21,8 @@ wallpaper under a scrim: nothing was special, and motion fought the type.
    the steps, the cost calculator, FAQ — carry no imagery.
 5. **Ops and employer sides use no photography** (funpay-ui): dark board,
    gradient and glass. The one exception is the `stage-*` surfaces below.
-6. **Photographic only.** No generated kite inside a film (Isaac,
-   2026-09-08 — every model rendered it as a cartoon). If the papalote
-   appears, it is the graded cutout layered in the UI.
+6. **Photographic only, and no kites.** Not in a film, not in a still,
+   not as a cutout or motif in the UI (Isaac, 2026-09-08 and 2026-09-14).
 7. **Composed, not cropped.** Desktop 16:9 and phone 9:16 of the same moment
    are generated as two compositions of one shot.
 

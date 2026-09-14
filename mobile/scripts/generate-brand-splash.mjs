@@ -1,7 +1,7 @@
 /**
  * generate-brand-splash.mjs — native splash artwork via fal.ai FLUX.
  *
- * The splash is the first frame of the brand: the papalote's dawn sky,
+ * The splash is the first frame of the brand: a dawn sky,
  * vast and calm, before the app even wakes. Reads the fal.ai key from
  * FAL_KEY env (CI: the FAL_AI repo secret) or ~/.fal/key, writes
  * mobile/assets/splash-generated.png (portrait 1080x2340).
@@ -32,10 +32,9 @@ const prompt =
   argPrompt > -1
     ? process.argv[argPrompt + 1]
     : 'Minimal vertical phone wallpaper artwork: serene dawn sky, smooth gradient from pale ' +
-      'mint-aqua at the top to soft warm golden light at the horizon below, one small elegant ' +
-      'kite in deep teal and gold soaring very high with a long graceful curving string, vast ' +
+      'mint-aqua at the top to soft warm golden light at the horizon below, vast ' +
       'negative space, sense of freedom and a new day, premium fintech brand aesthetic, soft ' +
-      'diffused light, no text, no logo, no people, no birds';
+      'diffused light, no text, no logo, no people, no birds, no kite';
 
 const headers = { Authorization: `Key ${KEY}`, 'Content-Type': 'application/json' };
 

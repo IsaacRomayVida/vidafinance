@@ -53,52 +53,72 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
 
   useEffect(() => {
     if (reduced || reel.length === 0) return;
+    const single = reel.length < 2;
     const showing = front === 'a' ? a.current : b.current;
-    const waiting = front === 'a' ? b.current : a.current;
-    if (!showing || !waiting) return;
+    const waiting = single ? null : front === 'a' ? b.current : a.current;
+    if (!showing || (!single && !waiting)) return;
 
     arm(showing, reel[index % reel.length].film);
-    safePlay(showing);
-
     // Stage the next film behind the visible one so the swap has no gap.
-    if (reel.length > 1) arm(waiting, reel[(index + 1) % reel.length].film);
+    if (waiting) arm(waiting, reel[(index + 1) % reel.length].film);
+
+    // Play only while on screen. Both reels are always mounted and one is
+    // display:none (the landscape stage vs the portrait background), so
+    // playing on mount ran the hidden film to its end — switching viewport
+    // then revealed a frozen last frame. A film that has ended stays ended:
+    // it holds, it does not restart.
+    const onScreen = (visible: boolean) => {
+      if (!visible) showing.pause();
+      else if (!showing.ended) safePlay(showing);
+    };
+    const io =
+      typeof IntersectionObserver === 'function'
+        ? new IntersectionObserver((es) => es.forEach((e) => onScreen(e.isIntersecting)), { threshold: 0.1 })
+        : null;
+    if (io) io.observe(showing);
+    else safePlay(showing);
 
     const advance = () => {
       // A single film plays once and holds its last frame: the scene
       // arrives and settles, rather than looping like a GIF behind the type.
-      if (reel.length < 2) return;
+      if (!waiting) return;
       waiting.currentTime = 0;
       safePlay(waiting);
       setFront((f) => (f === 'a' ? 'b' : 'a'));
       setIndex((i) => (i + 1) % reel.length);
     };
     showing.addEventListener('ended', advance);
-    return () => showing.removeEventListener('ended', advance);
+    return () => {
+      showing.removeEventListener('ended', advance);
+      io?.disconnect();
+    };
   }, [index, front, reel, reduced]);
 
   const still = reel[index % reel.length]?.still;
   const poster = still ? publicAsset(still) : undefined;
   if (reduced) return <img className={className} src={poster} alt="" />;
 
+  // No autoPlay attribute: it would start the hidden reel on load. Playback
+  // is driven by the effect above; muted is applied there before any source.
   return (
     <>
       <video
         ref={a}
         className={`${className ?? ''} mk-film-layer${front === 'a' ? ' on' : ''}`}
-        autoPlay
         muted
         playsInline
         preload="auto"
         poster={poster}
       />
-      <video
-        ref={b}
-        className={`${className ?? ''} mk-film-layer${front === 'b' ? ' on' : ''}`}
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-      />
+      {reel.length > 1 && (
+        <video
+          ref={b}
+          className={`${className ?? ''} mk-film-layer${front === 'b' ? ' on' : ''}`}
+          muted
+          playsInline
+          preload="auto"
+        />
+      )}
     </>
   );
 }

@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       set:
-        description: "Which assets: imagery | icons | stages | animate (image-to-video) | intros | loops | all"
+        description: "Which assets: imagery | icons | stages | animate (image-to-video) | intros | loops | hero-stills | hero-films | all"
         required: true
         default: "all"
         type: choice
@@ -21,6 +21,8 @@ on:
           - animate
           - intros
           - loops
+          - hero-stills
+          - hero-films
           - all
       pro:
         description: "Seedance pro at 1080p (slower, costlier) instead of lite 720p"
@@ -83,7 +85,7 @@ jobs:
             ffmpeg -loglevel error -y -i "graded/$f.jpg" -vf "scale=1080:-2" -q:v 3 "graded/$f-1080.jpg"
           done
           # Cutouts keep their alpha: grade the colour, merge the original alpha back.
-          for f in cutout-kite cutout-hands-kite cutout-paperbag icon-nomina icon-quincena icon-empleador icon-condusef icon-sat icon-cobranza icon-contrato icon-adelanto icon-kyc icon-hotel-key; do
+          for f in cutout-paperbag icon-nomina icon-quincena icon-empleador icon-condusef icon-sat icon-cobranza icon-contrato icon-adelanto icon-kyc icon-hotel-key; do
             [ -f "$f.png" ] || continue
             ffmpeg -loglevel error -y -i "$f.png" -filter_complex "[0:v]format=rgba,split[c][a];[a]alphaextract[al];[c]format=rgb24,eq=saturation=0.8[cg];[cg][al]alphamerge,format=rgba" "graded/$f.png"
           done

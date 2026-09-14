@@ -102,8 +102,8 @@ export function BrandIntro({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    // Timed to the 5s scenes: the film breathes alone, then as the papalote
-    // holds the sky the brand arrives, and the curtain hands over the app.
+    // Timed to the scene: the film breathes alone, then as it settles the
+    // brand arrives, and the curtain hands over the app.
     Animated.sequence([
       Animated.delay(3300),
       Animated.parallel([

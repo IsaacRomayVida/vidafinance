@@ -3,7 +3,7 @@
 > **Override (Isaac, 2026-09-08): no botanical subjects.** The subject is
 > *people achieving freedom* — the moment someone can pay for the last-minute
 > thing: the pharmacy counter, the school backpack, walking out of the service
-> door at dawn, hands letting the cream-and-sage paper kite go. Everything
+> door at dawn. No kites, anywhere (Isaac, 2026-09-14). Everything
 > else below still holds: photography is colour, the grade is muted
 > olive-clay-and-cream film, faces are never legible, one subject per frame,
 > a clear zone for type. Prompts live in `mobile/scripts/generate-brand-assets.mjs`.

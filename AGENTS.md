@@ -117,6 +117,8 @@ identity-gated. Do not depend on the relaxed state; it will be re-armed.
 
 ## Brand constants (for any agent generating assets or copy)
 
-Freedom is the brand: the papalote (teal #194445 / gold #a28657 kite),
-dawn-sky ground, dignified aspirational Mexican family life, Spanish
-informal tú. Every generated visual ends on the papalote in the sky.
+Freedom is the brand: dawn light, dignified aspirational Mexican working
+life, Spanish informal tú. Imagery is documentary photography of people in
+the moment credit makes possible — faces never legible. **No kites** — not
+generated into films or stills, not as cutouts or motifs in the UI (Isaac,
+2026-09-14). Where each image may appear: `docs/design/SHOT_LIST.md`.

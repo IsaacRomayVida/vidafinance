@@ -42,9 +42,8 @@ export function HeroSection() {
         </Statement>
 
         <div className="mk-stage" aria-hidden="true">
-          {/* The freedom motif: the cream-and-sage kite drifting in a pale sky.
-              A real <video> so it actually moves; the still stands in under
-              reduced motion or while it loads. */}
+          {/* The site's one film. A real <video> so it actually moves; the
+              still stands in under reduced motion or while it loads. */}
           <HeroFilm reel={LANDSCAPE} className="mk-stage-film wide" />
           <HeroFilm reel={PORTRAIT} className="mk-stage-film tall" />
         </div>

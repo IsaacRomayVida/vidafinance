@@ -17,9 +17,9 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills|hero-films|all [--out dir] [--pro]
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -141,8 +141,9 @@ const ANIMATED = [
 ];
 
 /**
- * PHOTOGRAPHIC ONLY (Isaac, 2026-09-08). The handmade-kite motif is out of
- * the films: every generator rendered it as a cartoon pasted over the plate.
+ * PHOTOGRAPHIC ONLY, NO KITES (Isaac, 2026-09-08 and 2026-09-14). The
+ * handmade-kite motif is out of every asset: generators rendered it as a
+ * cartoon pasted over the plate, and the brand dropped it.
  * The films are documentary photography of the moment credit buys — the
  * housekeeper stepping out at dawn is the reference for all of them.
  */
@@ -163,9 +164,35 @@ const LOOPS = [
   { file: 'ambient-loop-wide.mp4', aspect: '16:9', prompt: `${MX} Early morning light moving very gently across a quiet hotel service corridor, palm shadows drifting on a cream wall, nobody in frame, almost still, seamless ambient motion, the camera does not move, wide. ${GRADE}` },
 ];
 
+/**
+ * THE HERO (docs/design/SHOT_LIST.md, H1 / G1 / G2) — the website's one film.
+ * "The shift ends": one moment, composed twice rather than cropped — 16:9 for
+ * the desktop stage, where the headline sits over the left, and 9:16 for the
+ * phone, where it sits over the top. Stage 1 (hero-stills) makes the stills
+ * for review; approved stills are graded and committed to
+ * public-v2/public/images/brand/, and stage 2 (hero-films) animates exactly
+ * those files. Paying for films before the stills are right wastes the run.
+ */
+const HERO_MOMENT = 'The end of a night shift at a five-star resort. A housekeeper in a pale sage uniform has just stepped out of the staff service entrance into first light and walks slowly away along a coquina stone path between coconut palms toward the open morning, seen from behind, alone, her face never visible.';
+const HERO_STILLS = [
+  {
+    file: 'hero-dawn-16x9.png', size: '1536x1024',
+    prompt: `${MX} ${HERO_MOMENT} Wide composition: she is small in the RIGHT third of the frame. The left two thirds are calm and uncluttered — soft dawn sky, out-of-focus palms and pale stucco — so a headline can sit over them. ${GRADE} ${NEG}`,
+  },
+  {
+    file: 'hero-dawn-9x16.png', size: '1024x1536',
+    prompt: `${MX} ${HERO_MOMENT} Vertical composition: she is small in the LOWER third, centred on the path. The upper two thirds are calm — pale dawn sky and the tops of palms — so a headline can sit over them. ${GRADE} ${NEG}`,
+  },
+];
+const HERO_MOTION = 'She keeps walking slowly away along the path and, near the end, comes to a stop and stands still in the morning light; her uniform and the palm fronds move gently in the breeze; the light warms almost imperceptibly. She REMAINS in frame for the whole shot and does not fade, turn around or change. The final seconds are nearly still.';
+const HERO_FILMS = [
+  { file: 'hero-dawn-16x9.mp4', imageFile: 'public-v2/public/images/brand/hero-dawn-16x9.jpg', aspect: '16:9', duration: '10', prompt: `${HERO_MOTION} ${MOTION}` },
+  { file: 'hero-dawn-9x16.mp4', imageFile: 'public-v2/public/images/brand/hero-dawn-9x16.jpg', aspect: '9:16', duration: '10', prompt: `${HERO_MOTION} ${MOTION}` },
+];
+
 // Every human scene must reference MX rather than repeat the setting inline:
 // pasted copies went stale silently and a casting change reached nothing.
-for (const spec of [...IMAGES, ...ANIMATED, ...FILMS]) {
+for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS]) {
   if (/Quintana Roo/.test(spec.prompt) && !spec.prompt.startsWith(MX)) {
     throw new Error(`${spec.file}: hardcodes the setting — use \${MX} instead`);
   }
@@ -211,10 +238,19 @@ async function generateFilm(spec) {
   const key = process.env.FAL_KEY;
   if (!key) throw new Error('FAL_KEY missing');
   const headers = { Authorization: `Key ${key}`, 'Content-Type': 'application/json' };
-  // With an `image`, the film starts from that exact photograph.
-  const model = spec.image ? I2V_MODEL : VIDEO_MODEL;
-  const body = spec.image
-    ? { prompt: spec.prompt, image_url: spec.image, resolution: PRO ? '1080p' : '720p', duration: spec.duration ?? '5' }
+  // With an `image` (URL) or `imageFile` (committed file, sent as a data URI
+  // so it need not be published first), the film starts from that exact
+  // photograph.
+  const image = spec.imageFile
+    ? `data:image/jpeg;base64,${readFileSync(spec.imageFile).toString('base64')}`
+    : spec.image;
+  const model = image ? I2V_MODEL : VIDEO_MODEL;
+  const body = image
+    ? {
+        prompt: spec.prompt, image_url: image, resolution: PRO ? '1080p' : '720p', duration: spec.duration ?? '5',
+        ...(spec.aspect ? { aspect_ratio: spec.aspect } : {}),
+        ...(spec.imageFile ? { camera_fixed: true } : {}),
+      }
     : { prompt: spec.prompt, aspect_ratio: spec.aspect, resolution: PRO ? '1080p' : '720p', duration: '5' };
   const submit = await fetch(`https://queue.fal.run/${model}`, {
     method: 'POST', headers, body: JSON.stringify(body),
@@ -235,7 +271,7 @@ async function generateFilm(spec) {
   if (!url) throw new Error(`fal ${request_id}: no video url`);
   const bytes = Buffer.from(await (await fetch(url)).arrayBuffer());
   writeFileSync(join(OUT, spec.file), bytes);
-  console.log(`film   ${spec.file}  (${spec.image ? 'image-to-video' : 'text-to-video'}, ${(bytes.length / 1e6).toFixed(1)} MB)`);
+  console.log(`film   ${spec.file}  (${image ? 'image-to-video' : 'text-to-video'}, ${(bytes.length / 1e6).toFixed(1)} MB)`);
 }
 
 // ---------------------------------------------------------------- run
@@ -251,4 +287,7 @@ if (SET === 'stages' || SET === 'all') await runAll(STAGES, generateImage);
 if (SET === 'animate' || SET === 'all') await runAll(ANIMATED, generateFilm);
 if (SET === 'intros') await runAll(FILMS, generateFilm);
 if (SET === 'loops' || SET === 'all') await runAll(LOOPS, generateFilm);
+// The hero is never part of 'all': stills need review before films are paid for.
+if (SET === 'hero-stills') await runAll(HERO_STILLS, generateImage);
+if (SET === 'hero-films') await runAll(HERO_FILMS, generateFilm);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }
