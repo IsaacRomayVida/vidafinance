@@ -23,11 +23,11 @@ import { useReducedMotion } from './motion';
 
 // Metro needs static requires — the whole set ships (~2 MB total).
 /* eslint-disable @typescript-eslint/no-var-requires */
-const artwork = require('../../assets/brand/home-doorway.jpg');
-// Five moments of freedom, each ending on the cream-and-sage kite
-// (~0.4 MB each after grading). One is drawn per cold start.
+const artwork = require('../../assets/brand/home-stall.jpg');
+// The app's one film (docs/design/SHOT_LIST.md, A1): it plays here, once
+// per cold start, and nowhere else in the app. The doorway belongs to the
+// website hero, so it is not reused.
 const SCENES = [
-  require('../../assets/intros/live-doorway.mp4'),
   require('../../assets/intros/live-stall.mp4'),
 ];
 /* eslint-enable @typescript-eslint/no-var-requires */

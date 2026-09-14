@@ -42,6 +42,11 @@
 .mk-title{font-size:clamp(30px,4.6vw,40px);line-height:1.08;font-weight:400;letter-spacing:-.01em;max-width:20ch;margin:0}
 .mk-title em,.mk-title .quiet{font-style:normal;font-weight:300;color:var(--type-quiet)}
 .mk-board.ops .mk-title em,.mk-board.ink .mk-title em{color:rgba(242,245,240,.82)}
+.mk-board.ops .mk-h1 em,.mk-board.ops .mk-h1 .quiet,.mk-board.ink .mk-h1 em,.mk-board.ink .mk-h1 .quiet{color:rgba(242,245,240,.72)}
+.mk-board.ops .mk-btn:not(.white):not(.ghost):not(.cta),.mk-board.ink .mk-btn:not(.white):not(.ghost):not(.cta){background:var(--paper-dark);color:var(--ink)}
+.mk-board.ops .mk-btn:not(.white):not(.ghost):not(.cta):hover,.mk-board.ink .mk-btn:not(.white):not(.ghost):not(.cta):hover{background:#fff}
+.mk-board.ops .mk-btn.ghost,.mk-board.ink .mk-btn.ghost{background:transparent;color:var(--paper-dark);border-color:rgba(242,245,240,.35)}
+.mk-board.ops .mk-btn.ghost:hover,.mk-board.ink .mk-btn.ghost:hover{background:rgba(242,245,240,.08);border-color:rgba(242,245,240,.6)}
 .mk-board.leaf .mk-title em{color:rgba(244,247,238,.78)}
 .mk-lead{font-size:15px;line-height:1.55;font-weight:300;color:var(--ink-soft);max-width:44ch;margin:16px 0 0}
 .mk-lead b{font-weight:600;color:var(--ink)}
@@ -522,11 +527,6 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 
 /* ─── Photography (people achieving freedom) ──────────────────────── */
 .mk-board.photo{color:#f4f7ee;background-size:cover;background-position:center;text-shadow:0 1px 14px rgba(10,20,10,.35)}
-.mk-board.photo-backpack{background-image:linear-gradient(180deg,rgba(18,28,16,.42) 0%,rgba(18,28,16,.62) 60%,rgba(18,28,16,.8) 100%),url('/images/brand/moment-backpack.jpg')}
-.mk-board.photo-kitchen{background-image:linear-gradient(180deg,rgba(18,28,16,.45) 0%,rgba(18,28,16,.7) 100%),url('/images/brand/moment-kitchen.jpg')}
-.mk-board.photo-doorway{background-image:linear-gradient(180deg,rgba(18,28,16,.35) 0%,rgba(18,28,16,.72) 100%),url('/images/brand/home-doorway.jpg');background-position:center 30%}
-.mk-board.photo-stall{background-image:linear-gradient(180deg,rgba(18,26,16,.4) 0%,rgba(18,26,16,.68) 55%,rgba(18,26,16,.84) 100%),url('/images/brand/home-stall.jpg');background-position:center 42%}
-.mk-board.photo-pharmacy{background-image:linear-gradient(180deg,rgba(18,26,16,.45) 0%,rgba(18,26,16,.72) 100%),url('/images/brand/moment-pharmacy.jpg')}
 /* A photo board is a full-bleed picture: give it room to read as one. */
 .mk-board.photo .mk-inner{padding-top:clamp(56px,9vw,110px);padding-bottom:clamp(56px,9vw,110px)}
 .mk-stage-still,.mk-stage-film{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:22px}

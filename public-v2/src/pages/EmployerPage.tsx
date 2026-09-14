@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { BoardFilm } from '../components/marketing/BoardFilm';
 import { Link } from 'react-router-dom';
 import { Board, BoardHead, Statement, Rows, Figures, PillSteps } from '../components/marketing/Board';
 import { ArrowIcon } from '../components/marketing/ArrowIcon';
@@ -44,8 +43,9 @@ export function EmployerPage() {
         <Rows columns={2} items={[1, 2, 3, 4].map((n) => ({ title: t(`lp_e_ben_${n}_t`), desc: t(`lp_e_ben_${n}_d`) }))} />
       </Board>
 
-      <Board className="film">
-      <BoardFilm film="/video/live-doorway.mp4" still="/images/brand/home-doorway.jpg" />
+      {/* The employer side speaks in the ops language: dark board, no
+          photography (funpay-ui). */}
+      <Board tone="ops">
         <Statement html={t('lp_e_close_h')} lead={t('lp_e_close_sub')} center>
           <div className="mk-actions">
             <Link to="/onboarding?role=employer" className="mk-btn">{t('lp_e_cta')} {ArrowIcon}</Link>

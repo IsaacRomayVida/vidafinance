@@ -64,11 +64,9 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
     if (reel.length > 1) arm(waiting, reel[(index + 1) % reel.length].film);
 
     const advance = () => {
-      if (reel.length < 2) {
-        showing.currentTime = 0;
-        safePlay(showing);
-        return;
-      }
+      // A single film plays once and holds its last frame: the scene
+      // arrives and settles, rather than looping like a GIF behind the type.
+      if (reel.length < 2) return;
       waiting.currentTime = 0;
       safePlay(waiting);
       setFront((f) => (f === 'a' ? 'b' : 'a'));

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { BoardFilm } from './BoardFilm';
+import { BoardPhoto } from './BoardPhoto';
 import { Link } from 'react-router-dom';
 import { Board, BoardHead } from './Board';
 import { ArrowIcon } from './ArrowIcon';
@@ -12,15 +12,15 @@ const icons = [
 ];
 
 /**
- * Trust on the painted "leaf" board — the CSS stand-in for the macro
- * botanical photograph. White title, frosted rows.
+ * Trust over the backpack photograph — the only place it appears. A still:
+ * the hero carries the site's one film. White title, frosted rows.
  */
 export function TrustSection() {
   const { t } = useTranslation();
 
   return (
     <Board className="film" id="trust">
-      <BoardFilm film="/video/live-backpack.mp4" still="/images/brand/moment-backpack.jpg" />
+      <BoardPhoto still="/images/brand/moment-backpack.jpg" />
       <div className="mk-cols">
         <div className="sticky sh">
           <BoardHead kicker={t('trust_tag')} title={t('trust_h2')} lead={t('trust_p')} />

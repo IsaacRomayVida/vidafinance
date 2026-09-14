@@ -5,18 +5,16 @@ import { ArrowIcon } from './ArrowIcon';
 import { HeroFilm, type Film } from './HeroFilm';
 
 /**
- * The reels. Landscape films fill the desktop stage; the portrait cuts are
- * the phone background, where the film is the board itself. Each entry is a
- * photograph from the site and the film generated from it.
+ * The site's one film (docs/design/SHOT_LIST.md, H1). It plays once and
+ * holds on its last frame. Landscape fills the desktop stage; portrait is the
+ * phone background. Placeholders until the composed 16:9 / 9:16 pair of the
+ * same shot is generated: nothing here is used anywhere else on the site.
  */
 const LANDSCAPE: Film[] = [
   { film: '/video/live-kitchen.mp4', still: '/images/brand/moment-kitchen.jpg' },
-  { film: '/video/live-pharmacy.mp4', still: '/images/brand/moment-pharmacy.jpg' },
-  { film: '/video/live-backpack.mp4', still: '/images/brand/moment-backpack.jpg' },
 ];
 const PORTRAIT: Film[] = [
   { film: '/video/live-doorway.mp4', still: '/images/brand/home-doorway.jpg' },
-  { film: '/video/live-stall.mp4', still: '/images/brand/home-stall.jpg' },
 ];
 
 /**
