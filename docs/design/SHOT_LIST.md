@@ -36,8 +36,8 @@ design.
 
 | ID | Where | Treatment | Asset | Status |
 |---|---|---|---|---|
-| H1 | Home · hero (desktop stage) | Film, plays once, holds | `video/live-kitchen.mp4` (poster `moment-kitchen.jpg`) | placeholder → G2 |
-| H1 | Home · hero (phone background) | Same shot, 9:16 composition | `video/live-doorway.mp4` (poster `home-doorway.jpg`) | placeholder → G2 |
+| H1 | Home · hero (desktop stage) | Film, plays once, holds | `images/brand/hero-dawn-16x9.jpg` (still until G2) | still live · film pending G2 |
+| H1 | Home · hero (phone background) | Same shot, 9:16 composition | `images/brand/hero-dawn-9x16.jpg` (still until G2) | still live · film pending G2 |
 | H2 | Home · How it works | Paper board, the steps are the content | — | none |
 | H3 | Home · Cost calculator | Sage board, nothing competes with the numbers | — | none |
 | H4 | Home · Employers | Dark ops board over the stage surface | `images/brand/stage-employer.jpg` | live |
@@ -61,8 +61,10 @@ design.
 Removed from the website bundle (7.5 MB → 0.6 MB of video): `hero.mp4`,
 `hero-doorway.mp4`, `hero-market.mp4`, `hero-poster.jpg`, `showcase.mp4`,
 `ambient-loop.mp4`, `ambient-loop-wide.mp4`, `live-backpack.mp4`,
-`live-pharmacy.mp4`, `live-stall.mp4`. From the app: `live-doorway.mp4`,
-`home-doorway.jpg`.
+`live-pharmacy.mp4`, `live-stall.mp4`, then the hero placeholders
+`live-kitchen.mp4`, `live-doorway.mp4` and the unplaced stills
+`moment-kitchen.jpg`, `home-doorway.jpg`, `home-stall.jpg`,
+`figure-green.jpg`. From the app: `live-doorway.mp4`, `home-doorway.jpg`.
 
 ## Generation queue
 
@@ -72,7 +74,7 @@ alfa.suena.ch/funpay.
 | ID | Output | Tool | Notes |
 |---|---|---|---|
 | G1 | `images/brand/hero-dawn-16x9.jpg`, `images/brand/hero-dawn-9x16.jpg` | OpenAI Images (`set=hero-stills`) | **Approved 2026-09-14** (run 34837062464), graded, cropped to exact 16:9 / 9:16. Calm sky left (desktop) / top (phone) for the headline. |
-| G2 | `video/hero-dawn-16x9.mp4`, `video/hero-dawn-9x16.mp4` | fal.ai Seedance **pro**, image-to-video from the committed G1 files (`set=hero-films`, `pro=true`), 10 s, camera fixed | Replaces both H1 placeholders. |
+| G2 | `video/hero-dawn-16x9.mp4`, `video/hero-dawn-9x16.mp4` | fal.ai Seedance **pro**, image-to-video from the committed G1 files (`set=hero-films`, `pro=true`), 10 s, camera fixed | **Blocked 2026-09-14: fal.ai balance exhausted** (run 34837507246, nothing generated). Then add `film` to both entries in `HeroSection.tsx`. |
 
 **G1/G2 brief — "the shift ends."** A hotel staff member at the end of the
 night shift steps out of the service entrance into first light, seen from

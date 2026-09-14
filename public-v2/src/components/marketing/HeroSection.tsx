@@ -5,16 +5,16 @@ import { ArrowIcon } from './ArrowIcon';
 import { HeroFilm, type Film } from './HeroFilm';
 
 /**
- * The site's one film (docs/design/SHOT_LIST.md, H1). It plays once and
- * holds on its last frame. Landscape fills the desktop stage; portrait is the
- * phone background. Placeholders until the composed 16:9 / 9:16 pair of the
- * same shot is generated: nothing here is used anywhere else on the site.
+ * The site's one film (docs/design/SHOT_LIST.md, H1): "the shift ends", one
+ * moment composed twice — 16:9 fills the desktop stage, 9:16 is the phone
+ * background. It plays once and holds on its last frame. Until G2 generates
+ * the films, the approved stills stand alone (add `film` to each entry).
  */
 const LANDSCAPE: Film[] = [
-  { film: '/video/live-kitchen.mp4', still: '/images/brand/moment-kitchen.jpg' },
+  { still: '/images/brand/hero-dawn-16x9.jpg' },
 ];
 const PORTRAIT: Film[] = [
-  { film: '/video/live-doorway.mp4', still: '/images/brand/home-doorway.jpg' },
+  { still: '/images/brand/hero-dawn-9x16.jpg' },
 ];
 
 /**

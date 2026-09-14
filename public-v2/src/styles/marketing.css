@@ -544,7 +544,7 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 }
 .mk-stage{overflow:hidden;border-radius:22px;background:#eae6d6}
 @media (max-width:760px){}
-@media (prefers-reduced-motion:reduce){.mk-stage-film{display:none}}
+@media (prefers-reduced-motion:reduce){video.mk-stage-film{display:none}}
 
 /* ─── Mobile hero: the photograph is the ground, not a block below ──────
    Stacked, the film sat under the headline and had to be scrolled to. At

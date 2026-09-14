@@ -14,7 +14,8 @@ import { useEffect, useRef, useState } from 'react';
 import { publicAsset } from '../../lib/publicAsset';
 
 export interface Film {
-  film: string;
+  /** Omit while the film is not generated yet: the still stands alone. */
+  film?: string;
   still: string;
 }
 
@@ -51,16 +52,18 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
     typeof window !== 'undefined' &&
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+  const stillOnly = reel.length === 0 || reel.some((f) => !f.film);
+
   useEffect(() => {
-    if (reduced || reel.length === 0) return;
+    if (reduced || stillOnly) return;
     const single = reel.length < 2;
     const showing = front === 'a' ? a.current : b.current;
     const waiting = single ? null : front === 'a' ? b.current : a.current;
     if (!showing || (!single && !waiting)) return;
 
-    arm(showing, reel[index % reel.length].film);
+    arm(showing, reel[index % reel.length].film as string);
     // Stage the next film behind the visible one so the swap has no gap.
-    if (waiting) arm(waiting, reel[(index + 1) % reel.length].film);
+    if (waiting) arm(waiting, reel[(index + 1) % reel.length].film as string);
 
     // Play only while on screen. Both reels are always mounted and one is
     // display:none (the landscape stage vs the portrait background), so
@@ -92,11 +95,11 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
       showing.removeEventListener('ended', advance);
       io?.disconnect();
     };
-  }, [index, front, reel, reduced]);
+  }, [index, front, reel, reduced, stillOnly]);
 
   const still = reel[index % reel.length]?.still;
   const poster = still ? publicAsset(still) : undefined;
-  if (reduced) return <img className={className} src={poster} alt="" />;
+  if (reduced || stillOnly) return <img className={className} src={poster} alt="" />;
 
   // No autoPlay attribute: it would start the hidden reel on load. Playback
   // is driven by the effect above; muted is applied there before any source.
