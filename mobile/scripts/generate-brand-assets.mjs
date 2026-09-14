@@ -200,7 +200,12 @@ const HERO_FILMS = [
 const BOARD_FILMS = [
   {
     file: 'board-trust-backpack.mp4', imageFile: 'public-v2/public/images/brand/moment-backpack.jpg', aspect: '16:9', duration: '10',
-    prompt: `Both people REMAIN in frame for the entire shot and neither fades, disappears or changes. Their faces stay hidden the whole time: the boy keeps looking straight out through the open door, away from the camera, and the mother's face stays turned toward him and covered by her long hair; neither head turns, and no face becomes clear or sharp. The only movement: the mother gently settles the backpack straps on his shoulders and smooths his shirt; he shifts his weight slightly; the plants outside sway a little in the breeze. ${MOTION}`,
+    // Takes 1 and 2 (runs 34853102093, 34853554543) turned the boy's face
+    // into sharp profile as he looked at his mother. Cinemagraph instead: the
+    // people hold still, the world around them moves, and the film must end
+    // on the exact starting still, which leaves no room for a head to turn.
+    endImageFile: 'public-v2/public/images/brand/moment-backpack.jpg',
+    prompt: `A living photograph. The mother and the boy hold almost perfectly still in exactly the pose of the first frame for the entire shot, like a paused moment: nobody turns their head, nobody looks around, the boy keeps facing out through the open door with his back to the camera, and the mother's face stays behind her hair. The only motion is around them: the plants and trees outside sway gently in a breeze, soft morning light and leaf shadows drift slowly across the floor and the doorway, and a strand of the mother's hair moves slightly. The last frame is identical to the first. ${MOTION}`,
   },
 ];
 
@@ -264,6 +269,7 @@ async function generateFilm(spec) {
         prompt: spec.prompt, image_url: image, resolution: PRO ? '1080p' : '720p', duration: spec.duration ?? '5',
         ...(spec.aspect ? { aspect_ratio: spec.aspect } : {}),
         ...(spec.imageFile ? { camera_fixed: true } : {}),
+        ...(spec.endImageFile ? { end_image_url: `data:image/jpeg;base64,${readFileSync(spec.endImageFile).toString('base64')}` } : {}),
       }
     : { prompt: spec.prompt, aspect_ratio: spec.aspect, resolution: PRO ? '1080p' : '720p', duration: '5' };
   const submit = await fetch(`https://queue.fal.run/${model}`, {
