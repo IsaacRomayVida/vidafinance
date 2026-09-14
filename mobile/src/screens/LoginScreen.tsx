@@ -1,39 +1,36 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 
+import { Field } from '../components/Field';
 import { FunpayMark, FunpayWordmark } from '../components/FunpayLogo';
 import { Backdrop, GlassCard } from '../components/Glass';
+import { FadeSlideIn } from '../components/motion';
+import { GhostButton, PrimaryButton } from '../components/PrimaryButton';
 import { friendlyError } from '../lib/errors';
 import { auth } from '../lib/firebase';
-import { colors, fonts, gradient, microLabel, radii, spacing } from '../theme';
+import { EMAIL_REGEX } from '../lib/validation';
+import { colors, fonts, spacing } from '../theme';
+import type { AuthStackParamList } from '../types';
 
-// v1 is sign-in only, on purpose: account creation runs through the web
-// onboarding (identity verification via MetaMap has no Expo Go path — it
-// needs a native module and a dev-client build, tracked for v2). The copy
-// points new borrowers at funpay.mx instead of dead-ending them.
-export function LoginScreen() {
+export function LoginScreen({
+  navigation,
+}: {
+  navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
+}) {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [focused, setFocused] = useState<'email' | 'password' | null>(null);
 
   const submit = async () => {
     if (submitting) return;
     setError('');
+    setNotice('');
     setSubmitting(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -44,69 +41,89 @@ export function LoginScreen() {
     }
   };
 
+  const resetPassword = async () => {
+    setError('');
+    setNotice('');
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setError(t('login.resetNeedsEmail'));
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setNotice(t('login.resetSent'));
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+
   return (
     <Backdrop>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.brandBlock}>
-          <FunpayMark size={60} />
-          <FunpayWordmark size={27} />
-        </View>
-        <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
-
-        <GlassCard>
-          <View style={styles.form}>
-            <Text style={styles.label}>{t('login.email')}</Text>
-            <TextInput
-              style={[styles.input, focused === 'email' && styles.inputFocused]}
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              onFocus={() => setFocused('email')}
-              onBlur={() => setFocused(null)}
-              editable={!submitting}
-              selectionColor={colors.brandLight}
-              testID="login-email"
-            />
-
-            <Text style={[styles.label, { marginTop: spacing.l }]}>{t('login.password')}</Text>
-            <TextInput
-              style={[styles.input, focused === 'password' && styles.inputFocused]}
-              secureTextEntry
-              autoComplete="password"
-              value={password}
-              onChangeText={setPassword}
-              onFocus={() => setFocused('password')}
-              onBlur={() => setFocused(null)}
-              editable={!submitting}
-              selectionColor={colors.brandLight}
-              testID="login-password"
-            />
-
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <Pressable onPress={submit} disabled={submitting} testID="login-submit">
-              <LinearGradient
-                colors={gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.button, submitting && styles.buttonDisabled]}
-              >
-                {submitting ? (
-                  <ActivityIndicator color={colors.onBrand} />
-                ) : (
-                  <Text style={styles.buttonText}>{t('login.submit')}</Text>
-                )}
-              </LinearGradient>
-            </Pressable>
+        <FadeSlideIn index={0}>
+          <View style={styles.brandBlock}>
+            <FunpayMark size={60} />
+            <FunpayWordmark size={27} />
           </View>
-        </GlassCard>
+          <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
+        </FadeSlideIn>
 
-        <Text style={styles.hint}>{t('login.noAccount')}</Text>
+        <FadeSlideIn index={1}>
+          <GlassCard>
+            <View style={styles.form}>
+              <Field
+                label={t('login.email')}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                editable={!submitting}
+                testID="login-email"
+                containerStyle={{ marginBottom: spacing.l }}
+              />
+              <Field
+                label={t('login.password')}
+                value={password}
+                onChangeText={setPassword}
+                secure
+                autoComplete="password"
+                editable={!submitting}
+                testID="login-password"
+              />
+
+              <GhostButton
+                label={t('login.forgot')}
+                onPress={() => void resetPassword()}
+                style={styles.forgot}
+              />
+
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
+              <PrimaryButton
+                label={t('login.submit')}
+                onPress={() => void submit()}
+                busy={submitting}
+                style={{ marginTop: spacing.m }}
+                testID="login-submit"
+              />
+            </View>
+          </GlassCard>
+        </FadeSlideIn>
+
+        <FadeSlideIn index={2}>
+          <View style={styles.createRow}>
+            <Text style={styles.hint}>{t('login.noAccount')}</Text>
+            <GhostButton
+              label={t('login.createAccount')}
+              onPress={() => navigation.navigate('Onboarding')}
+              testID="login-create-account"
+            />
+          </View>
+        </FadeSlideIn>
       </KeyboardAvoidingView>
     </Backdrop>
   );
@@ -124,36 +141,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.l,
   },
   form: { padding: spacing.l },
-  label: { ...microLabel, marginBottom: spacing.s },
-  // A lighter glass within the glass: near-opaque white field so the text
-  // stays crisp, with a brand ring on focus.
-  input: {
-    backgroundColor: colors.glassStrong,
-    borderRadius: radii.m,
-    borderWidth: 1.5,
-    borderColor: colors.glassBorder,
-    paddingHorizontal: spacing.m,
-    paddingVertical: 13,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.text,
-  },
-  inputFocused: { borderColor: colors.brandLight },
-  error: { fontFamily: fonts.sans, color: colors.danger, marginTop: spacing.m },
-  button: {
-    borderRadius: radii.pill,
-    padding: spacing.m + 2,
-    alignItems: 'center',
-    marginTop: spacing.l,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { fontFamily: fonts.sansBold, color: colors.onBrand, fontSize: 16 },
+  forgot: { alignSelf: 'flex-end' },
+  error: { fontFamily: fonts.sans, color: colors.danger, marginTop: spacing.s, lineHeight: 19 },
+  notice: { fontFamily: fonts.sans, color: colors.brandLight, marginTop: spacing.s, lineHeight: 19 },
+  createRow: { alignItems: 'center', marginTop: spacing.l },
   hint: {
     fontFamily: fonts.sans,
     color: colors.faint,
     fontSize: 13,
     textAlign: 'center',
-    marginTop: spacing.l,
     lineHeight: 19,
   },
 });

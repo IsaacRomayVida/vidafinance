@@ -64,6 +64,31 @@ export const radii = { s: 10, m: 14, l: 20, xl: 28, pill: 999 } as const;
 
 export const spacing = { xs: 4, s: 8, m: 16, l: 24, xl: 32 } as const;
 
+/**
+ * Motion vocabulary — one timing language for the whole app.
+ * Fast enough to be felt, never watched; entrances rise 12–16pt and fade,
+ * presses settle at 0.97. Anything slower than 300ms is for rare moments
+ * (the success screen), not for controls.
+ */
+export const motion = {
+  press: 120,
+  enter: 220,
+  slow: 320,
+  stagger: 45,
+  rise: 14,
+  pressScale: 0.97,
+} as const;
+
+/** Type scale (minor third off a 15px body; display sizes track tighter). */
+export const type = {
+  display: 32,
+  title: 24,
+  heading: 19,
+  body: 15,
+  small: 13,
+  micro: 11,
+} as const;
+
 /** Uppercase letterspaced micro-label, the web app's form-label idiom. */
 export const microLabel = {
   fontFamily: fonts.sansBold,

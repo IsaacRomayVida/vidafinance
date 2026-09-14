@@ -18,11 +18,13 @@ import { AuthProvider, useAuth } from './src/hooks/useAuth';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LoansScreen } from './src/screens/LoansScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { RequestLoanScreen } from './src/screens/RequestLoanScreen';
 import { colors } from './src/theme';
-import type { RootStackParamList } from './src/types';
+import type { AuthStackParamList, RootStackParamList } from './src/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 
 // Screens own their full canvas (Backdrop + glass headers), so the
 // navigator chrome is invisible; the theme only sets the underlying wash.
@@ -56,13 +58,24 @@ function Splash() {
 }
 
 function Root() {
-  const { user, ready } = useAuth();
+  const { user, ready, onboardingHold } = useAuth();
 
   // Until persistence answers, show the brand splash — never flash the login
   // screen at a signed-in borrower on cold start.
   if (!ready) return <Splash />;
 
-  if (!user) return <LoginScreen />;
+  // The hold keeps the wizard (and its success moment) on screen even after
+  // registration has signed the new borrower in mid-flow.
+  if (!user || onboardingHold) {
+    return (
+      <AuthStack.Navigator
+        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
+      >
+        <AuthStack.Screen name="Login" component={LoginScreen} />
+        <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
+      </AuthStack.Navigator>
+    );
+  }
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
