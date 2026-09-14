@@ -28,6 +28,7 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
     document.body.style.overflow = 'hidden';
 
     const menu = menuRef.current;
+    const hamburger = hamburgerRef.current;
     const getFocusable = () =>
       menu
         ? Array.from(
@@ -62,7 +63,7 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
     return () => {
       document.body.style.overflow = prevOverflow;
       document.removeEventListener('keydown', handleKeyDown);
-      hamburgerRef.current?.focus();
+      hamburger?.focus();
     };
   }, [menuOpen]);
 
