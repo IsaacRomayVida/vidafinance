@@ -585,6 +585,8 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-board.mk-hero .mk-h1 .quiet,.mk-board.mk-hero .mk-h1 em{color:rgba(244,247,238,.92)}
 .mk-board.mk-hero .mk-kicker,.mk-board.mk-hero .mk-board-title{color:rgba(244,247,238,.94)}
 .mk-board.mk-hero .mk-disclose{color:rgba(244,247,238,.94);text-shadow:0 1px 12px rgba(8,14,8,.6)}
+.mk-board.mk-hero .mk-lead{color:rgba(244,247,238,.94);text-shadow:0 1px 14px rgba(8,14,8,.6)}
+.mk-board.mk-hero .mk-lead b,.mk-board.mk-hero .mk-disclose a{color:#f4f7ee}
 .mk-board.mk-hero .mk-btn.ghost{color:#f4f7ee;border-color:rgba(244,247,238,.6)}
 /* The floating cards sit over the film on wide screens, and step aside on
    phones where the headline needs the whole width. */

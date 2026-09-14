@@ -5,6 +5,12 @@ import { Link } from 'react-router-dom';
 import { Board, BoardHead, Statement, Rows, Figures, PillSteps } from '../components/marketing/Board';
 import { ArrowIcon } from '../components/marketing/ArrowIcon';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { PhotoHero } from '../components/marketing/PhotoHero';
+import type { Film } from '../components/marketing/HeroFilm';
+
+// Empleados hero (docs/design/SHOT_LIST.md, E0): a waiter starting his shift.
+const HERO_WIDE: Film = { still: '/images/brand/employee-hero-16x9.jpg' };
+const HERO_TALL: Film = { still: '/images/brand/employee-hero-9x16.jpg' };
 
 function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -27,7 +33,7 @@ export function EmployeePage() {
   return (
     <>
       {/* Statement */}
-      <Board label={t('lp_m_badge')}>
+      <PhotoHero label={t('lp_m_badge')} wide={HERO_WIDE} tall={HERO_TALL}>
         <Statement html={t('lp_m_h1')} lead={t('lp_m_sub')}>
           <div className="mk-actions">
             <Link to="/onboarding?role=employee" className="mk-btn">{t('lp_m_cta')} {ArrowIcon}</Link>
@@ -37,7 +43,7 @@ export function EmployeePage() {
             <Link to="/employers">{t('lp_m_no_code_link')}</Link>
           </p>
         </Statement>
-      </Board>
+      </PhotoHero>
 
       {/* What you get — numbers as the copy */}
       <Board tone="paper">

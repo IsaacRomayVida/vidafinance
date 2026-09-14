@@ -21,8 +21,10 @@ wallpaper under a scrim: nothing was special, and motion fought the type.
 3. **Nothing appears twice.** Not across pages, not between web and app.
 4. **A board earns its photograph.** Boards whose content *is* the point —
    the steps, the cost calculator, FAQ — carry no imagery.
-5. **Ops and employer sides use no photography** (funpay-ui): dark board,
-   gradient and glass. The one exception is the `stage-*` surfaces below.
+5. **Logged-in ops and employer screens use no photography** (funpay-ui):
+   dark board, gradient and glass, except the `stage-*` surfaces below. The
+   public Empleados and Empleadores pages open on a photograph (Isaac,
+   2026-09-14).
 6. **Photographic only, and no kites.** Not in a film, not in a still,
    not as a cutout or motif in the UI (Isaac, 2026-09-08 and 2026-09-14).
 7. **Composed, not cropped.** Desktop 16:9 and phone 9:16 of the same moment
@@ -43,10 +45,12 @@ design.
 | H2 | Home · How it works | Paper board, the steps are the content | — | none |
 | H3 | Home · Cost calculator | Sage board, nothing competes with the numbers | — | none |
 | H4 | Home · Employers | Dark ops board over the stage surface | `images/brand/stage-employer.jpg` | live |
-| H5 | Home · Trust | Cinemagraph from its still (6 s, ends on the still), plays on screen | `video/board-trust-backpack.mp4` (poster `images/brand/moment-backpack.jpg`, exact 16:9) — take 4, run 34855094459; takes 1–3 rejected (reframing, legible face, exposure swing) | live |
+| H5 | Home · Trust | Film from its still (6 s), plays on screen | `video/board-trust-lunch.mp4` (poster `images/brand/moment-lunch.jpg`) — the mother places the lunch in the backpack, both backs to camera (run 34857257196) | live |
 | H6 | Home · FAQ | Paper | — | none |
 | H7 | Home · Closing | Sage | — | none |
+| E0 | Employees · hero | Still, composed 16:9 + 9:16 | `images/brand/employee-hero-16x9.jpg`, `employee-hero-9x16.jpg` — a waiter starting his shift | live |
 | E1 | Employees · Use cases | Still | `images/brand/moment-pharmacy.jpg` | live |
+| R0 | Employers · hero | Still, composed 16:9 + 9:16 | `images/brand/employer-hero-16x9.jpg`, `employer-hero-9x16.jpg` — payroll morning in a resort HR office | live |
 | R1 | Employers · Closing statement | Dark ops board | — | none |
 | O1 | Employer dashboard + ops console · stage panel | Stage surface | `images/brand/stage-ops.jpg` | live |
 
@@ -63,7 +67,8 @@ design.
 Removed from the website bundle (7.5 MB → 0.6 MB of video): `hero.mp4`,
 `hero-doorway.mp4`, `hero-market.mp4`, `hero-poster.jpg`, `showcase.mp4`,
 `ambient-loop.mp4`, `ambient-loop-wide.mp4`, `live-backpack.mp4`,
-`live-pharmacy.mp4`, `live-stall.mp4`, then the hero placeholders
+`live-pharmacy.mp4`, `live-stall.mp4`, `board-trust-backpack.mp4` and
+`moment-backpack.jpg` (replaced by the lunch moment), then the hero placeholders
 `live-kitchen.mp4`, `live-doorway.mp4` and the unplaced stills
 `moment-kitchen.jpg`, `home-doorway.jpg`, `home-stall.jpg`,
 `figure-green.jpg`. From the app: `live-doorway.mp4`, `home-doorway.jpg`.

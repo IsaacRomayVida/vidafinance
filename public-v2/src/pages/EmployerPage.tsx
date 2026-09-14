@@ -3,6 +3,12 @@ import { Link } from 'react-router-dom';
 import { Board, BoardHead, Statement, Rows, Figures, PillSteps } from '../components/marketing/Board';
 import { ArrowIcon } from '../components/marketing/ArrowIcon';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { PhotoHero } from '../components/marketing/PhotoHero';
+import type { Film } from '../components/marketing/HeroFilm';
+
+// Empleadores hero (docs/design/SHOT_LIST.md, R0): payroll morning in a resort HR office.
+const HERO_WIDE: Film = { still: '/images/brand/employer-hero-16x9.jpg' };
+const HERO_TALL: Film = { still: '/images/brand/employer-hero-9x16.jpg' };
 
 export function EmployerPage() {
   const { t } = useTranslation();
@@ -10,14 +16,14 @@ export function EmployerPage() {
 
   return (
     <>
-      <Board label={t('lp_e_badge')}>
+      <PhotoHero label={t('lp_e_badge')} wide={HERO_WIDE} tall={HERO_TALL}>
         <Statement html={t('lp_e_h1')} lead={t('lp_e_sub')}>
           <div className="mk-actions">
             <Link to="/onboarding?role=employer" className="mk-btn">{t('lp_e_cta')} {ArrowIcon}</Link>
             <Link to="/login" className="mk-btn ghost">{t('lp_e_login')}</Link>
           </div>
         </Statement>
-      </Board>
+      </PhotoHero>
 
       <Board tone="paper">
         <div className="mk-cols">

@@ -12,15 +12,16 @@ const icons = [
 ];
 
 /**
- * Trust over the backpack photograph — the only place it appears — moving:
- * the film is generated from that exact still. White title, frosted rows.
+ * Trust over the school-morning moment — the mother slipping the lunch into
+ * her son's backpack — the only place it appears. The film is generated
+ * from that exact still. White title, frosted rows.
  */
 export function TrustSection() {
   const { t } = useTranslation();
 
   return (
     <Board className="film" id="trust">
-      <BoardPhoto still="/images/brand/moment-backpack.jpg" film="/video/board-trust-backpack.mp4" />
+      <BoardPhoto still="/images/brand/moment-lunch.jpg" film="/video/board-trust-lunch.mp4" />
       <div className="mk-cols">
         <div className="sticky sh">
           <BoardHead kicker={t('trust_tag')} title={t('trust_h2')} lead={t('trust_p')} />
