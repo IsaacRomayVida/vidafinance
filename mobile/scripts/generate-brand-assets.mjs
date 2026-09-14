@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -215,6 +215,25 @@ const PAGE_STILLS = [
 ];
 
 /**
+ * PAGE FILMS — the Empleados and Empleadores heroes, moving (Isaac,
+ * 2026-09-14: "there should be also videos"). The Trust lunch film taught the
+ * rule: hands handling objects morph (the backpack gaped open and swallowed
+ * the bag). So these keep people nearly still, pin exposure, and pin the
+ * last frame to the starting still; the world around them carries the motion.
+ */
+const STILL_PEOPLE = 'The exposure, brightness and colour of the whole frame stay exactly constant from first frame to last — no brightening, no flare, no fade. No object changes shape, opens, appears or disappears. Nobody turns toward the camera and no face becomes visible. The last frame is identical to the first.';
+const WAITER_MOTION = `He finishes fastening the cuff and lowers his hands, takes one slow, calm breath so his shoulders rise and settle, and brings his hands back to the cuff as in the first frame. Fine dust drifts in the window light. ${STILL_PEOPLE} ${MOTION}`;
+const OFFICE_MOTION = `The manager stays seated at the laptop, working, with only the smallest natural movement of the head and shoulders. Outside the window the coconut palms sway gently in the breeze and their soft shadows move faintly. ${STILL_PEOPLE} ${MOTION}`;
+const PAGE_FILMS = ['employee-hero-16x9', 'employee-hero-9x16', 'employer-hero-16x9', 'employer-hero-9x16'].map((name) => {
+  const still = `public-v2/public/images/brand/${name}.jpg`;
+  return {
+    file: `${name}.mp4`, imageFile: still, endImageFile: still,
+    aspect: name.endsWith('9x16') ? '9:16' : '16:9', duration: '8',
+    prompt: name.startsWith('employee') ? WAITER_MOTION : OFFICE_MOTION,
+  };
+});
+
+/**
  * BOARD FILMS (docs/design/SHOT_LIST.md) — a board whose photograph moves.
  * Each animates the exact committed still that is also its poster, so the
  * first frame is the picture already on the page, and is graded like it.
@@ -336,4 +355,5 @@ if (SET === 'hero-films-desktop') await runAll(HERO_FILMS.filter((x) => aspectOf
 if (SET === 'hero-films-phone') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'phone'), generateFilm);
 if (SET === 'board-films') await runAll(BOARD_FILMS, generateFilm);
 if (SET === 'page-stills') await runAll(PAGE_STILLS, generateImage);
+if (SET === 'page-films') await runAll(PAGE_FILMS, generateFilm);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }
