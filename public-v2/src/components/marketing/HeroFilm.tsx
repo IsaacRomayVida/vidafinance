@@ -11,6 +11,7 @@
  * motion nothing plays and the still stands alone.
  */
 import { useEffect, useRef, useState } from 'react';
+import { publicAsset } from '../../lib/publicAsset';
 
 export interface Film {
   film: string;
@@ -22,7 +23,8 @@ export interface Film {
  * attribute during render (facebook/react#10389), so a `<video autoPlay muted>`
  * is evaluated as unmuted, refused by autoplay policy, and left frozen.
  */
-function arm(el: HTMLVideoElement, src: string) {
+function arm(el: HTMLVideoElement, film: string) {
+  const src = publicAsset(film);
   el.muted = true;
   el.defaultMuted = true;
   el.setAttribute('muted', '');
@@ -76,7 +78,8 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
     return () => showing.removeEventListener('ended', advance);
   }, [index, front, reel, reduced]);
 
-  const poster = reel[index % reel.length]?.still;
+  const still = reel[index % reel.length]?.still;
+  const poster = still ? publicAsset(still) : undefined;
   if (reduced) return <img className={className} src={poster} alt="" />;
 
   return (

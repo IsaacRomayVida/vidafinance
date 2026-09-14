@@ -12,6 +12,7 @@
  * is evaluated as unmuted, refused by autoplay policy, and frozen.
  */
 import { useEffect, useRef } from 'react';
+import { publicAsset } from '../../lib/publicAsset';
 
 export function BoardFilm({ film, still }: { film: string; still: string }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -25,8 +26,9 @@ export function BoardFilm({ film, still }: { film: string; still: string }) {
     el.setAttribute('muted', '');
     el.playsInline = true;
     el.loop = true;
-    if (el.getAttribute('src') !== film) {
-      el.setAttribute('src', film);
+    const src = publicAsset(film);
+    if (el.getAttribute('src') !== src) {
+      el.setAttribute('src', src);
       el.load();
     }
     const play = () => {
@@ -53,8 +55,8 @@ export function BoardFilm({ film, still }: { film: string; still: string }) {
 
   return (
     <div className="mk-board-film" aria-hidden="true">
-      <img src={still} alt="" />
-      <video ref={ref} autoPlay muted loop playsInline preload="metadata" poster={still} />
+      <img src={publicAsset(still)} alt="" />
+      <video ref={ref} autoPlay muted loop playsInline preload="metadata" poster={publicAsset(still)} />
       <span className="mk-board-scrim" />
     </div>
   );
