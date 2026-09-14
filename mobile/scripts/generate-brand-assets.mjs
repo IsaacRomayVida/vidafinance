@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films[-desktop]|trust-still|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films[-desktop|-push]|trust-still|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -233,6 +233,21 @@ const OFFICE_MOTION = `The manager stays seated at the laptop, working, with onl
 const FROZEN_PERSON = 'The person does not move at all for the entire shot — completely still like a statue, head fixed, facing away exactly as in the first frame; no head turn, no nod, no glance.';
 const WAITER_WIDE_MOTION = `${FROZEN_PERSON} Only the light moves: fine dust drifts slowly through the soft window light and the light on the wall shifts almost imperceptibly. ${STILL_PEOPLE} ${MOTION}`;
 const OFFICE_WIDE_MOTION = `${FROZEN_PERSON} Only the world outside the window moves: the coconut palms and garden sway gently in the breeze. ${STILL_PEOPLE} ${MOTION}`;
+// Take 2 (run 34862026374) hid every face but read as a still photo (Isaac:
+// "they're moving so little that you don't see any movement"). Take 3 keeps
+// the person steady and gives the frame visible motion with the camera: a
+// slow, continuous push-in, plus the setting moving. No end-frame pin (the
+// framing changes), exposure still pinned.
+const PUSH_IN = 'The camera slowly and smoothly pushes in toward the person over the whole shot, a clearly visible cinematic dolly-in that ends noticeably closer; no shake, no cut, no zoom jump.';
+const STEADY_PERSON = 'The person stays in the same pose, facing away from the camera the entire time; their head does not turn, nod or look around, and no face is ever visible. Nobody else appears. No object changes shape.';
+const EXPOSURE = 'The exposure, brightness and colour of the frame stay constant — no brightening, no flare, no fade.';
+const WAITER_PUSH = `${PUSH_IN} ${STEADY_PERSON} He breathes naturally and his shoulders settle; fine dust drifts through the window light. ${EXPOSURE}`;
+const OFFICE_PUSH = `${PUSH_IN} ${STEADY_PERSON} The manager keeps working at the laptop with small natural movement of the hands only; outside the window the palms sway clearly in the breeze. ${EXPOSURE}`;
+const PAGE_FILMS_PUSH = ['employee-hero-16x9', 'employee-hero-9x16', 'employer-hero-16x9', 'employer-hero-9x16'].map((name) => ({
+  file: `${name}.mp4`, imageFile: `public-v2/public/images/brand/${name}.jpg`,
+  aspect: name.endsWith('16x9') ? '16:9' : '9:16', duration: '8', cameraMoves: true,
+  prompt: name.startsWith('employee') ? WAITER_PUSH : OFFICE_PUSH,
+}));
 const PAGE_FILMS = ['employee-hero-16x9', 'employee-hero-9x16', 'employer-hero-16x9', 'employer-hero-9x16'].map((name) => {
   const still = `public-v2/public/images/brand/${name}.jpg`;
   const wide = name.endsWith('16x9');
@@ -317,7 +332,7 @@ async function generateFilm(spec) {
     ? {
         prompt: spec.prompt, image_url: image, resolution: PRO ? '1080p' : '720p', duration: spec.duration ?? '5',
         ...(spec.aspect ? { aspect_ratio: spec.aspect } : {}),
-        ...(spec.imageFile ? { camera_fixed: true } : {}),
+        ...(spec.imageFile && !spec.cameraMoves ? { camera_fixed: true } : {}),
         ...(spec.endImageFile ? { end_image_url: `data:image/jpeg;base64,${readFileSync(spec.endImageFile).toString('base64')}` } : {}),
       }
     : { prompt: spec.prompt, aspect_ratio: spec.aspect, resolution: PRO ? '1080p' : '720p', duration: '5' };
@@ -367,5 +382,6 @@ if (SET === 'board-films') await runAll(BOARD_FILMS, generateFilm);
 if (SET === 'page-stills') await runAll(PAGE_STILLS, generateImage);
 if (SET === 'page-films') await runAll(PAGE_FILMS, generateFilm);
 if (SET === 'page-films-desktop') await runAll(PAGE_FILMS.filter((x) => x.aspect === '16:9'), generateFilm);
+if (SET === 'page-films-push') await runAll(PAGE_FILMS_PUSH, generateFilm);
 if (SET === 'trust-still') await runAll(PAGE_STILLS.filter((x) => x.file === TRUST_STILL_NAME), generateImage);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }

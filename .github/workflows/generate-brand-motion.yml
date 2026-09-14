@@ -30,6 +30,7 @@ on:
           - page-stills
           - page-films
           - page-films-desktop
+          - page-films-push
           - trust-still
           - all
       pro:
