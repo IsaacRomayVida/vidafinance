@@ -1,0 +1,415 @@
+/**
+ * Brand assets in the funpay-ui direction (.claude/skills/funpay-ui/references/imagery.md).
+ *
+ * Subject (Isaac, 2026-09-08): PEOPLE ACHIEVING FREEDOM — the moment someone
+ * can pay for the last-minute thing. Never plants as subject. Faces are never
+ * legible (turned away, motion-blurred, out of focus); the grade stays the
+ * skill's muted olive-clay-and-cream film look, and every intro ends on the
+ * photographic — documentary, never illustrated.
+ *
+ * Stills  — OpenAI Images (env OPENAI_API_KEY): Home backgrounds, four
+ *           "moments", the figure in green, the dark abstract, and transparent
+ *           cutouts (the pharmacy paper bag).
+ * Films   — fal.ai Seedance (env FAL_KEY): five intro scenes and two ambient
+ *           loops (9:16 for the app's Home board, 16:9 for the website hero).
+ *
+ * Keys come from the environment only (GitHub secrets in CI). Nothing is
+ * committed by this script; it writes to --out (default ./brand-assets) and the
+ * workflow uploads that folder as an artifact for review.
+ *
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films[-desktop|-push]|trust-still|usecase-still|usecase-film|app-intro-still|app-intro-film|all [--out dir] [--pro]
+ */
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const args = process.argv.slice(2);
+const flag = (name, fallback) => {
+  const i = args.indexOf(name);
+  return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : fallback;
+};
+const SET = flag('--set', 'all');
+const OUT = flag('--out', 'brand-assets');
+const PRO = args.includes('--pro');
+mkdirSync(OUT, { recursive: true });
+
+// ---------------------------------------------------------------- prompts
+// Every image prompt ends with the skill's negative list. Grade words are the
+// skill's: olive, moss, chartreuse, cream; muted, desaturated, grainy.
+const NEG =
+  'No text, no watermark, no logo, no saturated colours, no neon, no bright white, no sharp face, no eye contact, no bouquet, no multiple subjects, no stock photo lighting, no HDR.';
+
+/** Where every human scene is set, and who is in it. Declared here because
+ *  both the stills and the films reference it. */
+const MX = 'MEXICO, Riviera Maya, Quintana Roo. CASTING: Mexican adults between 25 and 45 years old, healthy and fit, well groomed, neat hair, clean pressed clothing. Resort and five-star hotel staff in crisp tailored uniforms, and off duty in simple modern clothes. SETTING: a mix — some scenes inside a well-kept upscale resort (clean stucco, polished concrete, coquina stone, good architecture, designed landscaping) and some in a modest but tidy, dignified Mexican home. Warm Caribbean morning light, coconut palms, bougainvillea. NOT Europe, NOT Mediterranean, NOT Asia. No elderly or frail people, no run-down or dilapidated buildings, no rubbish, no poverty cues.';
+
+const IMAGES = [
+  // Home backgrounds — 9:16, a clear lighter upper third for the numeral,
+  // a darker mass in the lower third for the chips. A person, never legible.
+  {
+    file: 'home-doorway.png', size: '1024x1536',
+    prompt: `${MX} A hotel housekeeper in a pale sage uniform stepping out of a service door into early morning light, seen from behind, walking away, long-exposure motion blur, face never visible, olive and clay tones, a pale cream sky filling the upper third of the frame, darker doorway shadow in the lower third, muted desaturated analog film grade, fine grain, editorial, vertical. ${NEG}`,
+  },
+  {
+    file: 'home-stall.png', size: '1024x1536',
+    prompt: `${MX} A woman in a pale sage apron raising the shutter of her small street food stall at dawn, seen from behind, warm cream morning light filling the upper third, the darker stall interior in the lower third, shot on 35mm film, documentary photography, muted desaturated grade, olive and clay tones, fine grain, shallow depth of field, face never visible, vertical. ${NEG}`,
+  },
+  // Moments — 4:3, for the credit-line / statement boards and the website.
+  {
+    file: 'moment-pharmacy.png', size: '1536x1024',
+    prompt: `${MX} Close-up of hands at a pharmacy counter receiving a small cream paper bag of medicine, soft focus, no faces in frame, warm olive and clay tones with cream highlights, quiet relief, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
+  },
+  {
+    file: 'moment-backpack.png', size: '1536x1024',
+    prompt: `${MX} A mother in her early thirties, in a neat blouse, kneels in the doorway of a tidy modern Mexican home and helps her child shoulder a school backpack; the child wears a clean school uniform and proper school shoes. Polished concrete or tiled floor, painted walls, a potted plant, a paved path outside. Both faces turned away and softly blurred, backlit morning light, tender and unposed. Comfortable working-family home — no dirt floor, no bare feet, no bamboo or makeshift fencing, nothing run-down. Muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
+  },
+  {
+    file: 'moment-kitchen.png', size: '1536x1024',
+    prompt: `${MX} A person sitting at a simple kitchen table at dawn, seen from the side and slightly behind, exhaling with relief, a phone face-down on the table, window light, face out of focus, olive-clay and cream tones, muted desaturated analog film grade, fine grain, editorial. ${NEG}`,
+  },
+  {
+    file: 'figure-green.png', size: '1024x1024',
+    prompt: `Soft-focus portrait from the shoulders up, a person in a pale sage green ribbed knit top, green-grey background, heavily diffused, face turned away and out of focus, muted pastel, colour study, minimal. ${NEG}`,
+  },
+  {
+    file: 'dark-abstract.png', size: '1024x1024',
+    prompt: `Near-black photograph, the shadowed shoulder of a figure against black, faint cool grey-green gradient, almost no detail, grainy, moody, minimal. ${NEG}`,
+  },
+  // Transparent cutouts — floats for the statement boards and the app.
+  {
+    file: 'cutout-paperbag.png', size: '1024x1024', transparent: true,
+    prompt: `A small folded cream paper bag, the kind a pharmacy hands over the counter, isolated on a transparent background, soft diffused light, muted desaturated film grade, slight paper texture, photographic. ${NEG}`,
+  },
+];
+
+// High-quality symbols to replace the folder glyphs: matte clay objects in
+// cream and sage, one per real thing in the operation, on transparent ground.
+const ICON_STYLE = 'Matte clay 3D icon, cream paper and pale sage green, soft studio light from the upper left, slight tilt, isolated on a transparent background, muted desaturated grade, no text, no shadow on the ground, centred, product-render quality.';
+const ICONS = [
+  { file: 'icon-nomina.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a cream pay envelope with a sage band, slightly open.` },
+  { file: 'icon-quincena.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a small tear-off calendar block showing a single highlighted day in sage.` },
+  { file: 'icon-empleador.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a low modern hotel building, three storeys, cream with sage window bands.` },
+  { file: 'icon-condusef.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a rounded shield with a small sage check mark.` },
+  { file: 'icon-sat.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a folded cream receipt with a sage stamp.` },
+  { file: 'icon-cobranza.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: three cream coins stacked with one sage coin on top.` },
+  { file: 'icon-contrato.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a single cream document with a sage signature line and a small seal.` },
+  { file: 'icon-adelanto.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a cream card with an upward sage arrow.` },
+  { file: 'icon-kyc.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: an identity card silhouette with a sage circle where the photo would be.` },
+  { file: 'icon-hotel-key.png', size: '1024x1024', transparent: true, prompt: `${ICON_STYLE} Subject: a hotel key card with a sage stripe on a small ring.` },
+];
+// Stage backgrounds — generated surfaces the crisp cards sit on.
+const STAGES = [
+  { file: 'stage-ops.png', size: '1536x1024', prompt: `Abstract photograph of a dark blue-charcoal surface fading into deep forest green, a soft green glow rising from the bottom edge, very fine film grain, faint depth like a dark studio backdrop, no subject, no text, no highlights blown out. ${NEG}` },
+  { file: 'stage-employer.png', size: '1536x1024', prompt: `Wide photograph of a hotel service corridor at dawn, empty, seen from low, soft cream light entering from the far end, deep forest and charcoal shadows, muted desaturated analog film grade, fine grain, no people, no text. ${NEG}` },
+];
+
+
+/**
+ * IMAGE-TO-VIDEO (Isaac, 2026-09-08): "the videos don't look like the images
+ * at all — do image to video so we have exactly the same look and feel."
+ *
+ * Text-to-video kept inventing its own world: different country, different
+ * palette, cartoon props. These start FROM the photographs already published
+ * on the site, so the first frame IS the picture and the grade cannot drift.
+ * Motion is deliberately small — a background has to hold type.
+ */
+// Must be publicly fetchable by fal.ai: alfa.funpay.mx no longer resolves and
+// alfa.suena.ch sits behind Cloudflare Access, so read the ungated origin.
+const SITE = process.env.BRAND_IMAGE_BASE || 'https://funpay-alfa.web.app/web/images/brand';
+const MOTION = 'Subtle natural motion only. The camera does not move, does not zoom and does not pan. No new objects enter the frame, nothing morphs, nobody turns toward the camera. Photographic, documentary, film grain preserved.';
+
+const ANIMATED = [
+  {
+    file: 'live-doorway.mp4', image: `${SITE}/home-doorway.jpg`, aspect: '9:16', duration: '3',
+    prompt: `The housekeeper REMAINS in frame for the whole shot and does not fade or change: she keeps walking slowly away down the path, her uniform and the palm fronds moving gently in the breeze. ${MOTION}`,
+  },
+  {
+    file: 'live-stall.mp4', image: `${SITE}/home-stall.jpg`, aspect: '9:16', duration: '3',
+    prompt: `She REMAINS in frame for the whole shot and does not fade or change: she finishes raising the shutter and settles her hands; palm fronds sway slightly against the dawn light. ${MOTION}`,
+  },
+  {
+    file: 'live-pharmacy.mp4', image: `${SITE}/moment-pharmacy.jpg`, aspect: '16:9', duration: '3',
+    prompt: `Both pairs of hands and the paper bag REMAIN in frame the whole shot and nothing fades: the exchange completes and the fingers settle. ${MOTION}`,
+  },
+  {
+    file: 'live-backpack.mp4', image: `${SITE}/moment-backpack.jpg`, aspect: '16:9', duration: '3',
+    prompt: `Both people REMAIN in frame for the entire shot and neither fades, disappears or changes: the mother stays kneeling and the child stays standing in the doorway. The only movement is a small shift of weight and the plants beyond the door moving in the breeze. ${MOTION}`,
+  },
+  {
+    file: 'live-kitchen.mp4', image: `${SITE}/moment-kitchen.jpg`, aspect: '16:9', duration: '3',
+    prompt: `He REMAINS in frame the whole shot and does not fade or change: he breathes out and his shoulders lower a little; the window light shifts almost imperceptibly. ${MOTION}`,
+  },
+];
+
+/**
+ * PHOTOGRAPHIC ONLY, NO KITES (Isaac, 2026-09-08 and 2026-09-14). The
+ * handmade-kite motif is out of every asset: generators rendered it as a
+ * cartoon pasted over the plate, and the brand dropped it.
+ * The films are documentary photography of the moment credit buys — the
+ * housekeeper stepping out at dawn is the reference for all of them.
+ */
+const GRADE = 'Shot on 35mm film, documentary photography, muted desaturated grade, olive and clay tones through moss to cream highlights, fine natural grain, soft diffused natural light, shallow depth of field, faces never legible, low saturation, no bright or saturated colour, no neon, no pink, no bright white, no text, no illustration, no cartoon, no graphic overlay, no CGI.';
+
+const FILMS = [
+  { file: 'intro-doorway.mp4', aspect: '9:16', prompt: `${MX} A hotel housekeeper in a pale sage uniform steps through a service doorway into early morning light, seen from behind, carrying a linen basket, walking slowly away down a path; misty hills and soft cream sky beyond; the camera holds still. ${GRADE}` },
+  { file: 'intro-backpack.mp4', aspect: '9:16', prompt: `${MX} A mother kneels in the doorway of a modest home and helps her small child shoulder a school backpack; the child steps out into the morning light; both faces turned away and softly blurred; unposed and tender; the camera holds still. ${GRADE}` },
+  { file: 'intro-pharmacy.mp4', aspect: '9:16', prompt: `${MX} Close-up of hands at a small pharmacy counter receiving a cream paper bag of medicine; the hands close around it and draw it in; no faces in frame; a quiet moment of relief; slow, the camera holds still. ${GRADE}` },
+  { file: 'intro-kitchen.mp4', aspect: '9:16', prompt: `${MX} INTERIOR of a small kitchen at dawn: a woman sits at the table by the window, seen from behind and to the side, lowers her shoulders in relief and sets a phone face-down on the table. Soft window light on a tiled wall, kettle and cups on the counter. Indoors only — no street, no murals, no outdoor furniture. Face never visible. Slow, the camera holds still. ${GRADE}` },
+  { file: 'intro-market.mp4', aspect: '9:16', prompt: `${MX} A woman in a pale sage apron raises the shutter of her small street food stall at dawn and turns to arrange the counter, seen from behind; steam and warm morning light; face never visible; the camera holds still. ${GRADE}` },
+];
+
+/** Ambient loops that sit BEHIND content — they must be calm and empty
+ *  enough for type to sit on, so they are light and atmosphere, not events. */
+const LOOPS = [
+  { file: 'ambient-loop.mp4', aspect: '9:16', prompt: `${MX} A hotel service doorway at dawn seen from inside: soft cream light falling through the open door onto a tiled floor, palm shadows moving very gently in the breeze, nobody in frame, almost still, seamless ambient motion, the camera does not move. ${GRADE}` },
+  { file: 'ambient-loop-wide.mp4', aspect: '16:9', prompt: `${MX} Early morning light moving very gently across a quiet hotel service corridor, palm shadows drifting on a cream wall, nobody in frame, almost still, seamless ambient motion, the camera does not move, wide. ${GRADE}` },
+];
+
+/**
+ * THE HERO (docs/design/SHOT_LIST.md, H1 / G1 / G2) — the website's one film.
+ * "The shift ends": one moment, composed twice rather than cropped — 16:9 for
+ * the desktop stage, where the headline sits over the left, and 9:16 for the
+ * phone, where it sits over the top. Stage 1 (hero-stills) makes the stills
+ * for review; approved stills are graded and committed to
+ * public-v2/public/images/brand/, and stage 2 (hero-films) animates exactly
+ * those files. Paying for films before the stills are right wastes the run.
+ */
+const HERO_MOMENT = 'The end of a night shift at a five-star resort. A housekeeper in a pale sage uniform has just stepped out of the staff service entrance into first light and walks slowly away along a coquina stone path between coconut palms toward the open morning, seen from behind, alone, her face never visible.';
+const HERO_STILLS = [
+  {
+    file: 'hero-dawn-16x9.png', size: '1536x1024',
+    prompt: `${MX} ${HERO_MOMENT} Wide composition: she is small in the RIGHT third of the frame. The left two thirds are calm and uncluttered — soft dawn sky, out-of-focus palms and pale stucco — so a headline can sit over them. ${GRADE} ${NEG}`,
+  },
+  {
+    file: 'hero-dawn-9x16.png', size: '1024x1536',
+    // On a phone the headline, both buttons and the disclosure fill the top
+    // three quarters of the hero; the figure must live in the band below them.
+    prompt: `${MX} ${HERO_MOMENT} Vertical composition for a phone screen: she is SMALL and very LOW in the frame — her whole figure inside the bottom fifth, feet close to the bottom edge, centred on the stone path that runs up from the bottom edge. Everything above the bottom fifth is calm and soft: pale dawn sky, the tops of coconut palms at the sides, a hazy resort far away, no strong detail and no people, so a long headline and buttons can sit over it. ${GRADE} ${NEG}`,
+  },
+];
+const HERO_MOTION = 'She keeps walking slowly away along the path and, near the end, comes to a stop and stands still in the morning light; her uniform and the palm fronds move gently in the breeze; the light warms almost imperceptibly. She REMAINS in frame for the whole shot and does not fade, turn around or change. The final seconds are nearly still.';
+const HERO_FILMS = [
+  { file: 'hero-dawn-16x9.mp4', imageFile: 'public-v2/public/images/brand/hero-dawn-16x9.jpg', aspect: '16:9', duration: '10', prompt: `${HERO_MOTION} ${MOTION}` },
+  { file: 'hero-dawn-9x16.mp4', imageFile: 'public-v2/public/images/brand/hero-dawn-9x16.jpg', aspect: '9:16', duration: '10', prompt: `${HERO_MOTION} ${MOTION}` },
+];
+
+/**
+ * PAGE STILLS (docs/design/SHOT_LIST.md, E0 / R0 / H5) — hero backgrounds for
+ * the Empleados and Empleadores pages, each composed twice (16:9 desktop with
+ * the headline over the left, 9:16 phone with the figure in the bottom fifth
+ * under the text), and the Trust board's lunch moment. Stills first; films,
+ * if any, animate the approved, committed files.
+ */
+const DESK = 'Wide composition: the subject is in the RIGHT third of the frame; the left two thirds are calm and uncluttered, softly out of focus, so a headline can sit over them.';
+const PHONE = 'Vertical composition for a phone screen: the subject is small and very LOW in the frame, inside the bottom fifth; everything above is calm, soft and uncluttered, so a long headline and buttons can sit over it.';
+const EMPLOYEE_MOMENT = 'The start of a shift at a five-star resort: a waiter in the staff locker room buttoning the cuff of a crisp white uniform shirt, a neat row of pale lockers, soft morning light from a high window. Seen from behind, his face never visible. Calm, proud, ready.';
+const EMPLOYER_MOMENT = 'The human resources office of a five-star resort in the morning: an HR manager at a clean, calm desk reviewing the payroll on a laptop, seen from behind over the shoulder and out of focus, the screen content not legible, a window onto coconut palms, a neat folder and a coffee cup. Professional, orderly, unhurried.';
+const TRUST_STILL_NAME = 'moment-school-walk.png';
+// App cold-start intro (docs/design/SHOT_LIST.md, A1). The shipped clip was
+// 3 s while the intro runs ~6 s, so it froze before the mark appeared and
+// the splash looked stuck. 6 s, walking (no hands on objects), 9:16.
+const APP_INTRO_STILL = {
+  file: 'app-intro.png', size: '1024x1536',
+  prompt: `${MX} Dawn in a quiet, tidy Mexican market street: a woman in a pale sage apron walks calmly away from the camera down the middle of the empty street toward her small food stall, its shutter still closed, seen from BEHIND, her face never visible. Warm first light at the end of the street, soft haze, palms and low painted buildings, no readable signs or text, nobody else. Vertical composition for a phone screen: she is in the lower third, the upper two thirds are calm sky, haze and soft light — a clean field for a centred logo. ${GRADE} ${NEG}`,
+};
+const APP_INTRO_FILM = {
+  file: 'app-intro.mp4', imageFile: 'mobile/assets/brand/app-intro.jpg', aspect: '9:16', duration: '6',
+  prompt: `She keeps walking calmly away down the street toward her stall in a steady natural stride, staying inside the frame and getting a little smaller; the haze and the first light at the end of the street brighten very slightly; the palms move gently. She never turns around and her face is never visible. Nobody else appears, no other shadows of people, no readable signs. The stall shutter stays closed. ${MOTION}`,
+};
+// Empleados · "Lo que no puede esperar" (Isaac chose it, 2026-09-14): replaces
+// the pharmacy paper-bag still. Walking, no hands on objects, no faces.
+const USECASE_STILL = {
+  file: 'moment-clinic.png', size: '1536x1024',
+  // Take 1 (film run 34865078107) was rejected: he left the frame by 2.5 s
+  // and a figure moved inside the clinic's glass doors. Take 2: a long,
+  // straight sidewalk so he stays in frame, and no glass or reflections.
+  prompt: `${MX} Early morning on a long, straight, tree-lined sidewalk in a clean, well-kept Mexican neighbourhood: a father in a simple pressed shirt walks briskly AWAY from the camera down the middle of the sidewalk, carrying his young daughter in his arms; her head is tucked into his shoulder with her face hidden against his neck. Both seen from BEHIND, faces never visible. Far ahead at the end of the sidewalk, small and soft, a low white building with a simple green cross above its door — the neighbourhood clinic. Matte walls and trees only: no glass, no windows, no reflective surfaces near him, no readable signs or text, nobody else in the scene. He is in the lower middle of the frame with plenty of sidewalk ahead of him; the sides are calm. Wide shot that also works cropped to 16:9. ${GRADE} ${NEG}`,
+};
+const USECASE_FILM = {
+  file: 'board-usecase-clinic.mp4', imageFile: 'public-v2/public/images/brand/moment-clinic.jpg', aspect: '16:9', duration: '8',
+  prompt: `The father keeps walking briskly straight down the middle of the long sidewalk toward the clinic far ahead, carrying his daughter, in a steady natural stride, staying well inside the frame and getting smaller as he goes; the palms move gently in the breeze. Both stay seen from behind for the entire shot: neither turns, the girl's face stays hidden in his shoulder, and no face is ever visible. Nobody else appears, no other shadows of people, no readable signs. Her body and his arms do not change shape. The exposure, brightness and colour stay constant. ${MOTION}`,
+};
+const PAGE_STILLS = [
+  { file: 'employee-hero-16x9.png', size: '1536x1024', prompt: `${MX} ${EMPLOYEE_MOMENT} ${DESK} ${GRADE} ${NEG}` },
+  { file: 'employee-hero-9x16.png', size: '1024x1536', prompt: `${MX} ${EMPLOYEE_MOMENT} ${PHONE} ${GRADE} ${NEG}` },
+  { file: 'employer-hero-16x9.png', size: '1536x1024', prompt: `${MX} ${EMPLOYER_MOMENT} ${DESK} ${GRADE} ${NEG}` },
+  { file: 'employer-hero-9x16.png', size: '1024x1536', prompt: `${MX} ${EMPLOYER_MOMENT} ${PHONE} ${GRADE} ${NEG}` },
+  {
+    // Trust (Isaac chose it, 2026-09-14): safety and peace of mind, with the
+    // motion AI video handles well — walking — and no hands on objects.
+    file: 'moment-school-walk.png', size: '1536x1024',
+    prompt: `${MX} A school morning in a calm, tidy residential street: a mother in a neat cream blouse and her young son in a clean school uniform with a dark backpack walk hand in hand along a shaded sidewalk toward school, seen from BEHIND, both faces never visible. Low garden walls, bougainvillea, trees casting soft dappled shade, warm early light. They are in the right half of the frame, walking away from the camera; the left side is calm and uncluttered. Wide shot, the whole scene also works cropped to 16:9. ${GRADE} ${NEG}`,
+  },
+];
+
+/**
+ * PAGE FILMS — the Empleados and Empleadores heroes, moving (Isaac,
+ * 2026-09-14: "there should be also videos"). The Trust lunch film taught the
+ * rule: hands handling objects morph (the backpack gaped open and swallowed
+ * the bag). So these keep people nearly still, pin exposure, and pin the
+ * last frame to the starting still; the world around them carries the motion.
+ */
+const STILL_PEOPLE = 'The exposure, brightness and colour of the whole frame stay exactly constant from first frame to last — no brightening, no flare, no fade. No object changes shape, opens, appears or disappears. Nobody turns toward the camera and no face becomes visible. The last frame is identical to the first.';
+const WAITER_MOTION = `He finishes fastening the cuff and lowers his hands, takes one slow, calm breath so his shoulders rise and settle, and brings his hands back to the cuff as in the first frame. Fine dust drifts in the window light. ${STILL_PEOPLE} ${MOTION}`;
+const OFFICE_MOTION = `The manager stays seated at the laptop, working, with only the smallest natural movement of the head and shoulders. Outside the window the coconut palms sway gently in the breeze and their soft shadows move faintly. ${STILL_PEOPLE} ${MOTION}`;
+// Take 1 (run 34860181217): both 9:16 films passed; both 16:9 films turned a
+// head into readable profile. In the wide shots the person is larger, so
+// there the person is frozen and the setting alone moves.
+const FROZEN_PERSON = 'The person does not move at all for the entire shot — completely still like a statue, head fixed, facing away exactly as in the first frame; no head turn, no nod, no glance.';
+const WAITER_WIDE_MOTION = `${FROZEN_PERSON} Only the light moves: fine dust drifts slowly through the soft window light and the light on the wall shifts almost imperceptibly. ${STILL_PEOPLE} ${MOTION}`;
+const OFFICE_WIDE_MOTION = `${FROZEN_PERSON} Only the world outside the window moves: the coconut palms and garden sway gently in the breeze. ${STILL_PEOPLE} ${MOTION}`;
+// Take 2 (run 34862026374) hid every face but read as a still photo (Isaac:
+// "they're moving so little that you don't see any movement"). Take 3 keeps
+// the person steady and gives the frame visible motion with the camera: a
+// slow, continuous push-in, plus the setting moving. No end-frame pin (the
+// framing changes), exposure still pinned.
+const PUSH_IN = 'The camera slowly and smoothly pushes in toward the person over the whole shot, a clearly visible cinematic dolly-in that ends noticeably closer; no shake, no cut, no zoom jump.';
+const STEADY_PERSON = 'The person stays in the same pose, facing away from the camera the entire time; their head does not turn, nod or look around, and no face is ever visible. Nobody else appears. No object changes shape.';
+const EXPOSURE = 'The exposure, brightness and colour of the frame stay constant — no brightening, no flare, no fade.';
+const WAITER_PUSH = `${PUSH_IN} ${STEADY_PERSON} He breathes naturally and his shoulders settle; fine dust drifts through the window light. ${EXPOSURE}`;
+const OFFICE_PUSH = `${PUSH_IN} ${STEADY_PERSON} The manager keeps working at the laptop with small natural movement of the hands only; outside the window the palms sway clearly in the breeze. ${EXPOSURE}`;
+const PAGE_FILMS_PUSH = ['employee-hero-16x9', 'employee-hero-9x16', 'employer-hero-16x9', 'employer-hero-9x16'].map((name) => ({
+  file: `${name}.mp4`, imageFile: `public-v2/public/images/brand/${name}.jpg`,
+  aspect: name.endsWith('16x9') ? '16:9' : '9:16', duration: '8', cameraMoves: true,
+  prompt: name.startsWith('employee') ? WAITER_PUSH : OFFICE_PUSH,
+}));
+const PAGE_FILMS = ['employee-hero-16x9', 'employee-hero-9x16', 'employer-hero-16x9', 'employer-hero-9x16'].map((name) => {
+  const still = `public-v2/public/images/brand/${name}.jpg`;
+  const wide = name.endsWith('16x9');
+  const employee = name.startsWith('employee');
+  return {
+    file: `${name}.mp4`, imageFile: still, endImageFile: still,
+    aspect: wide ? '16:9' : '9:16', duration: '8',
+    prompt: wide ? (employee ? WAITER_WIDE_MOTION : OFFICE_WIDE_MOTION) : employee ? WAITER_MOTION : OFFICE_MOTION,
+  };
+});
+
+/**
+ * BOARD FILMS (docs/design/SHOT_LIST.md) — a board whose photograph moves.
+ * Each animates the exact committed still that is also its poster, so the
+ * first frame is the picture already on the page, and is graded like it.
+ */
+const BOARD_FILMS = [
+  {
+    // The lunch film was rejected: the backpack morphed open and swallowed
+    // the bag. Walking away is a motion the model renders cleanly.
+    file: 'board-trust-walk.mp4', imageFile: 'public-v2/public/images/brand/moment-school-walk.jpg', aspect: '16:9', duration: '8',
+    prompt: `The mother and her son keep walking slowly away along the sidewalk, hand in hand, in a natural easy rhythm; the leaves above them move gently and the dappled shade shifts on the pavement. Both stay seen from behind for the entire shot: neither turns around and no face is ever visible. Their hands stay joined. The backpack does not change shape. There is nobody else anywhere in the scene and no other shadows: no shadow of a person appears on the walls or the ground. The exposure, brightness and colour stay constant. ${MOTION}`,
+  },
+];
+
+// Every human scene must reference MX rather than repeat the setting inline:
+// pasted copies went stale silently and a casting change reached nothing.
+for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS, ...PAGE_STILLS, USECASE_STILL, APP_INTRO_STILL]) {
+  if (/Quintana Roo/.test(spec.prompt) && !spec.prompt.startsWith(MX)) {
+    throw new Error(`${spec.file}: hardcodes the setting — use \${MX} instead`);
+  }
+}
+
+// ---------------------------------------------------------------- stills
+const IMAGE_MODELS = ['gpt-image-2', 'gpt-image-1.5', 'gpt-image-1'];
+
+async function generateImage(spec) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY missing');
+  let lastErr;
+  for (const model of IMAGE_MODELS) {
+    const body = { model, prompt: spec.prompt, size: spec.size, n: 1, quality: 'high', output_format: 'png' };
+    if (spec.transparent) body.background = 'transparent';
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 404 || res.status === 400) {
+      const text = await res.text();
+      // Unknown model → try the next one; anything else is a real error.
+      if (/model|not found|does not exist|invalid_request/i.test(text) && /model/i.test(text)) { lastErr = `${model}: ${text.slice(0, 200)}`; continue; }
+      throw new Error(`${model} ${res.status}: ${text.slice(0, 300)}`);
+    }
+    if (!res.ok) throw new Error(`${model} ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const json = await res.json();
+    const b64 = json.data?.[0]?.b64_json;
+    if (!b64) throw new Error(`${model}: no image in response`);
+    writeFileSync(join(OUT, spec.file), Buffer.from(b64, 'base64'));
+    console.log(`still  ${spec.file}  (${model}, ${spec.size}${spec.transparent ? ', transparent' : ''})`);
+    return;
+  }
+  throw new Error(`no image model accepted the request: ${lastErr}`);
+}
+
+// ---------------------------------------------------------------- films
+const VIDEO_MODEL = PRO ? 'fal-ai/bytedance/seedance/v1/pro/text-to-video' : 'fal-ai/bytedance/seedance/v1/lite/text-to-video';
+const I2V_MODEL = PRO ? 'fal-ai/bytedance/seedance/v1/pro/image-to-video' : 'fal-ai/bytedance/seedance/v1/lite/image-to-video';
+
+async function generateFilm(spec) {
+  const key = process.env.FAL_KEY;
+  if (!key) throw new Error('FAL_KEY missing');
+  const headers = { Authorization: `Key ${key}`, 'Content-Type': 'application/json' };
+  // With an `image` (URL) or `imageFile` (committed file, sent as a data URI
+  // so it need not be published first), the film starts from that exact
+  // photograph.
+  const image = spec.imageFile
+    ? `data:image/jpeg;base64,${readFileSync(spec.imageFile).toString('base64')}`
+    : spec.image;
+  const model = image ? I2V_MODEL : VIDEO_MODEL;
+  const body = image
+    ? {
+        prompt: spec.prompt, image_url: image, resolution: PRO ? '1080p' : '720p', duration: spec.duration ?? '5',
+        ...(spec.aspect ? { aspect_ratio: spec.aspect } : {}),
+        ...(spec.imageFile && !spec.cameraMoves ? { camera_fixed: true } : {}),
+        ...(spec.endImageFile ? { end_image_url: `data:image/jpeg;base64,${readFileSync(spec.endImageFile).toString('base64')}` } : {}),
+      }
+    : { prompt: spec.prompt, aspect_ratio: spec.aspect, resolution: PRO ? '1080p' : '720p', duration: '5' };
+  const submit = await fetch(`https://queue.fal.run/${model}`, {
+    method: 'POST', headers, body: JSON.stringify(body),
+  });
+  if (!submit.ok) throw new Error(`fal submit ${submit.status}: ${(await submit.text()).slice(0, 300)}`);
+  const { request_id, status_url, response_url } = await submit.json();
+  const started = Date.now();
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 6000));
+    const st = await fetch(status_url, { headers });
+    const s = await st.json();
+    if (s.status === 'COMPLETED') break;
+    if (s.status === 'FAILED') throw new Error(`fal ${request_id} failed: ${JSON.stringify(s).slice(0, 300)}`);
+    if (Date.now() - started > 12 * 60 * 1000) throw new Error(`fal ${request_id} timed out`);
+  }
+  const result = await (await fetch(response_url, { headers })).json();
+  const url = result.video?.url;
+  if (!url) throw new Error(`fal ${request_id}: no video url`);
+  const bytes = Buffer.from(await (await fetch(url)).arrayBuffer());
+  writeFileSync(join(OUT, spec.file), bytes);
+  console.log(`film   ${spec.file}  (${image ? 'image-to-video' : 'text-to-video'}, ${(bytes.length / 1e6).toFixed(1)} MB)`);
+}
+
+// ---------------------------------------------------------------- run
+const failures = [];
+async function runAll(list, fn) {
+  for (const spec of list) {
+    try { await fn(spec); } catch (e) { failures.push(`${spec.file}: ${e.message}`); console.error(`FAILED ${spec.file}: ${e.message}`); }
+  }
+}
+if (SET === 'imagery' || SET === 'all') await runAll(IMAGES, generateImage);
+if (SET === 'icons' || SET === 'all') await runAll(ICONS, generateImage);
+if (SET === 'stages' || SET === 'all') await runAll(STAGES, generateImage);
+if (SET === 'animate' || SET === 'all') await runAll(ANIMATED, generateFilm);
+if (SET === 'intros') await runAll(FILMS, generateFilm);
+if (SET === 'loops' || SET === 'all') await runAll(LOOPS, generateFilm);
+// The hero is never part of 'all': stills need review before films are paid for.
+const aspectOf = (spec) => (spec.file.includes('9x16') ? 'phone' : 'desktop');
+if (SET === 'hero-stills') await runAll(HERO_STILLS, generateImage);
+if (SET === 'hero-stills-phone') await runAll(HERO_STILLS.filter((x) => aspectOf(x) === 'phone'), generateImage);
+if (SET === 'hero-films') await runAll(HERO_FILMS, generateFilm);
+if (SET === 'hero-films-desktop') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'desktop'), generateFilm);
+if (SET === 'hero-films-phone') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'phone'), generateFilm);
+if (SET === 'board-films') await runAll(BOARD_FILMS, generateFilm);
+if (SET === 'page-stills') await runAll(PAGE_STILLS, generateImage);
+if (SET === 'page-films') await runAll(PAGE_FILMS, generateFilm);
+if (SET === 'page-films-desktop') await runAll(PAGE_FILMS.filter((x) => x.aspect === '16:9'), generateFilm);
+if (SET === 'page-films-push') await runAll(PAGE_FILMS_PUSH, generateFilm);
+if (SET === 'usecase-still') await runAll([USECASE_STILL], generateImage);
+if (SET === 'app-intro-still') await runAll([APP_INTRO_STILL], generateImage);
+if (SET === 'app-intro-film') await runAll([APP_INTRO_FILM], generateFilm);
+if (SET === 'usecase-film') await runAll([USECASE_FILM], generateFilm);
+if (SET === 'trust-still') await runAll(PAGE_STILLS.filter((x) => x.file === TRUST_STILL_NAME), generateImage);
+if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }

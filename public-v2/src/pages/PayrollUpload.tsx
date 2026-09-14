@@ -159,43 +159,32 @@ export function PayrollUpload() {
     ?.filter(r => r.status === 'deducted')
     .reduce((sum, r) => sum + (r.deductionAmount ?? 0), 0) ?? 0;
 
+  const canSubmit = !processing && !!periodStart && !!periodEnd;
+
   return (
-    <div>
-      <h1 style={{ fontFamily: 'var(--df)', fontSize: 'clamp(20px, 3vw, 28px)', color: 'var(--t1)', marginBottom: 8 }}>
-        {t('payroll_title')}
-      </h1>
-      <p style={{ color: 'var(--t2)', fontSize: 14, marginBottom: 28, lineHeight: 1.6 }}>
-        {t('payroll_subtitle')}
-      </p>
+    <div className="ops-page">
+      <div className="ops-head">
+        <div>
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_payroll')}</div>
+          <h1 className="ops-title">{t('payroll_title')}</h1>
+          <p className="ops-sub">{t('payroll_subtitle')}</p>
+        </div>
+      </div>
 
       {!results && (
         <>
-          {/* Drop zone */}
+          {/* Drop zone \u2014 the folder glyph turns green once a file is received */}
           <div
             onDragOver={e => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            style={{
-              border: `2px dashed ${dragging ? 'var(--gold)' : 'rgba(25,68,69,0.12)'}`,
-              borderRadius: 16,
-              padding: '40px 24px',
-              textAlign: 'center',
-              cursor: 'pointer',
-              background: dragging ? 'rgba(162,134,87,0.04)' : '#fff',
-              transition: 'all 0.2s',
-              marginBottom: 24,
-            }}
+            className={`ops-drop${dragging ? ' on' : ''}${fileName ? ' has' : ''}`}
+            style={{ marginBottom: 10 }}
           >
-            <div style={{ fontSize: 32, marginBottom: 8 }}>
-              {fileName ? '\u2705' : '\uD83D\uDCC4'}
-            </div>
-            <div style={{ fontWeight: 600, color: 'var(--t1)', fontSize: 15, marginBottom: 4 }}>
-              {fileName || t('payroll_drop_label')}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--t3)' }}>
-              {t('payroll_drop_hint')}
-            </div>
+            <span className={`ops-file${fileName ? ' g' : ''}`} aria-hidden="true" />
+            <b>{fileName || t('payroll_drop_label')}</b>
+            <small>{t('payroll_drop_hint')}</small>
             <input
               ref={fileInputRef}
               type="file"
@@ -208,21 +197,13 @@ export function PayrollUpload() {
 
           {/* Parse errors */}
           {parseErrors.length > 0 && (
-            <div style={{
-              background: 'rgba(220,80,60,0.06)',
-              border: '1px solid rgba(220,80,60,0.15)',
-              borderRadius: 12,
-              padding: '16px 20px',
-              marginBottom: 24,
-              fontSize: 13,
-              color: 'var(--danger)',
-            }}>
+            <div className="ops-card" role="alert">
               <strong>{t('payroll_errors_title', { count: parseErrors.length })}:</strong>
-              <ul style={{ margin: '8px 0 0 16px', padding: 0 }}>
-                {parseErrors.slice(0, 10).map((e, i) => <li key={i} style={{ marginBottom: 2 }}>{e}</li>)}
+              <ul style={{ margin: '8px 0 0 16px', padding: 0, fontSize: 13, lineHeight: 1.6 }}>
+                {parseErrors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
               </ul>
               {parseErrors.length > 10 && (
-                <div style={{ marginTop: 8, fontStyle: 'italic' }}>
+                <div style={{ marginTop: 8, fontSize: 13 }}>
                   {t('payroll_errors_more', { count: parseErrors.length - 10 })}
                 </div>
               )}
@@ -231,111 +212,84 @@ export function PayrollUpload() {
 
           {/* Preview table */}
           {rows.length > 0 && (
-            <>
-              <h2 style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)', marginBottom: 12 }}>
-                {t('payroll_preview', { count: rows.length })}
-              </h2>
-              <div style={{ overflowX: 'auto', marginBottom: 24, borderRadius: 12, border: '1px solid rgba(25,68,69,0.06)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <section className="ops-card">
+              <h2 className="ops-h3">{t('payroll_preview', { count: rows.length })}</h2>
+              <div className="table-wrap">
+                <table>
                   <thead>
-                    <tr style={{ background: 'var(--bg2)', textAlign: 'left' }}>
-                      <th style={thStyle}>{t('payroll_col_id')}</th>
-                      <th style={thStyle}>{t('payroll_col_gross')}</th>
-                      <th style={thStyle}>{t('payroll_col_net')}</th>
-                      <th style={thStyle}>{t('payroll_col_period')}</th>
-                      <th style={thStyle}>{t('payroll_col_deduction')}</th>
+                    <tr>
+                      <th>{t('payroll_col_id')}</th>
+                      <th className="num">{t('payroll_col_gross')}</th>
+                      <th className="num">{t('payroll_col_net')}</th>
+                      <th>{t('payroll_col_period')}</th>
+                      <th className="num">{t('payroll_col_deduction')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.slice(0, 20).map((r, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(25,68,69,0.04)' }}>
-                        <td style={tdStyle}>{r.employeeId}</td>
-                        <td style={tdStyle}>${r.grossSalary.toLocaleString('es-MX')}</td>
-                        <td style={tdStyle}>${r.netSalary.toLocaleString('es-MX')}</td>
-                        <td style={tdStyle}>{r.payPeriod}</td>
-                        <td style={tdStyle}>{r.deductionAmount != null ? `$${r.deductionAmount.toLocaleString('es-MX')}` : '\u2014'}</td>
+                      <tr key={i}>
+                        <td>{r.employeeId}</td>
+                        <td className="num">${r.grossSalary.toLocaleString('es-MX')}</td>
+                        <td className="num">${r.netSalary.toLocaleString('es-MX')}</td>
+                        <td>{r.payPeriod}</td>
+                        <td className="num">{r.deductionAmount != null ? `$${r.deductionAmount.toLocaleString('es-MX')}` : '\u2014'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               {rows.length > 20 && (
-                <p style={{ fontSize: 13, color: 'var(--t3)', marginBottom: 16 }}>
+                <p className="ops-note" style={{ marginTop: 8 }}>
                   {t('payroll_preview_more', { count: rows.length - 20 })}
                 </p>
               )}
 
               {/* Date pickers */}
-              <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-                <label style={labelStyle}>
-                  {t('payroll_period_start')}
+              <div className="ops-fields" style={{ marginTop: 20 }}>
+                <label className="ops-field">
+                  <span>{t('payroll_period_start')}</span>
                   <input
                     type="date"
+                    className="ops-input"
                     value={periodStart}
                     onChange={e => setPeriodStart(e.target.value)}
-                    style={dateInputStyle}
                   />
                 </label>
-                <label style={labelStyle}>
-                  {t('payroll_period_end')}
+                <label className="ops-field">
+                  <span>{t('payroll_period_end')}</span>
                   <input
                     type="date"
+                    className="ops-input"
                     value={periodEnd}
                     onChange={e => setPeriodEnd(e.target.value)}
-                    style={dateInputStyle}
                   />
                 </label>
               </div>
 
-              {/* Submit */}
+              {/* Submit \u2014 the one white action on this page */}
               <button
+                type="button"
                 onClick={submit}
-                disabled={processing || !periodStart || !periodEnd}
-                style={{
-                  background: processing || !periodStart || !periodEnd ? 'var(--t3)' : 'var(--brand)',
-                  color: '#fff',
-                  fontWeight: 700,
-                  fontSize: 14,
-                  border: 'none',
-                  borderRadius: 12,
-                  padding: '14px 32px',
-                  cursor: processing || !periodStart || !periodEnd ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                  width: '100%',
-                  maxWidth: 360,
-                }}
+                disabled={!canSubmit}
+                className="ops-go"
               >
+                <i aria-hidden="true" />
                 {processing ? t('payroll_processing') : t('payroll_submit', { count: rows.length })}
               </button>
 
-              {/* Progress bar */}
+              {/* Progress line */}
               {processing && (
-                <div style={{ marginTop: 16, height: 4, borderRadius: 2, background: 'rgba(25,68,69,0.06)', overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    background: 'var(--gold)',
-                    borderRadius: 2,
-                    animation: 'payroll-progress 2s ease-in-out infinite',
-                    width: '40%',
-                  }} />
-                  <style>{`@keyframes payroll-progress { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
+                <div className="ops-bar" style={{ marginTop: 16 }} aria-hidden="true">
+                  <i className="run" />
                 </div>
               )}
 
               {apiError && (
-                <div style={{
-                  marginTop: 16,
-                  background: 'rgba(220,80,60,0.06)',
-                  border: '1px solid rgba(220,80,60,0.15)',
-                  borderRadius: 12,
-                  padding: '12px 16px',
-                  fontSize: 13,
-                  color: 'var(--danger)',
-                }}>
+                <div className="ops-error" role="alert" style={{ marginTop: 16, padding: '12px 16px' }}>
                   {apiError}
                 </div>
               )}
-            </>
+            </section>
           )}
         </>
       )}
@@ -343,18 +297,10 @@ export function PayrollUpload() {
       {/* Results */}
       {results && (
         <div>
-          {/* Summary card */}
-          <div style={{
-            background: '#fff',
-            border: '1px solid rgba(25,68,69,0.06)',
-            borderRadius: 16,
-            padding: '20px 24px',
-            marginBottom: 24,
-          }}>
-            <h2 style={{ fontFamily: 'var(--df)', fontSize: 18, color: 'var(--t1)', marginBottom: 12 }}>
-              {t('payroll_results_title')}
-            </h2>
-            <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.8 }}>
+          {/* Summary */}
+          <section className="ops-card">
+            <h2 className="ops-h3">{t('payroll_results_title')}</h2>
+            <p className="ops-sub">
               {t('payroll_results_summary', {
                 total: results.length,
                 deducted: deductedCount,
@@ -363,63 +309,43 @@ export function PayrollUpload() {
                 amount: totalDeducted.toLocaleString('es-MX'),
               })}
             </p>
-          </div>
+          </section>
 
           {/* Results table */}
-          <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(25,68,69,0.06)', marginBottom: 24 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: 'var(--bg2)', textAlign: 'left' }}>
-                  <th style={thStyle}>{t('payroll_col_id')}</th>
-                  <th style={thStyle}>{t('payroll_res_status')}</th>
-                  <th style={thStyle}>{t('payroll_res_deduction')}</th>
-                  <th style={thStyle}>{t('payroll_res_balance')}</th>
-                  <th style={thStyle}>{t('payroll_res_note')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((r, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(25,68,69,0.04)' }}>
-                    <td style={tdStyle}>{r.employeeId}</td>
-                    <td style={tdStyle}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '3px 10px',
-                        borderRadius: 20,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: '0.3px',
-                        background: statusColor(r.status).bg,
-                        color: statusColor(r.status).text,
-                      }}>
-                        {isKnownRowStatus(r.status)
-                          ? t(`payroll_status_${r.status}`)
-                          : t('payroll_status_unknown')}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>{r.deductionAmount != null ? `$${r.deductionAmount.toLocaleString('es-MX')}` : '\u2014'}</td>
-                    <td style={tdStyle}>{r.newBalance != null ? `$${r.newBalance.toLocaleString('es-MX')}` : '\u2014'}</td>
-                    <td style={{ ...tdStyle, color: r.error ? 'var(--danger)' : 'var(--t3)' }}>{r.error || '\u2014'}</td>
+          <section className="ops-card">
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('payroll_col_id')}</th>
+                    <th>{t('payroll_res_status')}</th>
+                    <th className="num">{t('payroll_res_deduction')}</th>
+                    <th className="num">{t('payroll_res_balance')}</th>
+                    <th>{t('payroll_res_note')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {results.map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.employeeId}</td>
+                      <td>
+                        <span className={`ops-status${statusClass(r.status)}`}>
+                          {isKnownRowStatus(r.status)
+                            ? t(`payroll_status_${r.status}`)
+                            : t('payroll_status_unknown')}
+                        </span>
+                      </td>
+                      <td className="num">{r.deductionAmount != null ? `$${r.deductionAmount.toLocaleString('es-MX')}` : '\u2014'}</td>
+                      <td className="num">{r.newBalance != null ? `$${r.newBalance.toLocaleString('es-MX')}` : '\u2014'}</td>
+                      <td style={{ color: r.error ? '#f4a9a1' : 'rgba(242,245,240,.75)', whiteSpace: 'normal' }}>{r.error || '\u2014'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-          <button
-            onClick={resetState}
-            style={{
-              background: 'var(--brand)',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 14,
-              border: 'none',
-              borderRadius: 12,
-              padding: '14px 32px',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-          >
+          <button type="button" onClick={resetState} className="ops-btn">
             {t('payroll_upload_another')}
           </button>
         </div>
@@ -428,47 +354,13 @@ export function PayrollUpload() {
   );
 }
 
-function statusColor(status: string | undefined): { bg: string; text: string } {
+/** Green only for the outcome that means the deduction landed. */
+function statusClass(status: string | undefined): string {
   switch (status) {
-    case 'deducted': return { bg: 'rgba(36,122,110,0.1)', text: 'var(--success)' };
-    case 'skipped': return { bg: 'rgba(162,134,87,0.1)', text: 'var(--gold)' };
-    case 'already_processed': return { bg: 'rgba(147,170,169,0.15)', text: 'var(--t2)' };
-    case 'error': return { bg: 'rgba(220,80,60,0.08)', text: 'var(--danger)' };
-    default: return { bg: 'rgba(147,170,169,0.1)', text: 'var(--t3)' };
+    case 'deducted': return ' g';
+    case 'skipped': return ' warn';
+    case 'already_processed': return ' mute';
+    case 'error': return ' bad';
+    default: return ' mute';
   }
 }
-
-const thStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  fontSize: 11,
-  fontWeight: 700,
-  color: 'var(--t3)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-  whiteSpace: 'nowrap',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  color: 'var(--t1)',
-  whiteSpace: 'nowrap',
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  fontSize: 13,
-  fontWeight: 600,
-  color: 'var(--t2)',
-};
-
-const dateInputStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 10,
-  border: '1px solid rgba(25,68,69,0.12)',
-  fontSize: 14,
-  fontFamily: 'var(--db)',
-  color: 'var(--t1)',
-  outline: 'none',
-};

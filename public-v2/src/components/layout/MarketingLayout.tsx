@@ -10,18 +10,19 @@ interface MarketingLayoutProps {
   ctaHref?: string;
 }
 
+/** The --void page: 10px gutter, boards stacked with 10px gaps, ink footer. */
 export function MarketingLayout({ ctaLabel, ctaHref }: MarketingLayoutProps) {
   useHashScroll();
   const { t } = useTranslation();
 
   return (
-    <>
+    <div className="mk-page">
       <a href="#main-content" className="skip-link">{t('a11y_skip_content')}</a>
       <Navbar ctaLabel={ctaLabel} ctaHref={ctaHref} />
       <main id="main-content">
         <PageTransition><Outlet /></PageTransition>
       </main>
       <Footer />
-    </>
+    </div>
   );
 }

@@ -71,75 +71,47 @@ export function DeductionReports() {
   const completedCount = loans.filter((l) => isRepaidStatus(l.status)).length;
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '48px 0 64px' }}>
-      <div style={{ marginBottom: 40, padding: '0 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div className="ops-page">
+      <div className="ops-head">
         <div>
-          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: "var(--t1)", fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 16 }}>
-            {t('ded_title', 'Deducciones de Nómina')}
-          </h1>
-          <p style={{ fontSize: 14, color: "var(--t2)", lineHeight: 1.7 }}>
-            {t('ded_subtitle', 'Pagos de préstamos deducidos de la nómina del empleado.')}
-          </p>
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_payroll')}</div>
+          <h1 className="ops-title">{t('ded_title', 'Deducciones de Nómina')}</h1>
+          <p className="ops-sub">{t('ded_subtitle', 'Pagos de préstamos deducidos de la nómina del empleado.')}</p>
         </div>
         {loans.length > 0 && (
-          <button
-            onClick={() => exportToCsv(groups)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 20px',
-              background: 'var(--brand, var(--brand))',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 20,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              marginTop: 4,
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            {t('ded_export_csv', 'Exportar CSV')}
+          <button type="button" onClick={() => exportToCsv(groups)} className="ops-go" style={{ marginTop: 0 }}>
+            <i aria-hidden="true" />{t('ded_export_csv', 'Exportar CSV')}
           </button>
         )}
       </div>
 
       {/* Stats */}
-      <div className="stat-grid">
-        <div className="stat-card">
-          <div className="stat-label">{t('ded_total_deductions', 'Total Deducciones')}</div>
-          <div className="stat-value">${fmt(totalDeductions)}</div>
-          <div className="stat-change">MXN</div>
+      <div className="ops-kpis" style={{ marginTop: 0, marginBottom: 10 }}>
+        <div className="ops-kpi">
+          <small>{t('ded_total_deductions', 'Total Deducciones')}</small>
+          <b>${fmt(totalDeductions)}<span>MXN</span></b>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">{t('ded_active_deductions', 'Activos')}</div>
-          <div className="stat-value">{activeCount}</div>
+        <div className="ops-kpi">
+          <small>{t('ded_active_deductions', 'Activos')}</small>
+          <b>{activeCount}</b>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">{t('ded_completed', 'Completados')}</div>
-          <div className="stat-value">{completedCount}</div>
+        <div className="ops-kpi">
+          <small>{t('ded_completed', 'Completados')}</small>
+          <b>{completedCount}</b>
         </div>
       </div>
 
       {/* Grouped tables */}
       {error ? (
-        <div className="text-red-600" style={{ marginTop: 24 }}>{error}</div>
+        <div className="ops-card"><div className="ops-error">{error}</div></div>
       ) : loading ? (
-        <div className="card" style={{ marginTop: 24 }}>
-          <div style={{ padding: 40, textAlign: 'center' }}>
-            <span className="spinner" style={{ borderColor: 'rgba(25,68,69,0.1)', borderTopColor: 'var(--brand)' }} />
-          </div>
+        <div className="ops-card" style={{ textAlign: 'center', padding: 40 }} aria-busy="true">
+          <span className="spinner" />
         </div>
       ) : loans.length === 0 ? (
-        <div className="card" style={{ marginTop: 24 }}>
+        <div className="ops-card">
           <div className="empty-state">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
               <path d="M14 2v6h6" />
             </svg>
@@ -148,19 +120,10 @@ export function DeductionReports() {
         </div>
       ) : (
         groups.map((group) => (
-          <div className="card" style={{ marginTop: 24 }} key={group.key}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <div className="card-title" style={{ marginBottom: 0 }}>{group.label}</div>
-              <div style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: 'var(--gold, var(--gold))',
-                background: 'rgba(162,134,87,0.08)',
-                padding: '6px 14px',
-                borderRadius: 20,
-              }}>
-                Total: ${fmt(group.total)} MXN
-              </div>
+          <section className="ops-card" key={group.key} aria-label={group.label}>
+            <div className="ops-card-head">
+              <h2 className="ops-h3">{group.label}</h2>
+              <span className="ops-status">Total · ${fmt(group.total)} MXN</span>
             </div>
 
             <div className="table-wrap">
@@ -181,7 +144,7 @@ export function DeductionReports() {
                     return (
                     <tr key={loan.id}>
                       <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
-                      <td style={{ fontWeight: 600, color: 'var(--brand)' }}>
+                      <td style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                         {amount === null ? '—' : `$${fmtCurrency(amount)}`}
                       </td>
                       <td style={{ textTransform: 'capitalize' }}>
@@ -192,7 +155,7 @@ export function DeductionReports() {
                           {t(`status_${loan.status}`, loan.status)}
                         </span>
                       </td>
-                      <td style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--t2)' }}>
+                      <td style={{ fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'rgba(242,245,240,.75)' }}>
                         {loan.softcreditoDeductionId || '—'}
                       </td>
                     </tr>
@@ -201,7 +164,7 @@ export function DeductionReports() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </section>
         ))
       )}
     </div>

@@ -1,45 +1,106 @@
 /**
- * The glassmorphism primitives: a soft aqua-lit backdrop with color blobs,
- * and frosted cards that float over it.
+ * Surfaces of the funpay-ui language.
  *
- * Real backdrop blur (expo-blur) frosts whatever sits behind the card —
- * the blobs — which is what sells the glass. The translucent fill and the
- * bright hairline border carry the look even where blur is unavailable
- * (older Android), so the design degrades to "airy", never to "broken".
+ * Backdrop 'board' — the cream→sage vertical gradient every borrower screen
+ * sits on. 'paper' — flat cream for capture screens (request, repayment,
+ * forms). 'leaf' — a painted colour field (olive rising from the bottom,
+ * cream light in the upper third) that stands in for the graded people
+ * photograph until it ships; no botanical texture, per Isaac.
+ *
+ * GlassCard — the frosted chip: thin white fill, real blur, hairline edge,
+ * inset top highlight. Only over the leaf; never glass over flat colour.
  */
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg';
 
-import { backdropGradient, colors, radii } from '../theme';
+import { boardGradient, colors, radii } from '../theme';
 
-/** Full-screen lit ground: gradient wash + three soft brand-color blobs. */
-export function Backdrop({ children }: { children: React.ReactNode }) {
+export function Backdrop({
+  children,
+  variant = 'board',
+}: {
+  children: React.ReactNode;
+  variant?: 'board' | 'paper' | 'leaf';
+}) {
+  if (variant === 'paper') {
+    return <View style={[styles.fill, { backgroundColor: colors.cream }]}>{children}</View>;
+  }
+  if (variant === 'leaf') {
+    return (
+      <LinearGradient colors={['#c9d5a3', '#6f8340', '#2c421c']} locations={[0, 0.4, 1]} style={styles.fill}>
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none" width="100%" height="100%">
+          <Defs>
+            <RadialGradient id="l1" cx="62%" cy="38%" rx="75%" ry="55%">
+              <Stop offset="0%" stopColor="#5e7a34" stopOpacity="0.85" />
+              <Stop offset="70%" stopColor="#6e8a3c" stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id="l2" cx="50%" cy="50%" rx="40%" ry="75%">
+              <Stop offset="0%" stopColor="#47611f" stopOpacity="1" />
+              <Stop offset="80%" stopColor="#47611f" stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id="l3" cx="35%" cy="92%" rx="70%" ry="45%">
+              <Stop offset="0%" stopColor="#2f4a22" stopOpacity="0.9" />
+              <Stop offset="75%" stopColor="#2f4a22" stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id="l4" cx="80%" cy="8%" rx="70%" ry="50%">
+              <Stop offset="0%" stopColor="#ecf0d6" stopOpacity="1" />
+              <Stop offset="75%" stopColor="#ecf0d6" stopOpacity="0" />
+            </RadialGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#l4)" />
+          <Rect width="100%" height="100%" fill="url(#l3)" />
+          <Ellipse cx="50%" cy="50%" rx="40%" ry="75%" fill="url(#l2)" />
+          <Ellipse cx="62%" cy="38%" rx="75%" ry="55%" fill="url(#l1)" />
+        </Svg>
+        {children}
+      </LinearGradient>
+    );
+  }
   return (
-    <LinearGradient colors={backdropGradient} style={styles.fill}>
-      <View style={[styles.blob, styles.blobAqua]} />
-      <View style={[styles.blob, styles.blobTeal]} />
-      <View style={[styles.blob, styles.blobGold]} />
+    <LinearGradient colors={boardGradient} locations={[0, 0.48, 1]} style={styles.fill}>
       {children}
     </LinearGradient>
   );
 }
 
-/** A frosted card: blurred backdrop, translucent fill, bright edge. */
+/** iOS "reduce transparency": glass collapses to a solid pane. */
+function useReducedTransparency(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceTransparencyEnabled?.()
+      .then((v) => mounted && setReduced(!!v))
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.('reduceTransparencyChanged', setReduced);
+    return () => {
+      mounted = false;
+      sub?.remove?.();
+    };
+  }, []);
+  return reduced;
+}
+
+/** The frosted chip (the skill's `.trip`): thin fill, blur, lit top edge. */
 export function GlassCard({
   children,
   style,
-  intensity = 28,
+  intensity = 40,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   intensity?: number;
 }) {
+  const solid = useReducedTransparency();
   return (
-    <View style={[styles.cardShadow, style]}>
-      <BlurView intensity={intensity} tint="light" style={styles.cardClip}>
-        <View style={styles.cardFill}>{children}</View>
+    <View style={style}>
+      <BlurView intensity={solid ? 0 : intensity} tint="light" style={styles.cardClip}>
+        <View style={[styles.cardFill, solid && styles.cardSolid]}>
+          <View style={styles.topEdge} />
+          {children}
+        </View>
       </BlurView>
     </View>
   );
@@ -47,46 +108,21 @@ export function GlassCard({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  blob: { position: 'absolute', opacity: 0.5 },
-  blobAqua: {
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-    backgroundColor: colors.aqua,
-    top: -90,
-    right: -110,
-  },
-  blobTeal: {
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: colors.brandLight,
-    opacity: 0.22,
-    top: 260,
-    left: -140,
-  },
-  blobGold: {
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: colors.gold,
-    opacity: 0.2,
-    bottom: -60,
-    right: -60,
-  },
-  cardShadow: {
-    borderRadius: radii.l,
-    shadowColor: colors.brand,
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
-  },
-  cardClip: { borderRadius: radii.l, overflow: 'hidden' },
+  cardClip: { borderRadius: radii.m, overflow: 'hidden' },
   cardFill: {
-    backgroundColor: colors.glass,
-    borderRadius: radii.l,
+    backgroundColor: colors.glassLight,
+    borderRadius: radii.m,
     borderWidth: 1,
-    borderColor: colors.glassBorder,
+    borderColor: 'rgba(255,255,255,0.22)',
+    overflow: 'hidden',
+  },
+  cardSolid: { backgroundColor: 'rgba(255,255,255,0.86)' },
+  topEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.3)',
   },
 });

@@ -5,7 +5,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { classifyError, friendlyError } from '../../lib/errors';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import type { Loan, Repayment } from './types';
-import { fmt } from './types';
+import { fmt, fmtShortDate } from './types';
 
 interface PaymentModalProps {
   loan: Loan;
@@ -13,8 +13,13 @@ interface PaymentModalProps {
   onClose: () => void;
 }
 
+/**
+ * MONEY PATH. This dialog is re-skinned only: what it calls
+ * (`generatePaymentLink`), when, and with what, is unchanged. The one green
+ * control on the screen is the action that produces (then opens) the link.
+ */
 export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -54,11 +59,11 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
   const statusBadge = (status?: string) => {
     switch (status) {
       case 'completed':
-        return <span className="badge badge-repaid">{t('pay_status_paid', 'Paid')}</span>;
+        return <span className="bo-badge paid">{t('pay_status_paid', 'Pagado')}</span>;
       case 'processing':
-        return <span className="badge badge-approved">{t('pay_status_processing', 'Processing')}</span>;
+        return <span className="bo-badge">{t('pay_status_processing', 'Procesando')}</span>;
       default:
-        return <span className="badge badge-pending">{t('pay_status_pending', 'Pending')}</span>;
+        return <span className="bo-badge">{t('pay_status_pending', 'Pendiente')}</span>;
     }
   };
 
@@ -71,65 +76,62 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
         exit: { opacity: 0, scale: 0.96, y: 8 },
       };
 
+  const dueDate = fmtShortDate(loan.dueDate, i18n.language);
+
   return (
     <div
-      className="modal-overlay show"
+      className="bo-modal-overlay"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       role="dialog"
       aria-modal="true"
-      aria-label={t('pay_modal_title', 'Make a Payment')}
+      aria-label={t('pay_modal_title', 'Pagar')}
     >
       <motion.div
         ref={dialogRef}
-        className="modal"
-        style={{ position: 'relative', maxWidth: 480 }}
+        className="bo-modal"
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         {...modalVariants}
       >
-        <button
-          type="button"
-          className="modal-close"
-          aria-label={t('a11y_close')}
-          onClick={onClose}
-        >
-          ✕
-        </button>
+        <div className="bo-head">
+          <span className="dot">{t('pay_modal_title', 'Pagar')}</span>
+          <button
+            type="button"
+            className="bo-close"
+            aria-label={t('a11y_close')}
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
 
-        <h3>{t('pay_modal_title', 'Make a Payment')}</h3>
-        <p className="modal-sub" style={{ marginBottom: 20 }}>
-          {t('pay_modal_subtitle', 'Loan')} · <span className="money">${fmt(loan.amount)}</span> MXN
+        <h3 className="money">
+          {fmt(remaining)}<small>MXN</small>
+        </h3>
+        <p className="sub">
+          {t('pay_modal_subtitle', 'Crédito')} · <span className="money">{fmt(loan.amount)}</span> MXN
         </p>
 
         {/* Payment summary */}
-        <div style={{
-          borderTop: '1px solid rgba(25,68,69,0.06)',
-          borderBottom: '1px solid rgba(25,68,69,0.06)',
-          padding: '20px 0',
-          marginBottom: 20,
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-            <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('pay_total_owed', 'Total Owed')}</span>
-            <span className="money" style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>${fmt(totalOwed)}</span>
+        <div className="bo-quote">
+          <div className="r">
+            <span>{t('pay_total_owed', 'Total adeudado')}</span>
+            <b className="money">{fmt(totalOwed)}</b>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-            <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('pay_total_paid', 'Total Paid')}</span>
-            <span className="money" style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>${fmt(totalPaid)}</span>
+          <div className="r">
+            <span>{t('pay_total_paid', 'Total pagado')}</span>
+            <b className="money">{fmt(totalPaid)}</b>
           </div>
-          <div style={{ height: 1, background: 'rgba(25,68,69,0.06)', margin: '4px 0' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-            <span style={{ fontFamily: 'var(--df)', fontSize: 15, color: 'var(--t1)' }}>
-              {t('pay_remaining', 'Remaining Balance')}
-            </span>
-            <span className="money" style={{ fontFamily: 'var(--df)', fontSize: 18, color: remaining > 0 ? 'var(--t1)' : 'var(--success)' }}>
-              ${fmt(remaining)}
-            </span>
+          <div className="r total">
+            <span>{t('pay_remaining', 'Saldo restante')}</span>
+            <b className="money">{fmt(remaining)}</b>
           </div>
-          {loan.dueDate && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span style={{ fontSize: 13, color: 'var(--t2)' }}>{t('modal_due_date')}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: loan.status === 'overdue' ? 'var(--danger)' : 'var(--t1)' }}>
-                {new Date(loan.dueDate.seconds * 1000).toLocaleDateString('es-MX')}
-              </span>
+          {dueDate && (
+            <div className="r">
+              <span>{t('modal_due_date')}</span>
+              <b>
+                {loan.status === 'overdue' ? `${t('status_overdue', 'Vencido')} · ` : ''}
+                {dueDate}
+              </b>
             </div>
           )}
         </div>
@@ -138,86 +140,61 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
         {!paymentUrl ? (
           <>
             {error && (
-              <div className="auth-error show" style={{ marginBottom: 12 }}>{error}</div>
+              <div className="bo-err" role="alert">{error}</div>
             )}
             <button
+              type="button"
               onClick={handleGenerateLink}
               disabled={loading}
-              className="btn-primary"
+              className="bo-cta full"
             >
               {loading ? (
-                <><span className="spinner" /> {t('pay_generating', 'Generating link...')}</>
+                <><span className="spinner" aria-hidden="true" /> {t('pay_generating', 'Generando enlace…')}</>
               ) : (
-                t('pay_generate_link', 'Generate Payment Link')
+                t('pay_generate_link', 'Generar enlace de pago')
               )}
             </button>
           </>
         ) : (
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: '20px 16px', marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 2, color: 'var(--gold)', marginBottom: 10 }}>
-                {t('pay_checkout_ready', 'Checkout Ready')}
-              </div>
-              <p style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 16 }}>
-                {t('pay_checkout_desc', 'Click below to complete your payment via Conekta.')}
-              </p>
-              <a
-                href={paymentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-primary"
-                style={{ display: 'inline-block', textDecoration: 'none', textAlign: 'center' }}
-              >
-                {t('pay_open_checkout', 'Open Checkout')}
-              </a>
-            </div>
-            <button
-              onClick={() => { setPaymentUrl(''); setError(''); }}
-              style={{ background: 'none', border: 'none', color: 'var(--t2)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+          <div className="bo-ready">
+            <span className="dot">{t('pay_checkout_ready', 'Enlace listo')}</span>
+            <p>{t('pay_checkout_desc', 'Abre el enlace para completar tu pago con Conekta.')}</p>
+            <a
+              href={paymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bo-cta full"
             >
-              {t('pay_generate_new', 'Generate new link')}
-            </button>
+              {t('pay_open_checkout', 'Abrir pago')}
+            </a>
+            <div style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                onClick={() => { setPaymentUrl(''); setError(''); }}
+                className="bo-btn text"
+              >
+                {t('pay_generate_new', 'Generar nuevo enlace')}
+              </button>
+            </div>
           </div>
         )}
 
         {/* Payment history */}
         {sortedRepayments.length > 0 && (
-          <div style={{ marginTop: 24 }}>
-            <div style={{
-              fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: 2.2, color: 'var(--gold)', marginBottom: 12,
-            }}>
-              {t('pay_history', 'Payment History')}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {sortedRepayments.map((r) => (
-                <div
-                  key={r.id}
-                  style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '10px 14px', background: 'var(--bg2)', borderRadius: 10,
-                    border: '1px solid rgba(25,68,69,0.04)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="money" style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>
-                      ${fmt(r.amount)}
-                    </span>
-                    {statusBadge(r.status)}
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, color: 'var(--t2)' }}>
-                      {r.paidAt || r.createdAt
-                        ? new Date(((r.paidAt || r.createdAt)!.seconds) * 1000).toLocaleDateString('es-MX')
-                        : '—'}
-                    </div>
-                    {r.method && (
-                      <div style={{ fontSize: 10, color: 'var(--t3)' }}>{r.method}</div>
-                    )}
-                  </div>
+          <div className="bo-hist">
+            <span className="dot">{t('pay_history', 'Historial de pagos')}</span>
+            {sortedRepayments.map((r) => (
+              <div key={r.id} className="bo-hrow">
+                <div className="meta">
+                  <span className="money" style={{ fontWeight: 600 }}>${fmt(r.amount)}</span>
+                  {statusBadge(r.status)}
                 </div>
-              ))}
-            </div>
+                <div className="how">
+                  <div className="when">{fmtShortDate(r.paidAt || r.createdAt, i18n.language) ?? '—'}</div>
+                  {r.method && <div>{r.method}</div>}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </motion.div>

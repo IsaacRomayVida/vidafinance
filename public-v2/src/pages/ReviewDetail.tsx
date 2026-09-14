@@ -51,13 +51,13 @@ function num(val: unknown): number {
   return typeof val === 'number' ? val : 0;
 }
 
-function riskColor(level: string): { bg: string; text: string } {
+/** Risk is never green: a low risk level is an input, not an approval. */
+function riskClass(level: string): string {
   switch (level) {
-    case 'critical': return { bg: 'rgba(180,40,30,0.10)', text: '#a01c14' };
-    case 'high': return { bg: 'rgba(220,80,60,0.08)', text: 'var(--danger)' };
-    case 'medium': return { bg: 'rgba(212,160,60,0.10)', text: 'var(--warning)' };
-    case 'low': return { bg: 'rgba(36,122,110,0.08)', text: 'var(--brand-light)' };
-    default: return { bg: 'rgba(147,170,169,0.10)', text: 'var(--t2)' };
+    case 'critical':
+    case 'high': return ' bad';
+    case 'medium': return ' warn';
+    default: return '';
   }
 }
 
@@ -136,60 +136,44 @@ export function ReviewDetail() {
 
   /* ── styles ──────────────────────────────────────────────────────────────── */
 
+  // Dark board card — the ops recipe (rgba(0,11,26,.55), 22px radius).
   const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '24px 28px',
-    border: '1px solid rgba(25,68,69,0.04)',
-    boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
-    marginBottom: 20,
+    background: 'rgba(0,11,26,.55)',
+    borderRadius: 22,
+    padding: '24px',
+    border: '1px solid rgba(255,255,255,.06)',
+    marginBottom: 10,
   };
 
   const sectionLabel: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '2.2px',
-    color: 'var(--gold)',
+    fontSize: 15,
+    fontWeight: 500,
+    color: 'rgba(242,245,240,.85)',
     marginBottom: 16,
   };
 
   const fieldLabel: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
+    fontSize: 11,
+    fontWeight: 500,
     textTransform: 'uppercase',
-    letterSpacing: '1.5px',
-    color: 'var(--t3)',
+    letterSpacing: '.04em',
+    color: 'rgba(242,245,240,.75)',
     marginBottom: 4,
   };
 
   const fieldValue: React.CSSProperties = {
     fontSize: 14,
-    color: 'var(--t1)',
+    color: 'var(--paper-dark)',
     marginBottom: 16,
   };
 
-  const pillBtn = (bg: string, text: string): React.CSSProperties => ({
-    background: bg,
-    color: text,
-    borderRadius: 60,
-    padding: '10px 24px',
-    fontSize: 12,
-    fontWeight: 600,
-    border: 'none',
-    cursor: actionLoading ? 'not-allowed' : 'pointer',
-    transition: 'all 0.2s',
-    letterSpacing: '0.2px',
-    opacity: actionLoading ? 0.6 : 1,
-  });
-
   const jsonBoxStyle: React.CSSProperties = {
-    background: 'var(--bg2)',
-    borderRadius: 12,
+    background: 'rgba(255,255,255,.05)',
+    borderRadius: 16,
     padding: '16px',
     fontSize: 12,
-    fontFamily: "'DM Mono', monospace",
-    color: '#2a4445',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    color: 'rgba(242,245,240,.85)',
     lineHeight: 1.6,
     overflowX: 'auto',
     whiteSpace: 'pre-wrap',
@@ -202,19 +186,23 @@ export function ReviewDetail() {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px', textAlign: 'center', color: 'var(--t3)' }}>
-        <p style={{ fontSize: 14 }}>Loading review details...</p>
+      <div className="ops-page">
+        <div className="ops-card" style={{ textAlign: 'center', padding: 48 }} aria-busy="true">
+          <p className="ops-note">Loading review details...</p>
+        </div>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px', textAlign: 'center' }}>
-        <p style={{ fontSize: 14, color: 'var(--danger)', marginBottom: 16 }}>{error || 'Review not found'}</p>
-        <button onClick={() => navigate('/ops/review-queue')} style={pillBtn('var(--brand)', '#fff')}>
-          Back to Queue
-        </button>
+      <div className="ops-page">
+        <div className="ops-card" style={{ textAlign: 'center', padding: 48 }}>
+          <p className="ops-error" style={{ marginBottom: 16 }}>{error || 'Review not found'}</p>
+          <button type="button" onClick={() => navigate('/ops/review-queue')} className="ops-btn">
+            Back to Queue
+          </button>
+        </div>
       </div>
     );
   }
@@ -223,7 +211,7 @@ export function ReviewDetail() {
   const signals = review['signals'] as Record<string, Record<string, unknown>> | undefined;
   const llm = review['llm_narrative'] as { summary?: string; key_signals?: string[]; recommendation?: string; confidence?: number } | undefined;
   const aml = review['aml_result'] as Record<string, unknown> | undefined;
-  const risk = riskColor(str(review['risk_level'], 'unknown'));
+  const risk = riskClass(str(review['risk_level'], 'unknown'));
   const queuedAt = review['queuedAt'] as string;
   // Mirrors the server's own guard rather than a narrower copy of it: an
   // `info_requested` review stays decidable by anyone (the answer ops asked for
@@ -239,35 +227,34 @@ export function ReviewDetail() {
   /* ── render ──────────────────────────────────────────────────────────────── */
 
   return (
-    <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px' }}>
+    <div className="ops-page">
       {/* Back link */}
       <button
+        type="button"
         onClick={() => navigate('/ops/review-queue')}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--gold)', fontWeight: 600, marginBottom: 24, padding: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+        className="ops-link"
+        style={{ padding: '10px 4px 0' }}
       >
         ← Back to Queue
       </button>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
+      <div className="ops-head" style={{ paddingTop: 6 }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+          <div className="dot ops-eyebrow">Revisión</div>
+          <h1 className="ops-title">
             {String(review['applicantName'] || 'Review Detail')}
           </h1>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: risk.bg, color: risk.text, textTransform: 'uppercase' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+            <span className={`ops-status${risk}`} style={{ textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '.04em' }}>
               {String(review['risk_level'] || 'unknown')} risk
             </span>
             {queuedAt && (
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
-                background: hoursElapsed(queuedAt) > 24 ? 'rgba(220,80,60,0.08)' : 'rgba(36,122,110,0.06)',
-                color: hoursElapsed(queuedAt) > 24 ? 'var(--danger)' : 'var(--brand-light)',
-              }}>
+              <span className={`ops-status${hoursElapsed(queuedAt) > 24 ? ' bad' : ' g'}`}>
                 {slaLabel(queuedAt)}
               </span>
             )}
-            <span style={{ fontSize: 12, color: 'var(--t3)' }}>
+            <span className="ops-note">
               Loan: {str(review['loanId']).slice(0, 12)}
             </span>
           </div>
@@ -275,7 +262,7 @@ export function ReviewDetail() {
       </div>
 
       {/* Two-column grid for application data */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+      <div className="ops-two">
         {/* Applicant info */}
         <div style={cardStyle}>
           <div style={sectionLabel}>Applicant</div>
@@ -471,7 +458,7 @@ export function ReviewDetail() {
                   .map(([feature, value]) => (
                     <div key={feature} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <span style={{ fontSize: 12, color: 'var(--t2)', minWidth: 160 }}>{feature}</span>
-                      <div style={{ flex: 1, height: 8, background: '#f0f3f2', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+                      <div style={{ flex: 1, height: 8, background: 'rgba(255,255,255,.1)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
                         <div style={{
                           position: 'absolute',
                           left: value >= 0 ? '50%' : `${50 + (value / 2) * 100}%`,
@@ -498,21 +485,21 @@ export function ReviewDetail() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr>
-                      <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Feature</th>
-                      <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Bin</th>
-                      <th style={{ textAlign: 'right', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>WoE</th>
-                      <th style={{ textAlign: 'right', padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.08)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Points</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.1)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Feature</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.1)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Bin</th>
+                      <th style={{ textAlign: 'right', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.1)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>WoE</th>
+                      <th style={{ textAlign: 'right', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.1)', color: 'var(--t3)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px' }}>Points</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(mlDecision['woeBins'] as Record<string, unknown>[]).map((bin, i) => (
                       <tr key={i}>
-                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', color: 'var(--t2)' }}>{String(bin['feature'])}</td>
-                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', color: 'var(--t2)' }}>{String(bin['bin'])}</td>
-                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', textAlign: 'right', fontWeight: 600, color: (bin['woe'] as number) > 0 ? 'var(--danger)' : 'var(--brand-light)' }}>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.06)', color: 'var(--t2)' }}>{String(bin['feature'])}</td>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.06)', color: 'var(--t2)' }}>{String(bin['bin'])}</td>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.06)', textAlign: 'right', fontWeight: 600, color: (bin['woe'] as number) > 0 ? 'var(--danger)' : 'var(--brand-light)' }}>
                           {(bin['woe'] as number)?.toFixed(3) || '—'}
                         </td>
-                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(25,68,69,0.04)', textAlign: 'right', fontWeight: 600, color: 'var(--t1)' }}>
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,.06)', textAlign: 'right', fontWeight: 600, color: 'var(--t1)' }}>
                           {(bin['points'] as number)?.toFixed(0) || '—'}
                         </td>
                       </tr>
@@ -583,7 +570,7 @@ export function ReviewDetail() {
           <div style={sectionLabel}>Audit Trail</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {auditHistory.map((entry, i) => (
-              <div key={i} style={{ padding: '12px 16px', background: 'var(--bg2)', borderRadius: 12, fontSize: 13 }}>
+              <div key={i} style={{ padding: '12px 16px', background: 'var(--bg2)', borderRadius: 16, fontSize: 13, border: '1px solid rgba(255,255,255,.06)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ fontWeight: 600, color: 'var(--t1)' }}>{String(entry['action'])}</span>
                   <span style={{ fontSize: 11, color: 'var(--t3)' }}>{formatDate(entry['timestamp'])}</span>
@@ -603,48 +590,40 @@ export function ReviewDetail() {
 
       {/* Actions */}
       {isActionable && (
-        <div style={{ ...cardStyle, position: 'sticky', bottom: 0, zIndex: 10, boxShadow: '0 -4px 20px rgba(25,68,69,0.08)' }}>
+        <div className="ops-sticky" style={{ ...cardStyle, position: 'sticky', bottom: 10, zIndex: 10 }}>
           <div style={sectionLabel}>Actions</div>
           <textarea
             aria-label="Review notes"
             placeholder="Review notes (optional)..."
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            style={{
-              width: '100%',
-              minHeight: 48,
-              padding: '10px 14px',
-              fontSize: 13,
-              color: 'var(--t1)',
-              border: '1px solid rgba(25,68,69,0.10)',
-              borderRadius: 12,
-              resize: 'vertical',
-              fontFamily: "'DM Sans',sans-serif",
-              background: '#fff',
-              outline: 'none',
-              boxSizing: 'border-box',
-              marginBottom: 14,
-            }}
+            className="ops-input"
+            style={{ minHeight: 64, marginBottom: 14 }}
           />
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className="ops-actions" style={{ gap: 10 }}>
+            {/* Approve is the one white action on this page. */}
             <button
+              type="button"
               onClick={() => submitDecision('approved')}
               disabled={actionLoading}
-              style={pillBtn('var(--brand)', '#fff')}
+              className="ops-go"
+              style={{ marginTop: 0 }}
             >
-              {actionLoading ? 'Processing...' : 'Approve'}
+              <i aria-hidden="true" />{actionLoading ? 'Processing...' : 'Approve'}
             </button>
             <button
+              type="button"
               onClick={() => setShowDenyModal(true)}
               disabled={actionLoading}
-              style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}
+              className="ops-btn ghost danger"
             >
               Deny
             </button>
             <button
+              type="button"
               onClick={() => submitDecision('request_info')}
               disabled={actionLoading}
-              style={pillBtn('rgba(162,134,87,0.10)', 'var(--gold)')}
+              className="ops-btn"
             >
               Request More Info
             </button>
@@ -653,9 +632,10 @@ export function ReviewDetail() {
                 error. */}
             {offeredDecisions.includes('escalate') && (
               <button
+                type="button"
                 onClick={() => submitDecision('escalate')}
                 disabled={actionLoading}
-                style={pillBtn('rgba(147,170,169,0.10)', 'var(--t2)')}
+                className="ops-btn ghost"
               >
                 Escalate to Senior
               </button>
@@ -670,11 +650,11 @@ export function ReviewDetail() {
           as a closed one is what made escalation read as a dead end. */}
       {!isActionable && (
         <div style={{ ...cardStyle, textAlign: 'center' }}>
-          <div style={{ fontSize: 14, color: 'var(--t3)' }}>
-            This review has status: <strong>{String(review['status'])}</strong>
+          <div className="ops-note" style={{ fontSize: 14 }}>
+            This review has status: <strong style={{ color: 'var(--paper-dark)' }}>{String(review['status'])}</strong>
           </div>
           {cannotActReason && (
-            <div style={{ fontSize: 13, color: 'var(--t2)', marginTop: 8 }}>
+            <div className="ops-sub" style={{ margin: '8px auto 0' }}>
               {cannotActReason}
             </div>
           )}
@@ -683,12 +663,10 @@ export function ReviewDetail() {
 
       {/* Deny modal */}
       {showDenyModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(12,30,31,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-        }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: '28px', maxWidth: 440, width: '90%' }}>
+        <div className="ops-overlay" role="dialog" aria-modal="true" aria-label="Deny reason">
+          <div className="ops-card ops-sheet">
             <div style={sectionLabel}>Deny Reason</div>
-            <p style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 16 }}>
+            <p className="ops-sub" style={{ marginBottom: 16 }}>
               Please provide a reason for denying this application.
             </p>
             <textarea
@@ -697,25 +675,12 @@ export function ReviewDetail() {
               placeholder="Reason for denial..."
               value={denyReason}
               onChange={e => setDenyReason(e.target.value)}
-              style={{
-                width: '100%',
-                minHeight: 80,
-                padding: '10px 14px',
-                fontSize: 13,
-                color: 'var(--t1)',
-                border: '1px solid rgba(25,68,69,0.10)',
-                borderRadius: 12,
-                resize: 'vertical',
-                fontFamily: "'DM Sans',sans-serif",
-                background: '#fff',
-                outline: 'none',
-                boxSizing: 'border-box',
-                marginBottom: 14,
-              }}
+              className="ops-input"
+              style={{ minHeight: 96, marginBottom: 14 }}
             />
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowDenyModal(false)} style={pillBtn('rgba(147,170,169,0.10)', 'var(--t2)')}>Cancel</button>
-              <button onClick={handleDeny} style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}>Confirm Deny</button>
+            <div className="ops-actions" style={{ justifyContent: 'flex-end', width: '100%', gap: 10 }}>
+              <button type="button" onClick={() => setShowDenyModal(false)} className="ops-btn ghost">Cancel</button>
+              <button type="button" onClick={handleDeny} className="ops-btn danger">Confirm Deny</button>
             </div>
           </div>
         </div>
@@ -745,7 +710,7 @@ function LlmNarrativeSection({ llm, cardStyle, fieldLabel }: {
           <div style={fieldLabel}>Key Signals</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {llm.key_signals.map((sig, i) => (
-              <span key={i} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 16, background: 'rgba(25,68,69,0.04)', color: 'var(--t2)' }}>
+              <span key={i} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 16, background: 'rgba(255,255,255,.08)', color: 'var(--t2)' }}>
                 {sig}
               </span>
             ))}
