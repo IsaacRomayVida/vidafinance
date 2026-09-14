@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -193,28 +193,45 @@ const HERO_FILMS = [
 ];
 
 /**
+ * PAGE STILLS (docs/design/SHOT_LIST.md, E0 / R0 / H5) — hero backgrounds for
+ * the Empleados and Empleadores pages, each composed twice (16:9 desktop with
+ * the headline over the left, 9:16 phone with the figure in the bottom fifth
+ * under the text), and the Trust board's lunch moment. Stills first; films,
+ * if any, animate the approved, committed files.
+ */
+const DESK = 'Wide composition: the subject is in the RIGHT third of the frame; the left two thirds are calm and uncluttered, softly out of focus, so a headline can sit over them.';
+const PHONE = 'Vertical composition for a phone screen: the subject is small and very LOW in the frame, inside the bottom fifth; everything above is calm, soft and uncluttered, so a long headline and buttons can sit over it.';
+const EMPLOYEE_MOMENT = 'The start of a shift at a five-star resort: a waiter in the staff locker room buttoning the cuff of a crisp white uniform shirt, a neat row of pale lockers, soft morning light from a high window. Seen from behind, his face never visible. Calm, proud, ready.';
+const EMPLOYER_MOMENT = 'The human resources office of a five-star resort in the morning: an HR manager at a clean, calm desk reviewing the payroll on a laptop, seen from behind over the shoulder and out of focus, the screen content not legible, a window onto coconut palms, a neat folder and a coffee cup. Professional, orderly, unhurried.';
+const PAGE_STILLS = [
+  { file: 'employee-hero-16x9.png', size: '1536x1024', prompt: `${MX} ${EMPLOYEE_MOMENT} ${DESK} ${GRADE} ${NEG}` },
+  { file: 'employee-hero-9x16.png', size: '1024x1536', prompt: `${MX} ${EMPLOYEE_MOMENT} ${PHONE} ${GRADE} ${NEG}` },
+  { file: 'employer-hero-16x9.png', size: '1536x1024', prompt: `${MX} ${EMPLOYER_MOMENT} ${DESK} ${GRADE} ${NEG}` },
+  { file: 'employer-hero-9x16.png', size: '1024x1536', prompt: `${MX} ${EMPLOYER_MOMENT} ${PHONE} ${GRADE} ${NEG}` },
+  {
+    file: 'moment-lunch.png', size: '1536x1024',
+    prompt: `${MX} In the open front doorway of a tidy modern Mexican home on a school morning, a mother in her early thirties in a neat cream blouse kneels BEHIND her young son; BOTH have their backs to the camera, facing out toward the bright garden. His dark school backpack is on his shoulders with the top zipper open, and she is slipping a small cream lunch bag into it. Clean school uniform, polished floor, a potted plant beside the door. Faces never visible. Tender and unposed, backlit morning light. Framed so the whole scene also works cropped to 16:9. ${GRADE} ${NEG}`,
+  },
+];
+
+/**
  * BOARD FILMS (docs/design/SHOT_LIST.md) — a board whose photograph moves.
  * Each animates the exact committed still that is also its poster, so the
  * first frame is the picture already on the page, and is graded like it.
  */
 const BOARD_FILMS = [
   {
-    file: 'board-trust-backpack.mp4', imageFile: 'public-v2/public/images/brand/moment-backpack.jpg', aspect: '16:9', duration: '6',
-    // Takes 1 and 2 (runs 34853102093, 34853554543) turned the boy's face
-    // into sharp profile as he looked at his mother. Cinemagraph instead: the
-    // people hold still, the world around them moves, and the film must end
-    // on the exact starting still, which leaves no room for a head to turn.
-    // Take 3 (run 34854557301) kept faces hidden but swung exposure from
-    // lightness 87 to 146 and snapped back at 7 s: exposure is pinned too,
-    // and 6 s leaves the model less time to wander between the two stills.
-    endImageFile: 'public-v2/public/images/brand/moment-backpack.jpg',
-    prompt: `A living photograph. The mother and the boy hold almost perfectly still in exactly the pose of the first frame for the entire shot, like a paused moment: nobody turns their head, nobody looks around, the boy keeps facing out through the open door with his back to the camera, and the mother's face stays behind her hair. The only motion is around them: the plants and trees outside sway gently in a breeze, faint leaf shadows shift a little on the floor, and a strand of the mother's hair moves slightly. The exposure, brightness and colour of the whole frame stay exactly constant from the first frame to the last — no light brightening, no sun flare, no fade, no change in contrast. The last frame is identical to the first. ${MOTION}`,
+    // Isaac, 2026-09-14: not the mother's hair moving — her placing the lunch
+    // in the backpack. Both backs stay to camera; nothing is pinned at the
+    // end because the action changes the frame.
+    file: 'board-trust-lunch.mp4', imageFile: 'public-v2/public/images/brand/moment-lunch.jpg', aspect: '16:9', duration: '6',
+    prompt: `The mother slides the small lunch bag the rest of the way into the open backpack, then zips the backpack closed and gives the top a light pat. Both of them keep their backs to the camera for the entire shot; neither head turns and no face is ever visible. Her hair stays still. The boy stays facing out toward the garden. The exposure, brightness and colour of the frame stay constant — no light change, no flare. ${MOTION}`,
   },
 ];
 
 // Every human scene must reference MX rather than repeat the setting inline:
 // pasted copies went stale silently and a casting change reached nothing.
-for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS]) {
+for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS, ...PAGE_STILLS]) {
   if (/Quintana Roo/.test(spec.prompt) && !spec.prompt.startsWith(MX)) {
     throw new Error(`${spec.file}: hardcodes the setting — use \${MX} instead`);
   }
@@ -318,4 +335,5 @@ if (SET === 'hero-films') await runAll(HERO_FILMS, generateFilm);
 if (SET === 'hero-films-desktop') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'desktop'), generateFilm);
 if (SET === 'hero-films-phone') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'phone'), generateFilm);
 if (SET === 'board-films') await runAll(BOARD_FILMS, generateFilm);
+if (SET === 'page-stills') await runAll(PAGE_STILLS, generateImage);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }

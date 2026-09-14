@@ -27,6 +27,7 @@ on:
           - hero-films-desktop
           - hero-films-phone
           - board-films
+          - page-stills
           - all
       pro:
         description: "Seedance pro at 1080p (slower, costlier) instead of lite 720p"
