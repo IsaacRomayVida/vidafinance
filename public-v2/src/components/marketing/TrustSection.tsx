@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { BoardPhoto } from './BoardPhoto';
 import { Link } from 'react-router-dom';
 import { Board, BoardHead } from './Board';
 import { ArrowIcon } from './ArrowIcon';
@@ -12,16 +11,15 @@ const icons = [
 ];
 
 /**
- * Trust over the school-morning moment — the mother slipping the lunch into
- * her son's backpack — the only place it appears. The film is generated
- * from that exact still. White title, frosted rows.
+ * Trust on the dark board while its picture is re-cast: the lunch film was
+ * rejected (the backpack morphed open, and the moment did not say "regulated
+ * credit"). White title, frosted rows.
  */
 export function TrustSection() {
   const { t } = useTranslation();
 
   return (
-    <Board className="film" id="trust">
-      <BoardPhoto still="/images/brand/moment-lunch.jpg" film="/video/board-trust-lunch.mp4" />
+    <Board tone="ops" id="trust">
       <div className="mk-cols">
         <div className="sticky sh">
           <BoardHead kicker={t('trust_tag')} title={t('trust_h2')} lead={t('trust_p')} />

@@ -45,7 +45,7 @@ design.
 | H2 | Home · How it works | Paper board, the steps are the content | — | none |
 | H3 | Home · Cost calculator | Sage board, nothing competes with the numbers | — | none |
 | H4 | Home · Employers | Dark ops board over the stage surface | `images/brand/stage-employer.jpg` | live |
-| H5 | Home · Trust | Film from its still (6 s), plays on screen | `video/board-trust-lunch.mp4` (poster `images/brand/moment-lunch.jpg`) — the mother places the lunch in the backpack, both backs to camera (run 34857257196) | live |
+| H5 | Home · Trust | Dark ops board while re-cast — the lunch film (run 34857257196) was rejected: the backpack morphed open and the moment did not fit the copy | — | none (pending) |
 | H6 | Home · FAQ | Paper | — | none |
 | H7 | Home · Closing | Sage | — | none |
 | E0 | Employees · hero | Still, composed 16:9 + 9:16 | `images/brand/employee-hero-16x9.jpg`, `employee-hero-9x16.jpg` — a waiter starting his shift | live |
