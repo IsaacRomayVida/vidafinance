@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -192,6 +192,18 @@ const HERO_FILMS = [
   { file: 'hero-dawn-9x16.mp4', imageFile: 'public-v2/public/images/brand/hero-dawn-9x16.jpg', aspect: '9:16', duration: '10', prompt: `${HERO_MOTION} ${MOTION}` },
 ];
 
+/**
+ * BOARD FILMS (docs/design/SHOT_LIST.md) — a board whose photograph moves.
+ * Each animates the exact committed still that is also its poster, so the
+ * first frame is the picture already on the page, and is graded like it.
+ */
+const BOARD_FILMS = [
+  {
+    file: 'board-trust-backpack.mp4', imageFile: 'public-v2/public/images/brand/moment-backpack.jpg', aspect: '16:9', duration: '10',
+    prompt: `Both people REMAIN in frame for the entire shot and neither fades, disappears or changes: the mother, kneeling, settles the straps of the school backpack on her child's shoulders and smooths them; the child shifts their weight and adjusts a strap; morning light moves very slightly across the doorway and the plants outside sway gently. Neither turns toward the camera. ${MOTION}`,
+  },
+];
+
 // Every human scene must reference MX rather than repeat the setting inline:
 // pasted copies went stale silently and a casting change reached nothing.
 for (const spec of [...IMAGES, ...ANIMATED, ...FILMS, ...HERO_STILLS]) {
@@ -296,4 +308,5 @@ if (SET === 'hero-stills-phone') await runAll(HERO_STILLS.filter((x) => aspectOf
 if (SET === 'hero-films') await runAll(HERO_FILMS, generateFilm);
 if (SET === 'hero-films-desktop') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'desktop'), generateFilm);
 if (SET === 'hero-films-phone') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'phone'), generateFilm);
+if (SET === 'board-films') await runAll(BOARD_FILMS, generateFilm);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }

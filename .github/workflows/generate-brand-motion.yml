@@ -26,6 +26,7 @@ on:
           - hero-films
           - hero-films-desktop
           - hero-films-phone
+          - board-films
           - all
       pro:
         description: "Seedance pro at 1080p (slower, costlier) instead of lite 720p"
@@ -96,10 +97,10 @@ jobs:
           for f in *.mp4; do
             [ -f "$f" ] || continue
             case "$f" in
-              # The hero films start from a committed, already-graded still
-              # that is also their poster: grade them like the stills, or the
+              # Hero and board films start from a committed, already-graded
+              # still that is also their poster: grade them like the stills, or the
               # page visibly loses its colour the moment playback begins.
-              hero-*) VF="scale='if(gt(iw,ih),1600,900)':-2,eq=saturation=0.75:contrast=0.98:brightness=0.025,noise=alls=3:allf=t" ;;
+              hero-*|board-*) VF="scale='if(gt(iw,ih),1600,900)':-2,eq=saturation=0.75:contrast=0.98:brightness=0.025,noise=alls=3:allf=t" ;;
               *) VF="scale='if(gt(iw,ih),1280,720)':-2,eq=saturation=0.42:contrast=0.96:brightness=0.015,colorbalance=rs=.03:gs=.01:bs=-.03:rm=.02:bm=-.02,noise=alls=4:allf=t" ;;
             esac
             ffmpeg -loglevel error -y -i "$f" -vf "$VF" -c:v libx264 -preset slow -crf 27 -pix_fmt yuv420p -movflags +faststart -an "graded/$f"
