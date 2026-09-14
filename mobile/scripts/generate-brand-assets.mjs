@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films|trust-still|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -203,14 +203,17 @@ const DESK = 'Wide composition: the subject is in the RIGHT third of the frame; 
 const PHONE = 'Vertical composition for a phone screen: the subject is small and very LOW in the frame, inside the bottom fifth; everything above is calm, soft and uncluttered, so a long headline and buttons can sit over it.';
 const EMPLOYEE_MOMENT = 'The start of a shift at a five-star resort: a waiter in the staff locker room buttoning the cuff of a crisp white uniform shirt, a neat row of pale lockers, soft morning light from a high window. Seen from behind, his face never visible. Calm, proud, ready.';
 const EMPLOYER_MOMENT = 'The human resources office of a five-star resort in the morning: an HR manager at a clean, calm desk reviewing the payroll on a laptop, seen from behind over the shoulder and out of focus, the screen content not legible, a window onto coconut palms, a neat folder and a coffee cup. Professional, orderly, unhurried.';
+const TRUST_STILL_NAME = 'moment-school-walk.png';
 const PAGE_STILLS = [
   { file: 'employee-hero-16x9.png', size: '1536x1024', prompt: `${MX} ${EMPLOYEE_MOMENT} ${DESK} ${GRADE} ${NEG}` },
   { file: 'employee-hero-9x16.png', size: '1024x1536', prompt: `${MX} ${EMPLOYEE_MOMENT} ${PHONE} ${GRADE} ${NEG}` },
   { file: 'employer-hero-16x9.png', size: '1536x1024', prompt: `${MX} ${EMPLOYER_MOMENT} ${DESK} ${GRADE} ${NEG}` },
   { file: 'employer-hero-9x16.png', size: '1024x1536', prompt: `${MX} ${EMPLOYER_MOMENT} ${PHONE} ${GRADE} ${NEG}` },
   {
-    file: 'moment-lunch.png', size: '1536x1024',
-    prompt: `${MX} In the open front doorway of a tidy modern Mexican home on a school morning, a mother in her early thirties in a neat cream blouse kneels BEHIND her young son; BOTH have their backs to the camera, facing out toward the bright garden. His dark school backpack is on his shoulders with the top zipper open, and she is slipping a small cream lunch bag into it. Clean school uniform, polished floor, a potted plant beside the door. Faces never visible. Tender and unposed, backlit morning light. Framed so the whole scene also works cropped to 16:9. ${GRADE} ${NEG}`,
+    // Trust (Isaac chose it, 2026-09-14): safety and peace of mind, with the
+    // motion AI video handles well — walking — and no hands on objects.
+    file: 'moment-school-walk.png', size: '1536x1024',
+    prompt: `${MX} A school morning in a calm, tidy residential street: a mother in a neat cream blouse and her young son in a clean school uniform with a dark backpack walk hand in hand along a shaded sidewalk toward school, seen from BEHIND, both faces never visible. Low garden walls, bougainvillea, trees casting soft dappled shade, warm early light. They are in the right half of the frame, walking away from the camera; the left side is calm and uncluttered. Wide shot, the whole scene also works cropped to 16:9. ${GRADE} ${NEG}`,
   },
 ];
 
@@ -240,11 +243,10 @@ const PAGE_FILMS = ['employee-hero-16x9', 'employee-hero-9x16', 'employer-hero-1
  */
 const BOARD_FILMS = [
   {
-    // Isaac, 2026-09-14: not the mother's hair moving — her placing the lunch
-    // in the backpack. Both backs stay to camera; nothing is pinned at the
-    // end because the action changes the frame.
-    file: 'board-trust-lunch.mp4', imageFile: 'public-v2/public/images/brand/moment-lunch.jpg', aspect: '16:9', duration: '6',
-    prompt: `The mother slides the small lunch bag the rest of the way into the open backpack, then zips the backpack closed and gives the top a light pat. Both of them keep their backs to the camera for the entire shot; neither head turns and no face is ever visible. Her hair stays still. The boy stays facing out toward the garden. The exposure, brightness and colour of the frame stay constant — no light change, no flare. ${MOTION}`,
+    // The lunch film was rejected: the backpack morphed open and swallowed
+    // the bag. Walking away is a motion the model renders cleanly.
+    file: 'board-trust-walk.mp4', imageFile: 'public-v2/public/images/brand/moment-school-walk.jpg', aspect: '16:9', duration: '8',
+    prompt: `The mother and her son keep walking slowly away along the sidewalk, hand in hand, in a natural easy rhythm; the leaves above them move gently and the dappled shade shifts on the pavement. Both stay seen from behind for the entire shot: neither turns around and no face is ever visible. Their hands stay joined. The backpack does not change shape. The exposure, brightness and colour stay constant. ${MOTION}`,
   },
 ];
 
@@ -356,4 +358,5 @@ if (SET === 'hero-films-phone') await runAll(HERO_FILMS.filter((x) => aspectOf(x
 if (SET === 'board-films') await runAll(BOARD_FILMS, generateFilm);
 if (SET === 'page-stills') await runAll(PAGE_STILLS, generateImage);
 if (SET === 'page-films') await runAll(PAGE_FILMS, generateFilm);
+if (SET === 'trust-still') await runAll(PAGE_STILLS.filter((x) => x.file === TRUST_STILL_NAME), generateImage);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }

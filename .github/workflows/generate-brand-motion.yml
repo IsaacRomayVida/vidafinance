@@ -29,6 +29,7 @@ on:
           - board-films
           - page-stills
           - page-films
+          - trust-still
           - all
       pro:
         description: "Seedance pro at 1080p (slower, costlier) instead of lite 720p"
