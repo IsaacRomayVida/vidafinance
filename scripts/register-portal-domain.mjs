@@ -1,5 +1,5 @@
 /**
- * register-portal-domain.mjs — attach alfa.funtrip.mx to the funpay-alfa
+ * register-portal-domain.mjs — attach PORTAL_DOMAIN to the funpay-alfa
  * Firebase Hosting site (v1beta1 customDomains API). Zero dependencies:
  * the service-account access token is minted with node:crypto (RS256 JWT
  * → oauth2 token exchange). Prints the DNS records Cloudflare must hold.
@@ -8,7 +8,13 @@ import { readFileSync } from 'node:fs';
 import { createSign } from 'node:crypto';
 
 const SITE = 'funpay-alfa';
-const DOMAIN = process.env.PORTAL_DOMAIN || 'alfa.funtrip.mx';
+// No default: the old one was alfa.funtrip.mx, Funtrip's domain. Acting on
+// a custom domain must always be an explicit choice.
+const DOMAIN = process.env.PORTAL_DOMAIN;
+if (!DOMAIN) {
+  console.error('PORTAL_DOMAIN is required (the domain to attach or release).');
+  process.exit(1);
+}
 const BASE = `https://firebasehosting.googleapis.com/v1beta1/projects/vida-finance/sites/${SITE}`;
 
 const sa = JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));

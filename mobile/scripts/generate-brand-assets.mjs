@@ -112,7 +112,9 @@ const STAGES = [
  * on the site, so the first frame IS the picture and the grade cannot drift.
  * Motion is deliberately small — a background has to hold type.
  */
-const SITE = process.env.BRAND_IMAGE_BASE || 'https://alfa.funpay.mx/images/brand';
+// Must be publicly fetchable by fal.ai: alfa.funpay.mx no longer resolves and
+// alfa.suena.ch sits behind Cloudflare Access, so read the ungated origin.
+const SITE = process.env.BRAND_IMAGE_BASE || 'https://funpay-alfa.web.app/web/images/brand';
 const MOTION = 'Subtle natural motion only. The camera does not move, does not zoom and does not pan. No new objects enter the frame, nothing morphs, nobody turns toward the camera. Photographic, documentary, film grain preserved.';
 
 const ANIMATED = [

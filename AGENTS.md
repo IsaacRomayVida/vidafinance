@@ -11,13 +11,14 @@ and build automation. Humans: see README.md; Claude-in-repo: CLAUDE.md.
   transfers, or disbursements, and must never create borrowers outside
   the QA fixtures below.
 - FunPay (vidafinance) is a separate business from Funtrip (vidatravel).
-  Never cross their data, domains, or credentials. FunPay's portal used to
-  live on `alfa.funtrip.mx` — Funtrip's domain — because `funpay.mx` was
-  not on Cloudflare and could not be automated. It is now, so the portal
-  moved to `alfa.funpay.mx` and handed that domain back. The one remaining
-  shared resource is the Cloudflare API token, which lives in the
-  vidatravel repo and now sees all four zones; DNS for `funpay.mx` is
-  created with that repo's `cloudflare-dns.yml` workflow.
+  Never cross their data, domains, or credentials. FunPay's portal was
+  first parked on `alfa.funtrip.mx` (Funtrip's domain, handed back), then
+  `alfa.funpay.mx`, and now lives only behind the Suena review portal at
+  `https://alfa.suena.ch/funpay/`. `alfa.funpay.mx` no longer resolves —
+  do not link to it. The one remaining shared resource is the Cloudflare
+  API token, which lives in the vidatravel repo and sees all four zones;
+  DNS for `funpay.mx` is created with that repo's `cloudflare-dns.yml`
+  workflow.
 
 ## Surfaces (what to register in the Suena review portal)
 
@@ -45,7 +46,7 @@ both sizes. Shortcuts worth registering: `app/?screen=RequestLoan`,
 | Mount point | one build serves one prefix. `holding_prefix` sets `EXPO_PORTAL_BASE` and `VITE_BASE_PATH` together; a build made for `/funpay` renders blank anywhere else, with a 200 |
 | Rebuild/redeploy | Actions → `deploy-team-portal.yml`, **dispatched against the branch** (`--ref mobile-motion-pass`), inputs `ref`, `mode`, `holding_prefix=/funpay`, `web_launch_mode` |
 | Read feedback | dispatch `deploy-team-portal.yml` with `mode=feedback` — newest 25 reports print to the run summary (SA-authenticated; there is no anonymous read) |
-| Build identity | the portal footer shows `portal <git-sha> · <UTC time>`; quote it in bug reports |
+| Build identity | the alfa.suena.ch footer shows `alfa <shell build> · FunPay <git-sha> · <UTC time>`, the FunPay part read from `/funpay/version.json`, which every portal deploy publishes; quote it in bug reports |
 | Screen identity | every app screen sets `document.title` to `FunPay · <pantalla>`, so a report can name the surface it came from |
 
 ## QA fixtures (the only sanctioned test identities)
