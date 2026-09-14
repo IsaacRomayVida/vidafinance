@@ -22,7 +22,10 @@ on:
           - intros
           - loops
           - hero-stills
+          - hero-stills-phone
           - hero-films
+          - hero-films-desktop
+          - hero-films-phone
           - all
       pro:
         description: "Seedance pro at 1080p (slower, costlier) instead of lite 720p"

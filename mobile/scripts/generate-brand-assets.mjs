@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills|hero-films|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -181,7 +181,9 @@ const HERO_STILLS = [
   },
   {
     file: 'hero-dawn-9x16.png', size: '1024x1536',
-    prompt: `${MX} ${HERO_MOMENT} Vertical composition: she is small in the LOWER third, centred on the path. The upper two thirds are calm — pale dawn sky and the tops of palms — so a headline can sit over them. ${GRADE} ${NEG}`,
+    // On a phone the headline, both buttons and the disclosure fill the top
+    // three quarters of the hero; the figure must live in the band below them.
+    prompt: `${MX} ${HERO_MOMENT} Vertical composition for a phone screen: she is SMALL and very LOW in the frame — her whole figure inside the bottom fifth, feet close to the bottom edge, centred on the stone path that runs up from the bottom edge. Everything above the bottom fifth is calm and soft: pale dawn sky, the tops of coconut palms at the sides, a hazy resort far away, no strong detail and no people, so a long headline and buttons can sit over it. ${GRADE} ${NEG}`,
   },
 ];
 const HERO_MOTION = 'She keeps walking slowly away along the path and, near the end, comes to a stop and stands still in the morning light; her uniform and the palm fronds move gently in the breeze; the light warms almost imperceptibly. She REMAINS in frame for the whole shot and does not fade, turn around or change. The final seconds are nearly still.';
@@ -288,6 +290,10 @@ if (SET === 'animate' || SET === 'all') await runAll(ANIMATED, generateFilm);
 if (SET === 'intros') await runAll(FILMS, generateFilm);
 if (SET === 'loops' || SET === 'all') await runAll(LOOPS, generateFilm);
 // The hero is never part of 'all': stills need review before films are paid for.
+const aspectOf = (spec) => (spec.file.includes('9x16') ? 'phone' : 'desktop');
 if (SET === 'hero-stills') await runAll(HERO_STILLS, generateImage);
+if (SET === 'hero-stills-phone') await runAll(HERO_STILLS.filter((x) => aspectOf(x) === 'phone'), generateImage);
 if (SET === 'hero-films') await runAll(HERO_FILMS, generateFilm);
+if (SET === 'hero-films-desktop') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'desktop'), generateFilm);
+if (SET === 'hero-films-phone') await runAll(HERO_FILMS.filter((x) => aspectOf(x) === 'phone'), generateFilm);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }
