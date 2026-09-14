@@ -71,8 +71,8 @@ alfa.suena.ch/funpay.
 
 | ID | Output | Tool | Notes |
 |---|---|---|---|
-| G1 | `hero-dawn-16x9.png`, `hero-dawn-9x16.png` | OpenAI Images (`set=imagery`) | One moment, two compositions. Clear sky in the upper third (desktop: right half) for the headline. |
-| G2 | `hero-dawn-16x9.mp4`, `hero-dawn-9x16.mp4` | fal.ai Seedance **pro**, image-to-video from G1, `duration: 10` | Replaces both H1 placeholders. Seedance returns 5 or 10 s per clip. |
+| G1 | `images/brand/hero-dawn-16x9.jpg`, `images/brand/hero-dawn-9x16.jpg` | OpenAI Images (`set=hero-stills`) | **Approved 2026-09-14** (run 34837062464), graded, cropped to exact 16:9 / 9:16. Calm sky left (desktop) / top (phone) for the headline. |
+| G2 | `video/hero-dawn-16x9.mp4`, `video/hero-dawn-9x16.mp4` | fal.ai Seedance **pro**, image-to-video from the committed G1 files (`set=hero-films`, `pro=true`), 10 s, camera fixed | Replaces both H1 placeholders. |
 
 **G1/G2 brief — "the shift ends."** A hotel staff member at the end of the
 night shift steps out of the service entrance into first light, seen from
