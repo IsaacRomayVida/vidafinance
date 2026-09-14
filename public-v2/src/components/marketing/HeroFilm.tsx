@@ -65,14 +65,13 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
     // Stage the next film behind the visible one so the swap has no gap.
     if (waiting) arm(waiting, reel[(index + 1) % reel.length].film as string);
 
-    // Play only while on screen. Both reels are always mounted and one is
-    // display:none (the landscape stage vs the portrait background), so
-    // playing on mount ran the hidden film to its end — switching viewport
-    // then revealed a frozen last frame. A film that has ended stays ended:
-    // it holds, it does not restart.
+    // Play only while on screen; pause when it leaves. A single film holds
+    // its last frame while the reader stays, and plays again from the start
+    // when they come back to it after it ended — so it is never found frozen.
     const onScreen = (visible: boolean) => {
-      if (!visible) showing.pause();
-      else if (!showing.ended) safePlay(showing);
+      if (!visible) return showing.pause();
+      if (showing.ended && !waiting) showing.currentTime = 0;
+      safePlay(showing);
     };
     const io =
       typeof IntersectionObserver === 'function'

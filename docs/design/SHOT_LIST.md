@@ -13,9 +13,11 @@ wallpaper under a scrim: nothing was special, and motion fought the type.
 
 ## Rules
 
-1. **One film per surface.** Website: the home hero. App: the cold-start
-   intro. Everything else is a still or no imagery at all.
-2. **A film plays once and holds its last frame.** No loops behind content.
+1. **Films are few and deliberate.** Website: the home hero and the Trust
+   board (Isaac, 2026-09-14). App: the cold-start intro. Everything else is
+   a still or no imagery at all.
+2. **A film plays while on screen, once.** It holds its last frame while the
+   reader stays and plays again when they come back. No loops behind content.
 3. **Nothing appears twice.** Not across pages, not between web and app.
 4. **A board earns its photograph.** Boards whose content *is* the point —
    the steps, the cost calculator, FAQ — carry no imagery.
@@ -41,7 +43,7 @@ design.
 | H2 | Home · How it works | Paper board, the steps are the content | — | none |
 | H3 | Home · Cost calculator | Sage board, nothing competes with the numbers | — | none |
 | H4 | Home · Employers | Dark ops board over the stage surface | `images/brand/stage-employer.jpg` | live |
-| H5 | Home · Trust | Still | `images/brand/moment-backpack.jpg` | live |
+| H5 | Home · Trust | Cinemagraph from its still (6 s, ends on the still), plays on screen | `video/board-trust-backpack.mp4` (poster `images/brand/moment-backpack.jpg`, exact 16:9) — take 4, run 34855094459; takes 1–3 rejected (reframing, legible face, exposure swing) | live |
 | H6 | Home · FAQ | Paper | — | none |
 | H7 | Home · Closing | Sage | — | none |
 | E1 | Employees · Use cases | Still | `images/brand/moment-pharmacy.jpg` | live |

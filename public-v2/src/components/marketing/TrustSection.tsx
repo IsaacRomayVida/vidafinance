@@ -12,15 +12,15 @@ const icons = [
 ];
 
 /**
- * Trust over the backpack photograph — the only place it appears. A still:
- * the hero carries the site's one film. White title, frosted rows.
+ * Trust over the backpack photograph — the only place it appears — moving:
+ * the film is generated from that exact still. White title, frosted rows.
  */
 export function TrustSection() {
   const { t } = useTranslation();
 
   return (
     <Board className="film" id="trust">
-      <BoardPhoto still="/images/brand/moment-backpack.jpg" />
+      <BoardPhoto still="/images/brand/moment-backpack.jpg" film="/video/board-trust-backpack.mp4" />
       <div className="mk-cols">
         <div className="sticky sh">
           <BoardHead kicker={t('trust_tag')} title={t('trust_h2')} lead={t('trust_p')} />
