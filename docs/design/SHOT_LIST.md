@@ -48,9 +48,9 @@ design.
 | H5 | Home · Trust | Film from its still (8 s), plays on screen | `video/board-trust-walk.mp4` (poster `images/brand/moment-school-walk.jpg`) — mother and son walk to school, seen from behind (still run 34860578121, film run 34862030441; the shadow on the wall is hers) | live |
 | H6 | Home · FAQ | Paper | — | none |
 | H7 | Home · Closing | Sage | — | none |
-| E0 | Employees · hero | Film from its stills (8 s, ends on the still) | `video/employee-hero-16x9.mp4` (run 34862026374, person frozen) and `employee-hero-9x16.mp4` (run 34860181217) — a waiter starting his shift | live |
-| E1 | Employees · Use cases | Still | `images/brand/moment-pharmacy.jpg` | live |
-| R0 | Employers · hero | Film from its stills (8 s, ends on the still) | `video/employer-hero-16x9.mp4` (run 34862026374, person frozen) and `employer-hero-9x16.mp4` (run 34860181217) — payroll morning in a resort HR office | live |
+| E0 | Employees · hero | Film from its stills (8 s, ends on the still) | `video/employee-hero-16x9.mp4` (run 34864341488, camera push-in; the frozen take read as a still) and `employee-hero-9x16.mp4` (run 34860181217) — a waiter starting his shift | live |
+| E1 | Employees · "Lo que no puede esperar" | Film from its still — a father carrying his daughter to the clinic (Isaac chose it) | pending: take 1 rejected (left frame, figure in glass); take 2 generating. Paper-bag still `moment-pharmacy.jpg` rejected and removed | none (pending) |
+| R0 | Employers · hero | Film from its stills (8 s, ends on the still) | `video/employer-hero-16x9.mp4` (run 34864341488, camera push-in; the frozen take read as a still) and `employer-hero-9x16.mp4` (run 34860181217) — payroll morning in a resort HR office | live |
 | R1 | Employers · Closing statement | Dark ops board | — | none |
 | O1 | Employer dashboard + ops console · stage panel | Stage surface | `images/brand/stage-ops.jpg` | live |
 
