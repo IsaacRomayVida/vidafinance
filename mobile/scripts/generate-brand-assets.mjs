@@ -208,11 +208,14 @@ const TRUST_STILL_NAME = 'moment-school-walk.png';
 // the pharmacy paper-bag still. Walking, no hands on objects, no faces.
 const USECASE_STILL = {
   file: 'moment-clinic.png', size: '1536x1024',
-  prompt: `${MX} Early morning in a clean, well-kept Mexican neighbourhood: a father in a simple pressed shirt walks briskly along the sidewalk toward the glass entrance of a small, modern, tidy neighbourhood clinic, carrying his young daughter in his arms; her head is tucked into his shoulder with her face hidden against his neck, and both are seen from BEHIND, faces never visible. Urgent but calm. Soft warm light, a few palms and a low wall; no readable signs or text anywhere, nobody else in the scene. They are in the right half of the frame, walking away from the camera; the left side is calm. Wide shot that also works cropped to 16:9. ${GRADE} ${NEG}`,
+  // Take 1 (film run 34865078107) was rejected: he left the frame by 2.5 s
+  // and a figure moved inside the clinic's glass doors. Take 2: a long,
+  // straight sidewalk so he stays in frame, and no glass or reflections.
+  prompt: `${MX} Early morning on a long, straight, tree-lined sidewalk in a clean, well-kept Mexican neighbourhood: a father in a simple pressed shirt walks briskly AWAY from the camera down the middle of the sidewalk, carrying his young daughter in his arms; her head is tucked into his shoulder with her face hidden against his neck. Both seen from BEHIND, faces never visible. Far ahead at the end of the sidewalk, small and soft, a low white building with a simple green cross above its door — the neighbourhood clinic. Matte walls and trees only: no glass, no windows, no reflective surfaces near him, no readable signs or text, nobody else in the scene. He is in the lower middle of the frame with plenty of sidewalk ahead of him; the sides are calm. Wide shot that also works cropped to 16:9. ${GRADE} ${NEG}`,
 };
 const USECASE_FILM = {
   file: 'board-usecase-clinic.mp4', imageFile: 'public-v2/public/images/brand/moment-clinic.jpg', aspect: '16:9', duration: '8',
-  prompt: `The father keeps walking briskly along the sidewalk toward the clinic entrance, carrying his daughter, in a steady natural stride; the palms move gently in the breeze. Both stay seen from behind for the entire shot: neither turns, the girl's face stays hidden in his shoulder, and no face is ever visible. Nobody else appears, no other shadows of people, no readable signs. Her body and his arms do not change shape. The exposure, brightness and colour stay constant. ${MOTION}`,
+  prompt: `The father keeps walking briskly straight down the middle of the long sidewalk toward the clinic far ahead, carrying his daughter, in a steady natural stride, staying well inside the frame and getting smaller as he goes; the palms move gently in the breeze. Both stay seen from behind for the entire shot: neither turns, the girl's face stays hidden in his shoulder, and no face is ever visible. Nobody else appears, no other shadows of people, no readable signs. Her body and his arms do not change shape. The exposure, brightness and colour stay constant. ${MOTION}`,
 };
 const PAGE_STILLS = [
   { file: 'employee-hero-16x9.png', size: '1536x1024', prompt: `${MX} ${EMPLOYEE_MOMENT} ${DESK} ${GRADE} ${NEG}` },
