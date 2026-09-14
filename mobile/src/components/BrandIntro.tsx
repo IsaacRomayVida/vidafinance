@@ -23,12 +23,13 @@ import { useReducedMotion } from './motion';
 
 // Metro needs static requires — the whole set ships (~2 MB total).
 /* eslint-disable @typescript-eslint/no-var-requires */
-const artwork = require('../../assets/brand/home-stall.jpg');
-// The app's one film (docs/design/SHOT_LIST.md, A1): it plays here, once
-// per cold start, and nowhere else in the app. The doorway belongs to the
-// website hero, so it is not reused.
+const artwork = require('../../assets/brand/app-intro.jpg');
+// The app's one film (docs/design/SHOT_LIST.md, A1): a stall owner walking
+// to her stall at dawn, plays once per cold start and nowhere else. 6 s, so
+// it is still moving when the mark lands (the old 3 s clip froze first and
+// the splash looked stuck).
 const SCENES = [
-  require('../../assets/intros/live-stall.mp4'),
+  require('../../assets/intros/app-intro.mp4'),
 ];
 /* eslint-enable @typescript-eslint/no-var-requires */
 

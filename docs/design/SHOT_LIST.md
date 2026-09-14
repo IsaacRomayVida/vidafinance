@@ -58,7 +58,7 @@ design.
 
 | ID | Where | Treatment | Asset | Status |
 |---|---|---|---|---|
-| A1 | Brand intro (cold start) | Film, once per launch, then the mark | `assets/intros/live-stall.mp4` (poster `home-stall.jpg`) | live |
+| A1 | Brand intro (cold start) | Film, once per launch, then the mark | `assets/intros/app-intro.mp4` (poster `assets/brand/app-intro.jpg`) — stall owner walking to her stall at dawn, 6 s (still run 34867461746, film run 34867737573); the 3 s `live-stall.mp4` froze before the mark and was retired | live |
 | A2 | Home | Leaf painted field, no photo | — | none |
 | A3 | Login (desktop hero) | Leaf painted field, no photo | — | none |
 
