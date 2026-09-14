@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
@@ -22,7 +23,7 @@ interface Loan {
 }
 
 interface MonthBucket {
-  label: string;       // e.g. "2026-03"
+  label: string;       // e.g. "mar 2026"
   count: number;
   volume: number;
 }
@@ -42,10 +43,11 @@ function monthKey(ts: { seconds: number }): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function monthLabel(key: string): string {
+function monthLabel(key: string, lang: string): string {
   const [y, m] = key.split('-');
-  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${names[parseInt(m, 10) - 1]} ${y}`;
+  return new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1)
+    .toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { month: 'short', year: 'numeric' })
+    .replace('.', '');
 }
 
 /* ────────────────────────── component ────────────────────────── */
@@ -53,6 +55,7 @@ function monthLabel(key: string): string {
 const ACTIVE_STATUSES = new Set(['approved', 'disbursed', 'disbursement_queued']);
 
 export function AnalyticsPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -60,6 +63,7 @@ export function AnalyticsPage() {
   const [loansReady, setLoansReady] = useState(false);
 
   const loading = !employeesReady || !loansReady;
+  const lang = i18n.language;
 
   /* ── real-time employee listener ── */
   useEffect(() => {
@@ -124,7 +128,7 @@ export function AnalyticsPage() {
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      buckets[key] = { label: monthLabel(key), count: 0, volume: 0 };
+      buckets[key] = { label: monthLabel(key, lang), count: 0, volume: 0 };
     }
     // fill from loan data
     for (const l of loans) {
@@ -136,7 +140,7 @@ export function AnalyticsPage() {
       }
     }
     return Object.values(buckets);
-  }, [loans]);
+  }, [loans, lang]);
 
   const maxMonthlyVolume = useMemo(
     () => Math.max(...monthlyTrend.map((m) => m.volume), 1),
@@ -166,186 +170,94 @@ export function AnalyticsPage() {
     URL.revokeObjectURL(url);
   }, [loans]);
 
-  /* ────────────────────── styles ────────────────────── */
-
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '28px',
-    border: '1px solid rgba(25,68,69,0.04)',
-    boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '2.2px',
-    color: 'var(--gold)',
-    marginBottom: 10,
-  };
-
-  const valueStyle: React.CSSProperties = {
-    fontFamily: 'var(--df)',
-    fontSize: 36,
-    color: 'var(--t1)',
-    letterSpacing: '-0.03em',
-    fontWeight: 400,
-    lineHeight: 1,
-  };
-
-  const subValueStyle: React.CSSProperties = {
-    fontSize: 12,
-    color: 'var(--t3)',
-    marginTop: 6,
-  };
-
-  const thStyle: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '1.5px',
-    color: 'var(--t3)',
-  };
-
   /* ────────────────────── render ────────────────────── */
 
+  const kpis: { label: string; value: string; sub: string }[] = [
+    { label: t('analytics_total_employees'), value: fmt(totalEmployees), sub: t('analytics_total_employees_sub') },
+    { label: t('analytics_active_loans'), value: fmt(activeLoanCount), sub: t('analytics_active_loans_sub', { amount: fmtCurrency(activeLoanAmount) }) },
+    { label: t('analytics_repayment_rate'), value: repaymentRate, sub: t('analytics_repayment_rate_sub') },
+    { label: t('analytics_avg_loan'), value: fmtCurrency(avgLoanSize), sub: t('analytics_avg_loan_sub') },
+    { label: t('analytics_utilization'), value: utilizationRate, sub: t('analytics_utilization_sub') },
+    { label: t('analytics_total_loans'), value: fmt(loans.length), sub: t('analytics_total_loans_sub') },
+  ];
+
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
+    <div className="ops-page">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }}>
+      <div className="ops-head">
         <div>
-          <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-            Employer Analytics
-          </h1>
-          <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
-            Workforce loan metrics and monthly trends.
-          </p>
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_payroll')}</div>
+          <h1 className="ops-title">{t('analytics_title')}</h1>
+          <p className="ops-sub">{t('analytics_subtitle')}</p>
         </div>
         {!loading && loans.length > 0 && (
-          <button
-            onClick={downloadCSV}
-            style={{
-              background: 'var(--brand)',
-              color: '#fff',
-              borderRadius: 60,
-              padding: '10px 22px',
-              fontSize: 12,
-              fontWeight: 600,
-              border: 'none',
-              cursor: 'pointer',
-              letterSpacing: '0.2px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            Download CSV
+          <button type="button" onClick={downloadCSV} className="ops-go" style={{ marginTop: 0 }}>
+            <i aria-hidden="true" />{t('analytics_download_csv')}
           </button>
         )}
       </div>
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--t3)' }}>
-          <p style={{ fontSize: 14 }}>Loading analytics...</p>
+        <div className="ops-card" style={{ textAlign: 'center', padding: 48 }} aria-busy="true">
+          <p className="ops-note">{t('analytics_loading')}</p>
         </div>
       )}
 
       {/* Main content */}
       {!loading && (
         <>
-          {/* KPI cards — 2×3 grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Total Employees</div>
-              <div style={valueStyle}>{fmt(totalEmployees)}</div>
-              <div style={subValueStyle}>Registered in your company</div>
-            </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Active Loans</div>
-              <div style={valueStyle}>{fmt(activeLoanCount)}</div>
-              <div style={subValueStyle}>{fmtCurrency(activeLoanAmount)} MXN outstanding</div>
-            </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Repayment Rate</div>
-              <div style={valueStyle}>{repaymentRate}</div>
-              <div style={subValueStyle}>Loans paid on time</div>
-            </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Avg Loan Size</div>
-              <div style={valueStyle}>{fmtCurrency(avgLoanSize)}</div>
-              <div style={subValueStyle}>MXN per loan</div>
-            </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Utilization Rate</div>
-              <div style={valueStyle}>{utilizationRate}</div>
-              <div style={subValueStyle}>Employees with a loan</div>
-            </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Total Loans</div>
-              <div style={valueStyle}>{fmt(loans.length)}</div>
-              <div style={subValueStyle}>All time</div>
-            </div>
+          {/* KPI tiles */}
+          <div className="ops-kpis" style={{ marginTop: 0, marginBottom: 10 }}>
+            {kpis.map((k) => (
+              <div className="ops-kpi" key={k.label}>
+                <small>{k.label}</small>
+                <b>{k.value}</b>
+                <em>{k.sub}</em>
+              </div>
+            ))}
           </div>
 
-          {/* Monthly volume trend — bar chart + table */}
-          <div style={{ ...cardStyle, padding: '32px 28px', marginBottom: 20 }}>
-            <div style={{ ...labelStyle, marginBottom: 24 }}>Monthly Loan Volume (Last 6 Months)</div>
-
-            {/* Horizontal bar chart */}
+          {/* Monthly volume trend */}
+          <section className="ops-card">
+            <h2 className="ops-h3">{t('analytics_monthly_volume')}</h2>
             {monthlyTrend.map((m) => (
-              <div key={m.label} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--t1)' }}>{m.label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t2)' }}>
-                    {m.count} loan{m.count !== 1 ? 's' : ''} · {fmtCurrency(m.volume)}
-                  </span>
+              <div key={m.label} className="ops-bar-row">
+                <div className="ops-bar-meta">
+                  <span>{m.label}</span>
+                  <span>{t('analytics_month_line', { count: m.count, amount: fmtCurrency(m.volume) })}</span>
                 </div>
-                <div style={{ height: 8, borderRadius: 4, background: 'rgba(25,68,69,0.04)', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${(m.volume / maxMonthlyVolume) * 100}%`,
-                      borderRadius: 4,
-                      background: 'var(--gold)',
-                      transition: 'width 0.4s ease',
-                    }}
-                  />
+                <div className="ops-bar" aria-hidden="true">
+                  <i style={{ width: `${(m.volume / maxMonthlyVolume) * 100}%` }} />
                 </div>
               </div>
             ))}
-          </div>
+          </section>
 
-          {/* Monthly volume table */}
-          <div style={{ ...cardStyle, padding: '32px 28px' }}>
-            <div style={{ ...labelStyle, marginBottom: 20 }}>Monthly Breakdown</div>
-            {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 120px', gap: 12, paddingBottom: 12, borderBottom: '1px solid rgba(25,68,69,0.06)' }}>
-              <div style={thStyle}>Month</div>
-              <div style={{ ...thStyle, textAlign: 'right' }}>Loans</div>
-              <div style={{ ...thStyle, textAlign: 'right' }}>Volume (MXN)</div>
+          {/* Monthly breakdown */}
+          <section className="ops-card">
+            <h2 className="ops-h3">{t('analytics_breakdown')}</h2>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('analytics_col_month')}</th>
+                    <th className="num">{t('analytics_col_loans')}</th>
+                    <th className="num">{t('analytics_col_volume')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyTrend.map((m) => (
+                    <tr key={m.label}>
+                      <td style={{ fontWeight: 500 }}>{m.label}</td>
+                      <td className="num">{fmt(m.count)}</td>
+                      <td className="num">{fmtCurrency(m.volume)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {/* Rows */}
-            {monthlyTrend.map((m, i) => (
-              <div
-                key={m.label}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 80px 120px',
-                  gap: 12,
-                  padding: '14px 0',
-                  borderBottom: i < monthlyTrend.length - 1 ? '1px solid rgba(25,68,69,0.04)' : 'none',
-                  alignItems: 'center',
-                }}
-              >
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--t1)' }}>{m.label}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t2)', textAlign: 'right' }}>{fmt(m.count)}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', textAlign: 'right', fontFamily: 'var(--df)' }}>
-                  {fmtCurrency(m.volume)}
-                </div>
-              </div>
-            ))}
-          </div>
+          </section>
         </>
       )}
     </div>

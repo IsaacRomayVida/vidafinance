@@ -1,70 +1,36 @@
 import { useTranslation } from 'react-i18next';
-import { RichText } from '../components/shared/RichText';
-import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import { Board, BoardHead, Statement, Rows } from '../components/marketing/Board';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export function AboutPage() {
   const { t } = useTranslation();
-  useRevealOnScroll();
-  useDocumentTitle(`Funpay — ${t('pg_about_badge')}`);
+  useDocumentTitle(`FunPay — ${t('pg_about_badge')}`);
 
   return (
     <>
+      <Board label={t('pg_about_badge')}>
+        <Statement html={t('pg_about_h1')} lead={t('pg_about_sub')} />
+      </Board>
 
-      <section className="hero" style={{ padding: '100px 0 80px' }}>
-        <div className="hero-blob b1" /><div className="hero-blob b2" />
-        <div className="hero-inner" style={{ gridTemplateColumns: '1fr', textAlign: 'center', maxWidth: 720, margin: '0 auto' }}>
-          <div className="hero-text" style={{ textAlign: 'center' }}>
-            <div className="hero-badge" style={{ justifyContent: 'center' }}>
-              <span className="badge-dot" /><span className="badge-text">{t('pg_about_badge')}</span>
-            </div>
-            <h1 style={{ opacity: 0, animation: 'fu .9s ease .3s forwards' }}><RichText html={t('pg_about_h1')} /></h1>
-            <p className="hero-sub" style={{ maxWidth: 520, margin: '0 auto', opacity: 0, animation: 'fu .9s ease .45s forwards' }}>{t('pg_about_sub')}</p>
+      <Board tone="paper">
+        <BoardHead kicker={t('pg_about_mission_tag')} title={t('pg_about_mission_h')} />
+        <p className="mk-body" style={{ marginTop: 20 }}>{t('pg_about_mission_p')}</p>
+      </Board>
+
+      <Board>
+        <div className="mk-cols">
+          <div className="sticky">
+            <BoardHead kicker={t('pg_about_struct_tag')} title={t('pg_about_struct_h')} />
           </div>
+          <Rows items={[1, 2, 3].map((n) => ({ title: t(`pg_about_struct_${n}_t`), desc: t(`pg_about_struct_${n}_d`) }))} />
         </div>
-      </section>
+      </Board>
 
-      <section className="section">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_about_mission_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_about_mission_h')} /></h2>
-          <p className="sp rv d2" style={{ maxWidth: 640 }}>{t('pg_about_mission_p')}</p>
-        </div>
-      </section>
-
-      <section className="section tinted">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_about_struct_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_about_struct_h')} /></h2>
-          <div className="trust-grid rv d2">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className="trust-item">
-                <div>
-                  <div className="trust-t">{t(`pg_about_struct_${n}_t`)}</div>
-                  <div className="trust-d">{t(`pg_about_struct_${n}_d`)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="wrap">
-          <div className="tag rv">{t('pg_about_values_tag')}</div>
-          <h2 className="sh rv d1"><RichText html={t('pg_about_values_h')} /></h2>
-          <div className="trust-grid rv d2">
-            {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="trust-item">
-                <div>
-                  <div className="trust-t">{t(`pg_about_val_${n}_t`)}</div>
-                  <div className="trust-d">{t(`pg_about_val_${n}_d`)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <Board tone="paper">
+        <BoardHead kicker={t('pg_about_values_tag')} title={t('pg_about_values_h')} />
+        <div className="mk-gap" />
+        <Rows columns={2} items={[1, 2, 3, 4].map((n) => ({ title: t(`pg_about_val_${n}_t`), desc: t(`pg_about_val_${n}_d`) }))} />
+      </Board>
     </>
   );
 }

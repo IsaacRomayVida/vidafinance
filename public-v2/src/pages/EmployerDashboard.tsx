@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Icon, type IconName } from '../components/shared/Icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
@@ -61,6 +62,30 @@ type TabKey = 'all' | 'pending' | 'approved' | 'active' | 'paid' | 'rejected';
 
 function fmt(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+/* ── quincena helpers (presentation only) ─────────────────────────────────
+   A quincena is the 1st–15th or the 16th–end of a month. The board names its
+   folders and rows after these periods; nothing here prices, schedules or
+   dates a deduction — that stays on the server. */
+function quincenaStart(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() >= 16 ? 16 : 1);
+}
+function quincenaKey(start: Date): string {
+  return `${start.getFullYear()}-${start.getMonth()}-${start.getDate()}`;
+}
+/** n quincenas before (negative) or after (positive) `start`. */
+function shiftQuincena(start: Date, n: number): Date {
+  let m = start.getMonth();
+  let day = start.getDate();
+  for (let i = 0; i < Math.abs(n); i++) {
+    if (n < 0) { if (day === 16) day = 1; else { day = 16; m -= 1; } }
+    else { if (day === 1) day = 16; else { day = 1; m += 1; } }
+  }
+  return new Date(start.getFullYear(), m, day);
+}
+function monthShort(d: Date, lang: string): string {
+  return d.toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { month: 'short' }).replace('.', '');
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -144,102 +169,43 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
 
   if (allDone) {
     return (
-      <div style={{ maxWidth: 480, margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
-        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(36,122,110,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" style={{ width: 28, height: 28 }}>
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
+      <div className="ops-page">
+        <div className="ops-card" style={{ textAlign: 'center', padding: '64px 24px' }}>
+          <div className="ops-check" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 24, height: 24 }}>
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          </div>
+          <h2 className="ops-title sm">{t('dash_doc_banner_success')}</h2>
         </div>
-        <h2 style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--brand)', fontWeight: 400 }}>{t('dash_doc_banner_success')}</h2>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 520, margin: '0 auto', padding: '48px 24px 64px' }}>
-      {/* Header section */}
-      <div style={{ marginBottom: 40 }}>
-        <h2 style={{
-          fontFamily: 'var(--df)',
-          fontSize: 26,
-          color: 'var(--brand)',
-          fontWeight: 400,
-          letterSpacing: '-0.02em',
-          lineHeight: 1.15,
-          marginBottom: 16,
-        }}>
-          {t('dash_doc_banner_h')}
-        </h2>
-        <p style={{
-          fontSize: 14,
-          color: 'var(--t2)',
-          lineHeight: 1.7,
-          maxWidth: 380,
-        }}>
-          {t('dash_doc_banner_sub')}
-        </p>
+    <div className="ops-page">
+      <div className="ops-head">
+        <div>
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_verifying')}</div>
+          <h2 className="ops-title">{t('dash_doc_banner_h')}</h2>
+          <p className="ops-sub">{t('dash_doc_banner_sub')}</p>
+        </div>
       </div>
 
-      {/* Document cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Document folders — the glyph turns green only once the file is received */}
+      <div className="ops-card">
         {DOC_SLOTS.map((slot) => {
           const done = !!uploads[slot.key];
           const busy = !!uploading[slot.key];
           const error = errors[slot.key];
 
           return (
-            <div
-              key={slot.key}
-              style={{
-                background: '#fff',
-                borderRadius: 20,
-                padding: '28px 24px',
-                border: '1px solid rgba(25,68,69,0.04)',
-                boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
-              }}
-            >
-              {/* Icon + Text row */}
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
-                <div style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: '50%',
-                  background: done ? 'rgba(36,122,110,0.06)' : 'rgba(162,134,87,0.06)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  {done ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="2.5" style={{ width: 20, height: 20 }}><path d="M20 6L9 17l-5-5" /></svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5" style={{ width: 20, height: 20 }}>
-                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
-                    </svg>
-                  )}
-                </div>
-                <div style={{ paddingTop: 2 }}>
-                  <div style={{
-                    fontSize: 15,
-                    fontWeight: 600,
-                    color: 'var(--t1)',
-                    marginBottom: 6,
-                    letterSpacing: '-0.01em',
-                  }}>
-                    {t(slot.i18nKey)}
-                  </div>
-                  <div style={{
-                    fontSize: 12,
-                    color: 'var(--t3)',
-                    lineHeight: 1.4,
-                  }}>
-                    {t('onb_e_step4_formats')}
-                  </div>
-                  {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
-                </div>
-              </div>
-
-              {/* Button */}
+            <div key={slot.key} className="ops-batch" style={{ flexWrap: 'wrap' }}>
+              <span className={`fl${done ? ' g' : ''}`} aria-hidden="true" />
+              <span className="t">
+                {t(slot.i18nKey)}
+                <small>{error ? <span className="ops-error">{error}</span> : t('onb_e_step4_formats')}</small>
+              </span>
               <input
                 ref={(el) => { fileRefs.current[slot.key] = el; }}
                 type="file"
@@ -251,31 +217,23 @@ function DocUploadBanner({ uid, onComplete }: { uid: string; onComplete: () => v
                   if (file) handleFile(slot, file);
                 }}
               />
-              <button
-                disabled={done || busy}
-                onClick={() => fileRefs.current[slot.key]?.click()}
-                style={{
-                  width: '100%',
-                  background: done ? 'rgba(36,122,110,0.04)' : 'var(--brand)',
-                  color: done ? 'var(--success)' : '#fff',
-                  borderRadius: 60,
-                  padding: '14px 24px',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  border: 'none',
-                  letterSpacing: '0.2px',
-                  opacity: busy ? 0.6 : 1,
-                  cursor: done ? 'default' : 'pointer',
-                  transition: 'all 0.3s',
-                }}
-              >
-                {busy ? t('onb_e_step4_uploading') : done ? t('onb_e_step4_done') : t('onb_e_step4_upload')}
-              </button>
+              {done ? (
+                <span className="ops-status g">{t('onb_e_step4_done')}</span>
+              ) : (
+                <button
+                  type="button"
+                  className="ops-btn sm"
+                  disabled={busy}
+                  onClick={() => fileRefs.current[slot.key]?.click()}
+                >
+                  {busy ? t('onb_e_step4_uploading') : t('onb_e_step4_upload')}
+                </button>
+              )}
             </div>
           );
         })}
+        {submitError && <div className="ops-error" style={{ marginTop: 12 }}>{submitError}</div>}
       </div>
-      {submitError && <div style={{ fontSize: 13, color: 'var(--danger)', marginTop: 16 }}>{submitError}</div>}
     </div>
   );
 }
@@ -463,58 +421,38 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
   }
 
   return (
-    <div className="card" style={{ marginBottom: 24 }}>
-      <div className="card-title">{t('curp_config_title')}</div>
-      <p style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.6, marginBottom: 24 }}>
+    <section className="ops-card" aria-labelledby="curp-config-title">
+      <h2 id="curp-config-title" className="ops-h3">{t('curp_config_title')}</h2>
+      <p className="ops-sub" style={{ marginBottom: 20 }}>
         {t('curp_config_desc')}
       </p>
 
       {/* Mode toggle */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+      <div className="ops-choices">
         <button
+          type="button"
           onClick={() => { setMode('open'); setSaved(false); }}
-          style={{
-            flex: 1,
-            padding: '14px 16px',
-            borderRadius: 16,
-            border: mode === 'open' ? '2px solid var(--brand)' : '1.5px solid rgba(25,68,69,0.1)',
-            background: mode === 'open' ? 'rgba(25,68,69,0.03)' : '#fff',
-            cursor: 'pointer',
-            transition: 'all .2s',
-          }}
+          className={`ops-choice${mode === 'open' ? ' on' : ''}`}
+          aria-pressed={mode === 'open'}
         >
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
-            {t('curp_config_mode_open')}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.4 }}>
-            {t('curp_config_mode_open_desc')}
-          </div>
+          <b>{t('curp_config_mode_open')}</b>
+          <small>{t('curp_config_mode_open_desc')}</small>
         </button>
         <button
+          type="button"
           onClick={() => { setMode('allowlist'); setSaved(false); }}
-          style={{
-            flex: 1,
-            padding: '14px 16px',
-            borderRadius: 16,
-            border: mode === 'allowlist' ? '2px solid var(--brand)' : '1.5px solid rgba(25,68,69,0.1)',
-            background: mode === 'allowlist' ? 'rgba(25,68,69,0.03)' : '#fff',
-            cursor: 'pointer',
-            transition: 'all .2s',
-          }}
+          className={`ops-choice${mode === 'allowlist' ? ' on' : ''}`}
+          aria-pressed={mode === 'allowlist'}
         >
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
-            {t('curp_config_mode_allowlist')}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.4 }}>
-            {t('curp_config_mode_allowlist_desc')}
-          </div>
+          <b>{t('curp_config_mode_allowlist')}</b>
+          <small>{t('curp_config_mode_allowlist_desc')}</small>
         </button>
       </div>
 
       {/* Prefix list (only shown when mode is allowlist) */}
       {mode === 'allowlist' && (
-        <div style={{ marginBottom: 24 }}>
-          <label htmlFor="curp-prefix-input" style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)', display: 'block', marginBottom: 8 }}>
+        <div style={{ marginBottom: 20 }}>
+          <label htmlFor="curp-prefix-input" className="ops-label" style={{ display: 'block', marginBottom: 8 }}>
             {t('curp_config_prefixes_label')}
           </label>
 
@@ -533,69 +471,25 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
               maxLength={4}
               spellCheck={false}
               autoComplete="off"
-              style={{
-                flex: 1,
-                padding: '12px 16px',
-                borderRadius: 12,
-                border: inputError ? '1.5px solid var(--danger)' : '1.5px solid rgba(25,68,69,0.1)',
-                fontSize: 14,
-                fontFamily: 'monospace',
-                letterSpacing: '0.1em',
-                outline: 'none',
-                transition: 'border .2s',
-              }}
+              className={`ops-input mono${inputError ? ' error' : ''}`}
+              style={{ flex: 1 }}
             />
-            <button
-              onClick={addPrefix}
-              style={{
-                padding: '12px 20px',
-                borderRadius: 12,
-                background: 'var(--brand)',
-                color: '#fff',
-                border: 'none',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
+            <button type="button" onClick={addPrefix} className="ops-btn">
               {t('curp_config_add')}
             </button>
           </div>
-          {inputError && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{inputError}</div>}
+          {inputError && <div className="ops-error" style={{ marginBottom: 8 }}>{inputError}</div>}
 
           {/* Prefix chips */}
           {prefixes.length > 0 ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div className="ops-chips">
               {prefixes.map((p, i) => (
-                <span
-                  key={i}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 14px',
-                    borderRadius: 10,
-                    background: 'rgba(25,68,69,0.04)',
-                    fontSize: 13,
-                    fontFamily: 'monospace',
-                    fontWeight: 600,
-                    color: 'var(--brand)',
-                    letterSpacing: '0.05em',
-                  }}
-                >
+                <span key={i} className="ops-status mono">
                   {p}
                   <button
+                    type="button"
                     onClick={() => removePrefix(i)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: 0,
-                      lineHeight: 1,
-                      color: 'var(--t3)',
-                      fontSize: 16,
-                    }}
+                    className="ops-x"
                     aria-label={`Remove ${p}`}
                   >
                     &times;
@@ -604,7 +498,7 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
               ))}
             </div>
           ) : (
-            <p style={{ fontSize: 12, color: 'var(--t3)', fontStyle: 'italic' }}>
+            <p className="ops-note">
               {t('curp_config_no_prefixes')}
             </p>
           )}
@@ -612,34 +506,23 @@ function CurpConfigCard({ employer, onUpdated }: { employer: EmployerData; onUpd
       )}
 
       {/* Save button */}
-      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12 }}>{error}</div>}
+      {error && <div className="ops-error" style={{ marginBottom: 12 }}>{error}</div>}
       <button
+        type="button"
         onClick={handleSave}
         disabled={saving}
-        style={{
-          width: '100%',
-          padding: '14px 24px',
-          borderRadius: 60,
-          background: saved ? 'rgba(36,122,110,0.04)' : 'var(--brand)',
-          color: saved ? 'var(--success)' : '#fff',
-          border: 'none',
-          fontSize: 13,
-          fontWeight: 600,
-          letterSpacing: '0.2px',
-          cursor: saving ? 'default' : 'pointer',
-          opacity: saving ? 0.6 : 1,
-          transition: 'all .3s',
-        }}
+        className={`ops-btn${saved ? ' g' : ''}`}
       >
         {saving ? t('curp_config_saving') : saved ? t('curp_config_saved') : t('curp_config_save')}
       </button>
-    </div>
+    </section>
   );
 }
 
 
+
 export function EmployerDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -740,23 +623,27 @@ export function EmployerDashboard() {
 
   if (pageState === 'loading') {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
+      <div className="ops-card" style={{ display: 'grid', placeItems: 'center', padding: 80 }} aria-busy="true">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
       </div>
     );
   }
 
   if (needsEmailVerification) {
     return (
-      <div className="mx-auto max-w-lg py-12 sm:py-20 px-4 text-center">
-        <h2 className="text-lg sm:text-xl font-bold text-teal-900">{t('dash_verify_email')}</h2>
-        <p className="mt-3 sm:mt-4 text-sm text-gray-500">{t('dash_verify_email_desc')}</p>
-        <button
-          onClick={() => signOut(auth).then(() => navigate('/login'))}
-          className="mt-6 rounded-lg bg-teal-700 px-6 py-2 text-sm font-medium text-white hover:bg-teal-800"
-        >
-          {t('dash_back_to_login')}
-        </button>
+      <div className="ops-page">
+        <div className="ops-card" style={{ textAlign: 'center', padding: '56px 24px' }}>
+          <h2 className="ops-title sm">{t('dash_verify_email')}</h2>
+          <p className="ops-sub" style={{ margin: '10px auto 24px' }}>{t('dash_verify_email_desc')}</p>
+          <button
+            type="button"
+            className="ops-go"
+            style={{ marginTop: 0 }}
+            onClick={() => signOut(auth).then(() => navigate('/login'))}
+          >
+            <i aria-hidden="true" />{t('dash_back_to_login')}
+          </button>
+        </div>
       </div>
     );
   }
@@ -769,21 +656,20 @@ export function EmployerDashboard() {
       }} />;
     }
     return (
-      <div className="mx-auto max-w-lg py-12 sm:py-20 px-4 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-amber-50">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="2" className="h-7 w-7 sm:h-8 sm:w-8">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 6v6l4 2" />
-          </svg>
+      <div className="ops-page">
+        <div className="ops-card" style={{ textAlign: 'center', padding: '56px 24px' }}>
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_verifying')}</div>
+          <h2 className="ops-title sm">{t('dash_account_created')}</h2>
+          <p className="ops-sub" style={{ margin: '10px auto 24px' }}>{t('dash_pending_verification')}</p>
+          <button
+            type="button"
+            className="ops-go"
+            style={{ marginTop: 0 }}
+            onClick={() => signOut(auth).then(() => navigate('/'))}
+          >
+            <i aria-hidden="true" />{t('dash_back_to_login')}
+          </button>
         </div>
-        <h2 className="text-lg sm:text-xl font-bold text-teal-900">{t('dash_account_created')}</h2>
-        <p className="mt-3 sm:mt-4 text-sm text-gray-500">{t('dash_pending_verification')}</p>
-        <button
-          onClick={() => signOut(auth).then(() => navigate('/'))}
-          className="mt-6 rounded-lg bg-teal-700 px-6 py-2 text-sm font-medium text-white hover:bg-teal-800"
-        >
-          {t('dash_back_to_login')}
-        </button>
       </div>
     );
   }
@@ -835,221 +721,258 @@ export function EmployerDashboard() {
     return loans.filter((l) => l.status === key).length;
   }
 
+  /* ── the board: everything below is derived from `employer`, `stats` and
+     `loans` — the reads above — and names real objects in the operation:
+     this employer, its last quincenas, the CURP and IMSS files. ── */
+  const lang = i18n.language;
+  const cur = quincenaStart(new Date());
+  const curKey = quincenaKey(cur);
+  const label = (start: Date) => t('ops_quincena', { day: start.getDate(), month: monthShort(start, lang) });
+  const curLabel = label(cur);
+  const prev1 = shiftQuincena(cur, -1);
+  const prev2 = shiftQuincena(cur, -2);
+
+  const byPeriod = new Map<string, { start: Date; loans: Loan[] }>();
+  for (const l of loans) {
+    if (!l.createdAt) continue;
+    const start = quincenaStart(new Date(l.createdAt.seconds * 1000));
+    const key = quincenaKey(start);
+    const g = byPeriod.get(key) ?? { start, loans: [] };
+    g.loans.push(l);
+    byPeriod.set(key, g);
+  }
+  const countIn = (start: Date) => byPeriod.get(quincenaKey(start))?.loans.length ?? 0;
+  const isApproved = (l: Loan) => ['approved', 'disbursement_queued', 'active', 'disbursed', 'repaid', 'paid'].includes(l.status);
+  const periodRows = [
+    { start: cur, loans: byPeriod.get(curKey)?.loans ?? [], current: true },
+    ...[...byPeriod.values()]
+      .filter((g) => quincenaKey(g.start) !== curKey)
+      .sort((a, b) => b.start.getTime() - a.start.getTime())
+      .slice(0, 3)
+      .map((g) => ({ ...g, current: false })),
+  ];
+
+  const onSchedule = stats ? Math.max(0, stats.activeLoans - stats.overdueCount) : 0;
+  const pct = stats && stats.activeLoans > 0 ? Math.round((onSchedule / stats.activeLoans) * 100) : null;
+
+  const folders: { i: number; label: string; n: number; lit?: boolean; kind: IconName }[] = [
+    { i: -3, label: employer?.companyName ?? '', n: stats?.totalEmployees ?? employer?.totalEmployees ?? 0, kind: 'empleador' },
+    { i: -2, label: label(prev2), n: countIn(prev2), kind: 'quincena' },
+    { i: -1, label: label(prev1), n: countIn(prev1), kind: 'quincena' },
+    { i: 0, label: curLabel, n: countIn(cur), lit: true, kind: 'quincena' },
+    { i: 1, label: t('ops_folder_curp'), n: employer?.curpConfig?.prefixes?.length ?? 0, kind: 'kyc' },
+    { i: 2, label: t('ops_folder_imss'), n: employer?.sampleCurps?.length ?? 0, kind: 'contrato' },
+  ];
+
+  const partB = employer?.partBStatus;
+
   return (
     <div>
-      {/* Header */}
-      <div style={{ marginBottom: 8 }} className="dash-header">
-        <h1>{employer?.companyName}</h1>
-        <div className="dash-user">
-          <span>
-            {t('dash_employer_code')}: <strong>{employer?.employerCode}</strong>
-          </span>
-          <div className="dash-avatar">
-            {employer?.name?.charAt(0) || 'E'}
-          </div>
-        </div>
-      </div>
+      <div className="ops-board">
+        {/* ── stage ── */}
+        <section className="ops-panel stage" aria-labelledby="emp-stage-title">
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_payroll')} · {curLabel}</div>
+          <h1 id="emp-stage-title" className="ops-title">{employer?.companyName}</h1>
+          <p className="ops-sub">
+            {t('dash_employer_code')} · <strong>{employer?.employerCode}</strong>
+          </p>
 
-      {/* Content */}
-      <div className="dash-content">
-        {/* ── Premium Employer Stats ── */}
-        {statsError ? (
-          <div style={{ marginBottom: 40 }}>
-            <ErrorBanner message={`${t('dash_stats_error')} ${statsError}`} />
-            <button onClick={retryStats} className="btn-primary" style={{ width: 'auto', padding: '8px 20px', marginTop: 12 }}>
-              {t('dash_retry')}
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 40 }}>
-            {[
-              {
-                label: t('dash_total_employees'),
-                value: stats ? String(stats.totalEmployees) : '—',
-                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a8d5d0" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
-                accent: 'rgba(168,213,208,0.1)',
-              },
-              {
-                label: t('dash_active_loans'),
-                value: stats ? String(stats.activeLoans) : '—',
-                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
-                accent: 'rgba(36,122,110,0.06)',
-              },
-              {
-                label: t('dash_pending_requests'),
-                value: String(pendingCount),
-                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
-                accent: 'rgba(162,134,87,0.06)',
-              },
-              {
-                label: t('dash_overdue_count'),
-                value: stats ? String(stats.overdueCount) : '—',
-                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c1121f" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>,
-                accent: 'rgba(193,18,31,0.06)',
-              },
-              {
-                label: t('dash_total_disbursed'),
-                value: stats ? '$' + fmt(stats.totalDisbursed) : '—',
-                sub: 'MXN',
-                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
-                accent: 'rgba(25,68,69,0.04)',
-              },
-              {
-                label: t('dash_outstanding_balance'),
-                value: stats ? '$' + fmt(stats.outstandingBalance) : '—',
-                sub: 'MXN',
-                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
-                accent: 'rgba(162,134,87,0.06)',
-              },
-            ].map((stat, i) => (
-              <div key={i} style={{
-                background: '#fff', borderRadius: 20, padding: '24px 24px 20px',
-                border: '1px solid rgba(25,68,69,0.04)',
-                transition: 'all 0.3s cubic-bezier(0.22,1,0.36,1)',
-                position: 'relative', overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 12, background: stat.accent,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-                }}>
-                  {stat.icon}
-                </div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const, color: 'var(--gold)', marginBottom: 8 }}>
-                  {stat.label}
-                </div>
-                <div style={{ fontFamily: 'var(--df)', fontSize: 36, color: 'var(--t1)', letterSpacing: '-0.03em', lineHeight: 1 }}>
-                  {stat.value}
-                </div>
-                {stat.sub && <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>{stat.sub}</div>}
+          <div className="ops-objects" aria-hidden="true">
+            {folders.map((f) => (
+              <div key={f.i} className={`ops-object${f.lit ? ' lit' : ''}`}>
+                <Icon name={f.kind} size={26} />
+                <b>{f.n}</b>
+                <span>{f.label}</span>
               </div>
             ))}
           </div>
-        )}
 
-        {/* Payroll + CURP config moved below loans */}
-
-        {/* Loans Table */}
-        <div className="card">
-          <div className="card-title">{t('dash_recent_loans')}</div>
-
-          {/* Tabs */}
-          <div className="dash-tabs" style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(25,68,69,0.08)', marginBottom: 20 }}>
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`dash-tab-btn${activeTab === tab.key ? ' dash-tab-active' : ''}`}
-                style={{
-                  padding: '10px 16px',
-                  fontSize: 13,
-                  fontWeight: activeTab === tab.key ? 700 : 500,
-                  color: activeTab === tab.key ? 'var(--brand)' : 'var(--t3)',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: activeTab === tab.key ? '2px solid var(--brand)' : '2px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'all .2s',
-                }}
-              >
-                {tab.label} ({tabCount(tab.key)})
-              </button>
-            ))}
-          </div>
-
-          {loading ? (
-            <div style={{ padding: 20 }}>
-              <SkeletonRows rows={3} />
+          <div className="ops-prog">
+            <div className="h"><span>{curLabel}</span><span aria-hidden="true">↗</span></div>
+            <div className="d">
+              {pct === null
+                ? t('ops_prog_none')
+                : t('ops_prog_on_schedule', { ok: onSchedule, total: stats!.activeLoans })}
             </div>
-          ) : filteredLoans.length === 0 ? (
-            <div className="empty-state">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                <path d="M14 2v6h6" />
-              </svg>
-              <p>
-                {t('dash_no_loans_employer')} <strong>{employer?.employerCode}</strong> {t('dash_no_loans_employer_2')}
-              </p>
+            <div className="v">{pct === null ? '—' : <>{pct}<b>%</b></>}</div>
+            <span className="dotg" aria-hidden="true" />
+          </div>
+        </section>
+
+        {/* ── data ── */}
+        <section className="ops-panel data" aria-labelledby="emp-data-title">
+          <span className="ops-tag" id="emp-data-title"><i aria-hidden="true" />{t('ops_live_payroll')}</span>
+
+          {statsError ? (
+            <div style={{ marginTop: 22 }}>
+              <ErrorBanner message={`${t('dash_stats_error')} ${statsError}`} />
+              <button type="button" onClick={retryStats} className="ops-btn" style={{ marginTop: 12 }}>
+                {t('dash_retry')}
+              </button>
             </div>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t('dash_th_employee')}</th>
-                    <th>{t('dash_th_amount')}</th>
-                    <th>{t('dash_th_term')}</th>
-                    <th>{t('dash_th_status')}</th>
-                    <th>{t('dash_th_date')}</th>
-                    <th>{t('dash_th_action', 'Acción')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLoans.map((loan) => (
-                    <tr key={loan.id}>
-                      <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
-                      <td>${fmt(loan.amount)}</td>
-                      <td>{loan.term ?? 30} {t('dash_days')}</td>
-                      <td>
-                        <span className={`badge badge-${loan.status}`}>
-                          {t(`status_${loan.status}`, loan.status)}
-                        </span>
-                      </td>
-                      <td>
-                        {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString() : '—'}
-                      </td>
-                      <td>
-                        {loan.status === 'pending' ? (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              disabled={actionLoading === loan.id}
-                              onClick={() => handleLoanAction(loan.id, 'approved')}
-                              style={{
-                                padding: '5px 12px', fontSize: 12, fontWeight: 600,
-                                background: 'var(--brand, var(--brand))', color: '#fff',
-                                border: 'none', borderRadius: 8, cursor: 'pointer',
-                                opacity: actionLoading === loan.id ? 0.5 : 1,
-                              }}
-                            >
-                              {actionLoading === loan.id ? '...' : t('dash_approve', 'Aprobar')}
-                            </button>
-                            <button
-                              disabled={actionLoading === loan.id}
-                              onClick={() => handleLoanAction(loan.id, 'rejected')}
-                              style={{
-                                padding: '5px 12px', fontSize: 12, fontWeight: 600,
-                                background: 'transparent', color: 'var(--danger)',
-                                border: '1px solid #c1121f', borderRadius: 8, cursor: 'pointer',
-                                opacity: actionLoading === loan.id ? 0.5 : 1,
-                              }}
-                            >
-                              {t('dash_reject', 'Rechazar')}
-                            </button>
-                          </div>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <>
+              <div className="ops-kpis">
+                <div className="ops-kpi">
+                  <small>{t('dash_outstanding_balance')}</small>
+                  <b>{stats ? '$' + fmt(stats.outstandingBalance) : '—'}<span>MXN</span></b>
+                </div>
+                <div className="ops-kpi">
+                  <small>{t('dash_active_loans')}</small>
+                  <b>{stats ? String(stats.activeLoans) : '—'}</b>
+                </div>
+                <div className={`ops-kpi${stats && stats.overdueCount > 0 ? ' warn' : ''}`}>
+                  <small>{t('dash_overdue_count')}</small>
+                  <b>{stats ? String(stats.overdueCount) : '—'}</b>
+                </div>
+              </div>
+              <div className="ops-kpi-line">
+                {t('dash_total_disbursed')} <span>{stats ? '$' + fmt(stats.totalDisbursed) : '—'}</span> MXN
+                {' · '}{t('dash_total_employees')} <span>{stats ? String(stats.totalEmployees) : '—'}</span>
+                {' · '}{t('dash_adoption_rate')} <span>{stats ? stats.adoptionRate : '—'}</span>
+                {' · '}{t('dash_pending_requests')} <span>{pendingCount}</span>
+              </div>
+            </>
+          )}
+
+          <h2 className="ops-h3">{t('ops_requests_by_period')}</h2>
+          {periodRows.map((g) => {
+            const approved = g.loans.filter(isApproved).length;
+            const sum = g.loans.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+            return (
+              <div className="ops-batch" key={quincenaKey(g.start)}>
+                <span className={`fl${g.current ? ' g' : ''}`} aria-hidden="true" />
+                <span className="t">
+                  {label(g.start)}
+                  <small>{t('ops_row_requests', { count: g.loans.length, approved })}</small>
+                </span>
+                <span className={`p${g.current ? ' g' : ''}`}>{g.loans.length > 0 ? '$' + fmt(sum) : '—'}</span>
+              </div>
+            );
+          })}
+
+          {partB !== 'completed' && (
+            <div className="ops-due">
+              <i aria-hidden="true" />
+              <span>
+                {t('ops_due_imss')}
+                <small>{partB === 'pending' ? t('ops_due_imss_review') : t('ops_due_imss_pending')}</small>
+              </span>
             </div>
           )}
+
+          <button type="button" className="ops-go" onClick={() => navigate('/employer/payroll')}>
+            <i aria-hidden="true" />{t('ops_go_upload_payroll', { period: curLabel })}
+          </button>
+        </section>
+      </div>
+
+      {/* ── requests ── */}
+      <section className="ops-card" aria-labelledby="emp-loans-title">
+        <div className="ops-card-head">
+          <h2 id="emp-loans-title" className="ops-h3">{t('dash_recent_loans')}</h2>
+          <div className="ops-chips">
+            {tabs.map((tab) => {
+              const on = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`ops-chip${on ? ' on' : ''}`}
+                  aria-pressed={on}
+                >
+                  {tab.label}<span className="cnt">{tabCount(tab.key)}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Payroll Deduction Setup (Part B) — below loans for cleaner dashboard */}
-        {employer?.partBStatus !== 'completed' && (
-          <PayrollDeductionCard
-            employer={employer!}
-            onSubmitted={() => setEmployer(prev => prev ? { ...prev, partBStatus: 'pending' } : prev)}
-          />
+        {loading ? (
+          <div style={{ padding: 20 }}>
+            <SkeletonRows rows={3} />
+          </div>
+        ) : filteredLoans.length === 0 ? (
+          <div className="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <path d="M14 2v6h6" />
+            </svg>
+            <p>
+              {t('dash_no_loans_employer')} <strong>{employer?.employerCode}</strong> {t('dash_no_loans_employer_2')}
+            </p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('dash_th_employee')}</th>
+                  <th>{t('dash_th_amount')}</th>
+                  <th>{t('dash_th_term')}</th>
+                  <th>{t('dash_th_status')}</th>
+                  <th>{t('dash_th_date')}</th>
+                  <th>{t('dash_th_action', 'Acción')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLoans.map((loan) => (
+                  <tr key={loan.id}>
+                    <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
+                    <td>${fmt(loan.amount)}</td>
+                    <td>{loan.term ?? 30} {t('dash_days')}</td>
+                    <td>
+                      <span className={`badge badge-${loan.status}`}>
+                        {t(`status_${loan.status}`, loan.status)}
+                      </span>
+                    </td>
+                    <td>
+                      {loan.createdAt ? new Date(loan.createdAt.seconds * 1000).toLocaleDateString() : '—'}
+                    </td>
+                    <td>
+                      {loan.status === 'pending' ? (
+                        <div className="ops-actions">
+                          <button
+                            type="button"
+                            className="ops-btn sm"
+                            disabled={actionLoading === loan.id}
+                            onClick={() => handleLoanAction(loan.id, 'approved')}
+                          >
+                            {actionLoading === loan.id ? '...' : t('dash_approve', 'Aprobar')}
+                          </button>
+                          <button
+                            type="button"
+                            className="ops-btn sm ghost danger"
+                            disabled={actionLoading === loan.id}
+                            onClick={() => handleLoanAction(loan.id, 'rejected')}
+                          >
+                            {t('dash_reject', 'Rechazar')}
+                          </button>
+                        </div>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
+      </section>
 
-        {/* CURP Configuration — below loans */}
-        <CurpConfigCard
+      {/* Payroll Deduction Setup (Part B) — below requests */}
+      {employer?.partBStatus !== 'completed' && (
+        <PayrollDeductionCard
           employer={employer!}
-          onUpdated={(config) => setEmployer(prev => prev ? { ...prev, curpConfig: config } : prev)}
+          onSubmitted={() => setEmployer(prev => prev ? { ...prev, partBStatus: 'pending' } : prev)}
         />
+      )}
 
-      </div>
+      {/* CURP Configuration — below requests */}
+      <CurpConfigCard
+        employer={employer!}
+        onUpdated={(config) => setEmployer(prev => prev ? { ...prev, curpConfig: config } : prev)}
+      />
     </div>
   );
 }

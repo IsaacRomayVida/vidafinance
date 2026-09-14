@@ -1,6 +1,6 @@
 export type RootStackParamList = {
   Home: undefined;
-  Loans: undefined;
+  Loans: { filter?: 'all' | 'active' | 'paid' } | undefined;
   RequestLoan: undefined;
 };
 

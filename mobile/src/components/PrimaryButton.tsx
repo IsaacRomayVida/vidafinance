@@ -1,14 +1,14 @@
 /**
- * The one CTA of the design language: a deep brand-gradient pill with press
- * scale, a busy spinner, and a disabled state that dims without moving.
- * Every screen used to hand-roll this Pressable+LinearGradient pair; this is
- * that pattern extracted so the eight call sites stay identical.
+ * The pills. `PrimaryButton` is the ONE saturated control a screen gets —
+ * flat --cta green, ink type, no gradient, no shadow. `variant="ink"` is
+ * the dark pill (cream type) for a screen whose green is already spent.
+ * `GhostButton` is plain ink text.
  */
-import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, fonts, gradient, radii, spacing } from '../theme';
+import { colors, fonts, radii, spacing } from '../theme';
 import { PressableScale } from './motion';
 
 export function PrimaryButton({
@@ -16,6 +16,7 @@ export function PrimaryButton({
   onPress,
   disabled = false,
   busy = false,
+  variant = 'cta',
   style,
   testID,
 }: {
@@ -23,13 +24,20 @@ export function PrimaryButton({
   onPress: () => void;
   disabled?: boolean;
   busy?: boolean;
+  variant?: 'cta' | 'ink';
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
   const blocked = disabled || busy;
+  const ink = variant === 'ink';
   return (
     <PressableScale
-      onPress={onPress}
+      onPress={() => {
+        // Medium, not Light: mid-range Android motors (Galaxy A-series) render
+        // Light as imperceptible; Medium reads as a tap on both platforms.
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        onPress();
+      }}
       disabled={blocked}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -37,23 +45,17 @@ export function PrimaryButton({
       testID={testID}
       style={style}
     >
-      <LinearGradient
-        colors={gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.button, blocked && styles.dimmed]}
-      >
+      <View style={[styles.button, ink && styles.ink, blocked && styles.dimmed]}>
         {busy ? (
-          <ActivityIndicator color={colors.onBrand} />
+          <ActivityIndicator color={ink ? colors.cream : colors.ink} />
         ) : (
-          <Text style={styles.label}>{label}</Text>
+          <Text style={[styles.label, ink && styles.labelInk]}>{label}</Text>
         )}
-      </LinearGradient>
+      </View>
     </PressableScale>
   );
 }
 
-/** Quiet sibling: a frosted pill for secondary actions beside the hero CTA. */
 export function GhostButton({
   label,
   onPress,
@@ -85,17 +87,19 @@ export function GhostButton({
 const styles = StyleSheet.create({
   button: {
     borderRadius: radii.pill,
-    paddingVertical: spacing.m + 2,
     paddingHorizontal: spacing.l,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: 54,
+    backgroundColor: colors.cta,
   },
-  dimmed: { opacity: 0.55 },
-  label: { fontFamily: fonts.sansBold, color: colors.onBrand, fontSize: 16 },
+  ink: { backgroundColor: colors.ink },
+  dimmed: { opacity: 0.45 },
+  label: { fontFamily: fonts.sansBold, color: colors.ink, fontSize: 16 },
+  labelInk: { color: colors.cream },
   ghost: {
-    fontFamily: fonts.sansBold,
-    color: colors.brandLight,
+    fontFamily: fonts.sansMedium,
+    color: colors.ink,
     fontSize: 15,
     textAlign: 'center',
     paddingVertical: spacing.m,
