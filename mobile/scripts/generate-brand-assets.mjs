@@ -17,7 +17,7 @@
  * committed by this script; it writes to --out (default ./brand-assets) and the
  * workflow uploads that folder as an artifact for review.
  *
- * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films|trust-still|all [--out dir] [--pro]
+ * USAGE: node scripts/generate-brand-assets.mjs --set imagery|icons|stages|animate|intros|loops|hero-stills[-phone]|hero-films[-desktop|-phone]|board-films|page-stills|page-films[-desktop]|trust-still|all [--out dir] [--pro]
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -227,12 +227,20 @@ const PAGE_STILLS = [
 const STILL_PEOPLE = 'The exposure, brightness and colour of the whole frame stay exactly constant from first frame to last — no brightening, no flare, no fade. No object changes shape, opens, appears or disappears. Nobody turns toward the camera and no face becomes visible. The last frame is identical to the first.';
 const WAITER_MOTION = `He finishes fastening the cuff and lowers his hands, takes one slow, calm breath so his shoulders rise and settle, and brings his hands back to the cuff as in the first frame. Fine dust drifts in the window light. ${STILL_PEOPLE} ${MOTION}`;
 const OFFICE_MOTION = `The manager stays seated at the laptop, working, with only the smallest natural movement of the head and shoulders. Outside the window the coconut palms sway gently in the breeze and their soft shadows move faintly. ${STILL_PEOPLE} ${MOTION}`;
+// Take 1 (run 34860181217): both 9:16 films passed; both 16:9 films turned a
+// head into readable profile. In the wide shots the person is larger, so
+// there the person is frozen and the setting alone moves.
+const FROZEN_PERSON = 'The person does not move at all for the entire shot — completely still like a statue, head fixed, facing away exactly as in the first frame; no head turn, no nod, no glance.';
+const WAITER_WIDE_MOTION = `${FROZEN_PERSON} Only the light moves: fine dust drifts slowly through the soft window light and the light on the wall shifts almost imperceptibly. ${STILL_PEOPLE} ${MOTION}`;
+const OFFICE_WIDE_MOTION = `${FROZEN_PERSON} Only the world outside the window moves: the coconut palms and garden sway gently in the breeze. ${STILL_PEOPLE} ${MOTION}`;
 const PAGE_FILMS = ['employee-hero-16x9', 'employee-hero-9x16', 'employer-hero-16x9', 'employer-hero-9x16'].map((name) => {
   const still = `public-v2/public/images/brand/${name}.jpg`;
+  const wide = name.endsWith('16x9');
+  const employee = name.startsWith('employee');
   return {
     file: `${name}.mp4`, imageFile: still, endImageFile: still,
-    aspect: name.endsWith('9x16') ? '9:16' : '16:9', duration: '8',
-    prompt: name.startsWith('employee') ? WAITER_MOTION : OFFICE_MOTION,
+    aspect: wide ? '16:9' : '9:16', duration: '8',
+    prompt: wide ? (employee ? WAITER_WIDE_MOTION : OFFICE_WIDE_MOTION) : employee ? WAITER_MOTION : OFFICE_MOTION,
   };
 });
 
@@ -246,7 +254,7 @@ const BOARD_FILMS = [
     // The lunch film was rejected: the backpack morphed open and swallowed
     // the bag. Walking away is a motion the model renders cleanly.
     file: 'board-trust-walk.mp4', imageFile: 'public-v2/public/images/brand/moment-school-walk.jpg', aspect: '16:9', duration: '8',
-    prompt: `The mother and her son keep walking slowly away along the sidewalk, hand in hand, in a natural easy rhythm; the leaves above them move gently and the dappled shade shifts on the pavement. Both stay seen from behind for the entire shot: neither turns around and no face is ever visible. Their hands stay joined. The backpack does not change shape. The exposure, brightness and colour stay constant. ${MOTION}`,
+    prompt: `The mother and her son keep walking slowly away along the sidewalk, hand in hand, in a natural easy rhythm; the leaves above them move gently and the dappled shade shifts on the pavement. Both stay seen from behind for the entire shot: neither turns around and no face is ever visible. Their hands stay joined. The backpack does not change shape. There is nobody else anywhere in the scene and no other shadows: no shadow of a person appears on the walls or the ground. The exposure, brightness and colour stay constant. ${MOTION}`,
   },
 ];
 
@@ -358,5 +366,6 @@ if (SET === 'hero-films-phone') await runAll(HERO_FILMS.filter((x) => aspectOf(x
 if (SET === 'board-films') await runAll(BOARD_FILMS, generateFilm);
 if (SET === 'page-stills') await runAll(PAGE_STILLS, generateImage);
 if (SET === 'page-films') await runAll(PAGE_FILMS, generateFilm);
+if (SET === 'page-films-desktop') await runAll(PAGE_FILMS.filter((x) => x.aspect === '16:9'), generateFilm);
 if (SET === 'trust-still') await runAll(PAGE_STILLS.filter((x) => x.file === TRUST_STILL_NAME), generateImage);
 if (failures.length) { console.error(`\n${failures.length} asset(s) failed:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }

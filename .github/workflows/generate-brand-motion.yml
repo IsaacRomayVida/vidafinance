@@ -29,6 +29,7 @@ on:
           - board-films
           - page-stills
           - page-films
+          - page-films-desktop
           - trust-still
           - all
       pro:
