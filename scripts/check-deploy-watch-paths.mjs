@@ -39,7 +39,8 @@
  * Everything above holds only while this service stays Dockerfile-built from
  * the repo root. If the Dockerfile disappears, or a Railway config file
  * appears (`railwayConfigFile` is null on service instance
- * `0cf12987-4aba-4b20-942f-c8436d956723` as of 2026-08-06, which is the only
+ * `50df620b-535e-4a60-8c5e-7d71a95c60b9` as of 2026-09-17 (and on its predecessor in vida-backend
+ * before that), which is the only
  * reason the Dockerfile is authoritative), or a `COPY` source stops resolving
  * from the repo root, then this check would be comparing the filter against a
  * build that no longer exists — and it would pass. A green check on a false
