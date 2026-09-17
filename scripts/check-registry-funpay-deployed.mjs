@@ -218,7 +218,7 @@ function railway(query, variables, token) {
   const out = execFileSync(
     'curl',
     ['-sS', '--max-time', '30', RAILWAY_API,
-     '-H', `Project-Access-Token: ${token}`,
+     '-H', `Authorization: Bearer ${token}`,
      '-H', 'Content-Type: application/json',
      '--data', body],
     { encoding: 'utf8' }

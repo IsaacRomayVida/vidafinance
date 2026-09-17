@@ -68,7 +68,7 @@ jobs:
     timeout-minutes: 10
     environment: production
     env:
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
       RAILWAY_SERVICE_ID: 50df620b-535e-4a60-8c5e-7d71a95c60b9
 
     steps:
