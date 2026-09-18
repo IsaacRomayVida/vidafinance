@@ -4,6 +4,9 @@ const admin   = require('firebase-admin');
 const IORedis = require('ioredis');
 const { alert5xx, alertRateLimit, alertFraudScore, alertFirestoreFailure, alertRedisLost } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
+// Accepts INTERNAL_SECRET or, during a rotation, INTERNAL_SECRET_ALT --
+// see services/shared/internal-secret.js. Constant-time either way.
+const { requireInternal } = require('../shared/internal-secret');
 require('dotenv').config();
 
 // Fail closed: requireInternal compares the request header against
@@ -98,12 +101,6 @@ app.use((req, res, next) => {
   };
   next();
 });
-
-const requireInternal = (req, res, next) => {
-  if (req.headers['x-internal-secret'] !== process.env.INTERNAL_SECRET)
-    return res.status(401).json({ error: 'Unauthorized' });
-  next();
-};
 
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {

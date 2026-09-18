@@ -2,9 +2,10 @@ name: Deploy registry-service-funpay (Railway)
 
 # ⚠️ THIS WORKFLOW EXISTS BECAUSE THE SERVICE HAS NO RAILWAY DEPLOYMENT TRIGGER.
 #
-# `registry-service-funpay` (Railway project `vida-backend`) is not wired to any
-# deployment trigger: the project has exactly 5 triggers and all of them point at
-# `vidatravel/main`. Nothing in Railway watches this repo for this service.
+# `registry-service-funpay` (Railway project `FunPay`, FunPay's own
+# project since 2026-09-17; it previously ran inside Funtrip's `vida-backend`) is
+# not wired to any deployment trigger. Nothing in Railway watches this repo for
+# this service.
 #
 # What that cost, measured rather than hypothesised: the service ran commit
 # `e431dbd` (2026-07-30) in production for six days. #524 (a DB outage hung every
@@ -65,9 +66,9 @@ permissions:
 
 env:
   RAILWAY_API: https://backboard.railway.app/graphql/v2
-  RAILWAY_PROJECT_ID: e1334895-9fdc-4cab-9a3c-73416719c553
-  RAILWAY_SERVICE_ID: 0cf12987-4aba-4b20-942f-c8436d956723
-  RAILWAY_ENVIRONMENT_ID: 524fdbc8-c800-4c0a-bc0f-c962a0fb7ef4
+  RAILWAY_PROJECT_ID: 1ad040b4-6f0b-4530-9f58-0a1ef5e89c75
+  RAILWAY_SERVICE_ID: 50df620b-535e-4a60-8c5e-7d71a95c60b9
+  RAILWAY_ENVIRONMENT_ID: 441caff4-8cc1-401f-93e2-30c49fe5d2d9
   # Must match the TARGETS entry in scripts/check-deploy-watch-paths.mjs. That
   # script derives the `paths:` list's required coverage from this Dockerfile's
   # COPY set; the guard below confirms Railway still builds from it.
@@ -99,7 +100,7 @@ jobs:
             local payload="$1" out="$2" http
             http=$(curl -sS --max-time 60 -o "$out" -w '%{http_code}' \
               "$RAILWAY_API" \
-              -H "Project-Access-Token: ${RAILWAY_TOKEN}" \
+              -H "Authorization: Bearer ${RAILWAY_TOKEN}" \
               -H "Content-Type: application/json" \
               --data "$payload") || { echo "::error::curl failed talking to Railway"; return 1; }
 
@@ -199,7 +200,7 @@ jobs:
       # is neither.
       - name: Confirm Railway still builds this service the way the paths filter assumes
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -euo pipefail
           . "${RUNNER_TEMP}/railway.sh"
@@ -259,7 +260,7 @@ jobs:
 
       - name: Record the deployment that is live before we trigger
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -euo pipefail
           . "${RUNNER_TEMP}/railway.sh"
@@ -285,14 +286,15 @@ jobs:
 
       - name: Trigger the deploy
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -euo pipefail
           . "${RUNNER_TEMP}/railway.sh"
 
-          # `Project-Access-Token`, not `Authorization: Bearer`, and deliberately
-          # not the Railway CLI: the CLI rejects project-scoped tokens outright,
-          # which is what killed vidatravel run 30593326618.
+          # The GraphQL API with the account token (RAILWAY_API_TOKEN, Bearer) and
+          # deliberately not the Railway CLI. Since the move to FunPay
+          # (2026-09-17) the repo's RAILWAY_TOKEN is not authorised for this
+          # service, while RAILWAY_API_TOKEN is proven to see the project.
           #
           # `latestCommit: true` rather than `commitSha: $GITHUB_SHA`, even though
           # the mutation accepts both and the service is linked to this same repo
@@ -319,7 +321,7 @@ jobs:
 
       - name: Wait for the new deployment to reach a terminal state
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -euo pipefail
           . "${RUNNER_TEMP}/railway.sh"

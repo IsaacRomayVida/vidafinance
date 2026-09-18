@@ -1,33 +1,54 @@
 @import "tailwindcss";
+@import "./tokens.css";
+@import "./borrower.css";
+@import "./ops.css";
+@import "./marketing.css";
 
 @theme {
-  /* VIDA Brand Palette */
-  --color-teal-50: #e6eded;
-  --color-teal-100: #c0d3d4;
-  --color-teal-200: #97b7b8;
-  --color-teal-300: #6d9b9c;
-  --color-teal-400: #4d8687;
-  --color-teal-500: #2e7172;
-  --color-teal-600: #29696a;
-  --color-teal-700: #235e5f;
-  --color-teal-800: #1d5455;
-  --color-teal-900: #194445;
-  --color-teal-950: #0f2a2b;
+  /* funpay-ui — the Tailwind scale is aliased onto the skill tokens
+     (src/styles/tokens.css) so every existing utility class lands in the
+     new palette. "teal" is now the ink/moss ramp; "gold" is peach/clay. */
+  --color-teal-50: #f3f4ec;
+  --color-teal-100: #eaf0e3;
+  --color-teal-200: #dbe9d6;
+  --color-teal-300: #a9b46c;
+  --color-teal-400: #6f8a4a;
+  --color-teal-500: #2f4a22;
+  --color-teal-600: #2f4a22;
+  --color-teal-700: #3a3d38;
+  --color-teal-800: #3a3d38;
+  --color-teal-900: #1e201d;
+  --color-teal-950: #1e201d;
 
-  --color-gold-50: #f5f0e7;
-  --color-gold-100: #e6d9c3;
-  --color-gold-200: #d5c09b;
-  --color-gold-300: #c4a773;
-  --color-gold-400: #b89455;
-  --color-gold-500: #a28657;
-  --color-gold-600: #977a4c;
-  --color-gold-700: #886b3f;
-  --color-gold-800: #7a5d33;
-  --color-gold-900: #644520;
-  --color-gold-950: #3a2710;
+  --color-gold-50: #f8f1ea;
+  --color-gold-100: #f2c4a0;
+  --color-gold-200: #f2c4a0;
+  --color-gold-300: #e6b08a;
+  --color-gold-400: #d99c74;
+  --color-gold-500: #c9885f;
+  --color-gold-600: #b8774f;
+  --color-gold-700: #9c6340;
+  --color-gold-800: #7d4e32;
+  --color-gold-900: #5e3a24;
+  --color-gold-950: #3a2415;
 
-  --font-sans: 'DM Sans', system-ui, sans-serif;
-  --font-display: 'DM Serif Display', Georgia, serif;
+  --color-cream: #f3f4ec;
+  --color-sage: #dbe9d6;
+  --color-mint: #c9ecdc;
+  --color-ink: #1e201d;
+  --color-mute: #a2aa9c;
+  --color-cta: #2fc04e;
+  --color-harmony: #68e78e;
+  --color-charcoal: #000b1a;
+  --color-forest: #1c4a30;
+
+  --font-sans: 'Urbanist', system-ui, sans-serif;
+  --font-display: 'Urbanist', system-ui, sans-serif;
+  --font-dot: 'Doto', 'Matricha', monospace;
+
+  --radius-board: 26px;
+  --radius-card: 20px;
+  --radius-pill: 40px;
 }
 
 /* ═══════════════════════════════════════════════════════════════

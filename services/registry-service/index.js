@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const express = require('express');
 const helmet = require('helmet');
 require('dotenv').config();
@@ -6,6 +5,7 @@ require('dotenv').config();
 const { alert5xx } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
 const { getPool } = require('../shared/registry/pool');
+const { presentedSecretAccepted } = require('../shared/internal-secret');
 const {
   resolveOrCreateEntity,
   addExternalRef,
@@ -39,25 +39,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Constant-time compare, matching softcredito-adapter's lib/internalAuth.js
-// -- whose header comment already claims "same pattern as ... vida-registry-
-// service", which was not true of the plain !== this replaces.
-// crypto.timingSafeEqual throws when the buffers differ in length, and the
-// presented value's length is entirely the caller's, so hash both sides
-// first to get two fixed-width 32-byte digests. The boot check above is what
-// keeps this fail-closed: with INTERNAL_SECRET unset both sides would be
-// undefined and every /internal route would be open, so the service refuses
-// to start instead.
-function secretMatches(secret, presented) {
-  if (typeof secret !== 'string' || typeof presented !== 'string') return false;
-  if (!secret || !presented) return false;
-  const a = crypto.createHash('sha256').update(secret).digest();
-  const b = crypto.createHash('sha256').update(presented).digest();
-  return crypto.timingSafeEqual(a, b);
-}
+// One implementation of the compare, shared by every service that verifies
+// this header (services/shared/internal-secret.js). It accepts INTERNAL_SECRET
+// and, while a rotation is in flight, INTERNAL_SECRET_ALT -- hashing both
+// sides before crypto.timingSafeEqual, which throws on a length mismatch and
+// whose presented length is entirely the caller's. The boot check above is
+// what keeps this fail-closed: with INTERNAL_SECRET unset, both sides would be
+// undefined and every /internal route would be open, so the service refuses to
+// start instead.
 
 const requireInternal = (req, res, next) => {
-  if (!secretMatches(process.env.INTERNAL_SECRET, req.headers['x-internal-secret'])) {
+  if (!presentedSecretAccepted(req.headers['x-internal-secret'])) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();

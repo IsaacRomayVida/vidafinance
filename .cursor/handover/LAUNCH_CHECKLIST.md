@@ -12,7 +12,7 @@ An item is ✅ only if: code merged to main AND deployed to production AND verif
 
 ### Infrastructure
 - ✅ Firebase project, Firestore, Storage, Auth, Functions, Hosting — all deployed
-- ✅ Railway project `observant-miracle` with 6 services running
+- ✅ Railway project `FunPay` with 6 services running
 - ✅ GitHub Actions deploy pipeline
 - ✅ CSP + security headers on Firebase Hosting
 - ✅ Firestore rules hardened (61 unit tests)

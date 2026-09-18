@@ -1,33 +1,23 @@
 /**
- * The FunPay brand mark and wordmark, exactly as the web app draws them.
- *
- * The mark reproduces public-v2/public/favicon.svg geometrically — a deep
- * teal rounded tile, the white F built from three rounded bars, and the
- * gold dot — using plain Views on the favicon's own 48-unit grid, so it
- * needs no SVG dependency and scales crisply at any size. The wordmark
- * matches .funpay-logo: DM Sans bold, tight letterspacing, brand teal
- * ("Funpay" with one capital, as the web renders it).
+ * The FunPay mark and label. The mark keeps the favicon's geometry (the F
+ * built from three rounded bars, the dot) recoloured into the direction: an
+ * ink tile, cream bars, and the dot in --cta — the one green on the mark.
+ * The wordmark is now the Doto label `FUNPAY`, as the skill's brand mark.
  */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, fonts } from '../theme';
 
-export function FunpayMark({ size = 44 }: { size?: number }) {
+export function FunpayMark({ size = 44, tone = 'ink' }: { size?: number; tone?: 'ink' | 'cream' }) {
   const u = size / 48;
+  const tile = tone === 'ink' ? colors.ink : colors.cream;
+  const bar = tone === 'ink' ? colors.cream : colors.ink;
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 11 * u,
-        backgroundColor: colors.brand,
-      }}
-      accessibilityLabel="Funpay"
-    >
-      <View style={[styles.bar, { left: 15 * u, top: 12 * u, width: 6 * u, height: 24 * u, borderRadius: 1.5 * u }]} />
-      <View style={[styles.bar, { left: 15 * u, top: 12 * u, width: 19 * u, height: 6 * u, borderRadius: 1.5 * u }]} />
-      <View style={[styles.bar, { left: 15 * u, top: 21 * u, width: 14 * u, height: 6 * u, borderRadius: 1.5 * u }]} />
+    <View style={{ width: size, height: size, borderRadius: 14 * u, backgroundColor: tile }} accessibilityLabel="FunPay">
+      <View style={[styles.bar, { backgroundColor: bar, left: 15 * u, top: 12 * u, width: 6 * u, height: 24 * u, borderRadius: 3 * u }]} />
+      <View style={[styles.bar, { backgroundColor: bar, left: 15 * u, top: 12 * u, width: 19 * u, height: 6 * u, borderRadius: 3 * u }]} />
+      <View style={[styles.bar, { backgroundColor: bar, left: 15 * u, top: 21 * u, width: 14 * u, height: 6 * u, borderRadius: 3 * u }]} />
       <View
         style={{
           position: 'absolute',
@@ -36,31 +26,25 @@ export function FunpayMark({ size = 44 }: { size?: number }) {
           width: 6 * u,
           height: 6 * u,
           borderRadius: 3 * u,
-          backgroundColor: colors.gold,
+          backgroundColor: colors.cta,
         }}
       />
     </View>
   );
 }
 
-export function FunpayWordmark({
-  size = 22,
-  color = colors.brand,
-}: {
-  size?: number;
-  color?: string;
-}) {
+export function FunpayWordmark({ size = 15, color = colors.ink }: { size?: number; color?: string }) {
   return (
     <Text
-      style={{ fontFamily: fonts.sansBold, fontSize: size, letterSpacing: -0.01 * size, color }}
-      accessibilityLabel="Funpay"
+      style={{ fontFamily: fonts.dot, fontSize: size, letterSpacing: size * 0.06, color, textTransform: 'uppercase' }}
+      accessibilityLabel="FunPay"
     >
-      Funpay
+      FunPay
     </Text>
   );
 }
 
-export function FunpayLogo({ markSize = 40, textSize = 24 }: { markSize?: number; textSize?: number }) {
+export function FunpayLogo({ markSize = 34, textSize = 15 }: { markSize?: number; textSize?: number }) {
   return (
     <View style={styles.row}>
       <FunpayMark size={markSize} />
@@ -70,6 +54,6 @@ export function FunpayLogo({ markSize = 40, textSize = 24 }: { markSize?: number
 }
 
 const styles = StyleSheet.create({
-  bar: { position: 'absolute', backgroundColor: '#ffffff' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bar: { position: 'absolute' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

@@ -467,6 +467,28 @@ service cloud.firestore {
     match /metamap_shadow_log/{d}    { allow read, write: if false; }
 
     // =============================================
+    // QA FEEDBACK — the team-testing portal (alfa) writes tester comments
+    // here anonymously. Create-only, shape-locked, size-capped; reading is
+    // ops-only. No update/delete from any client.
+    // =============================================
+    match /qa_feedback/{id} {
+      allow create: if request.resource.data.keys().hasOnly(
+          ['screen', 'comment', 'name', 'ua', 'createdAt'])
+        && request.resource.data.screen is string
+        && request.resource.data.screen.size() <= 120
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() > 0
+        && request.resource.data.comment.size() <= 1500
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.ua is string
+        && request.resource.data.ua.size() <= 200
+        && request.resource.data.createdAt is timestamp;
+      allow read: if isOps();
+      allow update, delete: if false;
+    }
+
+    // =============================================
     // DENY ALL OTHER PATHS
     // =============================================
     match /{document=**} {

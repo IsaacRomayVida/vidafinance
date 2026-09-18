@@ -142,7 +142,7 @@ Isaac's emergency contact: — **(add your WhatsApp/phone here before handing of
 | Production frontend | https://vida-finance.web.app |
 | Linear workspace | linear.app/vidateam |
 | Sprint 4 project | `VIDA v1.8 — Launch Sprint` |
-| Railway project | `observant-miracle` |
+| Railway project | `FunPay` |
 | Railway ID | `1ad040b4-6f0b-4530-9f58-0a1ef5e89c75` |
 | Firebase project | `vida-finance` |
 | Business plan | `/mnt/project/Business_plan_VIDA_1_6.pdf` (in Claude project) |

@@ -40,23 +40,23 @@ export function ComingSoonForm() {
 
   if (sent) {
     return (
-      <div className="cf-success" role="status" aria-live="polite">
-        <p style={{ fontWeight: 700, color: 'var(--t1)', marginBottom: 8 }}>{t('cs_form_success_h')}</p>
+      <div className="mk-success" role="status" aria-live="polite">
+        <b>{t('cs_form_success_h')}</b>
         <p>{t('cs_form_success_p')}</p>
       </div>
     );
   }
 
   return (
-    <form className="contact-form" onSubmit={handleSubmit}>
-      <fieldset className="cs-toggle" aria-label={t('cs_form_audience_label')}>
-        <legend className="cs-toggle-legend">{t('cs_form_audience_label')}</legend>
-        <div className="cs-toggle-track" role="radiogroup">
+    <form className="mk-form" onSubmit={handleSubmit}>
+      <fieldset className="mk-field" style={{ border: 0, padding: 0, margin: '0 0 16px' }} aria-label={t('cs_form_audience_label')}>
+        <legend className="mk-seg-legend">{t('cs_form_audience_label')}</legend>
+        <div className="mk-seg" role="radiogroup">
           <button
             type="button"
             role="radio"
             aria-checked={audience === 'empresa'}
-            className={`cs-toggle-btn ${audience === 'empresa' ? 'active' : ''}`}
+            className={`mk-seg-btn${audience === 'empresa' ? ' on' : ''}`}
             onClick={() => setAudience('empresa')}
           >
             {t('cs_form_audience_empresa')}
@@ -65,7 +65,7 @@ export function ComingSoonForm() {
             type="button"
             role="radio"
             aria-checked={audience === 'trabajador'}
-            className={`cs-toggle-btn ${audience === 'trabajador' ? 'active' : ''}`}
+            className={`mk-seg-btn${audience === 'trabajador' ? ' on' : ''}`}
             onClick={() => setAudience('trabajador')}
           >
             {t('cs_form_audience_trabajador')}
@@ -73,40 +73,38 @@ export function ComingSoonForm() {
         </div>
       </fieldset>
 
-      <div className="cf-field">
+      <div className="mk-field">
         <label htmlFor="cs-name">{t('cs_form_name')}</label>
-        <input id="cs-name" type="text" name="name" autoComplete="name" placeholder={t('cs_form_name_ph')} required minLength={2} maxLength={100} />
+        <input id="cs-name" className="mk-input" type="text" name="name" autoComplete="name" placeholder={t('cs_form_name_ph')} required minLength={2} maxLength={100} />
       </div>
 
-      <div className="cf-field">
+      <div className="mk-field">
         <label htmlFor="cs-email">{t('cs_form_email')}</label>
-        <input id="cs-email" type="email" name="email" autoComplete="email" inputMode="email" placeholder={t('cs_form_email_ph')} required maxLength={200} />
+        <input id="cs-email" className="mk-input" type="email" name="email" autoComplete="email" inputMode="email" placeholder={t('cs_form_email_ph')} required maxLength={200} />
       </div>
 
       {audience === 'empresa' ? (
-        <div className="cf-field">
+        <div className="mk-field">
           <label htmlFor="cs-company">{t('cs_form_company')}</label>
-          <input id="cs-company" type="text" name="company" autoComplete="organization" placeholder={t('cs_form_company_ph')} maxLength={120} />
+          <input id="cs-company" className="mk-input" type="text" name="company" autoComplete="organization" placeholder={t('cs_form_company_ph')} maxLength={120} />
         </div>
       ) : (
-        <div className="cf-field">
+        <div className="mk-field">
           <label htmlFor="cs-phone">{t('cs_form_phone')}</label>
-          <input id="cs-phone" type="tel" name="phone" autoComplete="tel" inputMode="tel" placeholder={t('cs_form_phone_ph')} maxLength={20} />
+          <input id="cs-phone" className="mk-input" type="tel" name="phone" autoComplete="tel" inputMode="tel" placeholder={t('cs_form_phone_ph')} maxLength={20} />
         </div>
       )}
 
-      <div className="cf-field">
+      <div className="mk-field">
         <label htmlFor="cs-msg">{t('cs_form_msg')}</label>
-        <textarea id="cs-msg" name="message" placeholder={t('cs_form_msg_ph')} rows={3} maxLength={2000} />
+        <textarea id="cs-msg" className="mk-input" name="message" placeholder={t('cs_form_msg_ph')} rows={3} maxLength={2000} style={{ minHeight: 96 }} />
       </div>
 
       {error && (
-        <p className="cs-form-error" role="alert" aria-live="assertive" style={{ color: 'var(--danger)', fontSize: 14, marginBottom: 12 }}>
-          {error}
-        </p>
+        <p className="mk-msg bad" role="alert" aria-live="assertive">{error}</p>
       )}
 
-      <button type="submit" className="cf-btn" disabled={submitting} aria-busy={submitting}>
+      <button type="submit" className="mk-btn block" disabled={submitting} aria-busy={submitting}>
         {submitting ? (
           <>
             <span className="spinner" aria-hidden="true" />

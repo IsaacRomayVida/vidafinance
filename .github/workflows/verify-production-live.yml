@@ -108,8 +108,7 @@ jobs:
     name: Railway inventory matches our documentation
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Same environment as the registry reconciler, where the proven
-    # RAILWAY_TOKEN_VIDA_BACKEND lives.
+    # Same environment as the registry reconciler.
     environment: production
     steps:
       - uses: actions/checkout@v5
@@ -131,9 +130,9 @@ jobs:
       #   2  UNKNOWN — the state could not be observed (no token could
       #      enumerate, or a read failed). NOT a claim about production; the
       #      token-strategy log names which secret to fix. Only
-      #      RAILWAY_TOKEN_VIDA_BACKEND is proven in-tree — if the wider
-      #      tokens turn out unusable, expect a 2 here on the first run and
-      #      fix the secret rather than the check.
+      #      RAILWAY_API_TOKEN is proven in-tree — if the wider tokens turn
+      #      out unusable, expect a 2 here and fix the secret rather than the
+      #      check.
       # Both 1 and 2 fail the job on purpose: a check that cannot see is not
       # a check that passes.
       - name: What is Railway actually running?
@@ -141,7 +140,6 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_TOKEN_VIDA_BACKEND: ${{ secrets.RAILWAY_TOKEN_VIDA_BACKEND }}
 
       - name: Notify Slack on failure
         if: failure()

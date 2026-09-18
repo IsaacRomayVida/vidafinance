@@ -59,7 +59,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <AuthProvider>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         {/* Marketing pages — gated by VITE_LAUNCH_MODE */}
         {IS_COMING_SOON ? (

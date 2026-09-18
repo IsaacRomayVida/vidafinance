@@ -1,20 +1,24 @@
 # VIDA Finance — Railway Microservices
 
-## Production Architecture (`observant-miracle` / `production`)
+## Production Architecture (`FunPay` / `production`)
+
+The Railway project is `FunPay` (ID `1ad040b4-6f0b-4530-9f58-0a1ef5e89c75`), named
+`observant-miracle` until 2026-09-17. The rename changed no ID, token or hostname.
 
 ```
-                ┌──────────────────────────────────────────────┐
-                │   Railway project: observant-miracle (prod)    │
-                │                                                │
-Firebase ──────►│  payment-server        :3001                  │
-Functions       │  softcredito-adapter   :3002                  │
-(Cloud Run,     │  notification-service  :3003                  │
- public URLs)   │  pdf-generator         :3004                  │
-                │  ml-service            :3005                  │
-                │  underwriting-service  :3003                  │
-                │                ↕ private networking            │
-                │       Redis (shared)   :6379                   │
-                └──────────────────────────────────────────────┘
+                ┌──────────────────────────────────────────────────────┐
+                │            Railway project: FunPay (prod)            │
+                │                                                      │
+Firebase ──────►│  payment-server          :3001                       │
+Functions       │  softcredito-adapter     :3002                       │
+(Cloud Run,     │  notification-service    :3003                       │
+ public URLs)   │  pdf-generator           :3004                       │
+                │  ml-service              :3005                       │
+                │  underwriting-service    :3003                       │
+                │  registry-service-funpay :8080 → registry-ledger-db  │
+                │                ↕ private networking                  │
+                │  Redis (shared)          :6379                       │
+                └──────────────────────────────────────────────────────┘
 ```
 
 > **Service-to-service calls use Railway private networking** (`*.railway.internal`).
@@ -31,6 +35,8 @@ Functions       │  softcredito-adapter   :3002                  │
 | pdf-generator | 3004 | Node.js | Puppeteer loan contracts + receipts (e-signature via MetaMap) |
 | ml-service | 3005 | Python | Scorecard/XGBoost underwriting + Stage 4 autoencoder + Claude judge |
 | underwriting-service | 3003 | Node.js | 7-stage credit pipeline: employer screening, identity, bureau (Belvo), KYC (MetaMap), review |
+| registry-service-funpay | 8080 (Railway `PORT`) | Node.js | Identity registry + hash-chain ledger; shadow-writes from `approveEmployer` (Phase A). Deployed by `deploy-registry-funpay.yml`, not by a Railway trigger |
+| registry-ledger-db | 5432 | Postgres 17 | The registry's own database (private only) |
 | Redis | 6379 | Redis | BullMQ queues + rate limiting + ML cache |
 
 > **Note on the shared `:3003`:** `notification-service` and `underwriting-service`
@@ -46,6 +52,8 @@ notification-service.railway.internal:3003
 pdf-generator.railway.internal:3004
 ml-service.railway.internal:3005
 underwriting-service.railway.internal:3003
+registry-service-funpay.railway.internal:8080
+registry-ledger-db.railway.internal:5432
 redis.railway.internal:6379
 ```
 
@@ -99,11 +107,26 @@ Each service builds from the **monorepo root** using a per-service Dockerfile,
 selected by the `RAILWAY_DOCKERFILE_PATH` variable
 (e.g. `services/softcredito-adapter/Dockerfile`).
 
-- **GitHub-connected services** auto-deploy on push to `main`.
+- **GitHub-connected services** auto-deploy on push to `main`. All seven app
+  services are connected; check before assuming it. `underwriting-service` and
+  `softcredito-adapter` were **not** — they had no repo source at all, so a
+  merge shipped nothing to them and they ran a hand-uploaded build from
+  2026-09-06 for twelve days while every sibling moved with `main`. Nothing
+  reported this: the services were healthy, just old. They were connected on
+  2026-09-18. To verify a service actually ships on merge, read its source and
+  its last deployment's commit rather than trusting the dashboard's green:
+
+  ```graphql
+  serviceInstance(environmentId: $env, serviceId: $svc) { source { repo } }
+  deployments(first: 1, input: {...}) { edges { node { status meta } } }  # meta.commitHash
+  ```
+
+  A deployment whose `meta.commitHash` is empty came from `railway up`, not
+  from the repo.
 - **Manual / recovery deploy** (e.g. recreating a deleted service) from the repo root:
 
   ```bash
-  railway link --project <observant-miracle-id> --environment production
+  railway link --project FunPay --environment production
   # create the service shell (empty), then set its variables, then:
   railway up --service <name> --ci          # uploads repo root, builds via Dockerfile path
   railway domain --service <name>           # (or MCP generate-domain) for a public URL
@@ -147,6 +170,8 @@ PDF_GENERATOR_URL,
 ML_SERVICE_URL
 REGISTRY_SERVICE_URL       # still a GitHub secret (domain not in the file)
 INTERNAL_SECRET            # secret: shared inter-service auth token
+INTERNAL_SECRET_ALT        # secret: set only mid-rotation — accepted, never sent
+                           #   (docs/runbooks/rotate-internal-secret.md)
 REDIS_URL                  # secret: BullMQ queues
 ALLOW_STUB_DISBURSEMENT    # 'true' ONLY in local/dev/test — never in production
 ```

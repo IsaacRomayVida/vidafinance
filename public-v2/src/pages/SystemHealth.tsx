@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -26,82 +27,26 @@ interface DisplayItem {
   latencyMs?: number;
 }
 
-// ── Styles ───────────────────────────────────────────────────────────────────
-
-const colors = {
-  bg: 'var(--canvas)',
-  card: '#fff',
-  dark: 'var(--t1)',
-  mid: 'var(--t2)',
-  light: 'var(--t3)',
-  gold: 'var(--gold)',
-  green: 'var(--brand-light)',
-  yellow: '#b8860b',
-  red: 'var(--danger)',
-  border: 'rgba(25,68,69,0.04)',
-  shadow: '0 1px 4px rgba(25,68,69,0.02)',
-};
-
-const cardStyle: React.CSSProperties = {
-  background: colors.card,
-  borderRadius: 20,
-  padding: '28px',
-  border: `1px solid ${colors.border}`,
-  boxShadow: colors.shadow,
-  marginBottom: 20,
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  fontFamily: 'var(--df)',
-  fontSize: 22,
-  fontWeight: 400,
-  color: colors.dark,
-  margin: '0 0 20px 0',
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  color: colors.gold,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase' as const,
-};
-
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '14px 0',
-  borderBottom: `1px solid ${colors.border}`,
-};
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function statusDot(level: StatusLevel): string {
-  if (level === 'green') return '●';
-  if (level === 'yellow') return '●';
-  return '●';
-}
-
+/** Green means live; partial is peach; down is the soft red. */
 function statusColor(level: StatusLevel): string {
-  if (level === 'green') return colors.green;
-  if (level === 'yellow') return colors.yellow;
-  return colors.red;
+  if (level === 'green') return 'var(--harmony)';
+  if (level === 'yellow') return '#f2c4a0';
+  return '#f4a9a1';
 }
 
 function StatusRow({ item }: { item: DisplayItem }) {
   return (
-    <div style={rowStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ color: statusColor(item.status), fontSize: 14 }}>{statusDot(item.status)}</span>
-        <span style={{ fontSize: 14, fontWeight: 600, color: colors.dark }}>{item.label}</span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {item.latencyMs != null && (
-          <span style={{ fontSize: 11, color: colors.light, fontFamily: 'monospace' }}>{item.latencyMs}ms</span>
-        )}
-        <span style={{ fontSize: 12, color: colors.mid, maxWidth: 280, textAlign: 'right' as const }}>{item.detail}</span>
-      </div>
+    <div className="ops-batch">
+      <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor(item.status), flex: 'none', boxShadow: item.status === 'green' ? '0 0 0 4px rgba(104,231,142,.2)' : undefined }} />
+      <span className="t">
+        {item.label}
+        <small>{item.detail}</small>
+      </span>
+      {item.latencyMs != null && (
+        <span className="p" style={{ fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'rgba(242,245,240,.75)' }}>{item.latencyMs}ms</span>
+      )}
     </div>
   );
 }
@@ -109,6 +54,7 @@ function StatusRow({ item }: { item: DisplayItem }) {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function SystemHealth() {
+  const { t } = useTranslation();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,40 +156,29 @@ export function SystemHealth() {
   const yellowCount = allItems.filter(i => i.status === 'yellow').length;
   const redCount = allItems.filter(i => i.status === 'red').length;
 
+  const sections: { title: string; items: DisplayItem[]; live: boolean }[] = [
+    { title: t('health_section_firebase'), items: firebaseItems, live: true },
+    { title: t('health_section_railway'), items: railwayItems, live: !(loading && !health) },
+    { title: t('health_section_external'), items: externalItems, live: !(loading && !health) },
+    { title: t('health_section_integrations'), items: integrationItems, live: !(loading && !health) },
+  ];
+
   return (
-    <div>
+    <div className="ops-page">
       {/* Page header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+      <div className="ops-head">
         <div>
-          <h1 style={{ fontFamily: 'var(--df)', fontSize: 28, fontWeight: 400, color: colors.dark, margin: 0 }}>
-            System Health
-          </h1>
-          <p style={{ fontSize: 13, color: colors.mid, margin: '4px 0 0 0' }}>
-            Real-time API & service status
-          </p>
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_ops')}</div>
+          <h1 className="ops-title">{t('health_title')}</h1>
+          <p className="ops-sub">{t('health_subtitle')}</p>
         </div>
-        <div style={{ textAlign: 'right' as const }}>
-          <button
-            onClick={fetchHealth}
-            disabled={loading}
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: colors.card,
-              background: colors.gold,
-              border: 'none',
-              borderRadius: 60,
-              padding: '8px 20px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
-              transition: 'opacity 0.2s',
-            }}
-          >
-            {loading ? 'Checking…' : 'Refresh'}
+        <div style={{ textAlign: 'right' }}>
+          <button type="button" className="ops-go" style={{ marginTop: 0 }} onClick={fetchHealth} disabled={loading}>
+            <i aria-hidden="true" />{loading ? t('health_checking') : t('health_refresh')}
           </button>
           {lastRefresh && (
-            <p style={{ fontSize: 11, color: colors.light, margin: '6px 0 0 0' }}>
-              Last checked {lastRefresh.toLocaleTimeString()}
+            <p className="ops-note" style={{ marginTop: 6 }}>
+              {t('health_last_checked', { time: lastRefresh.toLocaleTimeString() })}
             </p>
           )}
         </div>
@@ -251,69 +186,38 @@ export function SystemHealth() {
 
       {/* Error banner */}
       {error && (
-        <div style={{ ...cardStyle, background: 'var(--danger-bg)', border: `1px solid ${colors.red}`, color: colors.red, fontSize: 13 }}>
+        <div role="alert" className="ops-error" style={{ padding: '12px 16px', marginBottom: 10 }}>
           {error}
         </div>
       )}
 
-      {/* Summary bar */}
-      <div style={{ ...cardStyle, display: 'flex', gap: 32, alignItems: 'center' }}>
-        <div>
-          <span style={labelStyle}>Overview</span>
+      {/* Overview */}
+      <div className="ops-kpis" style={{ marginTop: 0, marginBottom: 10 }}>
+        <div className="ops-kpi">
+          <small>{t('health_live')}</small>
+          <b style={{ color: 'var(--harmony)' }}>{greenCount}</b>
         </div>
-        <div style={{ display: 'flex', gap: 24 }}>
-          <span style={{ fontSize: 14, color: colors.green, fontWeight: 600 }}>● {greenCount} Live</span>
-          <span style={{ fontSize: 14, color: colors.yellow, fontWeight: 600 }}>● {yellowCount} Partial</span>
-          <span style={{ fontSize: 14, color: colors.red, fontWeight: 600 }}>● {redCount} Down</span>
+        <div className={`ops-kpi${yellowCount > 0 ? ' warn' : ''}`}>
+          <small>{t('health_partial')}</small>
+          <b>{yellowCount}</b>
         </div>
-        <div style={{ marginLeft: 'auto', fontSize: 11, color: colors.light }}>
-          Auto-refresh every 60s
+        <div className="ops-kpi">
+          <small>{t('health_down')}</small>
+          <b style={{ color: redCount > 0 ? '#f4a9a1' : undefined }}>{redCount}</b>
         </div>
       </div>
+      <p className="ops-note" style={{ margin: '0 4px 14px' }}>{t('health_auto_refresh')}</p>
 
-      {/* Section 1: Firebase */}
-      <div style={cardStyle}>
-        <h2 style={sectionTitleStyle}>Firebase Services</h2>
-        {firebaseItems.map(item => (
-          <StatusRow key={item.label} item={item} />
-        ))}
-      </div>
-
-      {/* Section 2: Railway */}
-      <div style={cardStyle}>
-        <h2 style={sectionTitleStyle}>Railway Services</h2>
-        {loading && !health ? (
-          <p style={{ fontSize: 13, color: colors.light, padding: '12px 0' }}>Loading…</p>
-        ) : (
-          railwayItems.map(item => (
-            <StatusRow key={item.label} item={item} />
-          ))
-        )}
-      </div>
-
-      {/* Section 3: External Providers */}
-      <div style={cardStyle}>
-        <h2 style={sectionTitleStyle}>External Providers</h2>
-        {loading && !health ? (
-          <p style={{ fontSize: 13, color: colors.light, padding: '12px 0' }}>Loading…</p>
-        ) : (
-          externalItems.map(item => (
-            <StatusRow key={item.label} item={item} />
-          ))
-        )}
-      </div>
-
-      {/* Section 4: Integrations */}
-      <div style={cardStyle}>
-        <h2 style={sectionTitleStyle}>Integrations</h2>
-        {loading && !health ? (
-          <p style={{ fontSize: 13, color: colors.light, padding: '12px 0' }}>Loading…</p>
-        ) : (
-          integrationItems.map(item => (
-            <StatusRow key={item.label} item={item} />
-          ))
-        )}
-      </div>
+      {sections.map(section => (
+        <section className="ops-card" key={section.title}>
+          <h2 className="ops-h3">{section.title}</h2>
+          {section.live ? (
+            section.items.map(item => <StatusRow key={item.label} item={item} />)
+          ) : (
+            <p className="ops-note" style={{ padding: '12px 0' }}>{t('health_loading')}</p>
+          )}
+        </section>
+      ))}
     </div>
   );
 }

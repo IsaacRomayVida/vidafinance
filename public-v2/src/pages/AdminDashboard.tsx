@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Icon, type IconName } from '../components/shared/Icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { isActiveDeductionStatus } from '../lib/loanStatus';
 
 interface Employer {
   id: string;
@@ -20,6 +23,7 @@ interface Loan {
   id: string;
   employeeName: string;
   employerName: string;
+  employerId?: string;
   amount: number;
   total: number;
   status: string;
@@ -40,9 +44,35 @@ function fmt(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+/* ── quincena helpers (presentation only) ─────────────────────────────────
+   A quincena is the 1st–15th or the 16th–end of a month. The board names the
+   lit folder after the current one; nothing here schedules or prices. */
+function quincenaStart(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() >= 16 ? 16 : 1);
+}
+function monthShort(d: Date, lang: string): string {
+  return d.toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { month: 'short' }).replace('.', '');
+}
+
+/** Of the loans in payroll deduction (isActiveDeductionStatus), these are late. */
+const LATE = new Set(['overdue', 'in_collections']);
+/** The same set the page has always called "active" for the queue below. */
+const ACTIVE = new Set(['active', 'approved', 'disbursement_queued']);
+
+interface EmployerGroup {
+  key: string;
+  name: string;
+  active: number;
+  pending: number;
+  total: number;
+  status?: string;
+}
+
+
 export function AdminDashboard() {
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashStats>({ totalEmployers: 0, totalEmployees: 0, activeLoans: 0, totalDisbursed: 0, pendingLoans: 0 });
   const [employers, setEmployers] = useState<Employer[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -123,142 +153,171 @@ export function AdminDashboard() {
   const pendingEmployers = employers.filter(e => e.status === 'pending_verification' || e.status === 'pending_review');
   const activeEmployers = employers.filter(e => e.status === 'active');
   const pendingLoans = loans.filter(l => l.status === 'pending');
-  const activeLoans = loans.filter(l => l.status === 'active' || l.status === 'approved' || l.status === 'disbursement_queued');
+  const activeLoans = loans.filter(l => ACTIVE.has(l.status));
 
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '28px',
-    border: '1px solid rgba(25,68,69,0.04)',
-    boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
-    marginBottom: 20,
-  };
+  /* ── the board: derived from the reads above, naming real objects —
+     the top employers, the current quincena, the review queue, sign-ups. ── */
+  const lang = i18n.language;
+  const cur = quincenaStart(new Date());
+  const curLabel = t('ops_quincena', { day: cur.getDate(), month: monthShort(cur, lang) });
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '2.2px',
-    color: 'var(--gold)',
-    marginBottom: 10,
-  };
+  const inDeduction = loans.filter(l => isActiveDeductionStatus(l.status));
+  const onSchedule = inDeduction.filter(l => !LATE.has(l.status)).length;
+  const pct = inDeduction.length > 0 ? Math.round((onSchedule / inDeduction.length) * 100) : null;
 
-  const valueStyle: React.CSSProperties = {
-    fontFamily: 'var(--df)',
-    fontSize: 36,
-    color: 'var(--t1)',
-    letterSpacing: '-0.03em',
-    fontWeight: 400,
-    lineHeight: 1,
-  };
-
-  const pillBtn = (color: string, textColor: string): React.CSSProperties => ({
-    background: color,
-    color: textColor,
-    borderRadius: 60,
-    padding: '10px 24px',
-    fontSize: 12,
-    fontWeight: 600,
-    border: 'none',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    letterSpacing: '0.2px',
-    opacity: actionLoading ? 0.6 : 1,
-  });
+  const groups = new Map<string, EmployerGroup>();
+  for (const l of loans) {
+    const key = l.employerId || l.employerName || '';
+    if (!key) continue;
+    const g = groups.get(key) ?? { key, name: l.employerName || key, active: 0, pending: 0, total: 0 };
+    if (ACTIVE.has(l.status)) { g.active += 1; g.total += Number(l.total) || 0; }
+    else if (l.status === 'pending') g.pending += 1;
+    groups.set(key, g);
+  }
+  for (const e of employers) {
+    const g = groups.get(e.id) ?? [...groups.values()].find(x => x.name === e.companyName);
+    if (g) { g.status = e.status; g.name = e.companyName || g.name; }
+  }
+  const employerRows = [...groups.values()]
+    .sort((a, b) => b.active - a.active || b.pending - a.pending)
+    .slice(0, 6);
+  const stackEmployers = employerRows.slice(0, 3);
+  const folders: { i: number; label: string; n: number; lit?: boolean; kind: IconName }[] = [
+    ...stackEmployers.map((g, idx) => ({ i: idx - stackEmployers.length, label: g.name, n: g.active, kind: 'empleador' as IconName })),
+    { i: 0, label: curLabel, n: inDeduction.length, lit: true, kind: 'quincena' },
+    { i: 1, label: t('ops_folder_review'), n: pendingLoans.length, kind: 'contrato' },
+    { i: 2, label: t('ops_folder_signups'), n: pendingEmployers.length, kind: 'empleador' },
+  ];
 
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-          {t('admin_title')}
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
-          {t('admin_subtitle')}
-        </p>
-      </div>
+    <div>
+      <div className="ops-board">
+        {/* ── stage ── */}
+        <section className="ops-panel stage" aria-labelledby="ops-stage-title">
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_ops')} · {curLabel}</div>
+          <h1 id="ops-stage-title" className="ops-title">{t('admin_title')}</h1>
+          <p className="ops-sub">{t('admin_subtitle')}</p>
 
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
-        <div style={cardStyle}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(168,213,208,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22V12h6v10"/><path d="M8 6h.01M16 6h.01M12 6h.01"/></svg>
+          <div className="ops-objects" aria-hidden="true">
+            {folders.map((f) => (
+              <div key={f.i} className={`ops-object${f.lit ? ' lit' : ''}`}>
+                <Icon name={f.kind} size={26} />
+                <b>{f.n}</b>
+                <span>{f.label}</span>
+              </div>
+            ))}
           </div>
-          <div style={labelStyle}>{t('admin_employers')}</div>
-          <div style={valueStyle}>{stats.totalEmployers || employers.length}</div>
-        </div>
-        <div style={cardStyle}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(168,213,208,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#194445" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-          </div>
-          <div style={labelStyle}>{t('admin_employees')}</div>
-          <div style={valueStyle}>{stats.totalEmployees}</div>
-        </div>
-        <div style={cardStyle}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(36,122,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#247a6e" strokeWidth="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-          </div>
-          <div style={labelStyle}>{t('admin_active_loans')}</div>
-          <div style={valueStyle}>{stats.activeLoans || activeLoans.length}</div>
-        </div>
-        <div style={cardStyle}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(162,134,87,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a28657" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          </div>
-          <div style={labelStyle}>{t('admin_pending')}</div>
-          <div style={valueStyle}>{pendingEmployers.length + pendingLoans.length}</div>
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 32, borderBottom: '1px solid rgba(25,68,69,0.06)', marginBottom: 24 }}>
-        {(['employers', 'loans'] as const).map(tabKey => (
-          <button
-            key={tabKey}
-            onClick={() => setTab(tabKey)}
-            style={{
-              fontSize: 12, fontWeight: tab === tabKey ? 700 : 500,
-              color: tab === tabKey ? 'var(--brand)' : 'var(--t3)',
-              textTransform: 'uppercase', letterSpacing: '0.5px',
-              padding: '14px 0', background: 'none', border: 'none',
-              borderBottom: tab === tabKey ? '2px solid var(--gold)' : '2px solid transparent',
-              cursor: 'pointer', transition: 'all 0.2s',
-            }}
-          >
-            {tabKey === 'employers' ? `${t('admin_employers')} (${pendingEmployers.length} ${t('admin_pending_short', 'pendientes')})` : `${t('admin_loans_tab', 'Préstamos')} (${pendingLoans.length} ${t('admin_pending_short', 'pendientes')})`}
+          <div className="ops-prog">
+            <div className="h"><span>{curLabel}</span><span aria-hidden="true">↗</span></div>
+            <div className="d">
+              {pct === null
+                ? t('ops_prog_none')
+                : t('ops_prog_on_schedule', { ok: onSchedule, total: inDeduction.length })}
+            </div>
+            <div className="v">{pct === null ? '—' : <>{pct}<b>%</b></>}</div>
+            <span className="dotg" aria-hidden="true" />
+          </div>
+        </section>
+
+        {/* ── data ── */}
+        <section className="ops-panel data" aria-labelledby="ops-data-title">
+          <span className="ops-tag" id="ops-data-title"><i aria-hidden="true" />{t('ops_live_book')}</span>
+
+          <div className="ops-kpis">
+            <div className="ops-kpi">
+              <small>{t('admin_total_disbursed')}</small>
+              <b>${fmt(stats.totalDisbursed)}<span>MXN</span></b>
+            </div>
+            <div className="ops-kpi">
+              <small>{t('admin_active_loans')}</small>
+              <b>{stats.activeLoans || activeLoans.length}</b>
+            </div>
+            <div className={`ops-kpi${pendingEmployers.length + pendingLoans.length > 0 ? ' warn' : ''}`}>
+              <small>{t('admin_pending')}</small>
+              <b>{pendingEmployers.length + pendingLoans.length}</b>
+            </div>
+          </div>
+          <div className="ops-kpi-line">
+            {t('admin_employers')} <span>{stats.totalEmployers || employers.length}</span>
+            {' · '}{t('admin_employees')} <span>{fmt(stats.totalEmployees)}</span>
+          </div>
+
+          <h2 className="ops-h3">{t('ops_collections_by_employer')}</h2>
+          {employerRows.length === 0 ? (
+            <div className="ops-batch">
+              <span className="fl" aria-hidden="true" />
+              <span className="t">{t('ops_rows_employers_empty')}</span>
+            </div>
+          ) : employerRows.map((g) => (
+            <div className="ops-batch" key={g.key}>
+              <span className={`fl${g.status === 'active' ? ' g' : ''}`} aria-hidden="true" />
+              <span className="t">
+                {g.name}
+                <small>{t('ops_row_employer', { active: g.active, pending: g.pending })}</small>
+              </span>
+              <span className="p">{g.active > 0 ? '$' + fmt(g.total) : '—'}</span>
+            </div>
+          ))}
+
+          <button type="button" className="ops-go" onClick={() => navigate('/ops/review-queue')}>
+            <i aria-hidden="true" />{t('ops_go_review', { count: pendingLoans.length })}
           </button>
-        ))}
+        </section>
+      </div>
+
+      {/* ── queues ── */}
+      <div className="ops-chips" style={{ margin: '14px 4px' }}>
+        {(['employers', 'loans'] as const).map(tabKey => {
+          const on = tab === tabKey;
+          return (
+            <button
+              key={tabKey}
+              type="button"
+              onClick={() => setTab(tabKey)}
+              className={`ops-chip${on ? ' on' : ''}`}
+              aria-pressed={on}
+            >
+              {tabKey === 'employers' ? t('admin_employers') : t('admin_loans_tab', 'Préstamos')}
+              <span className="cnt">{tabKey === 'employers' ? pendingEmployers.length : pendingLoans.length}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Employer list */}
       {tab === 'employers' && (
-        <div>
+        <section className="ops-card">
           {pendingEmployers.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ ...labelStyle, marginBottom: 16 }}>Pending Approval</div>
+            <div style={{ marginBottom: 24 }}>
+              <h2 className="ops-h3">{t('admin_pending_approval')}</h2>
               {pendingEmployers.map(emp => (
-                <div key={emp.id} style={{ ...cardStyle, padding: '24px 28px' }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--t1)', marginBottom: 6 }}>{emp.companyName}</div>
-                  <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 4 }}>{emp.email}</div>
-                  <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 16 }}>
-                    {emp.companySize || '—'} · Code: {emp.employerCode || '—'} · Docs: {emp.docRFC ? 'Uploaded' : 'Missing'}
-                  </div>
-                  <div style={{ display: 'flex', gap: 12 }}>
+                <div key={emp.id} className="ops-batch" style={{ flexWrap: 'wrap' }}>
+                  <span className="fl" aria-hidden="true" />
+                  <span className="t">
+                    {emp.companyName}
+                    <small>
+                      {emp.email} · {emp.companySize || '—'} · {t('admin_code')} {emp.employerCode || '—'} · {emp.docRFC ? t('admin_docs_uploaded') : t('admin_docs_missing')}
+                    </small>
+                  </span>
+                  <span className="ops-actions">
                     <button
+                      type="button"
+                      className="ops-btn sm"
                       onClick={() => approveEmployer(emp.id, 'approved')}
                       disabled={!!actionLoading}
-                      style={pillBtn('var(--brand)', '#fff')}
                     >
                       {actionLoading === emp.id ? '...' : t('admin_approve', 'Aprobar')}
                     </button>
                     <button
+                      type="button"
+                      className="ops-btn sm ghost danger"
                       onClick={() => approveEmployer(emp.id, 'rejected')}
                       disabled={!!actionLoading}
-                      style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}
                     >
-                      Reject
+                      {t('admin_reject')}
                     </button>
-                  </div>
+                  </span>
                 </div>
               ))}
             </div>
@@ -266,61 +325,65 @@ export function AdminDashboard() {
 
           {activeEmployers.length > 0 && (
             <div>
-              <div style={{ ...labelStyle, marginBottom: 16 }}>Active Employers</div>
+              <h2 className="ops-h3">{t('admin_active_employers')}</h2>
               {activeEmployers.map(emp => (
-                <div key={emp.id} style={{ ...cardStyle, padding: '20px 28px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)' }}>{emp.companyName}</div>
-                      <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 4 }}>{emp.email}</div>
-                    </div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-light)', background: 'rgba(36,122,110,0.06)', padding: '4px 12px', borderRadius: 20 }}>{t('status_active', 'Activo')}</div>
-                  </div>
+                <div key={emp.id} className="ops-batch">
+                  <span className="fl g" aria-hidden="true" />
+                  <span className="t">
+                    {emp.companyName}
+                    <small>{emp.email}</small>
+                  </span>
+                  <span className="ops-status g">{t('status_active', 'Activo')}</span>
                 </div>
               ))}
             </div>
           )}
 
           {employers.length === 0 && !loading && (
-            <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
-              <p style={{ fontSize: 14 }}>No employers registered yet.</p>
+            <div className="empty-state">
+              <p>{t('admin_no_employers')}</p>
             </div>
           )}
-        </div>
+        </section>
       )}
 
       {/* Loan list */}
       {tab === 'loans' && (
-        <div>
+        <section className="ops-card">
           {pendingLoans.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ ...labelStyle, marginBottom: 16 }}>{t('admin_pending')}</div>
+            <div style={{ marginBottom: 24 }}>
+              <h2 className="ops-h3">{t('admin_pending')}</h2>
               {pendingLoans.map(loan => (
-                <div key={loan.id} style={{ ...cardStyle, padding: '24px 28px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>{loan.employeeName}</div>
-                      <div style={{ fontSize: 13, color: 'var(--t2)' }}>{loan.employerName}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--df)', fontSize: 24, color: 'var(--t1)' }}>${fmt(loan.amount)}</div>
-                      <div style={{ fontSize: 11, color: 'var(--t3)' }}>MXN</div>
-                    </div>
-                  </div>
-                  {loan.mlCreditScore !== undefined && (
-                    <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 12, display: 'flex', gap: 16 }}>
-                      <span>ML Score: <strong>{loan.mlCreditScore}</strong></span>
-                      <span>Default Prob: <strong>{((loan.mlDefaultProb || 0) * 100).toFixed(0)}%</strong></span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <button onClick={() => reviewLoan(loan.id, 'approved')} disabled={!!actionLoading} style={pillBtn('var(--brand)', '#fff')}>
+                <div key={loan.id} className="ops-batch" style={{ flexWrap: 'wrap' }}>
+                  <span className="fl" aria-hidden="true" />
+                  <span className="t">
+                    {loan.employeeName}
+                    <small>
+                      {loan.employerName}
+                      {loan.mlCreditScore !== undefined && (
+                        <> · {t('admin_ml_score')} {loan.mlCreditScore} · {t('admin_default_prob')} {((loan.mlDefaultProb || 0) * 100).toFixed(0)}%</>
+                      )}
+                    </small>
+                  </span>
+                  <span className="p">${fmt(loan.amount)}<small>MXN</small></span>
+                  <span className="ops-actions">
+                    <button
+                      type="button"
+                      className="ops-btn sm"
+                      onClick={() => reviewLoan(loan.id, 'approved')}
+                      disabled={!!actionLoading}
+                    >
                       {actionLoading === loan.id ? '...' : t('admin_approve_loan', 'Aprobar Préstamo')}
                     </button>
-                    <button onClick={() => reviewLoan(loan.id, 'rejected')} disabled={!!actionLoading} style={pillBtn('rgba(220,80,60,0.08)', 'var(--danger)')}>
-                      Reject
+                    <button
+                      type="button"
+                      className="ops-btn sm ghost danger"
+                      onClick={() => reviewLoan(loan.id, 'rejected')}
+                      disabled={!!actionLoading}
+                    >
+                      {t('admin_reject')}
                     </button>
-                  </div>
+                  </span>
                 </div>
               ))}
             </div>
@@ -328,27 +391,26 @@ export function AdminDashboard() {
 
           {activeLoans.length > 0 && (
             <div>
-              <div style={{ ...labelStyle, marginBottom: 16 }}>{t('admin_active_loans')}</div>
+              <h2 className="ops-h3">{t('admin_active_loans')}</h2>
               {activeLoans.map(loan => (
-                <div key={loan.id} style={{ ...cardStyle, padding: '20px 28px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)' }}>{loan.employeeName}</div>
-                      <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{loan.employerName}</div>
-                    </div>
-                    <div style={{ fontFamily: 'var(--df)', fontSize: 20, color: 'var(--t1)' }}>${fmt(loan.amount)}</div>
-                  </div>
+                <div key={loan.id} className="ops-batch">
+                  <span className="fl g" aria-hidden="true" />
+                  <span className="t">
+                    {loan.employeeName}
+                    <small>{loan.employerName}</small>
+                  </span>
+                  <span className="p g">${fmt(loan.amount)}</span>
                 </div>
               ))}
             </div>
           )}
 
           {loans.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
-              <p style={{ fontSize: 14 }}>No loan applications yet.</p>
+            <div className="empty-state">
+              <p>{t('admin_no_loans')}</p>
             </div>
           )}
-        </div>
+        </section>
       )}
     </div>
   );

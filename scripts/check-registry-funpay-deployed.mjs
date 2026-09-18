@@ -49,8 +49,8 @@ import { readFileSync } from 'node:fs';
 import { TARGETS, pathsFilter } from './check-deploy-watch-paths.mjs';
 
 const RAILWAY_API = 'https://backboard.railway.app/graphql/v2';
-const PROJECT_ID = 'e1334895-9fdc-4cab-9a3c-73416719c553';
-const ENVIRONMENT_ID = '524fdbc8-c800-4c0a-bc0f-c962a0fb7ef4';
+const PROJECT_ID = '1ad040b4-6f0b-4530-9f58-0a1ef5e89c75'; // FunPay (named observant-miracle until 2026-09-17)
+const ENVIRONMENT_ID = '441caff4-8cc1-401f-93e2-30c49fe5d2d9';
 
 /* ── the decision, isolated from all I/O so it can be tested ──────────────── */
 
@@ -218,7 +218,7 @@ function railway(query, variables, token) {
   const out = execFileSync(
     'curl',
     ['-sS', '--max-time', '30', RAILWAY_API,
-     '-H', `Project-Access-Token: ${token}`,
+     '-H', `Authorization: Bearer ${token}`,
      '-H', 'Content-Type: application/json',
      '--data', body],
     { encoding: 'utf8' }

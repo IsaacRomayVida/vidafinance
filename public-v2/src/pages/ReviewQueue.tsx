@@ -66,18 +66,16 @@ function slaLabel(queuedAt: string, t: TFunction): string {
   return t('rq_sla_left', 'Faltan {{h}}h {{m}}m', { h, m });
 }
 
-function riskColor(level: string): { bg: string; text: string } {
+/** Risk is never green: a low risk level is an input, not an approval. */
+function riskClass(level: string): string {
   switch (level) {
     case 'critical':
-      return { bg: 'rgba(180,40,30,0.10)', text: '#a01c14' };
     case 'high':
-      return { bg: 'rgba(220,80,60,0.08)', text: 'var(--danger)' };
+      return ' bad';
     case 'medium':
-      return { bg: 'rgba(212,160,60,0.10)', text: 'var(--warning)' };
-    case 'low':
-      return { bg: 'rgba(36,122,110,0.08)', text: 'var(--brand-light)' };
+      return ' warn';
     default:
-      return { bg: 'rgba(147,170,169,0.10)', text: 'var(--t2)' };
+      return '';
   }
 }
 
@@ -244,112 +242,47 @@ export function ReviewQueue() {
     return result;
   }, [reviews, sortKey, urgencyFilter, employerFilter, reasonFilter, t]);
 
-  /* ── styles ──────────────────────────────────────────────────────────────── */
-
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '28px',
-    border: '1px solid rgba(25,68,69,0.04)',
-    boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
-    marginBottom: 20,
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '2.2px',
-    color: 'var(--gold)',
-    marginBottom: 10,
-  };
-
-  const valueStyle: React.CSSProperties = {
-    fontFamily: 'var(--df)',
-    fontSize: 36,
-    color: 'var(--t1)',
-    letterSpacing: '-0.03em',
-    fontWeight: 400,
-    lineHeight: 1,
-  };
-
-  const selectStyle: React.CSSProperties = {
-    fontSize: 12,
-    padding: '8px 12px',
-    borderRadius: 10,
-    border: '1px solid rgba(25,68,69,0.10)',
-    background: '#fff',
-    color: 'var(--t1)',
-    fontFamily: "'DM Sans',sans-serif",
-    outline: 'none',
-    cursor: 'pointer',
-    minWidth: 120,
-  };
-
-  const thStyle: React.CSSProperties = {
-    fontSize: 10,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '1.8px',
-    color: 'var(--t3)',
-    padding: '12px 14px',
-    textAlign: 'left',
-    borderBottom: '1px solid rgba(25,68,69,0.06)',
-    whiteSpace: 'nowrap',
-  };
-
-  const tdStyle: React.CSSProperties = {
-    fontSize: 13,
-    color: 'var(--t1)',
-    padding: '14px',
-    borderBottom: '1px solid rgba(25,68,69,0.04)',
-    verticalAlign: 'middle',
-  };
+  const highRisk = reviews.filter(r => r.risk_level === 'high' || r.risk_level === 'critical').length;
+  const breached = reviews.filter(r => hoursElapsed(r.queuedAt) > 24).length;
 
   /* ── render ──────────────────────────────────────────────────────────────── */
 
   return (
-    <div style={{ maxWidth: 920, margin: '0 auto', padding: '48px 0 64px' }}>
+    <div className="ops-page">
       {/* Header */}
-      <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-          {t('rq_title', 'Cola de revisión')}
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
-          {t('rq_subtitle', 'Préstamos marcados para revisión manual (Etapa 5). SLA de 24 horas por caso.')}
-        </p>
+      <div className="ops-head">
+        <div>
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_ops')}</div>
+          <h1 className="ops-title">{t('rq_title', 'Cola de revisión')}</h1>
+          <p className="ops-sub">{t('rq_subtitle', 'Préstamos marcados para revisión manual (Etapa 5). SLA de 24 horas por caso.')}</p>
+        </div>
       </div>
 
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 32 }}>
-        <div style={cardStyle}>
-          <div style={labelStyle}>{t('rq_stat_pending', 'Pendientes')}</div>
-          <div style={valueStyle}>{reviews.length}</div>
+      <div className="ops-kpis" style={{ marginTop: 0, marginBottom: 10 }}>
+        <div className="ops-kpi">
+          <small>{t('rq_stat_pending', 'Pendientes')}</small>
+          <b>{reviews.length}</b>
         </div>
-        <div style={cardStyle}>
-          <div style={labelStyle}>{t('rq_stat_high_risk', 'Riesgo alto')}</div>
-          <div style={{ ...valueStyle, color: reviews.some(r => r.risk_level === 'high' || r.risk_level === 'critical') ? 'var(--danger)' : 'var(--t1)' }}>
-            {reviews.filter(r => r.risk_level === 'high' || r.risk_level === 'critical').length}
-          </div>
+        <div className={`ops-kpi${highRisk > 0 ? ' warn' : ''}`}>
+          <small>{t('rq_stat_high_risk', 'Riesgo alto')}</small>
+          <b>{highRisk}</b>
         </div>
-        <div style={cardStyle}>
-          <div style={labelStyle}>{t('rq_stat_sla_breach', 'SLA incumplido')}</div>
-          <div style={{ ...valueStyle, color: reviews.some(r => hoursElapsed(r.queuedAt) > 24) ? 'var(--danger)' : 'var(--t1)' }}>
-            {reviews.filter(r => hoursElapsed(r.queuedAt) > 24).length}
-          </div>
+        <div className={`ops-kpi${breached > 0 ? ' warn' : ''}`}>
+          <small>{t('rq_stat_sla_breach', 'SLA incumplido')}</small>
+          <b>{breached}</b>
         </div>
       </div>
 
       {/* Filters & Sort */}
-      <div style={{ ...cardStyle, padding: '16px 20px', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)', marginRight: 4 }}>
-          {t('rq_filters', 'Filtros')}
-        </div>
+      <div className="ops-card quiet" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', padding: '14px 16px' }}>
+        <span className="ops-label" style={{ marginRight: 4 }}>{t('rq_filters', 'Filtros')}</span>
         <select
           aria-label={t('rq_aria_filter_urgency', 'Filtrar por urgencia')}
           value={urgencyFilter}
           onChange={e => setUrgencyFilter(e.target.value as UrgencyFilter)}
-          style={selectStyle}
+          className="ops-input"
+          style={{ width: 'auto', minWidth: 150 }}
         >
           <option value="all">{t('rq_urgency_all', 'Toda urgencia')}</option>
           <option value="breach">{t('rq_urgency_breach', 'SLA incumplido')}</option>
@@ -359,7 +292,8 @@ export function ReviewQueue() {
           aria-label={t('rq_aria_filter_employer', 'Filtrar por empleador')}
           value={employerFilter}
           onChange={e => setEmployerFilter(e.target.value)}
-          style={selectStyle}
+          className="ops-input"
+          style={{ width: 'auto', minWidth: 170 }}
         >
           <option value="">{t('rq_employer_all', 'Todos los empleadores')}</option>
           {employers.map(e => <option key={e} value={e}>{e}</option>)}
@@ -368,21 +302,21 @@ export function ReviewQueue() {
           aria-label={t('rq_aria_filter_reason', 'Filtrar por motivo')}
           value={reasonFilter}
           onChange={e => setReasonFilter(e.target.value)}
-          style={selectStyle}
+          className="ops-input"
+          style={{ width: 'auto', minWidth: 150 }}
         >
           <option value="">{t('rq_reason_all', 'Todos los motivos')}</option>
           {reasons.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)' }}>
-            {t('rq_sort', 'Ordenar')}
-          </span>
+          <span className="ops-label">{t('rq_sort', 'Ordenar')}</span>
           <select
             aria-label={t('rq_aria_sort', 'Ordenar revisiones')}
             value={sortKey}
             onChange={e => setSortKey(e.target.value as SortKey)}
-            style={selectStyle}
+            className="ops-input"
+            style={{ width: 'auto' }}
           >
             <option value="age">{t('rq_sort_age', 'Antigüedad (más antiguas primero)')}</option>
             <option value="amount">{t('rq_sort_amount', 'Monto (mayor primero)')}</option>
@@ -393,8 +327,8 @@ export function ReviewQueue() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
-          <p style={{ fontSize: 14 }}>{t('rq_loading', 'Cargando revisiones...')}</p>
+        <div className="ops-card" style={{ textAlign: 'center', padding: 48 }} aria-busy="true">
+          <p className="ops-note">{t('rq_loading', 'Cargando revisiones...')}</p>
         </div>
       )}
 
@@ -406,7 +340,7 @@ export function ReviewQueue() {
               ? t('rq_err_index', 'No se pudo cargar la cola: falta un índice de Firestore (#414). Esto NO significa que no haya revisiones pendientes.')
               : t('rq_err_generic', 'No se pudo cargar la cola de revisión: {{reason}}. Esto NO significa que no haya revisiones pendientes.', { reason: loadError.reason })
           }
-          style={{ textAlign: 'left', marginBottom: 16 }}
+          style={{ textAlign: 'left', marginBottom: 10 }}
         />
       )}
 
@@ -414,92 +348,73 @@ export function ReviewQueue() {
           waiting borrower has been dealt with, and it must only be made when
           the queue was actually read. */}
       {!loading && !loadError && reviews.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}>
-          <p style={{ fontSize: 14 }}>{t('rq_empty', 'No hay revisiones pendientes. Todo al día.')}</p>
+        <div className="ops-card">
+          <div className="empty-state">
+            <p>{t('rq_empty', 'No hay revisiones pendientes. Todo al día.')}</p>
+          </div>
         </div>
       )}
 
       {/* Table */}
       {!loading && filteredReviews.length > 0 && (
-        <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <section className="ops-card">
+          <div className="table-wrap">
+            <table>
               <thead>
                 <tr>
-                  <th style={thStyle}>{t('rq_th_loan_id', 'ID de préstamo')}</th>
-                  <th style={thStyle}>{t('rq_th_applicant', 'Solicitante')}</th>
-                  <th style={thStyle}>{t('rq_th_employer', 'Empleador')}</th>
-                  <th style={thStyle}>{t('rq_th_amount', 'Monto')}</th>
-                  <th style={thStyle}>{t('rq_th_risk', 'Riesgo')}</th>
-                  <th style={thStyle}>{t('rq_th_reason', 'Motivo')}</th>
-                  <th style={thStyle}>{t('rq_th_age', 'Antigüedad')}</th>
-                  <th style={thStyle}>{t('rq_th_sla', 'SLA')}</th>
+                  <th>{t('rq_th_loan_id', 'ID de préstamo')}</th>
+                  <th>{t('rq_th_applicant', 'Solicitante')}</th>
+                  <th>{t('rq_th_employer', 'Empleador')}</th>
+                  <th className="num">{t('rq_th_amount', 'Monto')}</th>
+                  <th>{t('rq_th_risk', 'Riesgo')}</th>
+                  <th>{t('rq_th_reason', 'Motivo')}</th>
+                  <th>{t('rq_th_age', 'Antigüedad')}</th>
+                  <th>{t('rq_th_sla', 'SLA')}</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredReviews.map(item => {
                   const urg = urgencyLevel(item);
-                  const risk = riskColor(item.risk_level);
+                  const open = () => navigate(`/ops/review-queue/${item.id}`);
 
                   return (
                     <tr
                       key={item.id}
-                      onClick={() => navigate(`/ops/review-queue/${item.id}`)}
-                      style={{
-                        cursor: 'pointer',
-                        transition: 'background 0.15s',
-                        borderLeft: urg === 'breach' ? '3px solid var(--danger)' : urg === 'warning' ? '3px solid var(--warning)' : '3px solid transparent',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(25,68,69,0.02)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      className={`ops-row-link${urg === 'breach' ? ' breach' : urg === 'warning' ? ' warning' : ''}`}
+                      tabIndex={0}
+                      onClick={open}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
                     >
-                      <td style={{ ...tdStyle, fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--t2)' }}>
+                      <td style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11.5, color: 'rgba(242,245,240,.75)' }}>
                         {item.loanId?.slice(0, 8) || '—'}
                       </td>
-                      <td style={tdStyle}>
-                        <div style={{ fontWeight: 600 }}>{item.applicantName}</div>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{item.applicantName}</div>
                         {item.applicantRfc && (
-                          <div style={{ fontSize: 11, color: 'var(--t3)' }}>{item.applicantRfc}</div>
+                          <div style={{ fontSize: 11.5, color: 'rgba(242,245,240,.75)' }}>{item.applicantRfc}</div>
                         )}
                       </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--t2)' }}>
+                      <td style={{ fontSize: 12.5, color: 'rgba(242,245,240,.75)' }}>
                         {getEmployerName(item)}
                       </td>
-                      <td style={{ ...tdStyle, fontWeight: 600 }}>
+                      <td className="num" style={{ fontWeight: 500 }}>
                         {getLoanAmount(item) > 0 ? `$${fmt(getLoanAmount(item))}` : '—'}
                       </td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '3px 10px',
-                          borderRadius: 20,
-                          background: risk.bg,
-                          color: risk.text,
-                          textTransform: 'uppercase',
-                          whiteSpace: 'nowrap',
-                        }}>
+                      <td>
+                        <span className={`ops-status${riskClass(item.risk_level)}`} style={{ textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '.04em' }}>
                           {item.risk_level}
                         </span>
                       </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--t2)', maxWidth: 180 }}>
-                        <span style={{ display: 'inline-block', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontSize: 12.5, color: 'rgba(242,245,240,.75)', maxWidth: 200 }}>
+                        <span style={{ display: 'inline-block', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
                           {getEscalationReason(item, t)}
                         </span>
                       </td>
-                      <td style={{ ...tdStyle, fontSize: 12, fontWeight: 600, color: 'var(--t2)', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontSize: 12.5, color: 'rgba(242,245,240,.75)' }}>
                         {ageLabel(item.queuedAt)}
                       </td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '3px 10px',
-                          borderRadius: 20,
-                          background: urg === 'breach' ? 'rgba(220,80,60,0.08)' : urg === 'warning' ? 'rgba(212,160,60,0.10)' : 'rgba(36,122,110,0.06)',
-                          color: urg === 'breach' ? 'var(--danger)' : urg === 'warning' ? 'var(--warning)' : 'var(--brand-light)',
-                          whiteSpace: 'nowrap',
-                        }}>
+                      <td>
+                        <span className={`ops-status${urg === 'breach' ? ' bad' : urg === 'warning' ? ' warn' : ' g'}`}>
                           {slaLabel(item.queuedAt, t)}
                         </span>
                       </td>
@@ -509,13 +424,13 @@ export function ReviewQueue() {
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Filtered count */}
       {!loading && reviews.length > 0 && filteredReviews.length !== reviews.length && (
-        <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--t3)', marginTop: 8 }}>
-          Showing {filteredReviews.length} of {reviews.length} reviews
+        <div className="ops-note" style={{ textAlign: 'center', marginTop: 8 }}>
+          {t('rq_showing', 'Mostrando {{shown}} de {{total}} revisiones', { shown: filteredReviews.length, total: reviews.length })}
         </div>
       )}
     </div>
