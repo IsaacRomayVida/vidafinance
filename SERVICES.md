@@ -107,7 +107,22 @@ Each service builds from the **monorepo root** using a per-service Dockerfile,
 selected by the `RAILWAY_DOCKERFILE_PATH` variable
 (e.g. `services/softcredito-adapter/Dockerfile`).
 
-- **GitHub-connected services** auto-deploy on push to `main`.
+- **GitHub-connected services** auto-deploy on push to `main`. All seven app
+  services are connected; check before assuming it. `underwriting-service` and
+  `softcredito-adapter` were **not** — they had no repo source at all, so a
+  merge shipped nothing to them and they ran a hand-uploaded build from
+  2026-09-06 for twelve days while every sibling moved with `main`. Nothing
+  reported this: the services were healthy, just old. They were connected on
+  2026-09-18. To verify a service actually ships on merge, read its source and
+  its last deployment's commit rather than trusting the dashboard's green:
+
+  ```graphql
+  serviceInstance(environmentId: $env, serviceId: $svc) { source { repo } }
+  deployments(first: 1, input: {...}) { edges { node { status meta } } }  # meta.commitHash
+  ```
+
+  A deployment whose `meta.commitHash` is empty came from `railway up`, not
+  from the repo.
 - **Manual / recovery deploy** (e.g. recreating a deleted service) from the repo root:
 
   ```bash
