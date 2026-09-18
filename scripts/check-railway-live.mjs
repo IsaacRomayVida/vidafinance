@@ -10,7 +10,7 @@
  * Why both: a month of HTTP 404s on all five service health probes (ci.yml
  * runs 31335990563, 32069677859) is explained EITHER by dead services OR by
  * stale URL secrets — and the repo has two overlapping Railway projects
- * (docs/ops/railway-project-audit.md: `observant-miracle` vs the stalled
+ * (docs/ops/railway-project-audit.md: `FunPay` vs the stalled
  * `vida-backend`, with lookalike domains like payment-server-production-91c7
  * vs -b9b8). Only Railway's own inventory can tell those apart.
  *

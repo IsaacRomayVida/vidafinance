@@ -1,21 +1,24 @@
 # VIDA Finance — Railway Microservices
 
-## Production Architecture (`observant-miracle` / `production`)
+## Production Architecture (`FunPay` / `production`)
+
+The Railway project is `FunPay` (ID `1ad040b4-6f0b-4530-9f58-0a1ef5e89c75`), named
+`observant-miracle` until 2026-09-17. The rename changed no ID, token or hostname.
 
 ```
-                ┌──────────────────────────────────────────────┐
-                │   Railway project: observant-miracle (prod)    │
-                │                                                │
-Firebase ──────►│  payment-server        :3001                  │
-Functions       │  softcredito-adapter   :3002                  │
-(Cloud Run,     │  notification-service  :3003                  │
- public URLs)   │  pdf-generator         :3004                  │
-                │  ml-service            :3005                  │
-                │  underwriting-service  :3003                  │
-                │  registry-service-funpay :8080 → registry-ledger-db │
-                │                ↕ private networking            │
-                │       Redis (shared)   :6379                   │
-                └──────────────────────────────────────────────┘
+                ┌──────────────────────────────────────────────────────┐
+                │            Railway project: FunPay (prod)            │
+                │                                                      │
+Firebase ──────►│  payment-server          :3001                       │
+Functions       │  softcredito-adapter     :3002                       │
+(Cloud Run,     │  notification-service    :3003                       │
+ public URLs)   │  pdf-generator           :3004                       │
+                │  ml-service              :3005                       │
+                │  underwriting-service    :3003                       │
+                │  registry-service-funpay :8080 → registry-ledger-db  │
+                │                ↕ private networking                  │
+                │  Redis (shared)          :6379                       │
+                └──────────────────────────────────────────────────────┘
 ```
 
 > **Service-to-service calls use Railway private networking** (`*.railway.internal`).
@@ -108,7 +111,7 @@ selected by the `RAILWAY_DOCKERFILE_PATH` variable
 - **Manual / recovery deploy** (e.g. recreating a deleted service) from the repo root:
 
   ```bash
-  railway link --project <observant-miracle-id> --environment production
+  railway link --project FunPay --environment production
   # create the service shell (empty), then set its variables, then:
   railway up --service <name> --ci          # uploads repo root, builds via Dockerfile path
   railway domain --service <name>           # (or MCP generate-domain) for a public URL

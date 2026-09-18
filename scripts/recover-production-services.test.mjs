@@ -16,7 +16,7 @@ const CANONICAL = { 'payment-server': 'https://payment-server-production-b9b8.up
 const svc = (over = {}) => ({
   id: 'svc-1',
   name: 'payment-server',
-  projectName: 'observant-miracle',
+  projectName: 'FunPay',
   environmentName: 'production',
   environmentId: 'env-1',
   domains: ['payment-server-production-b9b8.up.railway.app'],
@@ -27,7 +27,7 @@ const svc = (over = {}) => ({
 const redis = (over = {}) => ({
   id: 'svc-redis',
   name: 'Redis',
-  projectName: 'observant-miracle',
+  projectName: 'FunPay',
   environmentName: 'production',
   environmentId: 'env-1',
   domains: [],

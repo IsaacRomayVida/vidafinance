@@ -3,7 +3,7 @@
  *
  * Found live on 2026-09-04 (verify-production-live run 33918482954):
  * `softcredito-adapter` and `underwriting-service` had ZERO active deployments
- * in observant-miracle/production (SPEI disbursement, payroll deductions and
+ * in FunPay/production (SPEI disbursement, payroll deductions and
  * the entire credit pipeline offline), and the shared `Redis` service showed
  * NONE ACTIVE — which explains ml-service reporting "degraded" and the other
  * services' health endpoints hanging. Fixing that meant clicking the Railway

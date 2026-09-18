@@ -13,10 +13,10 @@ Both are low-risk by design: `manual_review_all` cannot autonomously approve, an
 
 ## Current state (as of 2026-04-24, end-to-end verified)
 
-Production is in `observant-miracle` on Railway (not `vida-production` — that project name does not exist; `vida-backend` is audited separately — see `docs/ops/railway-project-audit.md`).
+Production is in `FunPay` on Railway (not `vida-production` — that project name does not exist; `vida-backend` is audited separately — see `docs/ops/railway-project-audit.md`).
 
 - **RiskSeal**: live — `RISKSEAL_MOCK=false`, `RISKSEAL_API_KEY` set, `RISKSEAL_BASE_URL=https://latam-1.riskseal.io` (regional endpoint, not `api.riskseal.io/v1`).
-- **ML**: `ML_MODE=manual_review_all` on `observant-miracle/ml-service` (set 2026-04-24 during initial cutover).
+- **ML**: `ML_MODE=manual_review_all` on `FunPay/ml-service` (set 2026-04-24 during initial cutover).
 - **Employer-screening (stage-a)**: fully operational on self-hosted SAT data. `EMPLOYER_SAT_PROVIDER=local` (default), EFOS + Art. 69 blobs live in `vida-finance.firebasestorage.app`. First successful refresh 2026-04-24 @ 15:39:45 UTC (`sat_refresh_meta/latest.status=ok`). `DENUE` timeout raised from 10s → 30s + 1 retry, `REPSE_URL` configured. SW SAPiens (`sw-client`) stays dormant behind the flag; flip `EMPLOYER_SAT_PROVIDER=sw` + set `SW_USER`/`SW_PASSWORD` only if the SAT portal changes schema in a way the CF can't absorb.
 - **Pipeline reach**: with stage-a unblocked, real traffic now reaches stage 0 (RiskSeal + ML). End-to-end verified 2026-04-24 against live `/underwrite` (see section 8).
 
@@ -97,7 +97,7 @@ curl -sS -o /dev/null -w "ml-service: %{http_code}\n" --max-time 5 \
 gh secret list --repo IsaacRomayVida/vidafinance | grep RISKSEAL_API_KEY
 
 # 3. Confirm the same key is wired through to Railway
-railway link --project observant-miracle --environment production --service underwriting-service
+railway link --project FunPay --environment production --service underwriting-service
 railway variables --service underwriting-service --kv | grep -E '^RISKSEAL_'
 # Expected:
 #   RISKSEAL_MOCK=false
@@ -122,7 +122,7 @@ ETA: 15 min incl. verification. Rollback plan ready.
 ## 3. Flip ML (2 min)
 
 ```bash
-railway link --project observant-miracle --environment production --service ml-service
+railway link --project FunPay --environment production --service ml-service
 railway variables --service ml-service --set ML_MODE=manual_review_all
 # A redeploy is triggered automatically on variable change; if not:
 railway redeploy --service ml-service
@@ -147,7 +147,7 @@ railway variables --service ml-service --kv | grep ML_MODE
 ## 4. Flip RiskSeal (2 min)
 
 ```bash
-railway link --project observant-miracle --environment production --service underwriting-service
+railway link --project FunPay --environment production --service underwriting-service
 railway variables --service underwriting-service --set RISKSEAL_MOCK=false
 railway redeploy --service underwriting-service
 ```
@@ -196,7 +196,7 @@ Either toggle can be reverted independently — they are not coupled.
 **ML rollback** (undo §3):
 
 ```bash
-railway link --project observant-miracle --environment production --service ml-service
+railway link --project FunPay --environment production --service ml-service
 railway variables --service ml-service --set ML_MODE=shadow
 railway redeploy --service ml-service
 ```
@@ -206,7 +206,7 @@ railway redeploy --service ml-service
 **RiskSeal rollback** (undo §4):
 
 ```bash
-railway link --project observant-miracle --environment production --service underwriting-service
+railway link --project FunPay --environment production --service underwriting-service
 railway variables --service underwriting-service --set RISKSEAL_MOCK=true
 railway redeploy --service underwriting-service
 ```
@@ -232,7 +232,7 @@ If approval rate ≠ 0% manual or if you see RiskSeal 5xx >5% of calls → roll 
 
 ## 8. Verifying employer-screening end-to-end (VID3-714)
 
-Verified 2026-04-24 against production `observant-miracle/underwriting-service`. The actual request/response shape (for future re-runs) is:
+Verified 2026-04-24 against production `FunPay/underwriting-service`. The actual request/response shape (for future re-runs) is:
 
 ```bash
 URL="https://underwriting-service-production.up.railway.app/underwrite"

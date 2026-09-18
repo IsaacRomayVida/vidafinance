@@ -15,7 +15,7 @@ Prometheus-compatible metrics exposed at `/metrics` on every Railway service + a
 
 ## What's instrumented
 
-Each Railway service on `observant-miracle` exposes:
+Each Railway service on `FunPay` exposes:
 
 - **vida_http_request_duration_seconds** — histogram, per route + method + status code
 - **vida_business_events_total** — counter: `loan_disbursed`, `loan_repaid`, `disbursement_failed`, etc.

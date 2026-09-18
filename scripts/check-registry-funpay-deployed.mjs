@@ -49,7 +49,7 @@ import { readFileSync } from 'node:fs';
 import { TARGETS, pathsFilter } from './check-deploy-watch-paths.mjs';
 
 const RAILWAY_API = 'https://backboard.railway.app/graphql/v2';
-const PROJECT_ID = '1ad040b4-6f0b-4530-9f58-0a1ef5e89c75'; // observant-miracle (FunPay) since 2026-09-17
+const PROJECT_ID = '1ad040b4-6f0b-4530-9f58-0a1ef5e89c75'; // FunPay (named observant-miracle until 2026-09-17)
 const ENVIRONMENT_ID = '441caff4-8cc1-401f-93e2-30c49fe5d2d9';
 
 /* ── the decision, isolated from all I/O so it can be tested ──────────────── */

@@ -2,7 +2,7 @@ name: Deploy registry-service-funpay (Railway)
 
 # ⚠️ THIS WORKFLOW EXISTS BECAUSE THE SERVICE HAS NO RAILWAY DEPLOYMENT TRIGGER.
 #
-# `registry-service-funpay` (Railway project `observant-miracle`, FunPay's own
+# `registry-service-funpay` (Railway project `FunPay`, FunPay's own
 # project since 2026-09-17; it previously ran inside Funtrip's `vida-backend`) is
 # not wired to any deployment trigger. Nothing in Railway watches this repo for
 # this service.
@@ -292,7 +292,7 @@ jobs:
           . "${RUNNER_TEMP}/railway.sh"
 
           # The GraphQL API with the account token (RAILWAY_API_TOKEN, Bearer) and
-          # deliberately not the Railway CLI. Since the move to observant-miracle
+          # deliberately not the Railway CLI. Since the move to FunPay
           # (2026-09-17) the repo's RAILWAY_TOKEN is not authorised for this
           # service, while RAILWAY_API_TOKEN is proven to see the project.
           #
