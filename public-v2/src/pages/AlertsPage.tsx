@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   collection,
   query,
@@ -133,38 +134,18 @@ function getSourceLabel(alert: Alert): string {
   return labels[src] || src;
 }
 
-/* ─── Severity Styles ──────────────────────────────────────────────── */
+/* ─── Severity → status pill class (never green: an alert is never "approved") ─── */
 
-const severityConfig: Record<
-  Severity,
-  { bg: string; text: string; dot: string; border: string; badgeBg: string }
-> = {
-  critical: {
-    bg: 'rgba(220,80,60,0.04)',
-    text: 'var(--danger)',
-    dot: 'var(--danger)',
-    border: 'rgba(220,80,60,0.12)',
-    badgeBg: 'rgba(220,80,60,0.08)',
-  },
-  warning: {
-    bg: 'rgba(196,155,65,0.04)',
-    text: 'var(--gold)',
-    dot: '#c49b41',
-    border: 'rgba(196,155,65,0.12)',
-    badgeBg: 'rgba(196,155,65,0.08)',
-  },
-  info: {
-    bg: 'rgba(25,68,69,0.03)',
-    text: 'var(--t2)',
-    dot: '#4a8fa0',
-    border: 'rgba(25,68,69,0.06)',
-    badgeBg: 'rgba(74,143,160,0.08)',
-  },
+const severityClass: Record<Severity, string> = {
+  critical: ' bad',
+  warning: ' warn',
+  info: '',
 };
 
 /* ─── Component ────────────────────────────────────────────────────── */
 
 export function AlertsPage() {
+  const { t } = useTranslation();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -274,58 +255,31 @@ export function AlertsPage() {
   };
 
   const filterTabs: { key: AlertType; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'overdue', label: 'Overdue' },
-    { key: 'system', label: 'System' },
-    { key: 'payment_failure', label: 'Payment Failure' },
+    { key: 'all', label: t('alerts_filter_all') },
+    { key: 'overdue', label: t('alerts_filter_overdue') },
+    { key: 'system', label: t('alerts_filter_system') },
+    { key: 'payment_failure', label: t('alerts_filter_payment') },
   ];
 
-  /* ─── Shared Styles ──────────────────────────────────────────────── */
-
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '24px 28px',
-    border: '1px solid rgba(25,68,69,0.04)',
-    boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
-    marginBottom: 12,
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '2.2px',
-    color: 'var(--gold)',
-    marginBottom: 10,
+  const severityLabel: Record<Severity, string> = {
+    critical: t('alerts_sev_critical'),
+    warning: t('alerts_sev_warning'),
+    info: t('alerts_sev_info'),
   };
 
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
+    <div className="ops-page">
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h1
-          style={{
-            fontFamily: 'var(--df)',
-            fontSize: 26,
-            color: 'var(--t1)',
-            fontWeight: 400,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.15,
-            marginBottom: 8,
-          }}
-        >
-          Alerts
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
-          System incidents and overdue loan alerts from Firestore.
-        </p>
+      <div className="ops-head">
+        <div>
+          <div className="dot ops-eyebrow">{t('ops_eyebrow_ops')}</div>
+          <h1 className="ops-title">{t('alerts_title')}</h1>
+          <p className="ops-sub">{t('alerts_subtitle')}</p>
+        </div>
       </div>
 
-      {/* Severity Count Badges */}
-      <div
-        style={{ display: 'flex', gap: 12, marginBottom: 28, flexWrap: 'wrap' }}
-      >
+      {/* Severity counts */}
+      <div className="ops-kpis" style={{ marginTop: 0, marginBottom: 10 }}>
         {(
           [
             ['critical', counts.critical],
@@ -333,311 +287,106 @@ export function AlertsPage() {
             ['info', counts.info],
           ] as [Severity, number][]
         ).map(([sev, count]) => (
-          <div
-            key={sev}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              background: severityConfig[sev].badgeBg,
-              border: `1px solid ${severityConfig[sev].border}`,
-              borderRadius: 60,
-              padding: '8px 18px',
-            }}
-          >
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: severityConfig[sev].dot,
-              }}
-            />
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: severityConfig[sev].text,
-                textTransform: 'capitalize',
-              }}
-            >
-              {sev}
-            </span>
-            <span
-              style={{
-                fontFamily: 'var(--df)',
-                fontSize: 16,
-                color: severityConfig[sev].text,
-              }}
-            >
-              {count}
-            </span>
+          <div key={sev} className={`ops-kpi${count > 0 && sev !== 'info' ? ' warn' : ''}`}>
+            <small>{severityLabel[sev]}</small>
+            <b>{count}</b>
           </div>
         ))}
       </div>
 
-      {/* Filter Tabs */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 32,
-          borderBottom: '1px solid rgba(25,68,69,0.06)',
-          marginBottom: 24,
-        }}
-      >
-        {filterTabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setFilter(t.key)}
-            style={{
-              fontSize: 12,
-              fontWeight: filter === t.key ? 700 : 500,
-              color: filter === t.key ? 'var(--brand)' : 'var(--t3)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              padding: '14px 0',
-              background: 'none',
-              border: 'none',
-              borderBottom:
-                filter === t.key
-                  ? '2px solid var(--gold)'
-                  : '2px solid transparent',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Filter chips */}
+      <div className="ops-chips" style={{ margin: '4px 4px 14px' }}>
+        {filterTabs.map((tab) => {
+          const on = filter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setFilter(tab.key)}
+              className={`ops-chip${on ? ' on' : ''}`}
+              aria-pressed={on}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Loading */}
+      {/* Errors / loading */}
       {error && (
-        <div role="alert" className="text-red-600" style={{ marginBottom: 16 }}>
+        <div role="alert" className="ops-error" style={{ marginBottom: 10, padding: '12px 16px' }}>
           {error}
         </div>
       )}
       {loading && (
-        <div
-          style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}
-        >
-          <p style={{ fontSize: 14 }}>Loading alerts...</p>
+        <div className="ops-card" style={{ textAlign: 'center', padding: 48 }} aria-busy="true">
+          <p className="ops-note">{t('alerts_loading')}</p>
         </div>
       )}
 
       {/* Active Alerts */}
       {!loading && filtered(activeAlerts).length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ ...labelStyle, marginBottom: 16 }}>
-            Active ({filtered(activeAlerts).length})
-          </div>
+        <section className="ops-card">
+          <h2 className="ops-h3">{t('alerts_active', { count: filtered(activeAlerts).length })}</h2>
           {filtered(activeAlerts).map((alert) => {
             const sev = getSeverity(alert);
-            const cfg = severityConfig[sev];
             const key = `${alert.kind}-${alert.id}`;
             return (
-              <div
-                key={key}
-                style={{
-                  ...cardStyle,
-                  borderLeft: `3px solid ${cfg.dot}`,
-                  background: cfg.bg,
-                  borderColor: cfg.border,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    gap: 16,
-                  }}
+              <div key={key} className="ops-batch" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <span className="fl" aria-hidden="true" style={{ marginTop: 2 }} />
+                <span className="t" style={{ whiteSpace: 'normal' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span className={`ops-status${severityClass[sev]}`}>{severityLabel[sev]}</span>
+                    <span className="ops-status mute">{getSourceLabel(alert)}</span>
+                  </span>
+                  <span style={{ display: 'block', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.5 }}>{getMessage(alert)}</span>
+                  <small style={{ whiteSpace: 'normal' }}>
+                    {fmtDate(getTimestamp(alert))} · {fmtRelative(getTimestamp(alert))}
+                  </small>
+                </span>
+                <button
+                  type="button"
+                  className="ops-btn sm ghost"
+                  onClick={() => dismiss(alert)}
+                  disabled={dismissing === key}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {/* Source + Severity */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: cfg.text,
-                          background: cfg.badgeBg,
-                          padding: '3px 10px',
-                          borderRadius: 20,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                        }}
-                      >
-                        {sev}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color: 'var(--t2)',
-                          background: 'rgba(25,68,69,0.04)',
-                          padding: '3px 10px',
-                          borderRadius: 20,
-                        }}
-                      >
-                        {getSourceLabel(alert)}
-                      </span>
-                    </div>
-
-                    {/* Message */}
-                    <div
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 500,
-                        color: 'var(--t1)',
-                        lineHeight: 1.5,
-                        marginBottom: 6,
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {getMessage(alert)}
-                    </div>
-
-                    {/* Timestamp */}
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--t3)',
-                        display: 'flex',
-                        gap: 8,
-                      }}
-                    >
-                      <span>{fmtDate(getTimestamp(alert))}</span>
-                      <span>{fmtRelative(getTimestamp(alert))}</span>
-                    </div>
-                  </div>
-
-                  {/* Dismiss Button */}
-                  <button
-                    onClick={() => dismiss(alert)}
-                    disabled={dismissing === key}
-                    style={{
-                      background: 'rgba(25,68,69,0.06)',
-                      color: 'var(--t2)',
-                      borderRadius: 60,
-                      padding: '8px 18px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      whiteSpace: 'nowrap',
-                      opacity: dismissing === key ? 0.5 : 1,
-                    }}
-                  >
-                    {dismissing === key ? 'Dismissing...' : 'Dismiss'}
-                  </button>
-                </div>
+                  {dismissing === key ? t('alerts_dismissing') : t('alerts_dismiss')}
+                </button>
               </div>
             );
           })}
-        </div>
+        </section>
       )}
 
-      {/* Resolved Alerts */}
+      {/* Resolved Alerts — the only green on this page: resolved = done */}
       {!loading && filtered(resolvedAlerts).length > 0 && (
-        <div>
-          <div style={{ ...labelStyle, marginBottom: 16, color: 'var(--t3)' }}>
-            Resolved ({filtered(resolvedAlerts).length})
-          </div>
+        <section className="ops-card">
+          <h2 className="ops-h3">{t('alerts_resolved', { count: filtered(resolvedAlerts).length })}</h2>
           {filtered(resolvedAlerts).map((alert) => {
             const key = `${alert.kind}-${alert.id}`;
             return (
-              <div
-                key={key}
-                style={{
-                  ...cardStyle,
-                  opacity: 0.55,
-                  borderLeft: '3px solid rgba(25,68,69,0.08)',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    gap: 16,
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: 'var(--brand-light)',
-                          background: 'rgba(36,122,110,0.06)',
-                          padding: '3px 10px',
-                          borderRadius: 20,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                        }}
-                      >
-                        Resolved
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color: 'var(--t2)',
-                          background: 'rgba(25,68,69,0.04)',
-                          padding: '3px 10px',
-                          borderRadius: 20,
-                        }}
-                      >
-                        {getSourceLabel(alert)}
-                      </span>
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 500,
-                        color: 'var(--t1)',
-                        lineHeight: 1.5,
-                        marginBottom: 6,
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {getMessage(alert)}
-                    </div>
-
-                    <div style={{ fontSize: 12, color: 'var(--t3)' }}>
-                      {fmtDate(getTimestamp(alert))}
-                    </div>
-                  </div>
-                </div>
+              <div key={key} className="ops-batch" style={{ flexWrap: 'wrap', alignItems: 'flex-start', opacity: 0.7 }}>
+                <span className="fl g" aria-hidden="true" style={{ marginTop: 2 }} />
+                <span className="t" style={{ whiteSpace: 'normal' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span className="ops-status g">{t('alerts_resolved_label')}</span>
+                    <span className="ops-status mute">{getSourceLabel(alert)}</span>
+                  </span>
+                  <span style={{ display: 'block', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.5 }}>{getMessage(alert)}</span>
+                  <small>{fmtDate(getTimestamp(alert))}</small>
+                </span>
               </div>
             );
           })}
-        </div>
+        </section>
       )}
 
       {/* Empty State */}
       {!loading && alerts.length === 0 && (
-        <div
-          style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--t3)' }}
-        >
-          <p style={{ fontSize: 14 }}>No alerts recorded.</p>
+        <div className="ops-card">
+          <div className="empty-state">
+            <p>{t('alerts_empty')}</p>
+          </div>
         </div>
       )}
 
@@ -646,16 +395,10 @@ export function AlertsPage() {
         alerts.length > 0 &&
         filtered(activeAlerts).length === 0 &&
         filtered(resolvedAlerts).length === 0 && (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '48px 24px',
-              color: 'var(--t3)',
-            }}
-          >
-            <p style={{ fontSize: 14 }}>
-              No {filter === 'all' ? '' : filter.replace('_', ' ')} alerts.
-            </p>
+          <div className="ops-card">
+            <div className="empty-state">
+              <p>{t('alerts_empty_filtered')}</p>
+            </div>
           </div>
         )}
     </div>

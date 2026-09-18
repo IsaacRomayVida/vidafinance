@@ -32,27 +32,30 @@ const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  * Anything not described here is a defect.
  */
 const DELIBERATE: Record<string, { count: number; why: string }> = {
+  // The funpay-ui borrower redesign moved these five surfaces onto the cream
+  // boards (src/styles/borrower.css), where every secondary text is --ink-soft
+  // and the dimmed timeline / disabled / metadata states are carried by
+  // classes, not by --t3. The counts are pinned at zero so a --t3 cannot come
+  // back one inline style at a time.
   'components/LoanStatusCard.tsx': {
-    count: 1,
-    why: 'Future timeline steps: the low contrast IS the message ("not yet").',
+    count: 0,
+    why: 'Future timeline steps dim through .bo-tl opacity, not through --t3.',
   },
   'components/employee/CreditWidget.tsx': {
-    count: 1,
-    why: 'Disabled CTA text. WCAG 1.4.3 exempts disabled controls from the minimum.',
+    count: 0,
+    why: 'Disabled CTA dims through .bo-cta:disabled opacity, not through --t3.',
   },
   'components/employee/PaymentModal.tsx': {
-    count: 1,
-    why: 'Payment-method metadata, secondary to the amount and date beside it.',
+    count: 0,
+    why: 'Payment-method metadata is --ink-soft via .bo-hrow .how.',
   },
   'pages/MyLoans.tsx': {
-    count: 3,
-    why:
-      'Expand chevron (a glyph, not text — 3:1 applies, still failing, deferred to the ' +
-      'token audit) plus payment-method and timestamp metadata.',
+    count: 0,
+    why: 'Chevron, payment-method and timestamp metadata are --ink-soft via .bo-chev / .bo-hrow.',
   },
   'components/employee/LoanTable.tsx': {
-    count: 1,
-    why: 'Empty-state help paragraph, no value beside it to invert.',
+    count: 0,
+    why: 'Empty-state help paragraph is --ink-soft via .bo-empty.',
   },
   'pages/EmployeePage.tsx': {
     count: 1,

@@ -58,3 +58,16 @@ export function statusLabelKey(status: unknown): string {
   }
   return 'loanStatus.unknown';
 }
+
+
+/**
+ * Whole days until a loan's due date (negative = overdue). Ceil so "due in
+ * 20 hours" reads as 1 day, matching how borrowers count.
+ */
+export function daysUntilDue(
+  dueDate: { seconds: number } | undefined,
+  now: number = Date.now()
+): number | null {
+  if (!dueDate || typeof dueDate.seconds !== 'number') return null;
+  return Math.ceil((dueDate.seconds * 1000 - now) / 86400000);
+}

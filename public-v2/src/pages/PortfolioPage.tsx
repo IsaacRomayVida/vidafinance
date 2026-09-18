@@ -49,19 +49,8 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'var(--gold)',
-  approved: 'var(--brand-light)',
-  active: 'var(--brand)',
-  disbursed: 'var(--brand)',
-  disbursement_queued: 'var(--t2)',
-  repaid: 'var(--brand-light)',
-  overdue: 'var(--danger)',
-  in_collections: 'var(--danger)',
-  written_off: 'var(--t3)',
-  rejected: 'var(--t3)',
-  cancelled: 'var(--t3)',
-};
+/** Bars are paper; only the states that mean money is live/repaid are green. */
+const STATUS_GREEN = new Set(['approved', 'active', 'disbursed', 'repaid']);
 
 export function PortfolioPage() {
   const { user } = useAuth();
@@ -105,39 +94,6 @@ export function PortfolioPage() {
     return () => { cancelled = true; };
   }, [user, period]);
 
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '28px',
-    border: '1px solid rgba(25,68,69,0.04)',
-    boxShadow: '0 1px 4px rgba(25,68,69,0.02)',
-    marginBottom: 20,
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '2.2px',
-    color: 'var(--gold)',
-    marginBottom: 10,
-  };
-
-  const valueStyle: React.CSSProperties = {
-    fontFamily: 'var(--df)',
-    fontSize: 36,
-    color: 'var(--t1)',
-    letterSpacing: '-0.03em',
-    fontWeight: 400,
-    lineHeight: 1,
-  };
-
-  const subValueStyle: React.CSSProperties = {
-    fontSize: 12,
-    color: 'var(--t3)',
-    marginTop: 6,
-  };
-
   // Compute derived metrics
   const summary = report?.summary;
   // Loans with money out and not yet repaid. This previously counted
@@ -174,177 +130,150 @@ export function PortfolioPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 0 64px' }}>
+    <div className="ops-page">
       {/* Header */}
-      <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontFamily: 'var(--df)', fontSize: 26, color: 'var(--t1)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-          Portfolio Analytics
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.7 }}>
-          Loan portfolio performance, risk metrics, and employer breakdown.
-        </p>
-      </div>
-
-      {/* Period filter */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
-        {periodOptions.map((opt) => (
-          <button
-            key={opt.value}
-            onClick={() => setPeriod(opt.value)}
-            style={{
-              background: period === opt.value ? 'var(--brand)' : 'rgba(25,68,69,0.04)',
-              color: period === opt.value ? '#fff' : 'var(--t2)',
-              borderRadius: 60,
-              padding: '8px 20px',
-              fontSize: 12,
-              fontWeight: 600,
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              letterSpacing: '0.2px',
-            }}
-          >
-            {opt.label}
-          </button>
-        ))}
+      <div className="ops-head">
+        <div>
+          <div className="dot ops-eyebrow">Cartera</div>
+          <h1 className="ops-title">Portfolio Analytics</h1>
+          <p className="ops-sub">Loan portfolio performance, risk metrics, and employer breakdown.</p>
+        </div>
+        {/* Period filter */}
+        <div className="ops-chips">
+          {periodOptions.map((opt) => {
+            const on = period === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPeriod(opt.value)}
+                className={`ops-chip${on ? ' on' : ''}`}
+                aria-pressed={on}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Loading state */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--t3)' }}>
-          <p style={{ fontSize: 14 }}>Loading portfolio data...</p>
+        <div className="ops-card" style={{ textAlign: 'center', padding: 48 }} aria-busy="true">
+          <p className="ops-note">Loading portfolio data...</p>
         </div>
       )}
 
       {/* Error state */}
       {error && !loading && (
-        <div style={{ ...cardStyle, background: 'rgba(220,80,60,0.04)', borderColor: 'rgba(220,80,60,0.12)' }}>
-          <p style={{ fontSize: 14, color: 'var(--danger)' }}>Error: {error}</p>
+        <div className="ops-card">
+          <p className="ops-error">Error: {error}</p>
         </div>
       )}
 
       {/* Main content */}
       {report && !loading && (
         <>
-          {/* Key metrics - 2x3 grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Loans Disbursed</div>
-              <div style={valueStyle}>{fmt(summary!.totalLoans)}</div>
-              <div style={subValueStyle}>{fmtCurrency(summary!.totalDisbursedMXN)} MXN total</div>
+          {/* Key metrics */}
+          <div className="ops-kpis" style={{ marginTop: 0, marginBottom: 10 }}>
+            <div className="ops-kpi">
+              <small>Loans Disbursed</small>
+              <b>{fmt(summary!.totalLoans)}</b>
+              <em>{fmtCurrency(summary!.totalDisbursedMXN)} MXN total</em>
             </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Active Loans</div>
-              <div style={valueStyle}>{fmt(activeCount)}</div>
-              <div style={subValueStyle}>{fmtCurrency(summary!.totalDisbursedMXN - summary!.totalRepaidMXN)} MXN outstanding</div>
+            <div className="ops-kpi">
+              <small>Active Loans</small>
+              <b>{fmt(activeCount)}</b>
+              <em>{fmtCurrency(summary!.totalDisbursedMXN - summary!.totalRepaidMXN)} MXN outstanding</em>
             </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Default Rate</div>
+            <div className="ops-kpi">
+              <small>Default Rate</small>
               {/* An absent rate renders as an explicit em-dash, never as a
                   number. React renders null as nothing, which would have left
                   this tile silently blank and read as "fine". */}
-              <div style={valueStyle}>{summary!.defaultRate ?? '—'}</div>
+              <b>{summary!.defaultRate ?? '—'}</b>
               {/* The backend has never measured days-late: there is no
                   days-overdue field on the loan doc. This figure is the
                   share of disbursed VOLUME sitting anywhere on the default
                   ladder. The old ">30 days" subtitle described a metric that
                   does not exist. */}
-              <div style={subValueStyle}>
+              <em>
                 {summary!.defaultRate === null
                   ? 'No disbursed volume yet'
                   : 'Share of disbursed volume overdue, in collections or written off'}
-              </div>
+              </em>
             </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Avg Loan Size</div>
-              <div style={valueStyle}>{fmtCurrency(avgLoanSize)}</div>
-              <div style={subValueStyle}>MXN per loan</div>
+            <div className="ops-kpi">
+              <small>Avg Loan Size</small>
+              <b>{fmtCurrency(avgLoanSize)}</b>
+              <em>MXN per loan</em>
             </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Repayment Rate</div>
-              <div style={valueStyle}>{repaymentRate}</div>
-              <div style={subValueStyle}>{fmtCurrency(summary!.totalRepaidMXN)} MXN collected</div>
+            <div className="ops-kpi">
+              <small>Repayment Rate</small>
+              <b>{repaymentRate}</b>
+              <em>{fmtCurrency(summary!.totalRepaidMXN)} MXN collected</em>
             </div>
-            <div style={cardStyle}>
-              <div style={labelStyle}>Revenue</div>
-              <div style={valueStyle}>{fmtCurrency(summary!.totalRevenueMXN)}</div>
-              <div style={subValueStyle}>Fees collected (MXN)</div>
+            <div className="ops-kpi">
+              <small>Revenue</small>
+              <b>{fmtCurrency(summary!.totalRevenueMXN)}</b>
+              <em>Fees collected (MXN)</em>
             </div>
           </div>
 
           {/* Loan volume by status - bar chart */}
-          <div style={{ ...cardStyle, padding: '32px 28px' }}>
-            <div style={{ ...labelStyle, marginBottom: 24 }}>Loan Volume by Status</div>
+          <section className="ops-card">
+            <h2 className="ops-h3">Loan Volume by Status</h2>
             {statusEntries.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--t3)' }}>No loan data for this period.</p>
+              <p className="ops-note">No loan data for this period.</p>
             )}
             {statusEntries.map(([status, count]) => (
-              <div key={status} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--t1)' }}>
-                    {STATUS_LABELS[status] || status}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t2)' }}>{count}</span>
+              <div key={status} className="ops-bar-row">
+                <div className="ops-bar-meta">
+                  <span>{STATUS_LABELS[status] || status}</span>
+                  <span>{count}</span>
                 </div>
-                <div style={{ height: 8, borderRadius: 4, background: 'rgba(25,68,69,0.04)', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${(count / maxStatusCount) * 100}%`,
-                      borderRadius: 4,
-                      background: STATUS_COLORS[status] || 'var(--brand)',
-                      transition: 'width 0.4s ease',
-                    }}
+                <div className="ops-bar" aria-hidden="true">
+                  <i
+                    className={STATUS_GREEN.has(status) ? 'g' : undefined}
+                    style={{ width: `${(count / maxStatusCount) * 100}%` }}
                   />
                 </div>
               </div>
             ))}
-          </div>
+          </section>
 
           {/* Top employers by loan volume */}
-          <div style={{ ...cardStyle, padding: '32px 28px' }}>
-            <div style={{ ...labelStyle, marginBottom: 24 }}>Top Employers by Loan Volume</div>
+          <section className="ops-card">
+            <h2 className="ops-h3">Top Employers by Loan Volume</h2>
             {topEmployers.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--t3)' }}>No employer data for this period.</p>
+              <p className="ops-note">No employer data for this period.</p>
             )}
             {topEmployers.length > 0 && (
-              <div>
-                {/* Table header */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 120px', gap: 12, paddingBottom: 12, borderBottom: '1px solid rgba(25,68,69,0.06)' }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)' }}>Employer</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)', textAlign: 'right' }}>Loans</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--t3)', textAlign: 'right' }}>Volume (MXN)</div>
-                </div>
-                {/* Table rows */}
-                {topEmployers.map(([employerId, data], i) => (
-                  <div
-                    key={employerId}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 100px 120px',
-                      gap: 12,
-                      padding: '14px 0',
-                      borderBottom: i < topEmployers.length - 1 ? '1px solid rgba(25,68,69,0.04)' : 'none',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {employerId}
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t2)', textAlign: 'right' }}>
-                      {fmt(data.count)}
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)', textAlign: 'right', fontFamily: 'var(--df)' }}>
-                      {fmtCurrency(data.volume)}
-                    </div>
-                  </div>
-                ))}
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Employer</th>
+                      <th className="num">Loans</th>
+                      <th className="num">Volume (MXN)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topEmployers.map(([employerId, data]) => (
+                      <tr key={employerId}>
+                        <td style={{ fontWeight: 500, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{employerId}</td>
+                        <td className="num">{fmt(data.count)}</td>
+                        <td className="num">{fmtCurrency(data.volume)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
-          </div>
+          </section>
 
           {/* Report timestamp */}
-          <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--t3)', fontSize: 11 }}>
+          <div className="ops-note" style={{ textAlign: 'center', padding: '8px 0' }}>
             Report generated {new Date(report.generatedAt).toLocaleString()}
           </div>
         </>

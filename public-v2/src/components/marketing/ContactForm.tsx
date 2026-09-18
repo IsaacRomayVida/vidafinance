@@ -32,25 +32,25 @@ export function ContactForm() {
 
   if (sent) {
     return (
-      <div className="cf-success" id="cfSuccess" style={{ display: 'block' }}>
+      <div className="mk-success" id="cfSuccess" role="status" aria-live="polite">
         <p>{t('pg_contact_form_sent')}</p>
       </div>
     );
   }
 
   return (
-    <form className="contact-form" onSubmit={handleSubmit}>
-      <div className="cf-field">
+    <form className="mk-form" onSubmit={handleSubmit} style={{ maxWidth: 520 }}>
+      <div className="mk-field">
         <label htmlFor="cf-name">{t('pg_contact_form_name')}</label>
-        <input id="cf-name" type="text" name="name" placeholder={t('pg_contact_form_name_ph')} required />
+        <input id="cf-name" className="mk-input" type="text" name="name" autoComplete="name" placeholder={t('pg_contact_form_name_ph')} required />
       </div>
-      <div className="cf-field">
+      <div className="mk-field">
         <label htmlFor="cf-email">{t('pg_contact_form_email')}</label>
-        <input id="cf-email" type="email" name="email" placeholder={t('pg_contact_form_email_ph')} required />
+        <input id="cf-email" className="mk-input" type="email" name="email" autoComplete="email" placeholder={t('pg_contact_form_email_ph')} required />
       </div>
-      <div className="cf-field">
+      <div className="mk-field">
         <label htmlFor="cf-type">{t('pg_contact_form_type')}</label>
-        <select id="cf-type" name="type" required>
+        <select id="cf-type" className="mk-input" name="type" required>
           <option value="general">{t('pg_contact_form_type_general')}</option>
           <option value="employer">{t('pg_contact_form_type_employer')}</option>
           <option value="partner">{t('pg_contact_form_type_partner')}</option>
@@ -59,11 +59,11 @@ export function ContactForm() {
           <option value="other">{t('pg_contact_form_type_other')}</option>
         </select>
       </div>
-      <div className="cf-field">
+      <div className="mk-field">
         <label htmlFor="cf-msg">{t('pg_contact_form_msg')}</label>
-        <textarea id="cf-msg" name="message" placeholder={t('pg_contact_form_msg_ph')} rows={4} required />
+        <textarea id="cf-msg" className="mk-input" name="message" placeholder={t('pg_contact_form_msg_ph')} rows={4} required />
       </div>
-      <button type="submit" className="cf-btn" disabled={submitting} aria-busy={submitting}>
+      <button type="submit" className="mk-btn block" disabled={submitting} aria-busy={submitting}>
         {submitting ? (
           <>
             <span className="spinner" aria-hidden="true" />
