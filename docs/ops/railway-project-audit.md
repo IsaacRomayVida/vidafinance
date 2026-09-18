@@ -29,5 +29,12 @@ reconciler, scrapers, its own registry-service). The one FunPay service that liv
 - New service deployed from `main`, `/health` reporting `db: true`, internal-secret gate
   verified; `REGISTRY_SERVICE_URL` switched to
   `https://registry-service-funpay-production-1d23.up.railway.app`.
-- The old copy in `vida-backend` stays in place, untouched, as the rollback path until it is
-  explicitly retired (then also remove `RAILWAY_TOKEN_VIDA_BACKEND` from this repo).
+- The old copy in `vida-backend` was kept untouched as the rollback path until 2026-09-18, then
+  deleted (service and database) with Isaac's approval. Its ledger was still empty — 0 entities,
+  0 refs, 0 receipts, only the migration row — so nothing had been written to it after the
+  cutover. **FunPay now runs nothing in `vida-backend`**, and this repo no longer carries
+  `RAILWAY_TOKEN_VIDA_BACKEND`.
+- Two Funtrip services (`scraper-rnt`, `scraper-portals`) still hold a literal
+  `RAILWAY_SERVICE_REGISTRY_SERVICE_FUNPAY_URL` variable pointing at the deleted host. It is a
+  plain string, not a Railway reference, and no Funtrip code reads it, so the deletion could not
+  break their deploys. Funtrip can drop the variable when convenient.
