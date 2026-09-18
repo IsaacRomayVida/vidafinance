@@ -28,7 +28,7 @@ Payroll-deducted microcredit SOFOM for Mexican workers. Loans MXN 500–5,000 de
 
 **Backend — don't modify from a frontend task:**
 - `functions/` — 36 callable CFs, all with `enforceAppCheck: true` + rate limiting
-- 6 Railway services under `observant-miracle`
+- 6 Railway services under `FunPay`
 
 ## The actual `public-v2/src/` tree
 

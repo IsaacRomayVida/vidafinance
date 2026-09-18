@@ -3,7 +3,7 @@ name: Recover fully-down production services
 # The repair half of the pair whose detection half is
 # verify-production-live.yml. That workflow found (run 33918482954,
 # 2026-09-04): softcredito-adapter and underwriting-service with ZERO active
-# deployments in observant-miracle/production, and the shared Redis NONE
+# deployments in FunPay/production, and the shared Redis NONE
 # ACTIVE — SPEI disbursement, payroll deductions, the credit pipeline and
 # every BullMQ queue offline. The only fix path was the Railway dashboard;
 # this makes it a workflow instead, per this repo's working model. Isaac

@@ -30,7 +30,7 @@ There is no "promote staging → prod" mechanism — each environment deploys fr
 
 ### 1.1 registry-service-funpay deploys from CI, not from Railway
 
-`registry-service-funpay` (Railway project `observant-miracle`; it ran inside Funtrip's `vida-backend`
+`registry-service-funpay` (Railway project `FunPay`; it ran inside Funtrip's `vida-backend`
 until 2026-09-17) **has no Railway deployment trigger.** Nothing in Railway watches this repo for this
 service. `.github/workflows/deploy-registry-funpay.yml` exists to fill that gap.
 

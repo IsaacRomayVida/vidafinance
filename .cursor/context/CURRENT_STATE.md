@@ -23,7 +23,7 @@ Goes in `.cursor/context/CURRENT_STATE.md`. Any new Cursor chat reads this and h
 
 **Backend — don't modify from frontend task:**
 - `functions/` — 36 callable CFs, all `enforceAppCheck: true` + rate-limited
-- 6 Railway services under `observant-miracle`
+- 6 Railway services under `FunPay`
 
 ## Design tokens (from `src/styles/index.css` @theme)
 
@@ -130,7 +130,7 @@ cd functions && npm test              # 213 tests must pass
 firebase emulators:start              # local full stack
 
 # Railway (if touching services)
-railway link -p observant-miracle
+railway link -p FunPay
 railway service <service-name>
 railway variables --set "KEY=value"
 ```

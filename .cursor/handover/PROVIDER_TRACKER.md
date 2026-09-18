@@ -224,7 +224,7 @@ If it fails, file a ticket with the error and I'll fix.
 - **Secrets:** Set via `firebase functions:secrets:set` (METAMAP_WEBHOOK_SECRET lives here)
 
 ### Railway
-- **Project:** `observant-miracle` (id `1ad040b4-6f0b-4530-9f58-0a1ef5e89c75`)
+- **Project:** `FunPay` (id `1ad040b4-6f0b-4530-9f58-0a1ef5e89c75`)
 - **6 services:** softcredito-adapter, payment-server, pdf-generator, notification-service, underwriting-service, ml-service
 - **Outbound IP:** `162.220.232.99` (whitelist this with vendors if they ask)
 - **Prod environment ID:** `441caff4-8cc1-401f-93e2-30c49fe5d2d9`

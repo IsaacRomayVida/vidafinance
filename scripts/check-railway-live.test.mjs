@@ -15,7 +15,7 @@ const CANONICAL = { 'payment-server': 'https://payment-server-production-b9b8.up
 const liveService = (over = {}) => ({
   id: 'svc-1234567890',
   name: 'payment-server',
-  projectName: 'observant-miracle',
+  projectName: 'FunPay',
   environmentName: 'production',
   domains: ['payment-server-production-b9b8.up.railway.app'],
   activeDeployments: [{ status: 'SUCCESS' }],
