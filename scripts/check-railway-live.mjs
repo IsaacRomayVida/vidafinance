@@ -10,15 +10,16 @@
  * Why both: a month of HTTP 404s on all five service health probes (ci.yml
  * runs 31335990563, 32069677859) is explained EITHER by dead services OR by
  * stale URL secrets — and the repo has two overlapping Railway projects
- * (docs/ops/railway-project-audit.md: `FunPay` vs the stalled
- * `vida-backend`, with lookalike domains like payment-server-production-91c7
- * vs -b9b8). Only Railway's own inventory can tell those apart.
+ * (docs/ops/railway-project-audit.md: `FunPay` vs Funtrip's `vida-backend`,
+ * with lookalike domains like payment-server-production-91c7 vs -b9b8).
+ * Only Railway's own inventory can tell those apart.
  *
  * Token reality, stated honestly: this repo carries RAILWAY_API_TOKEN,
- * RAILWAY_TOKEN, RAILWAY_TOKEN_STAGING and RAILWAY_TOKEN_VIDA_BACKEND, and
- * only the last is PROVEN in-tree (Project-Access-Token against project
- * e1334895, hourly, in verify-registry-funpay-deployed.yml). The others'
- * types and scopes are not observable from the repo. So this script tries
+ * RAILWAY_TOKEN and RAILWAY_TOKEN_STAGING. RAILWAY_API_TOKEN is PROVEN
+ * in-tree (Bearer, hourly, in verify-registry-funpay-deployed.yml);
+ * RAILWAY_TOKEN_VIDA_BACKEND went with the retired registry copy on
+ * 2026-09-18. The others' types and scopes are not observable from the
+ * repo. So this script tries
  * each candidate with both auth shapes, prints exactly which combination
  * worked, and treats "no token can see anything" as exit 2 (could not
  * observe) — loudly distinct from exit 1 (observed a mismatch). A check that
@@ -184,7 +185,6 @@ function enumerateProjects(log) {
   const candidates = [
     ['RAILWAY_API_TOKEN', process.env.RAILWAY_API_TOKEN],
     ['RAILWAY_TOKEN', process.env.RAILWAY_TOKEN],
-    ['RAILWAY_TOKEN_VIDA_BACKEND', process.env.RAILWAY_TOKEN_VIDA_BACKEND],
   ].filter(([, v]) => v);
 
   for (const [tokenName, token] of candidates) {
