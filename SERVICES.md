@@ -12,6 +12,7 @@ Functions       │  softcredito-adapter   :3002                  │
  public URLs)   │  pdf-generator         :3004                  │
                 │  ml-service            :3005                  │
                 │  underwriting-service  :3003                  │
+                │  registry-service-funpay :8080 → registry-ledger-db │
                 │                ↕ private networking            │
                 │       Redis (shared)   :6379                   │
                 └──────────────────────────────────────────────┘
@@ -31,6 +32,8 @@ Functions       │  softcredito-adapter   :3002                  │
 | pdf-generator | 3004 | Node.js | Puppeteer loan contracts + receipts (e-signature via MetaMap) |
 | ml-service | 3005 | Python | Scorecard/XGBoost underwriting + Stage 4 autoencoder + Claude judge |
 | underwriting-service | 3003 | Node.js | 7-stage credit pipeline: employer screening, identity, bureau (Belvo), KYC (MetaMap), review |
+| registry-service-funpay | 8080 (Railway `PORT`) | Node.js | Identity registry + hash-chain ledger; shadow-writes from `approveEmployer` (Phase A). Deployed by `deploy-registry-funpay.yml`, not by a Railway trigger |
+| registry-ledger-db | 5432 | Postgres 17 | The registry's own database (private only) |
 | Redis | 6379 | Redis | BullMQ queues + rate limiting + ML cache |
 
 > **Note on the shared `:3003`:** `notification-service` and `underwriting-service`
@@ -46,6 +49,8 @@ notification-service.railway.internal:3003
 pdf-generator.railway.internal:3004
 ml-service.railway.internal:3005
 underwriting-service.railway.internal:3003
+registry-service-funpay.railway.internal:8080
+registry-ledger-db.railway.internal:5432
 redis.railway.internal:6379
 ```
 

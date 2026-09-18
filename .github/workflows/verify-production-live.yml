@@ -108,8 +108,8 @@ jobs:
     name: Railway inventory matches our documentation
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Same environment as the registry reconciler, where the proven
-    # RAILWAY_TOKEN_VIDA_BACKEND lives.
+    # Same environment as the registry reconciler. RAILWAY_TOKEN_VIDA_BACKEND is
+    # kept only until the retired registry copy in vida-backend is removed.
     environment: production
     steps:
       - uses: actions/checkout@v5
