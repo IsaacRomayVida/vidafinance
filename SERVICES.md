@@ -155,6 +155,8 @@ PDF_GENERATOR_URL,
 ML_SERVICE_URL
 REGISTRY_SERVICE_URL       # still a GitHub secret (domain not in the file)
 INTERNAL_SECRET            # secret: shared inter-service auth token
+INTERNAL_SECRET_ALT        # secret: set only mid-rotation — accepted, never sent
+                           #   (docs/runbooks/rotate-internal-secret.md)
 REDIS_URL                  # secret: BullMQ queues
 ALLOW_STUB_DISBURSEMENT    # 'true' ONLY in local/dev/test — never in production
 ```

@@ -11,6 +11,9 @@ module.exports = {
   testMatch: [
     '<rootDir>/registry-service/**/*.test.js',
     '<rootDir>/shared/registry/**/*.test.js',
+    // Every service verifies x-internal-secret through this one module; this
+    // suite is where it is covered.
+    '<rootDir>/shared/internal-secret.test.js',
   ],
   modulePaths: ['<rootDir>/registry-service/node_modules'],
 };

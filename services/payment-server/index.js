@@ -7,6 +7,7 @@ const { Queue, Worker, UnrecoverableError } = require('bullmq');
 const { applyCardRepayment, applyPayrollRepayment } = require('./applyRepayment');
 const { alert5xx, alertDisbursementFailed, alertQueueDepth, alertRedisLost } = require('../shared/alerting');
 const { register: metricsRegister, metricsMiddleware } = require('../shared/metrics');
+const { presentedSecretAccepted } = require('../shared/internal-secret');
 require('dotenv').config();
 
 // Fail closed: requireInternal compares the request header against
@@ -117,9 +118,12 @@ const timingSafeStringEqual = (a, b) => {
   return crypto.timingSafeEqual(ha, hb);
 };
 
+// The accepted set is INTERNAL_SECRET plus, during a rotation,
+// INTERNAL_SECRET_ALT -- services/shared/internal-secret.js, which compares
+// the same hash-then-timingSafeEqual way as timingSafeStringEqual above.
 const requireInternal = (req, res, next) => {
   const provided = req.headers['x-internal-secret'];
-  if (!timingSafeStringEqual(Array.isArray(provided) ? '' : provided, process.env.INTERNAL_SECRET))
+  if (!presentedSecretAccepted(Array.isArray(provided) ? '' : provided))
     return res.status(401).json({ error: 'Unauthorized' });
   next();
 };

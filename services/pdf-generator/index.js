@@ -10,6 +10,9 @@ const path       = require("path");
 const { alert5xx, alertQueueDepth, alertRedisLost } = require("../shared/alerting");
 const { register: metricsRegister, metricsMiddleware } = require("../shared/metrics");
 const createLogger = require("../shared/logger");
+// Accepts INTERNAL_SECRET or, during a rotation, INTERNAL_SECRET_ALT --
+// see services/shared/internal-secret.js. Constant-time either way.
+const { requireInternal } = require("../shared/internal-secret");
 require("dotenv").config();
 
 const log = createLogger("vida-pdf-generator");
@@ -228,12 +231,6 @@ setInterval(async () => {
 }, 60_000);
 
 /* ─── Express server ─── */
-
-const requireInternal = (req, res, next) => {
-  if (req.headers["x-internal-secret"] !== process.env.INTERNAL_SECRET)
-    return res.status(401).json({ error: "Unauthorized" });
-  next();
-};
 
 const cors = require("cors");
 const ALLOWED = ["https://vida-finance.web.app"];
