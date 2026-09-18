@@ -52,8 +52,14 @@ stop at.
   (`gh secret set INTERNAL_SECRET`).
 - Set `INTERNAL_SECRET` = *new* and `INTERNAL_SECRET_ALT` = *old* on the five
   Railway services.
-- Deploy production so the Cloud Functions pick the new value up (a deploy of
-  `main`, or re-run the last `VIDA Platform — Deploy`).
+- Deploy production so the Cloud Functions pick the new value up. **The deploy
+  must be *created* after the secret changed.** A workflow run carries the
+  secret values it was given when the run started, so a deploy already in
+  flight — or a re-run of an older one — ships the OLD value and reports
+  success. This is not theoretical: on 2026-09-18 the deploy triggered by the
+  merge began at 11:22, `INTERNAL_SECRET` changed at 11:32, and the functions
+  updated at 11:44 still carried the old value. Merge something, or dispatch
+  `firebase-deploy.yml` with `environment: production`, and check afterwards.
 
 Order does not matter here: every verifier accepts both values throughout, so a
 caller mid-switch is accepted whichever value it holds.
@@ -72,9 +78,25 @@ node scripts/check-production-health.mjs        # 14/14, all services answering
 curl -s "$REGISTRY_URL/health"                  # {"status":"ok","db":true}
 ```
 
-The health endpoints are unauthenticated, so they prove liveness, not auth. For
-auth, watch for 401s in `services/*/logs` (Railway) and in the functions logs
-during a real loan flow, or run the QA loan fixture end to end. A 401 at step 2
+The health endpoints are unauthenticated, so they prove liveness, not auth.
+
+Two checks that prove auth without side effects:
+
+```bash
+# Accepted? 400 = the secret got through and the body was rejected; 401 = refused.
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "$REGISTRY_URL/internal/entities/resolve" \
+  -H 'Content-Type: application/json' -H "x-internal-secret: $(cat new-secret-file)" -d '{}'
+
+# Which value are the deployed functions actually sending? Compare digests,
+# never the values themselves.
+val=$(gcloud functions describe getSystemHealth --project vida-finance --region us-central1 \
+  --format='value(serviceConfig.environmentVariables.INTERNAL_SECRET)')
+printf %s "$val" | shasum -a 256 | cut -c1-12
+shasum -a 256 < new-secret-file | cut -c1-12
+```
+
+Do not run step 3 until those digests match. Also watch for 401s in the Railway
+service logs and the functions logs during a real loan flow. A 401 at step 2
 means some service never got step 1 — put `ALT` back on it before continuing.
 
 ## Rollback
