@@ -29,18 +29,34 @@ module.exports = {
     '^../utils/redis$': '<rootDir>/src/__mocks__/utils/redis.ts',
     '^../../utils/redis$': '<rootDir>/src/__mocks__/utils/redis.ts',
   },
+  // Previously scoped to 4 hand-picked files (~99.5% "coverage" that
+  // actually described 4 of ~50 source files, not the suite). Widened to
+  // the real source surface so the reported number means what it says.
   collectCoverageFrom: [
-    'src/loans/markLoanDisbursed.ts',
-    'src/loans/calculateNextPayrollDate.ts',
-    'src/payments/generatePaymentLink.ts',
-    'src/admin/adminClaims.ts',
+    'src/**/*.ts',
+    '!src/**/*.test.ts',
+    '!src/**/*.d.ts',
+    '!src/**/__tests__/**',
+    '!src/**/__mocks__/**',
+    '!src/**/lib/**',
   ],
+  // A RATCHET, not an aspiration. The old 90/65/80/90 thresholds described
+  // the previous 4-file collectCoverageFrom above, where the suite reported
+  // ~99.5%; against the real ~50-file surface they would fail the build
+  // immediately. Deleting them outright was the other wrong answer — it
+  // leaves nothing stopping coverage from sliding.
+  //
+  // So these sit a couple of points under the measured values on
+  // 2026-09-19 (statements 81.66, branches 73.27, functions 73.27,
+  // lines 83.32): today's suite passes, and a change that meaningfully
+  // reduces coverage fails. Raise them when the number rises; never lower
+  // them to make a red build green.
   coverageThreshold: {
     global: {
-      lines: 90,
-      functions: 65,
-      branches: 80,
-      statements: 90,
+      statements: 80,
+      branches: 72,
+      functions: 72,
+      lines: 82,
     },
   },
 };

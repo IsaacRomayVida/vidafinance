@@ -158,6 +158,15 @@ jobs:
       - name: Unit tests (migration scripts) — hard gate
         run: npm run test:migrations
 
+      # This guards the deploy.yml/firebase-deploy.yml production/staging
+      # Firebase project wiring — it exists because a real prod/staging
+      # deploy mixup happened once. It rotted silently for a while because
+      # nothing in CI ran it; it belongs here because it's a root-level jest
+      # test using root deps (already installed above), same as the
+      # migration scripts tests just above.
+      - name: CI/CD workflow audit (deploy.yml Firebase project routing) — hard gate
+        run: npx jest tests/ci-workflow-audit.test.js
+
   underwriting-service:
     name: "Underwriting Service Tests"
     runs-on: ubuntu-latest
