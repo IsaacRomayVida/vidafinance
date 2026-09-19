@@ -332,6 +332,47 @@ jobs:
       - name: Unit tests (pdf-generator) — internal auth, boot guard, contract generation, worker, hard gate
         run: cd services/pdf-generator && npm test
 
+  # The suite above mocks puppeteer completely — page.pdf() returns a 26-byte
+  # literal — so nothing in it can tell whether this service can actually
+  # render the loan contract a borrower signs. This job launches real Chromium
+  # against the real template and asserts the loan's own values come back out
+  # of the rendered PDF.
+  #
+  # It is deliberately NOT a gate yet, and that is the point of adding it now.
+  # The render test fails on macOS with production's exact launch arguments:
+  # headless:true plus --disable-gpu makes page.setContent(..., networkidle0)
+  # never resolve. Dropping --disable-gpu fixes it, and so does headless:'shell'.
+  # That reproduces on both Chrome 146 and 148, so it predates the puppeteer
+  # bump in this branch. What nobody knows is whether it also happens on Linux,
+  # which is what production actually runs (ghcr.io/puppeteer/puppeteer:21) and
+  # where --disable-gpu is the ordinary recommendation. No production log can
+  # answer it: no contract has been generated yet.
+  #
+  # So this runs on ubuntu, where the answer is meaningful, and reports without
+  # blocking. Green here means the hang is a macOS-only development nuisance.
+  # Red here means the contract generator cannot render in production, which is
+  # a release blocker — promote this to a required gate the moment it passes.
+  pdf-generator-render:
+    name: "PDF Render (real Chromium, reporting only)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: services/pdf-generator/package-lock.json
+
+      # Chromium IS downloaded here, unlike the mocked job above.
+      - name: Install pdf-generator dependencies (with Chromium)
+        run: cd services/pdf-generator && npm ci
+
+      - name: Render a real contract PDF
+        run: cd services/pdf-generator && npm run test:render
+
   # See the softcredito-adapter job above for why this exists (#425).
   ml-service:
     name: "ML Service Tests"
