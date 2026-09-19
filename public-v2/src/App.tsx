@@ -40,6 +40,12 @@ const AlertsPage = React.lazy(() => import('./pages/AlertsPage').then(m => ({ de
 const SystemHealth = React.lazy(() => import('./pages/SystemHealth').then(m => ({ default: m.SystemHealth })));
 const Onboarding = React.lazy(() => import('./pages/Onboarding').then(m => ({ default: m.Onboarding })));
 const NotFound = React.lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
+// pages/ComingSoon.tsx is the pre-redesign landing (restored — business
+// asked to hold the funpay-ui redesign off the public site for now). The
+// redesigned version lives side by side, fully working, at
+// pages/ComingSoonRedesign.tsx; swap it back in by changing this import to
+// `./pages/ComingSoonRedesign` and `m.ComingSoon` to `m.ComingSoonRedesign`
+// below — no env var or build flag involved.
 const ComingSoon = React.lazy(() => import('./pages/ComingSoon').then(m => ({ default: m.ComingSoon })));
 
 // Pre-launch gate. When 'coming-soon' (the fail-safe default when the env var

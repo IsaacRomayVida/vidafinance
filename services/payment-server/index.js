@@ -542,6 +542,19 @@ app.get('/internal/queue-stats', requireInternal, async (req, res) => {
   res.json({ queues: stats, ...(Object.keys(errors).length ? { errors } : {}), ts: new Date().toISOString() });
 });
 
+// ── Global error handler (crash safety net) ──────────────────────────
+// Catches anything thrown/rejected inside a route handler that wasn't
+// already caught by its own try/catch. Must be registered after every
+// route above. Never leak err.message/stack to the client.
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  console.error('[payment-server] unhandled request error:', err && err.message);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 // ── BullMQ: disbursement worker ─────────────────────────────────────
 const disburseWorker = new Worker('vida-disbursements', async job => {
   const { loanId, clabe, amount, concept, employeeName, employeeId } = job.data;
@@ -649,6 +662,22 @@ setInterval(async () => {
     if (depth > 100) alertQueueDepth(SERVICE_NAME, 'vida-disbursements', depth, 100);
   } catch (_) {}
 }, 60_000);
+
+// ── Process-level crash safety net ───────────────────────────────────
+// Anything thrown or rejected outside of Express's request/response cycle
+// (a stray promise in the worker/queue code above, a timer callback, etc.)
+// would otherwise kill the process with no log line at all.
+process.on('unhandledRejection', (reason) => {
+  console.error('[payment-server] unhandled rejection:', reason && reason.message ? reason.message : reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[payment-server] uncaught exception:', err && err.message);
+  // Railway restarts the container -- continuing after a truly uncaught
+  // exception risks running in a corrupted state, so exit rather than
+  // trying to carry on.
+  process.exit(1);
+});
 
 if (require.main === module) {
   app.listen(process.env.PORT || 3001, () => console.log('vida-payment-server on', process.env.PORT || 3001));

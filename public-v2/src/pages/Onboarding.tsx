@@ -165,25 +165,31 @@ const STEP_CONTEXT: Record<string, { title: string; sub: string; trust: string }
 };
 
 
+// Role carried by ?role=employer / ?role=employee, or null for neither/absent.
+// Read once, at first render — see the comment on `role`'s useState below.
+function roleFromParams(searchParams: URLSearchParams): Role {
+  const urlRole = searchParams.get('role');
+  return urlRole === 'employer' || urlRole === 'employee' ? urlRole : null;
+}
+
 export function Onboarding() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
-  const [role, setRole] = useState<Role>(null);
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState(0);
-
-  // Auto-select role from URL param (?role=employer or ?role=employee)
-  useEffect(() => {
-    const urlRole = searchParams.get('role');
-    if (urlRole === 'employer' && !role) {
-      setRole('employer');
-      setStep(1);
-    } else if (urlRole === 'employee' && !role) {
-      setRole('employee');
-      setStep(1);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-select role from the URL (?role=employer or ?role=employee), and
+  // land straight on step 1 when it's present. This used to be a mount-only
+  // effect that read searchParams and called setRole/setStep synchronously
+  // (react-hooks/set-state-in-effect) — a real extra render, not just a lint
+  // formality: the role-picker screen (step 0, role === null) was reachable
+  // for one frame even when the URL already said which role this was, before
+  // the effect fired and immediately overwrote it. The URL param is only
+  // ever consulted at mount (deps were `[]` deliberately — a role picked
+  // later via the on-screen buttons must not be clobbered by the query
+  // string), which is exactly what a lazy useState initializer gives for
+  // free, without the effect or the extra render.
+  const [role, setRole] = useState<Role>(() => roleFromParams(searchParams));
+  const [step, setStep] = useState(() => (roleFromParams(searchParams) ? 1 : 0));
   const [, setDirection] = useState<'left' | 'right'>('right');
   const [creating, setCreating] = useState(false);
   const [docFiles, setDocFiles] = useState<Record<string, File>>({});

@@ -110,6 +110,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import '../i18n';
+import { getDoc } from 'firebase/firestore';
 import { LoanWizard } from './LoanWizard';
 import { sliderFillPercent } from '../lib/loanSlider';
 
@@ -715,5 +716,62 @@ describe('LoanWizard — amount slider at a collapsed range (F10)', () => {
     expect(sliderFillPercent(1000, 5000)).toBeCloseTo(11.111, 2);
     expect(sliderFillPercent(500, 5000)).toBe(0);
     expect(sliderFillPercent(5000, 5000)).toBe(100);
+  });
+});
+
+/**
+ * The amount-clamp used to be a useEffect keyed on [cappedMax, amount]
+ * (react-hooks/set-state-in-effect), which meant the render right after the
+ * employee doc resolved — the one that first has a real, possibly-lower
+ * `cappedMax` — still showed the stale default `amount` (1,000) with a
+ * slider whose `value` exceeded its own `max`, one tick before the effect
+ * corrected it. It's now adjusted synchronously while rendering (comparing
+ * against the previous `cappedMax`), so that intermediate, out-of-range
+ * render should no longer be reachable: by the time the employee data is in
+ * the DOM at all, the amount is already within range.
+ */
+describe('LoanWizard — amount clamps to a shrinking cap without an intermediate over-cap render', () => {
+  it('clamps the default 1,000 amount down to a lower availableCredit as soon as it is known', async () => {
+    // A persistent override, not `...Once`: the mocked useAuth() above hands
+    // back a fresh `{ uid: 'emp-1' }` object on every call
+    // (`useAuth: () => ({ user: { uid: 'emp-1' } })`), which the eligibility
+    // effect's `[user, navigate, t]` deps see as a changed `user` — so this
+    // effect can legitimately run more than once per test here, the same way
+    // it would for a real user object that genuinely changed. A `...Once`
+    // override answered only the first call and let a second one fall back
+    // to the module-level 5000 fixture, undoing the clamp this test exists to
+    // check. A real `getDoc` would return the same document either way, so
+    // answering every call identically is the more faithful mock, too.
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        creditLimit: 600,
+        // Above MIN_AMOUNT (500, so the borrower still clears the
+        // eligibility check) but below the 1,000 default `amount`, so the
+        // clamp — not the "no credit available" screen — is what's under
+        // test here.
+        availableCredit: 600,
+        kycStatus: 'approved',
+        employerCode: 'ACME',
+        employerId: 'acme',
+        monthlySalary: 20000,
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    getLoanConfigMock.mockResolvedValue(READY_CONFIG);
+
+    render(<LoanWizard />);
+
+    const slider = await waitFor(() => {
+      const el = document.querySelector('#lw-amount-range') as HTMLInputElement | null;
+      if (!el) throw new Error('amount slider not rendered yet');
+      return el;
+    });
+
+    // cappedMax = max(min(salaryMax=6000, MAX_AMOUNT=5000, availableCredit=600), MIN_AMOUNT=500) = 600.
+    await waitFor(() => expect(slider.max).toBe('600'));
+    // The clamp landed on the same render as the new max, never briefly above it.
+    expect(Number(slider.value)).toBeLessThanOrEqual(Number(slider.max));
+    expect(slider.value).toBe('600');
   });
 });

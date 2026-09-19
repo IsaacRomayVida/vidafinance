@@ -158,6 +158,15 @@ jobs:
       - name: Unit tests (migration scripts) — hard gate
         run: npm run test:migrations
 
+      # This guards the deploy.yml/firebase-deploy.yml production/staging
+      # Firebase project wiring — it exists because a real prod/staging
+      # deploy mixup happened once. It rotted silently for a while because
+      # nothing in CI ran it; it belongs here because it's a root-level jest
+      # test using root deps (already installed above), same as the
+      # migration scripts tests just above.
+      - name: CI/CD workflow audit (deploy.yml Firebase project routing) — hard gate
+        run: npx jest tests/ci-workflow-audit.test.js
+
   underwriting-service:
     name: "Underwriting Service Tests"
     runs-on: ubuntu-latest
@@ -322,6 +331,48 @@ jobs:
 
       - name: Unit tests (pdf-generator) — internal auth, boot guard, contract generation, worker, hard gate
         run: cd services/pdf-generator && npm test
+
+  # The suite above mocks puppeteer completely — page.pdf() returns a 26-byte
+  # literal — so nothing in it can tell whether this service can actually
+  # render the loan contract a borrower signs. This job launches real Chromium
+  # against the real template and asserts the loan's own values come back out
+  # of the rendered PDF.
+  #
+  # This was added reporting-only, because the render test hangs on macOS with
+  # production's exact launch arguments — headless:true plus --disable-gpu makes
+  # page.setContent(..., networkidle0) never resolve — and nobody knew whether
+  # that also happened on Linux, which is what production runs. No log could
+  # answer it: the service had generated no contract.
+  #
+  # It answered on the first run. Linux reaches page.pdf() in about 2.5s and
+  # renders the contract with the loan's own folio, names, amounts and CAT
+  # present in the extracted text. The hang is a macOS development nuisance, not
+  # a production hazard, so this is now a gate — as that first comment said it
+  # should be the moment it passed.
+  #
+  # Keep it a gate. It is the only check in this repo that proves the document a
+  # borrower signs can actually be produced; the unit suite above mocks
+  # puppeteer and, until this job existed, passed happily while the contract
+  # sent for signature was corrupt.
+  pdf-generator-render:
+    name: "PDF Render (real Chromium, hard gate)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: services/pdf-generator/package-lock.json
+
+      # Chromium IS downloaded here, unlike the mocked job above.
+      - name: Install pdf-generator dependencies (with Chromium)
+        run: cd services/pdf-generator && npm ci
+
+      - name: Render a real contract PDF
+        run: cd services/pdf-generator && npm run test:render
 
   # See the softcredito-adapter job above for why this exists (#425).
   ml-service:

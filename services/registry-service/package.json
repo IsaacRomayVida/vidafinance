@@ -7,7 +7,8 @@
     "dev": "nodemon index.js",
     "test": "jest --runInBand",
     "backfill:dry-run": "node scripts/backfill.js --dry-run",
-    "backfill:apply": "node scripts/backfill.js --apply"
+    "backfill:apply": "node scripts/backfill.js --apply",
+    "lint": "eslint ."
   },
   "dependencies": {
     "cors": "^2.8.5",

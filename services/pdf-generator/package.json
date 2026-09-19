@@ -5,8 +5,9 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "lint": "eslint '*.js' 'src/**/*.js' 'routes/**/*.js'",
-    "test": "jest --forceExit"
+    "lint": "eslint --no-error-on-unmatched-pattern '*.js' 'src/**/*.js' 'routes/**/*.js'",
+    "test": "jest --forceExit",
+    "test:render": "jest --config jest.render.config.js --forceExit"
   },
   "dependencies": {
     "bullmq": "^5.71.0",
@@ -23,8 +24,11 @@
     "puppeteer": "^24.6.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "globals": "^17.12.0",
     "jest": "^30.4.2",
     "nodemon": "^3.0.0",
+    "pdf-parse": "^1.1.1",
     "supertest": "^7.0.0"
   }
 }

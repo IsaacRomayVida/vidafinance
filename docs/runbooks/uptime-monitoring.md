@@ -10,7 +10,7 @@ This runbook describes the exact monitors to stand up, the alerting contacts, an
 
 ## TL;DR
 
-Provision **6 HTTPS health monitors** in UptimeRobot (or Pingdom, Better Uptime, etc.) pointing at the canonical production URLs below, all on a **1-minute interval**, alerting to **PagerDuty/Slack** after two consecutive failures. Cost: free tier on UptimeRobot covers 50 monitors at 5-min intervals; the 1-min interval needs the Pro plan (~$7/mo) or Better Uptime's free tier.
+Provision **7 HTTPS health monitors** in UptimeRobot (or Pingdom, Better Uptime, etc.) pointing at the canonical production URLs below, all on a **1-minute interval**, alerting to **PagerDuty/Slack** after two consecutive failures. Cost: free tier on UptimeRobot covers 50 monitors at 5-min intervals; the 1-min interval needs the Pro plan (~$7/mo) or Better Uptime's free tier.
 
 Total budget: **$7–10/mo**. Setup time: **~20 minutes**.
 
@@ -51,7 +51,7 @@ shrink to a pointer once they exist.
 
 ## 2. Monitor configuration (UptimeRobot)
 
-For each of the 6 services above:
+For each of the 7 services above:
 
 - **Monitor type**: `HTTPS`
 - **URL**: (from table)
@@ -76,7 +76,7 @@ When a monitor pages, the first thing to check is service-specific. Each alert m
 | Monitor | Runbook entry |
 |---|---|
 | Hosting | `docs/runbooks/deploy.md` §7 (rollback paths) |
-| Payment server | `docs/runbooks/provider-failover.md` §Stripe/Softcredito failover |
+| Payment server | `docs/runbooks/provider-failover.md` §Conekta Outage |
 | Softcredito adapter | `docs/runbooks/provider-failover.md` §Softcredito failover |
 | Notifications | `docs/runbooks/alerting-runbook.md` §Twilio / SendGrid |
 | PDF generator | `docs/runbooks/incident-response.md` §Non-critical service |
@@ -91,12 +91,12 @@ When a monitor pages, the first thing to check is service-specific. Each alert m
 - Service: "VIDA Production Uptime"
 - Escalation policy: **5 min → primary on-call (Isaac) → 15 min → secondary**
 - UptimeRobot has a native PagerDuty integration — use the "Create Integration" flow in PagerDuty and paste the integration URL into UptimeRobot's alert contacts.
-- Only pages for the **3 critical** services (Hosting, Payment server, Softcredito adapter). The other 3 alert Slack-only because their failure is recoverable without user impact.
+- Only pages for the **3 critical** services (Hosting, Payment server, Softcredito adapter). The other 4 (Notifications, PDF generator, ML service, Underwriting service) alert Slack-only because their failure is recoverable without user impact.
 
 ### Slack
 
 - Channel: `#vida-ops`
-- All 6 monitors post here on both down and recovery events
+- All 7 monitors post here on both down and recovery events
 - Format: `🚨 [DOWN] service | status 500 | runbook: …`
 
 ### Email
@@ -108,12 +108,14 @@ When a monitor pages, the first thing to check is service-specific. Each alert m
 
 ## 5. Creating the monitors (script)
 
-UptimeRobot has a public API. Rather than click through the UI six times, run:
+UptimeRobot has a public API. Rather than click through the UI seven times, run:
 
 ```bash
 export UPTIMEROBOT_API_KEY="u<your-main-api-key>"
 export PD_INTEGRATION_URL="https://events.pagerduty.com/integration/<key>/enqueue"
 export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+
+ENDPOINTS="scripts/production-endpoints.json"  # the single source of truth — see §1
 
 # Add the contacts once (IDs returned here are used below)
 curl -X POST "https://api.uptimerobot.com/v2/newAlertContact" \
@@ -122,20 +124,28 @@ curl -X POST "https://api.uptimerobot.com/v2/newAlertContact" \
 curl -X POST "https://api.uptimerobot.com/v2/newAlertContact" \
   -d "api_key=$UPTIMEROBOT_API_KEY&friendly_name=Slack&type=11&value=$SLACK_WEBHOOK_URL&format=json"
 
-# Then create one monitor per service. Replace CONTACTS_CSV with the IDs
-# returned from the two calls above, formatted as "2519123_0_0-2519124_0_0".
-for svc in \
-  "VIDA Hosting|https://vida-finance.web.app/" \
-  "VIDA Payment Server|https://vida-payment-server.railway.app/health" \
-  "VIDA Softcredito|https://vida-softcredito.railway.app/health" \
-  "VIDA Notifications|https://vida-notifications.railway.app/health" \
-  "VIDA PDF Generator|https://vida-pdf-generator.railway.app/health" \
-  "VIDA ML Service|https://vida-ml-service.railway.app/health"; do
-  name="${svc%%|*}"; url="${svc##*|}"
+# Then create one monitor per entry in production-endpoints.json — never
+# hand-copy the hostnames, they drift (see the §1 note on the earlier
+# `vida-*.railway.app` URLs that never matched a deployed service). Replace
+# CONTACTS_CSV with the IDs returned from the two calls above, formatted as
+# "2519123_0_0-2519124_0_0".
+
+hosting_url="$(jq -r '.hosting.url' "$ENDPOINTS")"
+curl -X POST "https://api.uptimerobot.com/v2/newMonitor" \
+  -d "api_key=$UPTIMEROBOT_API_KEY" \
+  -d "friendly_name=VIDA Hosting" \
+  -d "url=${hosting_url}/" \
+  -d "type=1" \
+  -d "interval=60" \
+  -d "timeout=30" \
+  -d "alert_contacts=$CONTACTS_CSV" \
+  -d "format=json"
+
+jq -r '.services | to_entries[] | "\(.key)|\(.value)"' "$ENDPOINTS" | while IFS='|' read -r key url; do
   curl -X POST "https://api.uptimerobot.com/v2/newMonitor" \
     -d "api_key=$UPTIMEROBOT_API_KEY" \
-    -d "friendly_name=$name" \
-    -d "url=$url" \
+    -d "friendly_name=VIDA ${key}" \
+    -d "url=${url}/health" \
     -d "type=1" \
     -d "interval=60" \
     -d "timeout=30" \
@@ -143,6 +153,13 @@ for svc in \
     -d "format=json"
 done
 ```
+
+This reads the six Railway services straight out of the `services` object in
+`scripts/production-endpoints.json` (`payment-server`, `softcredito-adapter`,
+`notification-service`, `pdf-generator`, `ml-service`, `underwriting-service`
+as of 2026-09-19) plus the one `hosting` entry — seven monitors total. If a
+service is added to or removed from that file, this loop picks it up on the
+next run without editing this runbook.
 
 Save the resulting monitor IDs to `docs/runbooks/uptime-monitoring.md` §7 (IDs table) so future engineers can modify or delete them cleanly.
 
@@ -152,7 +169,7 @@ Save the resulting monitor IDs to `docs/runbooks/uptime-monitoring.md` §7 (IDs 
 
 After running the script above:
 
-- [ ] All 6 monitors show **"Up"** in the UptimeRobot dashboard after ~2 minutes
+- [ ] All 7 monitors show **"Up"** in the UptimeRobot dashboard after ~2 minutes
 - [ ] Temporarily rename one Railway service to break its URL, wait 2 minutes, confirm Slack + PagerDuty alerts both fire, then restore and confirm recovery alerts
 - [ ] Open the UptimeRobot public status page (if enabled) at `https://status.vidafinance.mx` and confirm it renders
 - [ ] Confirm monthly billing plan shows "Pro ($7/mo)" if using 1-min intervals — free tier caps at 5 min
@@ -211,5 +228,5 @@ Adding external monitoring is the last critical observability gap before launch.
 
 - `deploy.md` — how deploys flow, rollback procedures
 - `incident-response.md` — overall incident playbook and escalation
-- `provider-failover.md` — Stripe / Softcredito / Twilio failover
+- `provider-failover.md` — Conekta / Softcredito / Twilio failover
 - `alerting-runbook.md` — how to triage every alert type

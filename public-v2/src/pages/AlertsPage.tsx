@@ -134,6 +134,26 @@ function getSourceLabel(alert: Alert): string {
   return labels[src] || src;
 }
 
+// Merges the two live collections (incidents, overdue loans) into one sorted
+// feed. It closes over nothing from the component — same shape as the other
+// helpers above — so it lives at module scope with them rather than inside
+// AlertsPage, where the two onSnapshot listeners below used to call it before
+// its declaration (react-hooks/immutability). As a `function` there it was
+// hoisted, so it happened to run correctly, but it was still a fresh
+// function value on every render, and both listeners are registered once
+// (empty deps) and so only ever called the very first render's copy — it
+// only worked because that copy never closes over any component state, so
+// every render's version was behaviorally identical anyway. Declaring it
+// here removes that fragility along with the ordering warning: one stable
+// reference, no dependence on the component never adding a closure to it.
+function mergeAndSort(items: Alert[]): Alert[] {
+  return items.sort((a, b) => {
+    const ta = getTimestamp(a)?.seconds ?? 0;
+    const tb = getTimestamp(b)?.seconds ?? 0;
+    return tb - ta;
+  });
+}
+
 /* ─── Severity → status pill class (never green: an alert is never "approved") ─── */
 
 const severityClass: Record<Severity, string> = {
@@ -217,14 +237,6 @@ export function AlertsPage() {
     );
     return unsub;
   }, []);
-
-  function mergeAndSort(items: Alert[]): Alert[] {
-    return items.sort((a, b) => {
-      const ta = getTimestamp(a)?.seconds ?? 0;
-      const tb = getTimestamp(b)?.seconds ?? 0;
-      return tb - ta;
-    });
-  }
 
   const dismiss = async (alert: Alert) => {
     const key = `${alert.kind}-${alert.id}`;

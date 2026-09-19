@@ -16,6 +16,25 @@ function loadWorkflow(filename) {
   return yaml.load(fs.readFileSync(filepath, "utf8"));
 }
 
+// Matches the shell pattern every "which Firebase project do I deploy to?"
+// step uses: branch on github.ref, then pull the project ID from the
+// PRODUCTION secret on main and the STAGING secret otherwise. This is a
+// ROLE match (what the step's `run` actually does), not a display-name
+// match, so it keeps working if a step gets renamed for cosmetic reasons —
+// which is exactly what rotted this test once already (the step this test
+// looks for was renamed from "Deploy to Firebase (Production)" to plain
+// "Deploy to Firebase").
+const PROJECT_SELECTOR_RE =
+  /if\s*\[\s*"\$\{\{\s*github\.ref\s*\}\}"\s*=\s*"refs\/heads\/main"\s*\]\s*;\s*then\s*\n\s*PROJECT="\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}"\s*\n\s*else\s*\n\s*PROJECT="\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}"/;
+
+// Finds every step in a job whose `run` selects a Firebase project by this
+// pattern, regardless of what the step is named.
+function findProjectSelectorSteps(job) {
+  return (job.steps || []).filter(
+    (s) => typeof s.run === "string" && PROJECT_SELECTOR_RE.test(s.run)
+  );
+}
+
 describe("CI/CD Workflow Audit", () => {
   // ─── Issue 1: eslint missing from functions/package.json ───
   describe("CI workflow — eslint dependency", () => {
@@ -57,18 +76,48 @@ describe("CI/CD Workflow Audit", () => {
 
   // ─── Issue 3: Production deploy targets staging project ───
   describe("deploy.yml — production Firebase project", () => {
-    it("production deploy step should use FIREBASE_PROJECT_ID_PRODUCTION, not STAGING", () => {
+    it("every step that selects a Firebase project target must route main to PRODUCTION and everything else to STAGING", () => {
       const wf = loadWorkflow("deploy.yml");
       const firebaseJob = wf.jobs["deploy-firebase"];
-      const prodStep = firebaseJob.steps.find(
-        (s) => s.name === "Deploy to Firebase (Production)"
-      );
+      const selectorSteps = findProjectSelectorSteps(firebaseJob);
 
-      // BUG: Line 159 of deploy.yml uses FIREBASE_PROJECT_ID_STAGING for the
-      // production deploy (when github.ref == 'refs/heads/main').
-      // It should use FIREBASE_PROJECT_ID_PRODUCTION.
-      expect(prodStep.run).toContain("FIREBASE_PROJECT_ID_PRODUCTION");
-      expect(prodStep.run).not.toContain("FIREBASE_PROJECT_ID_STAGING");
+      // Fail loudly and specifically if the pattern can't be found at all —
+      // e.g. the branching logic itself was rewritten — instead of throwing
+      // a TypeError from indexing into `undefined`.
+      if (selectorSteps.length === 0) {
+        const stepNames = (firebaseJob.steps || [])
+          .map((s) => JSON.stringify(s.name))
+          .join(", ");
+        throw new Error(
+          `Expected at least one step in deploy.yml's "deploy-firebase" job ` +
+            `whose \`run\` selects a Firebase PROJECT via an ` +
+            `"if github.ref == refs/heads/main" branch (looked for a shell ` +
+            `if/else assigning PROJECT from secrets.FIREBASE_PROJECT_ID_* in ` +
+            `each arm). Found none among steps named: ${stepNames}. If this ` +
+            `pattern was intentionally restructured, update ` +
+            `PROJECT_SELECTOR_RE in tests/ci-workflow-audit.test.js to match ` +
+            `the new shape — do not delete this guard, it exists because a ` +
+            `real production/staging deploy mixup happened once.`
+        );
+      }
+
+      // BUG this guards against: a step using FIREBASE_PROJECT_ID_STAGING
+      // for the production deploy (when github.ref == 'refs/heads/main'),
+      // or vice versa. Every matched step's main-branch arm must resolve to
+      // PRODUCTION and its else arm must resolve to STAGING.
+      const misrouted = selectorSteps
+        .map((step) => {
+          const [, mainBranchSecret, elseBranchSecret] =
+            step.run.match(PROJECT_SELECTOR_RE);
+          return { name: step.name, mainBranchSecret, elseBranchSecret };
+        })
+        .filter(
+          ({ mainBranchSecret, elseBranchSecret }) =>
+            mainBranchSecret !== "FIREBASE_PROJECT_ID_PRODUCTION" ||
+            elseBranchSecret !== "FIREBASE_PROJECT_ID_STAGING"
+        );
+
+      expect(misrouted).toEqual([]);
     });
 
     it("firebase-deploy.yml production deploy should also use PRODUCTION project ID", () => {
