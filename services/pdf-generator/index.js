@@ -123,7 +123,14 @@ async function renderPDF(html) {
   await page.setContent(html, { waitUntil: "networkidle0" });
   const pdf = await page.pdf({ format: "A4", printBackground: true });
   await page.close();
-  return pdf;
+  // puppeteer >= 23 resolves page.pdf() to a plain Uint8Array, not a Buffer.
+  // That distinction is silent and destructive here: Uint8Array inherits
+  // Object.prototype.toString semantics, so the `pdf.toString("base64")` that
+  // feeds MetaMap's signing API returned "37,80,68,70,..." — the decimal bytes,
+  // comma-separated — instead of base64. The request succeeded and the signed
+  // contract carried a corrupt payload. Normalise once, here, so neither this
+  // nor upload()'s file.save() has to care which type puppeteer returned.
+  return Buffer.from(pdf);
 }
 
 async function upload(buf, filePath) {
