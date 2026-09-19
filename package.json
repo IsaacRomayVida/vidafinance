@@ -1,6 +1,7 @@
 {
   "scripts": {
     "verify": "node scripts/verify-production.js",
+    "lint": "eslint tests scripts",
     "test": "jest",
     "test:rules": "jest \"(firestore|storage)\\.rules\\.test\"",
     "test:migrations": "jest --roots scripts/migrations",
