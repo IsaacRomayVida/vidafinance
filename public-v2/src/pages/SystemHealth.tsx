@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -60,23 +60,43 @@ export function SystemHealth() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
+  // fetchHealth is called from three places that can overlap — the mount
+  // effect, its own 60s interval, and the manual "Actualizar" button — so a
+  // slow response from an older call could otherwise land after, and
+  // overwrite, a newer one's result. requestIdRef makes each call check it
+  // is still the most recent before writing anything back to state.
+  const requestIdRef = useRef(0);
+
   const fetchHealth = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
       setError(null);
       const functions = getFunctions();
       const fn = httpsCallable<unknown, HealthData>(functions, 'getSystemHealth');
       const result = await fn({});
+      if (requestIdRef.current !== requestId) return; // superseded by a newer call
       setHealth(result.data);
       setLastRefresh(new Date());
     } catch (err: unknown) {
+      if (requestIdRef.current !== requestId) return;
       const message = err instanceof Error ? err.message : 'Failed to fetch health data';
       setError(message);
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === requestId) setLoading(false);
     }
   }, []);
 
+  // react-hooks/set-state-in-effect flags `fetchHealth()` below: it calls
+  // setLoading/setError synchronously before its first await. Left as a
+  // warning, not "fixed" — this is react.dev's own documented shape for an
+  // effect that fetches on mount and keeps refreshing (see
+  // "you-might-not-need-an-effect", the SearchResults/isLoading example).
+  // There is no props/state this health snapshot could be derived from
+  // instead: it only exists because something (an interval, a mount, a
+  // click) asked the server for it. The requestIdRef guard above is what
+  // makes it a legitimate synchronization with that external system rather
+  // than an unguarded fire-and-forget.
   useEffect(() => {
     fetchHealth();
     const interval = setInterval(fetchHealth, 60_000);

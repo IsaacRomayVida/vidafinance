@@ -26,15 +26,29 @@ export default defineConfig([
       // resolve at all, and so blocked every security patch including the
       // react-router advisory.
       //
-      // They report 8 real findings in five dashboard pages: a value read
-      // before its declaration (AlertsPage), Date.now() called during render
-      // (EmployeeRoster), and setState inside an effect (LoanWizard,
-      // Onboarding, SystemHealth). None is new breakage — this code has
-      // shipped and its tests pass — and each wants its own considered fix in
-      // rendering logic rather than a same-day sweep. Warnings so they stay
-      // visible; raise them back to errors as the pages are fixed.
-      'react-hooks/immutability': 'warn',
-      'react-hooks/purity': 'warn',
+      // They reported 8 findings across five dashboard pages. Five were real
+      // and are fixed: a helper read before its declaration (AlertsPage),
+      // Date.now() called during render behind the invite TTL and resend
+      // cooldown (EmployeeRoster), a loan-amount clamp that let an
+      // out-of-range slider value reach the screen for a frame (LoanWizard),
+      // and a ?role= param applied in a mount effect, so the role picker
+      // flashed even when the URL already answered it (Onboarding).
+      //
+      // immutability and purity are clean, so they are errors — nothing may
+      // reintroduce them.
+      'react-hooks/immutability': 'error',
+      'react-hooks/purity': 'error',
+
+      // Three set-state-in-effect findings remain and are deliberate: two in
+      // LoanWizard and one in SystemHealth that set a loading/reset state at
+      // the start of a fetch-or-subscribe effect. That is react.dev's own
+      // documented pattern, and each is already guarded against the real risk
+      // — a cancelled flag, a subscription cleanup, and in SystemHealth a
+      // request-id guard added alongside this work, because overlapping mount,
+      // interval and manual refreshes could let a stale response clobber a
+      // newer one. Moving the call into the async continuation would be the
+      // same tick and the same behaviour, so the rule stays a warning rather
+      // than being satisfied cosmetically.
       'react-hooks/set-state-in-effect': 'warn',
     },
   },
