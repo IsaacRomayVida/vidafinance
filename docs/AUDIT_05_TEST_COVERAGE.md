@@ -1,7 +1,28 @@
 # Audit 05: Unit + Integration Test Coverage Report
 
-**Date:** 2026-03-24
-**Ticket:** VID3-341
+> # ⛔ SUPERSEDED — DO NOT CITE THESE NUMBERS AS CURRENT
+>
+> **Written 2026-03-24; the figures below are historical, not current.**
+>
+> This audit reported 19 test files, 430 test cases, 266 passing, 164 failing,
+> a 61.9% pass rate, and named specific `underwriting-service` suites as
+> 0-passing — the test files called helper functions the source did not yet
+> export. Those helpers were implemented in PR #483, after this audit was
+> written. Verified 2026-09-19: `services/underwriting-service` now runs
+> **399 passed / 1 skipped / 0 failed** across 23 suites (`npm test` in
+> `services/underwriting-service`) — the opposite of the picture this
+> document paints.
+>
+> No newer version of this audit exists in the repo. Do not read the table
+> below as today's coverage. For the current state of any suite, run it
+> directly (`npm test` in the relevant `services/<name>` or `functions`
+> directory) rather than trusting a point-in-time report.
+>
+> Kept for history only.
+
+> **Date:** 2026-03-24
+> **Ticket:** VID3-341
+> **Status:** ⛔ superseded — figures below are historical and now false for underwriting-service
 
 ---
 
