@@ -47,16 +47,19 @@ module.exports = {
   // leaves nothing stopping coverage from sliding.
   //
   // So these sit a couple of points under the measured values on
-  // 2026-09-19 (statements 81.66, branches 73.27, functions 73.27,
-  // lines 83.32): today's suite passes, and a change that meaningfully
-  // reduces coverage fails. Raise them when the number rises; never lower
-  // them to make a red build green.
+  // 2026-09-19 (statements 85.99, branches 75.96, functions 79.33,
+  // lines 87.24 — raised same-day from 81.66/73.27/73.27/83.32 after adding
+  // real coverage for utils/redis.ts, health/api.ts, the three
+  // scheduled/*HealthCheck+weeklyPortfolioSnapshot jobs, utils/registryClient.ts
+  // and utils/sentry.ts): today's suite passes, and a change that
+  // meaningfully reduces coverage fails. Raise them when the number rises;
+  // never lower them to make a red build green.
   coverageThreshold: {
     global: {
-      statements: 80,
-      branches: 72,
-      functions: 72,
-      lines: 82,
+      statements: 84,
+      branches: 74,
+      functions: 77,
+      lines: 85,
     },
   },
 };
