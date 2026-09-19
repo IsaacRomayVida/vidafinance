@@ -338,25 +338,26 @@ jobs:
   # against the real template and asserts the loan's own values come back out
   # of the rendered PDF.
   #
-  # It is deliberately NOT a gate yet, and that is the point of adding it now.
-  # The render test fails on macOS with production's exact launch arguments:
-  # headless:true plus --disable-gpu makes page.setContent(..., networkidle0)
-  # never resolve. Dropping --disable-gpu fixes it, and so does headless:'shell'.
-  # That reproduces on both Chrome 146 and 148, so it predates the puppeteer
-  # bump in this branch. What nobody knows is whether it also happens on Linux,
-  # which is what production actually runs (ghcr.io/puppeteer/puppeteer:21) and
-  # where --disable-gpu is the ordinary recommendation. No production log can
-  # answer it: no contract has been generated yet.
+  # This was added reporting-only, because the render test hangs on macOS with
+  # production's exact launch arguments — headless:true plus --disable-gpu makes
+  # page.setContent(..., networkidle0) never resolve — and nobody knew whether
+  # that also happened on Linux, which is what production runs. No log could
+  # answer it: the service had generated no contract.
   #
-  # So this runs on ubuntu, where the answer is meaningful, and reports without
-  # blocking. Green here means the hang is a macOS-only development nuisance.
-  # Red here means the contract generator cannot render in production, which is
-  # a release blocker — promote this to a required gate the moment it passes.
+  # It answered on the first run. Linux reaches page.pdf() in about 2.5s and
+  # renders the contract with the loan's own folio, names, amounts and CAT
+  # present in the extracted text. The hang is a macOS development nuisance, not
+  # a production hazard, so this is now a gate — as that first comment said it
+  # should be the moment it passed.
+  #
+  # Keep it a gate. It is the only check in this repo that proves the document a
+  # borrower signs can actually be produced; the unit suite above mocks
+  # puppeteer and, until this job existed, passed happily while the contract
+  # sent for signature was corrupt.
   pdf-generator-render:
-    name: "PDF Render (real Chromium, reporting only)"
+    name: "PDF Render (real Chromium, hard gate)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
 
