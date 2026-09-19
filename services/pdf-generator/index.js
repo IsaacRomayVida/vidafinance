@@ -389,6 +389,35 @@ app.get("/health", async (req, res) => {
   });
 });
 
+// ── Global error handler (crash safety net) ──────────────────────────
+// Catches anything thrown/rejected inside a route handler that wasn't
+// already caught by its own try/catch. Must be registered after every
+// route above. Never leak err.message/stack to the client.
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  console.error("[pdf-generator] unhandled request error:", err && err.message);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// ── Process-level crash safety net ───────────────────────────────────
+// Anything thrown or rejected outside of Express's request/response cycle
+// (a stray promise in the worker code above, a timer callback, etc.) would
+// otherwise kill the process with no log line at all.
+process.on("unhandledRejection", (reason) => {
+  console.error("[pdf-generator] unhandled rejection:", reason && reason.message ? reason.message : reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[pdf-generator] uncaught exception:", err && err.message);
+  // Railway restarts the container -- continuing after a truly uncaught
+  // exception risks running in a corrupted state, so exit rather than
+  // trying to carry on.
+  process.exit(1);
+});
+
 if (require.main === module) {
   app.listen(process.env.PORT || 3004, () =>
     console.log("vida-pdf-generator on", process.env.PORT || 3004)

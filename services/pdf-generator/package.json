@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "lint": "eslint '*.js' 'src/**/*.js' 'routes/**/*.js'",
+    "lint": "eslint --no-error-on-unmatched-pattern '*.js' 'src/**/*.js' 'routes/**/*.js'",
     "test": "jest --forceExit"
   },
   "dependencies": {
@@ -23,6 +23,8 @@
     "puppeteer": "^24.6.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "globals": "^17.12.0",
     "jest": "^30.4.2",
     "nodemon": "^3.0.0",
     "supertest": "^7.0.0"

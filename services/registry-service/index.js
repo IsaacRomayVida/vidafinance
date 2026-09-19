@@ -215,6 +215,34 @@ app.post('/internal/entities/:entityId/refs', requireInternal, async (req, res) 
   });
 });
 
+// ── Crash safety net ─────────────────────────────────────────────────
+// Global error handler. Must be registered after every route/middleware
+// above -- Express only routes to a 4-arg handler when it is last. Catches
+// whatever a route forwarded via next(err) or threw synchronously; never
+// echoes err.message or a stack to the caller.
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// A rejected promise with no .catch anywhere up the chain, or a synchronous
+// throw outside Express's request handling, would otherwise crash the
+// process with no log line (unhandledRejection) or an opaque one
+// (uncaughtException). Log and, for the latter, exit so Railway restarts
+// the service into a known-good state rather than carrying on after
+// corrupted state.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
 const PORT = process.env.PORT || 3006;
 
 if (require.main === module) {

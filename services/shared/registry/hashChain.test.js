@@ -1,11 +1,16 @@
 'use strict';
 
+const os = require('os');
 const { Pool } = require('pg');
 const { appendReceipt, verifyChain, GENESIS_HASH, CURRENT_HASH_VERSION } = require('./hashChain');
 const { resetLedgerTestState } = require('./testUtils');
 
+// No 'postgres' role exists on a standard Homebrew/local Postgres install --
+// only the OS user's own role does. Fall back to that instead of hardcoding
+// a role that only exists on some machines; DATABASE_URL still wins when set.
+const DEFAULT_DB_USER = process.env.PGUSER || process.env.USER || os.userInfo().username;
 const DATABASE_URL =
-  process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/vida_registry_test';
+  process.env.DATABASE_URL || `postgres://${DEFAULT_DB_USER}@localhost:5432/vida_registry_test`;
 
 let pool;
 
