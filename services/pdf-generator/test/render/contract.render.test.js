@@ -163,14 +163,26 @@ describe('contract template — real Chromium render', () => {
           "itself is what's stuck. If contract generation is hanging in production, " +
           'start there.',
       );
-      const pdf = await page.pdf({ format: 'A4', printBackground: true });
+      const raw = await page.pdf({ format: 'A4', printBackground: true });
       await page.close();
 
-      // 1. Real PDF magic bytes -- the mock returns
-      // Buffer.from('%PDF-1.4 mock pdf content'), which also happens to
-      // start with '%PDF-', so this alone wouldn't distinguish a real
-      // render from the mock; it's the first of several checks below.
-      expect(Buffer.isBuffer(pdf)).toBe(true);
+      // 0. The hazard that made this test worth writing. puppeteer >= 23
+      // resolves page.pdf() to a plain Uint8Array, and Uint8Array has no
+      // encoding-aware toString -- so `raw.toString('base64')` yields
+      // "37,80,68,70,..." rather than base64, and the contract that went to
+      // MetaMap for signature was corrupt. renderPDF() in index.js normalises
+      // with Buffer.from() for exactly this reason; mirror it here, and assert
+      // the raw shape so a future puppeteer that changes it back is loud
+      // rather than silent.
+      expect(Buffer.isBuffer(raw)).toBe(false);
+      expect(raw).toBeInstanceOf(Uint8Array);
+      const pdf = Buffer.from(raw);
+      expect(pdf.toString('base64')).not.toMatch(/^\d+(,\d+)+$/);
+
+      // 1. Real PDF magic bytes -- the mock returns '%PDF-1.4 mock pdf
+      // content', which also starts with '%PDF-', so this alone wouldn't
+      // distinguish a real render from the mock; it's the first of several
+      // checks below.
       expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
 
       // 2. Substantially larger than a trivial/mock buffer. The mock is 26
