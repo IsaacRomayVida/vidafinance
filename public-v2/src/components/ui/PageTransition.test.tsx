@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, render, screen } from '@testing-library/react';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { MemoryRouter, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageTransition, PAGE_FADE_MS } from './PageTransition';
 
@@ -60,7 +60,7 @@ describe('PageTransition', () => {
     expect(animate).not.toHaveBeenCalled();
   });
 
-  it('fades out and back in, 0.25s each way, when the route changes', () => {
+  it('dips out and back in, 0.25s each way, when the route changes', () => {
     renderPage();
     act(() => nav.go('/employers'));
 
@@ -76,6 +76,42 @@ describe('PageTransition', () => {
     act(() => nav.go('/employees'));
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(animate).toHaveBeenCalledTimes(2);
+  });
+
+  // Parity with the motion AnimatePresence version this replaced, measured
+  // against main 23d03d2 in jsdom: right after navigating / -> /about its
+  // exiting wrapper already held the About page at opacity 1 (an <Outlet />
+  // renders the current route even inside a held element). So the dip plays
+  // on the incoming page, in one wrapper, and nothing of the old page stays.
+  it('with an <Outlet /> child, swaps to the new page at once and dips that page', () => {
+    function Layout() {
+      const navigate = useNavigate();
+      useEffect(() => {
+        nav.go = navigate;
+      }, [navigate]);
+      return <main><PageTransition><Outlet /></PageTransition></main>;
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<p>home page</p>} />
+            <Route path="/about" element={<p>about page</p>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    const main = screen.getByRole('main');
+    expect(main.textContent).toBe('home page');
+
+    act(() => nav.go('/about'));
+
+    // One wrapper, holding only the incoming page; the fade ran on it.
+    expect(main.children).toHaveLength(1);
+    expect(main.textContent).toBe('about page');
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(animate.mock.contexts[0]).toBe(main.firstElementChild);
+    expect(animate.mock.calls[0][0].map((k) => k.opacity)).toEqual([1, 0, 1]);
   });
 
   it('does not fade when only the hash or query changes', () => {

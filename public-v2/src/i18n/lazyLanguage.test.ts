@@ -63,4 +63,31 @@ describe('i18n — lazy languages', () => {
 
     expect(i18n.t('hero_cta_employer')).toBe(es.hero_cta_employer);
   });
+
+  it('a stalled language chunk does not hold the first render: Spanish after the timeout, English when it arrives', async () => {
+    localStorage.setItem('vida_lang', 'en');
+    vi.useFakeTimers();
+    try {
+      // The English chunk request hangs: neither resolves nor rejects.
+      let arrive!: () => void;
+      vi.doMock('./en.json', () => new Promise((r) => { arrive = () => r({ default: en }); }));
+      const { default: i18n, i18nReady, LANGUAGE_TIMEOUT_MS } = await loadI18n();
+
+      let settled = false;
+      void i18nReady.then(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(LANGUAGE_TIMEOUT_MS - 1);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(settled).toBe(true);
+      expect(i18n.t('hero_cta_employer')).toBe(es.hero_cta_employer);
+
+      arrive();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(i18n.t('hero_cta_employer')).toBe(en.hero_cta_employer);
+    } finally {
+      vi.doUnmock('./en.json');
+      vi.useRealTimers();
+    }
+  });
 });

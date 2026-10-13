@@ -131,3 +131,43 @@ describe('landing-page photographs', () => {
     }
   });
 });
+
+describe('the Lighthouse gate and the chunking it was measured with', () => {
+  it('fails CI (error, not warn) when a marketing page drops below performance 0.9', () => {
+    const rc = JSON.parse(read('lighthouserc.json'));
+    const [level, options] = rc.ci.assert.assertions['categories:performance'];
+    expect(level).toBe('error');
+    expect(options.minScore).toBeGreaterThanOrEqual(0.9);
+    expect(rc.ci.collect.url.map((u: string) => new URL(u).pathname)).toEqual(
+      expect.arrayContaining(['/', '/employers', '/employees', '/about']),
+    );
+  });
+
+  it('ships the first-render libraries as one vendor chunk and keeps firebase out of it', async () => {
+    // vite.config.ts must actually use the function under test.
+    expect(read('vite.config.ts')).toMatch(/output:\s*{\s*manualChunks,\s*}/);
+    const { manualChunks } = await import('../../manualChunks');
+    const chunk = (id: string) => manualChunks(`/repo/public-v2/${id}`);
+
+    for (const id of [
+      'node_modules/react/index.js',
+      'node_modules/react-dom/client.js',
+      'node_modules/scheduler/index.js',
+      'node_modules/react-router/dist/index.mjs',
+      'node_modules/react-router-dom/dist/index.mjs',
+      'node_modules/i18next/dist/esm/i18next.js',
+      'node_modules/react-i18next/dist/es/index.js',
+      'src/lib/safeStorage.ts',
+      'src/components/shared/RichText.tsx',
+    ]) {
+      expect(chunk(id), id).toBe('vendor');
+    }
+    expect(chunk('node_modules/firebase/auth/dist/esm/index.esm.js')).toBe('firebase-auth');
+    expect(chunk('node_modules/@firebase/auth/dist/esm2017/index.js')).toBe('firebase-auth');
+    expect(chunk('node_modules/@firebase/firestore/dist/index.esm2017.js')).toBe('firebase');
+    // Everything else is left to Rollup: pages and the animation library
+    // must not be pulled into the first-render chunk.
+    expect(chunk('node_modules/motion/dist/es/index.mjs')).toBeUndefined();
+    expect(chunk('src/pages/EmployerPage.tsx')).toBeUndefined();
+  });
+});

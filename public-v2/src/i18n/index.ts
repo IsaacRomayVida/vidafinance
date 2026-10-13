@@ -18,6 +18,9 @@ export const lazyLanguages: Record<string, () => Promise<{ default: ResourceKey 
   en: () => import('./en.json'),
 };
 
+/** How long the first render (or the toggle) waits for a language chunk. */
+export const LANGUAGE_TIMEOUT_MS = 3000;
+
 /**
  * Resolves once the saved language is ready to render. main.tsx waits for it
  * before the first render, so a reader who chose English never sees a flash
@@ -30,7 +33,27 @@ export const i18nReady: Promise<unknown> = i18n
     read(lng: string, _ns: string, done: (err: unknown, data: ResourceKey | null) => void) {
       const load = lazyLanguages[lng];
       if (!load) return done(null, {});
-      load().then((m) => done(null, m.default), (err) => done(err, null));
+      // main.tsx holds the first render until the saved language is ready,
+      // so a request that stalls (rather than fails) must not leave a blank
+      // page: after LANGUAGE_TIMEOUT_MS give up and render the Spanish
+      // fallback. If the chunk does arrive later, it is applied then.
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        done(new Error(`language "${lng}" timed out`), null);
+      }, LANGUAGE_TIMEOUT_MS);
+      load().then(
+        (m) => {
+          clearTimeout(timer);
+          if (!timedOut) return done(null, m.default);
+          i18n.addResourceBundle(lng, 'translation', m.default, true, true);
+          if (i18n.language === lng) void i18n.changeLanguage(lng);
+        },
+        (err) => {
+          clearTimeout(timer);
+          if (!timedOut) done(err, null);
+        },
+      );
     },
   })
   .use(initReactI18next)
