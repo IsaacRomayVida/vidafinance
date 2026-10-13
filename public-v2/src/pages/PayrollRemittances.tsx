@@ -6,8 +6,13 @@ import { db } from '../lib/firebase';
 import { friendlyError } from '../lib/errors';
 import { formatCents } from '../lib/money';
 import {
-  classifyRemittanceError,
+  REMITTANCE_LIMIT_MAX,
+  REMITTANCE_PAGE_SIZE,
+  formatInstantInMexicoCity,
   formatIsoDate,
+  readRemittanceRefusal,
+  remittanceRefusalText,
+  totalsOf,
   type ListRemittancesInput,
   type ListRemittancesResult,
   type RecordRemittanceResult,
@@ -21,11 +26,24 @@ import { RemittanceVoidDialog } from '../components/ops/RemittanceVoidDialog';
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
-interface ListQuery {
+/**
+ * One call to listPayrollRemittances. `cursor: null` is page one and replaces
+ * the list; a cursor is "the page after what is on screen" and appends to it.
+ */
+interface ListRequest {
   view: 'outstanding' | 'all';
   overdueOnly: boolean;
-  /** Bumped to re-run the same query (refresh button, after a write). */
+  cursor: string | null;
+  limit: number;
+  /** Bumped so that asking for the same thing again is still a new request. */
   nonce: number;
+}
+
+/** What the last answered page said about the list as a whole. */
+interface ListMeta {
+  asOf: string;
+  graceDays: number;
+  nextCursor: string | null;
 }
 
 /** Green only for money that has fully arrived. */
@@ -50,46 +68,77 @@ const money = (cents: number) => `$${formatCents(cents)}`;
  * deducted against what has reached the bank, how late the difference is, and
  * the receipts behind it. Recording and voiding go through callables; the page
  * never writes to Firestore itself.
+ *
+ * The list is paged by the server (one ordered query, `nextCursor`). The
+ * figures at the top are sums of the rows on screen, and say so whenever
+ * there is another page.
  */
 export function PayrollRemittances() {
   const { t, i18n } = useTranslation();
   const locale = i18n.language === 'en' ? 'en-US' : 'es-MX';
 
-  const [query, setQuery] = useState<ListQuery>({ view: 'outstanding', overdueOnly: false, nonce: 0 });
-  const [data, setData] = useState<ListRemittancesResult | null>(null);
+  const [request, setRequest] = useState<ListRequest>({
+    view: 'outstanding',
+    overdueOnly: false,
+    cursor: null,
+    limit: REMITTANCE_PAGE_SIZE,
+    nonce: 0,
+  });
+  const [rows, setRows] = useState<Remittance[] | null>(null);
+  const [meta, setMeta] = useState<ListMeta | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [moreError, setMoreError] = useState<string | null>(null);
   const [employerNames, setEmployerNames] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [recording, setRecording] = useState<Remittance | null>(null);
   const [voiding, setVoiding] = useState<{ remittance: Remittance; receipt: RemittanceReceipt } | null>(null);
 
-  // Every change to `query` is a new request. The cleanup flag is what stops
-  // a slow answer to an older query (a filter the user has since left) from
-  // overwriting the newer one.
+  // Every change to `request` is a new call. The cleanup flag is what stops a
+  // slow answer to an older request (a filter the user has since left, or a
+  // "load more" for a list that has since been reloaded) from landing on top
+  // of the newer one.
   useEffect(() => {
     let stale = false;
     const fn = httpsCallable<ListRemittancesInput, ListRemittancesResult>(getFunctions(), 'listPayrollRemittances');
-    const input: ListRemittancesInput = { view: query.view };
-    if (query.overdueOnly) input.overdueOnly = true;
+    const input: ListRemittancesInput = { view: request.view, limit: request.limit };
+    if (request.overdueOnly) input.overdueOnly = true;
+    if (request.cursor !== null) input.cursor = request.cursor;
+    const appending = request.cursor !== null;
     fn(input)
       .then((result) => {
         if (stale) return;
-        setData(result.data);
+        const page = result.data;
+        setRows((current) => {
+          if (!appending || current === null) return page.remittances;
+          // The server's order is total, so a page never repeats a row. The
+          // filter is for the one case it cannot rule out: a record that moved
+          // (its period dates were rewritten) between two pages.
+          const seen = new Set(current.map((r) => r.batchId));
+          return [...current, ...page.remittances.filter((r) => !seen.has(r.batchId))];
+        });
+        setMeta({ asOf: page.asOf, graceDays: page.graceDays, nextCursor: page.nextCursor ?? null });
         setLoadError(null);
+        setMoreError(null);
       })
       .catch((err: unknown) => {
         if (stale) return;
-        const kind = classifyRemittanceError(err);
-        setLoadError(kind.kind === 'invalid' ? kind.detail : friendlyError(err));
+        const text = remittanceRefusalText(readRemittanceRefusal(err), t, locale) ?? friendlyError(err);
+        if (appending) setMoreError(text);
+        else setLoadError(text);
       })
       .finally(() => {
-        if (!stale) setLoading(false);
+        if (stale) return;
+        setLoading(false);
+        setLoadingMore(false);
       });
     return () => {
       stale = true;
     };
-  }, [query]);
+    // `t` and `locale` only word an error; a language switch must not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request]);
 
   // Employer names are a convenience over the ids the ledger stores. If the
   // read fails the list still works — it shows the id.
@@ -111,9 +160,27 @@ export function PayrollRemittances() {
     };
   }, []);
 
-  const runQuery = (next: Partial<Omit<ListQuery, 'nonce'>>) => {
+  /**
+   * Page one again. A filter change starts from a fresh page; a refresh (or
+   * the reload after a write) asks for as many rows as are already on screen,
+   * so ops does not lose their place in a list they had paged through.
+   */
+  const reload = (filters: Partial<Pick<ListRequest, 'view' | 'overdueOnly'>> = {}) => {
+    const filterChanged = Object.keys(filters).length > 0;
+    const loaded = rows?.length ?? 0;
+    const limit = filterChanged ? REMITTANCE_PAGE_SIZE : Math.min(REMITTANCE_LIMIT_MAX, Math.max(REMITTANCE_PAGE_SIZE, loaded));
     setLoading(true);
-    setQuery((q) => ({ ...q, ...next, nonce: q.nonce + 1 }));
+    setLoadingMore(false);
+    setMoreError(null);
+    setRequest((q) => ({ ...q, ...filters, cursor: null, limit, nonce: q.nonce + 1 }));
+  };
+
+  const loadMore = () => {
+    const cursor = meta?.nextCursor;
+    if (!cursor || loading || loadingMore) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    setRequest((q) => ({ ...q, cursor, limit: REMITTANCE_PAGE_SIZE, nonce: q.nonce + 1 }));
   };
 
   const employerLabel = (r: Remittance): string =>
@@ -131,7 +198,7 @@ export function PayrollRemittances() {
   const onRecorded = (result: RecordRemittanceResult, amountCents: number) => {
     setRecording(null);
     setToast(t('remit_toast_recorded', { amount: formatCents(amountCents), status: statusLabel(result.status) }));
-    runQuery({});
+    reload();
   };
 
   const onVoided = (result: VoidReceiptResult) => {
@@ -139,12 +206,15 @@ export function PayrollRemittances() {
     setToast(
       t(result.alreadyVoided ? 'remit_toast_already_voided' : 'remit_toast_voided', { status: statusLabel(result.status) }),
     );
-    runQuery({});
+    reload();
   };
 
-  const remittances = data?.remittances ?? [];
-  const totals = data?.totals;
-  const emptyKey = query.overdueOnly ? 'remit_empty_overdue' : query.view === 'all' ? 'remit_empty_all' : 'remit_empty_outstanding';
+  const remittances = rows ?? [];
+  const totals = rows ? totalsOf(rows) : null;
+  const hasMore = Boolean(meta?.nextCursor);
+  // Oldest first whenever the list is outstanding-only; `overdueOnly` implies it.
+  const oldestFirst = request.view === 'outstanding' || request.overdueOnly;
+  const emptyKey = request.overdueOnly ? 'remit_empty_overdue' : request.view === 'all' ? 'remit_empty_all' : 'remit_empty_outstanding';
 
   /* ── render ─────────────────────────────────────────────────────────────── */
 
@@ -156,11 +226,9 @@ export function PayrollRemittances() {
           <h1 className="ops-title">{t('remit_title')}</h1>
           <p className="ops-sub">{t('remit_subtitle')}</p>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <button type="button" className="ops-go" style={{ marginTop: 0 }} onClick={() => runQuery({})} disabled={loading}>
-            <i aria-hidden="true" />{loading ? t('remit_refreshing') : t('remit_refresh')}
-          </button>
-        </div>
+        <button type="button" className="ops-go flush" onClick={() => reload()} disabled={loading}>
+          <i aria-hidden="true" />{loading ? t('remit_refreshing') : t('remit_refresh')}
+        </button>
       </div>
 
       {toast && (
@@ -168,15 +236,15 @@ export function PayrollRemittances() {
       )}
 
       {loadError && (
-        <div role="alert" className="ops-toast error">
-          {t('remit_load_error', { detail: loadError })}{' '}
-          <button type="button" className="ops-btn sm ghost" onClick={() => runQuery({})} disabled={loading}>
+        <div role="alert" className="ops-toast error ops-toast-row">
+          <span>{t('remit_load_error', { detail: loadError })}</span>
+          <button type="button" className="ops-btn sm ghost" onClick={() => reload()} disabled={loading}>
             {t('remit_retry')}
           </button>
         </div>
       )}
 
-      <div className="ops-kpis four" style={{ marginTop: 0, marginBottom: 10 }}>
+      <div className="ops-kpis four flush">
         <div className="ops-kpi">
           <small>{t('remit_kpi_expected')}</small>
           <b>{totals ? money(totals.expectedCents) : '—'}</b>
@@ -196,58 +264,62 @@ export function PayrollRemittances() {
         </div>
       </div>
 
-      <div className="ops-card quiet" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '14px 16px' }}>
+      {rows && hasMore && (
+        <p role="status" className="ops-toast" data-testid="remit-totals-partial">{t('remit_totals_partial')}</p>
+      )}
+
+      <div className="ops-card quiet ops-filterbar">
         <span className="ops-label">{t('remit_filter_label')}</span>
         <div className="ops-chips">
           <button
             type="button"
-            className={`ops-chip${query.view === 'outstanding' ? ' on' : ''}`}
-            aria-pressed={query.view === 'outstanding'}
-            onClick={() => runQuery({ view: 'outstanding' })}
+            className={`ops-chip${request.view === 'outstanding' ? ' on' : ''}`}
+            aria-pressed={request.view === 'outstanding'}
+            onClick={() => reload({ view: 'outstanding' })}
           >
             {t('remit_filter_outstanding')}
           </button>
           <button
             type="button"
-            className={`ops-chip${query.view === 'all' ? ' on' : ''}`}
-            aria-pressed={query.view === 'all'}
-            onClick={() => runQuery({ view: 'all' })}
+            className={`ops-chip${request.view === 'all' ? ' on' : ''}`}
+            aria-pressed={request.view === 'all'}
+            onClick={() => reload({ view: 'all' })}
           >
             {t('remit_filter_all')}
           </button>
           <button
             type="button"
-            className={`ops-chip${query.overdueOnly ? ' on' : ''}`}
-            aria-pressed={query.overdueOnly}
-            onClick={() => runQuery({ overdueOnly: !query.overdueOnly })}
+            className={`ops-chip${request.overdueOnly ? ' on' : ''}`}
+            aria-pressed={request.overdueOnly}
+            onClick={() => reload({ overdueOnly: !request.overdueOnly })}
           >
             {t('remit_filter_overdue')}
           </button>
         </div>
       </div>
 
-      <section className="ops-card" aria-busy={loading}>
-        {loading && !data && (
+      <section className="ops-card" aria-busy={loading || loadingMore}>
+        {loading && !rows && (
           <div className="empty-state">
             <p>{t('remit_loading')}</p>
           </div>
         )}
 
-        {data && remittances.length === 0 && (
+        {rows && meta && remittances.length === 0 && !hasMore && (
           <div className="empty-state">
             <p>{t(emptyKey)}</p>
           </div>
         )}
 
-        {data && remittances.length > 0 && (
+        {rows && meta && (remittances.length > 0 || hasMore) && (
           <>
-            <h2 className="ops-h3">{t('remit_list_title', { count: remittances.length })}</h2>
-            <p className="ops-note" style={{ marginBottom: 12 }}>
-              {t('remit_as_of', { date: formatIsoDate(data.asOf, locale), days: data.graceDays })}
+            <h2 className="ops-h3">
+              {t(hasMore ? 'remit_list_title_partial' : 'remit_list_title', { count: remittances.length })}
+            </h2>
+            <p className="ops-note ops-remit-asof">
+              {t('remit_as_of', { date: formatIsoDate(meta.asOf, locale), days: meta.graceDays })}{' '}
+              {t(oldestFirst ? 'remit_order_outstanding' : 'remit_order_all')}
             </p>
-            {data.truncated && (
-              <p role="status" className="ops-toast">{t('remit_truncated')}</p>
-            )}
           </>
         )}
 
@@ -259,30 +331,27 @@ export function PayrollRemittances() {
               : t('remit_period_unknown');
 
           return (
-            <div
-              key={r.batchId}
-              className="ops-batch"
-              data-testid={`remittance-${r.batchId}`}
-              style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}
-            >
+            <div key={r.batchId} className="ops-batch ops-remit" data-testid={`remittance-${r.batchId}`}>
               {/* Folder glyph is green only once the money has fully arrived */}
-              <span className={`fl${r.status === 'received' ? ' g' : ''}`} aria-hidden="true" style={{ marginTop: 2 }} />
-              <span className="t" style={{ whiteSpace: 'normal', flex: '1 1 240px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 500 }}>{employerLabel(r)}</span>
+              <span className={`fl${r.status === 'received' ? ' g' : ''}`} aria-hidden="true" />
+              <span className="t">
+                <span className="ops-remit-head">
+                  <b>{employerLabel(r)}</b>
                   <span className={`ops-status${statusClass(r.status)}`}>{statusLabel(r.status)}</span>
                   {aging && <span className={`ops-status${agingClass(r)}`}>{aging}</span>}
                 </span>
-                <small style={{ whiteSpace: 'normal' }}>{period}</small>
-                <small style={{ whiteSpace: 'normal' }}>
+                <small>{period}</small>
+                <small>
                   {t('remit_batch', { batch: r.batchId })} · {t('remit_deductions', { count: r.deductionCount })}
                 </small>
               </span>
 
-              <span className="p">{money(r.expectedCents)}<small>{t('remit_col_expected')}</small></span>
-              <span className="p">{money(r.receivedCents)}<small>{t('remit_col_received')}</small></span>
-              <span className="p" style={r.aging.overdue ? { color: '#f2c4a0' } : undefined}>
-                {money(r.aging.outstandingCents)}<small>{t('remit_col_outstanding')}</small>
+              <span className="ops-remit-figures">
+                <span className="p">{money(r.expectedCents)}<small>{t('remit_col_expected')}</small></span>
+                <span className="p">{money(r.receivedCents)}<small>{t('remit_col_received')}</small></span>
+                <span className={`p${r.aging.overdue ? ' late' : ''}`}>
+                  {money(r.aging.outstandingCents)}<small>{t('remit_col_outstanding')}</small>
+                </span>
               </span>
 
               <span className="ops-actions">
@@ -296,13 +365,13 @@ export function PayrollRemittances() {
                 </button>
               </span>
 
-              <div style={{ flex: '1 1 100%', paddingLeft: 44 }}>
+              <div className="ops-remit-receipts">
                 {r.receipts.length === 0 ? (
                   <p className="ops-note">{t('remit_receipts_none')}</p>
                 ) : (
                   <>
-                    <p className="ops-label" style={{ margin: '4px 0 6px' }}>{t('remit_receipts_title')}</p>
-                    <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    <p className="ops-label">{t('remit_receipts_title')}</p>
+                    <ul>
                       {r.receipts.map((receipt) => {
                         const reference = receipt.bankReference ?? t('remit_receipt_no_reference');
                         return (
@@ -310,33 +379,26 @@ export function PayrollRemittances() {
                             key={receipt.receiptId}
                             data-testid={`receipt-${receipt.receiptId}`}
                             data-voided={receipt.voided ? 'true' : 'false'}
-                            style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid rgba(255,255,255,.06)', fontSize: 13 }}
+                            className={receipt.voided ? 'voided' : undefined}
                           >
-                            <span
-                              style={{
-                                fontVariantNumeric: 'tabular-nums',
-                                minWidth: 110,
-                                ...(receipt.voided ? { textDecoration: 'line-through', opacity: 0.7 } : {}),
-                              }}
-                            >
-                              {money(receipt.amountCents)}
-                            </span>
-                            <span style={receipt.voided ? { opacity: 0.7 } : undefined}>{formatIsoDate(receipt.receivedOn, locale)}</span>
-                            <span className="ops-status mono">{t('remit_receipt_reference', { reference })}</span>
+                            <span className="amt">{money(receipt.amountCents)}</span>
+                            <span className="when">{formatIsoDate(receipt.receivedOn, locale)}</span>
+                            <span className="ops-status mono ref">{t('remit_receipt_reference', { reference })}</span>
                             {receipt.voided ? (
                               <>
                                 <span className="ops-status bad">{t('remit_receipt_voided')}</span>
-                                <span className="ops-note" style={{ flex: '1 1 100%' }}>
+                                <span className="ops-note why">
                                   {receipt.voidReason && t('remit_receipt_void_reason', { reason: receipt.voidReason })}
                                   {receipt.voidReason && receipt.voidedAt && ' · '}
-                                  {receipt.voidedAt && t('remit_receipt_voided_on', { date: formatIsoDate(receipt.voidedAt, locale) })}
+                                  {/* An instant, shown as the day it was in Mexico City — not the UTC day. */}
+                                  {receipt.voidedAt &&
+                                    t('remit_receipt_voided_on', { date: formatInstantInMexicoCity(receipt.voidedAt, locale) })}
                                 </span>
                               </>
                             ) : (
                               <button
                                 type="button"
-                                className="ops-btn sm ghost danger"
-                                style={{ marginLeft: 'auto' }}
+                                className="ops-btn sm ghost danger void"
                                 aria-label={t('remit_void_aria', { reference, batch: r.batchId })}
                                 onClick={() => { setToast(null); setVoiding({ remittance: r, receipt }); }}
                               >
@@ -353,6 +415,26 @@ export function PayrollRemittances() {
             </div>
           );
         })}
+
+        {rows && (hasMore || moreError) && (
+          <div className="ops-remit-more">
+            {moreError && (
+              <div role="alert" className="ops-toast error">{t('remit_load_more_error', { detail: moreError })}</div>
+            )}
+            <div className="ops-actions">
+              {hasMore && (
+                <button type="button" className="ops-btn" onClick={loadMore} disabled={loading || loadingMore}>
+                  {loadingMore ? t('remit_loading_more') : t('remit_load_more')}
+                </button>
+              )}
+              {moreError && (
+                <button type="button" className="ops-btn ghost" onClick={() => reload()} disabled={loading}>
+                  {t('remit_reload_from_start')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       {recording && (

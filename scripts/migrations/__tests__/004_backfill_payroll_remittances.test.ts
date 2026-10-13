@@ -6,7 +6,11 @@
  *   - `--apply` writes exactly the records the dry run announced;
  *   - a second run is a no-op (idempotent), and an existing record — with the
  *     receipts ops booked on it — is never touched;
- *   - a non-emulator target is refused without `--allow-production`.
+ *   - a non-emulator target is refused without `--allow-production`;
+ *   - receipts booked before the bank-reference index existed get their index
+ *     entry (pass 2), with the same dry-run / idempotency guarantees, and the
+ *     entry is one `recordPayrollRemittance` and `voidPayrollRemittanceReceipt`
+ *     would have written themselves.
  *
  * No Firebase app is initialised and no network call is made — `run` takes its
  * Firestore handle as an argument.
@@ -14,6 +18,7 @@
 
 import type { Firestore } from 'firebase-admin/firestore';
 
+import { bankReferenceDocId } from '../../../functions/src/payroll/remittanceLedger';
 import {
   ALLOW_PRODUCTION_FLAG,
   APPLY_FLAG,
@@ -27,7 +32,7 @@ type Store = Record<string, Record<string, Doc>>;
 type Filter = { field: string; value: unknown };
 
 function makeDb(seed: Store) {
-  const store: Store = { payrollBatches: {}, payrollDeductions: {}, payrollRemittances: {} };
+  const store: Store = { payrollBatches: {}, payrollDeductions: {}, payrollRemittances: {}, payrollRemittanceReferences: {} };
   for (const [col, docs] of Object.entries(seed)) store[col] = structuredClone(docs);
   let transactions = 0;
   let writes = 0;
@@ -218,11 +223,13 @@ describe('migration 004 — apply', () => {
     await run(db, { apply: true, ...quiet });
     const afterFirst = structuredClone(store);
     const writesAfterFirst = stats().writes;
-    expect(writesAfterFirst).toBe(2);
+    // Two records, plus the index entry for the receipt already on emp1's June record.
+    expect(writesAfterFirst).toBe(3);
 
     const second = await run(db, { apply: true, ...quiet });
 
     expect(second.counts).toMatchObject({ create: 0, exists: 3 });
+    expect(second.referenceIndex.counts).toEqual({ create: 0, exists: 1, 'no-reference': 0 });
     expect(store).toEqual(afterFirst);
     expect(stats().writes).toBe(writesAfterFirst);
   });
@@ -241,5 +248,158 @@ describe('migration 004 — apply', () => {
     expect(report.counts.create).toBe(450);
     expect(report.createdExpectedCents).toBe(45000);
     expect(Object.keys(store['payrollRemittances']!)).toHaveLength(450);
+  });
+});
+
+describe('migration 004 — bank-reference index for receipts booked before it existed', () => {
+  const REFS = 'payrollRemittanceReferences';
+  const record = (batchId: string, employerId: string, receipts: Doc[]): Doc => ({
+    batchId,
+    employerId,
+    payPeriodStart: '2026-04-01',
+    payPeriodEnd: '2026-04-15',
+    expectedCents: 100000,
+    receivedCents: 0,
+    status: 'expected',
+    receipts,
+  });
+
+  /** Only remittance records: pass 1 has nothing to do, so every write is pass 2's. */
+  function legacySeed(): Store {
+    return {
+      payrollRemittances: {
+        legacy_1: record('legacy_1', 'emp2', [
+          { amountCents: 40000, receivedOn: '2026-04-17', bankReference: '  spei   0001 abc ' },
+          { amountCents: 99999, receivedOn: '2026-04-17', bankReference: 'SPEI-VOIDED', voided: true },
+          { amountCents: 20000, receivedOn: '2026-04-18', bankReference: 'spei-shared-9' },
+          { amountCents: 500, receivedOn: '2026-04-19' },
+        ]),
+        legacy_2: record('legacy_2', 'emp3', [{ amountCents: 20000, receivedOn: '2026-05-02', bankReference: 'SPEI-SHARED-9' }]),
+        native_1: record('native_1', 'emp1', [
+          { receiptId: 'rcpt-1', amountCents: 100000, bankReference: 'SPEI-NATIVE', bankReferenceKey: 'SPEI-NATIVE' },
+        ]),
+      },
+      [REFS]: {
+        [bankReferenceDocId('SPEI-NATIVE')]: {
+          bankReferenceKey: 'SPEI-NATIVE',
+          holders: [{ batchId: 'native_1', receiptId: 'rcpt-1', employerId: 'emp1' }],
+          updatedAt: 'T0',
+        },
+      },
+    };
+  }
+
+  const wantRows = [
+    { batchId: 'legacy_1', receiptId: 'legacy-0', bankReferenceKey: 'SPEI 0001 ABC', outcome: 'create' },
+    { batchId: 'legacy_1', receiptId: 'legacy-2', bankReferenceKey: 'SPEI-SHARED-9', outcome: 'create' },
+    { batchId: 'legacy_1', receiptId: 'legacy-3', bankReferenceKey: '', outcome: 'no-reference' },
+    { batchId: 'legacy_2', receiptId: 'legacy-0', bankReferenceKey: 'SPEI-SHARED-9', outcome: 'create' },
+    { batchId: 'native_1', receiptId: 'rcpt-1', bankReferenceKey: 'SPEI-NATIVE', outcome: 'exists' },
+  ];
+
+  it('dry run: reports the entries it would write, and writes nothing', async () => {
+    const { db, store, stats } = makeDb(legacySeed());
+    const before = structuredClone(store);
+
+    const report = await run(db, { apply: false, ...quiet });
+
+    expect(report.referenceIndex.rows).toEqual(wantRows);
+    expect(report.referenceIndex.counts).toEqual({ create: 3, exists: 1, 'no-reference': 1 });
+    expect(report.referenceIndex.sharedReferences).toEqual([
+      { bankReferenceKey: 'SPEI-SHARED-9', batchIds: ['legacy_1', 'legacy_2'] },
+    ]);
+    expect(store).toEqual(before);
+    expect(stats()).toEqual({ transactions: 0, writes: 0 });
+  });
+
+  it('apply: indexes every live receipt under the key and id the callables use for it', async () => {
+    const { db, store } = makeDb(legacySeed());
+
+    const report = await run(db, { apply: true, ...quiet });
+
+    expect(report.referenceIndex.rows).toEqual(wantRows);
+    const refs = store[REFS]!;
+    expect(Object.keys(refs).sort()).toEqual(
+      ['SPEI-NATIVE', 'SPEI 0001 ABC', 'SPEI-SHARED-9'].map(bankReferenceDocId).sort(),
+    );
+    expect(refs[bankReferenceDocId('SPEI 0001 ABC')]).toMatchObject({
+      bankReferenceKey: 'SPEI 0001 ABC',
+      holders: [{ batchId: 'legacy_1', receiptId: 'legacy-0', employerId: 'emp2' }],
+      backfilledBy: MIGRATION_TAG,
+    });
+    // One transfer on two batches: both hold it, and it is listed for review.
+    expect(refs[bankReferenceDocId('SPEI-SHARED-9')]!['holders']).toEqual([
+      { batchId: 'legacy_1', receiptId: 'legacy-2', employerId: 'emp2' },
+      { batchId: 'legacy_2', receiptId: 'legacy-0', employerId: 'emp3' },
+    ]);
+    expect(report.referenceIndex.sharedReferences).toEqual([
+      { bankReferenceKey: 'SPEI-SHARED-9', batchIds: ['legacy_1', 'legacy_2'] },
+    ]);
+  });
+
+  it('a voided receipt and a receipt with no reference get no entry', async () => {
+    const { db, store } = makeDb(legacySeed());
+
+    await run(db, { apply: true, ...quiet });
+
+    expect(store[REFS]![bankReferenceDocId('SPEI-VOIDED')]).toBeUndefined();
+    expect(store[REFS]![bankReferenceDocId('')]).toBeUndefined();
+  });
+
+  it('never touches a remittance record, nor an index entry that is already right', async () => {
+    const original = legacySeed();
+    const { db, store } = makeDb(original);
+
+    await run(db, { apply: true, ...quiet });
+
+    expect(store['payrollRemittances']).toEqual(original['payrollRemittances']);
+    expect(store[REFS]![bankReferenceDocId('SPEI-NATIVE')]).toEqual(original[REFS]![bankReferenceDocId('SPEI-NATIVE')]);
+  });
+
+  it('adds to an entry another batch already holds instead of replacing it', async () => {
+    const seeded = legacySeed();
+    seeded[REFS]![bankReferenceDocId('SPEI 0001 ABC')] = {
+      bankReferenceKey: 'SPEI 0001 ABC',
+      holders: [{ batchId: 'someone_else', receiptId: 'rcpt-9', employerId: 'emp9' }],
+      updatedAt: 'T0',
+    };
+    const { db, store } = makeDb(seeded);
+
+    const report = await run(db, { apply: true, ...quiet });
+
+    expect(store[REFS]![bankReferenceDocId('SPEI 0001 ABC')]!['holders']).toEqual([
+      { batchId: 'someone_else', receiptId: 'rcpt-9', employerId: 'emp9' },
+      { batchId: 'legacy_1', receiptId: 'legacy-0', employerId: 'emp2' },
+    ]);
+    expect(report.referenceIndex.sharedReferences.map((r) => r.bankReferenceKey)).toEqual(['SPEI 0001 ABC', 'SPEI-SHARED-9']);
+  });
+
+  it('is idempotent: a second run writes nothing and adds no duplicate holder', async () => {
+    const { db, store, stats } = makeDb(legacySeed());
+    await run(db, { apply: true, ...quiet });
+    const afterFirst = structuredClone(store);
+    const writesAfterFirst = stats().writes;
+    expect(writesAfterFirst).toBe(3);
+
+    const second = await run(db, { apply: true, ...quiet });
+
+    expect(second.referenceIndex.counts).toEqual({ create: 0, exists: 4, 'no-reference': 1 });
+    expect(store).toEqual(afterFirst);
+    expect(stats().writes).toBe(writesAfterFirst);
+  });
+
+  it('pages through more records than fit in one page', async () => {
+    const many: Store = { payrollRemittances: {} };
+    for (let i = 0; i < 450; i++) {
+      const id = `rec_${String(i).padStart(4, '0')}`;
+      many['payrollRemittances']![id] = record(id, 'emp', [{ amountCents: 1, bankReference: `REF-${i}` }]);
+    }
+    const { db, store } = makeDb(many);
+
+    const report = await run(db, { apply: true, ...quiet });
+
+    expect(report.referenceIndex.counts.create).toBe(450);
+    expect(Object.keys(store[REFS]!)).toHaveLength(450);
+    expect(report.referenceIndex.sharedReferences).toEqual([]);
   });
 });

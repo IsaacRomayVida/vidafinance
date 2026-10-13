@@ -119,6 +119,12 @@ jobs:
       - name: The load test still refuses production by default — hard gate
         run: node --test tests/load/target.test.mjs
 
+      # scripts/seed-remittance-emulator.mjs creates an ops login and ledger
+      # rows for looking at /ops/remittances locally. Its whole safety case is
+      # that it writes to the Firebase emulator or nowhere; the guard is pure.
+      - name: The remittance emulator seed still refuses any real project — hard gate
+        run: node --test scripts/seed-remittance-emulator.test.mjs
+
       - name: Install root deps (includes ESLint)
         run: npm ci
 

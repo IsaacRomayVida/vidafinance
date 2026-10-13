@@ -399,6 +399,52 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "payrollRemittances",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "payPeriodEnd",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "payrollRemittances",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "payPeriodEnd",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "payrollRemittances",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "payPeriodEnd",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

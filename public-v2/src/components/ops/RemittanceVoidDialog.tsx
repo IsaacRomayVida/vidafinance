@@ -7,7 +7,8 @@ import { formatCents } from '../../lib/money';
 import {
   VOID_REASON_MAX,
   VOID_REASON_MIN,
-  classifyRemittanceError,
+  readRemittanceRefusal,
+  remittanceRefusalText,
   voidReasonProblem,
   type Remittance,
   type RemittanceReceipt,
@@ -29,7 +30,8 @@ interface Props {
  * step — a void moves money on the ledger and lands in the audit log.
  */
 export function RemittanceVoidDialog({ remittance, receipt, onClose, onVoided }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === 'en' ? 'en-US' : 'es-MX';
   const [step, setStep] = useState<'reason' | 'confirm'>('reason');
   const [reason, setReason] = useState('');
   const [problem, setProblem] = useState<VoidReasonProblem | null>(null);
@@ -40,12 +42,8 @@ export function RemittanceVoidDialog({ remittance, receipt, onClose, onVoided }:
   const amount = formatCents(receipt.amountCents);
   const reference = receipt.bankReference ?? t('remit_receipt_no_reference');
 
-  const describe = (err: unknown): string => {
-    const kind = classifyRemittanceError(err);
-    if (kind.kind === 'invalid') return t('remit_err_invalid', { detail: kind.detail });
-    if (kind.kind === 'not_found') return t('remit_err_not_found_void');
-    return friendlyError(err);
-  };
+  const describe = (err: unknown): string =>
+    remittanceRefusalText(readRemittanceRefusal(err), t, locale) ?? friendlyError(err);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -84,14 +82,14 @@ export function RemittanceVoidDialog({ remittance, receipt, onClose, onVoided }:
         <h2 id="remit-void-title" className="ops-h3">
           {step === 'reason' ? t('remit_dialog_void_title') : t('remit_void_confirm_title')}
         </h2>
-        <p className="ops-sub" style={{ marginBottom: 12 }}>
+        <p className="ops-sub">
           {t('remit_dialog_void_sub', { amount, reference, batch: remittance.batchId })}
         </p>
 
         {step === 'reason' ? (
           <>
-            <p className="ops-note" style={{ marginBottom: 14 }}>{t('remit_void_explain')}</p>
-            <div className="ops-field" style={{ marginBottom: 16 }}>
+            <p className="ops-note">{t('remit_void_explain')}</p>
+            <div className="ops-field">
               <label className="ops-label" htmlFor="remit-reason">{t('remit_field_void_reason')}</label>
               <textarea
                 id="remit-reason"
@@ -104,20 +102,20 @@ export function RemittanceVoidDialog({ remittance, receipt, onClose, onVoided }:
               />
               {reasonError && <span id="remit-reason-error" role="alert" className="ops-error">{reasonError}</span>}
             </div>
-            <div className="ops-actions" style={{ justifyContent: 'flex-end', width: '100%', gap: 10 }}>
+            <div className="ops-actions end">
               <button type="button" className="ops-btn ghost" onClick={onClose}>{t('remit_cancel')}</button>
               <button type="submit" className="ops-btn on">{t('remit_void_continue')}</button>
             </div>
           </>
         ) : (
           <>
-            <p className="ops-note" style={{ marginBottom: 10 }}>{t('remit_void_confirm_body', { amount })}</p>
-            <p className="ops-note" style={{ marginBottom: 16 }}>{t('remit_receipt_void_reason', { reason: reason.trim() })}</p>
+            <p className="ops-note">{t('remit_void_confirm_body', { amount })}</p>
+            <p className="ops-note ops-sheet-quote">{t('remit_receipt_void_reason', { reason: reason.trim() })}</p>
             {serverError && <div role="alert" className="ops-toast error">{serverError}</div>}
             {/* Destructive action on the left, on purpose: "Continuar" sat on
                 the right a moment ago, so a double click there lands on
                 "Volver" instead of confirming the void unread. */}
-            <div className="ops-actions" style={{ justifyContent: 'space-between', width: '100%', gap: 10 }}>
+            <div className="ops-actions between">
               <button type="submit" className="ops-btn danger" disabled={submitting}>
                 {submitting ? t('remit_voiding') : t('remit_void_confirm')}
               </button>

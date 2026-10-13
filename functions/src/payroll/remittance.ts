@@ -9,11 +9,13 @@ import { enforceRateLimit } from '../utils/rateLimiter';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 import {
   DEFAULT_REMITTANCE_GRACE_DAYS,
+  OUTSTANDING_REMITTANCE_STATUSES,
   PAYROLL_BATCHES_COLLECTION,
   PAYROLL_REMITTANCES_COLLECTION,
   PAYROLL_REMITTANCE_REFERENCES_COLLECTION,
   bankReferenceDocId,
   batchFromBatchDoc,
+  calendarDaysBefore,
   expectedRemittanceFields,
   isRealCalendarDate,
   isVoided,
@@ -26,10 +28,13 @@ import {
   receivedCentsOf,
   remittanceAging,
   remittanceStatus,
+  remittancesQuery,
+  remittancesQueryDirection,
   todayInMexicoCity,
   upsertExpectedRemittance,
   type RemittanceAging,
   type RemittanceBatch,
+  type RemittancePosition,
   type RemittanceStatus,
   type StoredReceipt,
 } from './remittanceLedger';
@@ -96,6 +101,69 @@ export async function recordExpectedRemittance(
 
 const OPS_ROLES = ['ops', 'admin', 'super_admin'] as const;
 
+// ─── Refusals the UI can translate ───────────────────────────────────────────
+
+/**
+ * Every refusal these callables throw carries `details.reason`, a stable
+ * machine-readable code. The `message` is English and for logs; the ops UI
+ * shows its own Spanish text keyed on the reason. Codes are a contract
+ * (docs/runbooks/payroll-remittances.md): add new ones, never rename.
+ */
+export type RemittanceRefusalReason =
+  // already-exists
+  | 'bank-reference-in-batch'
+  | 'bank-reference-in-other-batch'
+  // invalid-argument
+  | 'input-invalid'
+  | 'batch-id-invalid'
+  | 'amount-invalid'
+  | 'received-on-invalid-format'
+  | 'received-on-not-a-date'
+  | 'received-on-future'
+  | 'received-on-before-pay-period'
+  | 'bank-reference-invalid'
+  | 'shared-transfer-invalid'
+  | 'receipt-id-invalid'
+  | 'void-reason-invalid'
+  | 'view-invalid'
+  | 'employer-id-invalid'
+  | 'overdue-only-invalid'
+  | 'grace-days-invalid'
+  | 'limit-invalid'
+  | 'cursor-invalid'
+  // not-found
+  | 'remittance-not-expected'
+  | 'remittance-not-found'
+  | 'receipt-not-found';
+
+function refusal(
+  code: 'invalid-argument' | 'not-found' | 'already-exists',
+  reason: RemittanceRefusalReason,
+  message: string,
+  extra: Record<string, unknown> = {},
+): HttpsError {
+  return new HttpsError(code, message, { reason, ...extra });
+}
+
+type SchemaIssue = { path: PropertyKey[]; code?: string; message: string };
+
+/**
+ * A failed schema parse → `invalid-argument` with the reason for the first
+ * field that failed. `reasons` maps a top-level field to its code (or to a
+ * function of the issue, where one field can fail in more than one way).
+ */
+function schemaRefusal(
+  issues: SchemaIssue[],
+  reasons: Record<string, RemittanceRefusalReason | ((issue: SchemaIssue) => RemittanceRefusalReason)>,
+): HttpsError {
+  const issue = issues[0];
+  const first = issue?.path[0];
+  const field = typeof first === 'string' ? first : null;
+  const mapped = field === null ? undefined : reasons[field];
+  const reason = typeof mapped === 'function' && issue ? mapped(issue) : typeof mapped === 'string' ? mapped : 'input-invalid';
+  return refusal('invalid-argument', reason, issue?.message ?? 'Invalid input', field === null ? {} : { field });
+}
+
 type ReferenceHolder = { batchId: string; receiptId: string; employerId: string | null };
 
 function holdersOf(indexDoc: Record<string, unknown> | undefined): ReferenceHolder[] {
@@ -148,7 +216,15 @@ export const recordPayrollRemittance = onCall(
 
           const parsed = RecordPayrollRemittanceSchema.safeParse(data);
           if (!parsed.success) {
-            throw new HttpsError('invalid-argument', parsed.error.issues[0]?.message ?? 'Invalid input');
+            throw schemaRefusal(parsed.error.issues, {
+              batchId: 'batch-id-invalid',
+              amountCents: 'amount-invalid',
+              // The refinement (a day that does not exist) reports as `custom`;
+              // anything else is the wrong shape.
+              receivedOn: (issue) => (issue.code === 'custom' ? 'received-on-not-a-date' : 'received-on-invalid-format'),
+              bankReference: 'bank-reference-invalid',
+              sharedTransfer: 'shared-transfer-invalid',
+            });
           }
           const input = parsed.data;
 
@@ -156,9 +232,11 @@ export const recordPayrollRemittance = onCall(
           // strings: both sides are zero-padded YYYY-MM-DD.
           const today = todayInMexicoCity(new Date(Date.now()));
           if (input.receivedOn > today) {
-            throw new HttpsError(
+            throw refusal(
               'invalid-argument',
+              'received-on-future',
               `receivedOn ${input.receivedOn} is in the future (today is ${today} in Mexico City)`,
+              { field: 'receivedOn', today },
             );
           }
 
@@ -190,13 +268,34 @@ export const recordPayrollRemittance = onCall(
               const batch = batchSnap.exists ? batchFromBatchDoc(input.batchId, batchSnap.data()) : null;
               const expected = batch ? await readExpectedInTx(tx, db, input.batchId) : null;
               if (!batch || !expected || expected.expectedCents <= 0) {
-                throw new HttpsError('not-found', `No remittance expected for batch ${input.batchId}`);
+                throw refusal('not-found', 'remittance-not-expected', `No remittance expected for batch ${input.batchId}`);
               }
               current = expectedRemittanceFields(batch, expected, undefined, now);
             }
             const referenceSnap = await tx.get(referenceRef);
 
             // ── Checks ──
+            // Money withheld from a pay period cannot have been remitted before
+            // that period began: a date earlier than `payPeriodStart` is a typo
+            // (wrong year, wrong batch), and booking it would put the receipt
+            // ahead of the deductions it pays for. The period START, not its
+            // end, because an employer that runs payroll early may remit before
+            // the period closes. Skipped only if the record carries no readable
+            // start date — an unknown period is not a reason to refuse money.
+            const payPeriodStart = current['payPeriodStart'];
+            if (
+              typeof payPeriodStart === 'string' &&
+              isRealCalendarDate(payPeriodStart) &&
+              input.receivedOn < payPeriodStart
+            ) {
+              throw refusal(
+                'invalid-argument',
+                'received-on-before-pay-period',
+                `receivedOn ${input.receivedOn} is before the pay period of batch ${input.batchId} began (${payPeriodStart})`,
+                { field: 'receivedOn', payPeriodStart },
+              );
+            }
+
             const receipts = receiptsOf(current);
 
             // One bank transfer is one receipt. Without this an ops
@@ -352,7 +451,11 @@ export const voidPayrollRemittanceReceipt = onCall(
 
           const parsed = VoidPayrollRemittanceReceiptSchema.safeParse(data);
           if (!parsed.success) {
-            throw new HttpsError('invalid-argument', parsed.error.issues[0]?.message ?? 'Invalid input');
+            throw schemaRefusal(parsed.error.issues, {
+              batchId: 'batch-id-invalid',
+              receiptId: 'receipt-id-invalid',
+              reason: 'void-reason-invalid',
+            });
           }
           const input = parsed.data;
 
@@ -364,14 +467,14 @@ export const voidPayrollRemittanceReceipt = onCall(
           const result = await db.runTransaction(async (tx): Promise<VoidPayrollRemittanceReceiptResult> => {
             const snap = await tx.get(remittanceRef);
             if (!snap.exists) {
-              throw new HttpsError('not-found', `No remittance record for batch ${input.batchId}`);
+              throw refusal('not-found', 'remittance-not-found', `No remittance record for batch ${input.batchId}`);
             }
             const current = snap.data() ?? {};
             const receipts = receiptsOf(current);
             const index = receipts.findIndex((r, i) => receiptIdOf(r, i) === input.receiptId);
             const target = receipts[index];
             if (!target) {
-              throw new HttpsError('not-found', `No receipt ${input.receiptId} on batch ${input.batchId}`);
+              throw refusal('not-found', 'receipt-not-found', `No receipt ${input.receiptId} on batch ${input.batchId}`);
             }
 
             const expectedCents = Number(current['expectedCents'] ?? 0);
@@ -471,10 +574,8 @@ export const voidPayrollRemittanceReceipt = onCall(
 
 // ─── Ops: list remittances with status and aging ─────────────────────────────
 
-/** Most records one call returns. Past this the result is cut and `truncated` is true. */
+/** Most records one page holds, and the page size when the caller names none. */
 export const LIST_REMITTANCES_MAX = 500;
-
-const OUTSTANDING_STATUSES: RemittanceStatus[] = ['expected', 'partial'];
 
 const ListPayrollRemittancesSchema = z
   .object({
@@ -484,6 +585,10 @@ const ListPayrollRemittancesSchema = z
     /** Only records past the grace window with money still missing. */
     overdueOnly: z.boolean().optional(),
     graceDays: z.number().int().min(0).max(365).optional(),
+    /** Page size. */
+    limit: z.number().int().min(1).max(LIST_REMITTANCES_MAX).optional(),
+    /** `nextCursor` of the previous page, to get the one after it. */
+    cursor: z.string().min(1).max(1000).optional(),
   })
   .optional();
 
@@ -521,7 +626,11 @@ export interface ListPayrollRemittancesResult {
   /** The Mexico City date aging was computed against. */
   asOf: string;
   graceDays: number;
+  /** The page size this call used. */
+  pageSize: number;
+  /** One page, in the ledger's order (see `remittancesQuery`). */
   remittances: RemittanceView[];
+  /** Totals of THIS PAGE's rows — not of everything that matches. */
   totals: {
     count: number;
     expectedCents: number;
@@ -530,8 +639,36 @@ export interface ListPayrollRemittancesResult {
     overdueCount: number;
     overdueCents: number;
   };
-  /** True when more than LIST_REMITTANCES_MAX records matched and the list was cut. */
+  /** Pass back as `cursor` for the next page; null on the last page. */
+  nextCursor: string | null;
+  /** `nextCursor !== null`. Kept for callers written before pagination. */
   truncated: boolean;
+}
+
+/**
+ * A page cursor is the sort key of the page's last row, tagged with the
+ * direction it was read in so a cursor from one view cannot be replayed into a
+ * view sorted the other way (it would silently skip most of the ledger).
+ * Opaque to the client: base64url of a small JSON array.
+ */
+export function encodeRemittanceCursor(direction: 'asc' | 'desc', position: RemittancePosition): string {
+  return Buffer.from(JSON.stringify([direction, position.payPeriodEnd, position.batchId]), 'utf8').toString('base64url');
+}
+
+/** The position a cursor names, or null if it is not a cursor for `direction`. */
+export function decodeRemittanceCursor(cursor: string, direction: 'asc' | 'desc'): RemittancePosition | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 3) return null;
+  const [dir, payPeriodEnd, batchId] = parsed as unknown[];
+  if (dir !== direction || typeof payPeriodEnd !== 'string' || typeof batchId !== 'string') return null;
+  // The id goes to Firestore as a document id: it must be able to be one.
+  if (!batchId || batchId.includes('/') || batchId.length > 200) return null;
+  return { payPeriodEnd, batchId };
 }
 
 const stringOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
@@ -579,8 +716,12 @@ export function toRemittanceView(
 
 /**
  * The read path for the ops remittance screen: which batches still owe money,
- * and for how long. Filters on at most one Firestore field so it needs no
- * composite index; everything else is filtered here.
+ * and for how long.
+ *
+ * One ordered, paginated Firestore query (`remittancesQuery`): outstanding
+ * records oldest pay period first, or — `view: 'all'` — every record newest
+ * first. The order is total (pay period end, then batch id), so paging with
+ * `nextCursor` neither skips nor repeats a record however many there are.
  *
  * It only knows about batches that have a record. Batches processed before the
  * ledger shipped get one from the backfill script (or from the first receipt
@@ -601,35 +742,65 @@ export const listPayrollRemittances = onCall(
 
           const parsed = ListPayrollRemittancesSchema.safeParse(data ?? undefined);
           if (!parsed.success) {
-            throw new HttpsError('invalid-argument', parsed.error.issues[0]?.message ?? 'Invalid input');
+            throw schemaRefusal(parsed.error.issues, {
+              view: 'view-invalid',
+              employerId: 'employer-id-invalid',
+              overdueOnly: 'overdue-only-invalid',
+              graceDays: 'grace-days-invalid',
+              limit: 'limit-invalid',
+              cursor: 'cursor-invalid',
+            });
           }
           const input = parsed.data ?? {};
-          const view = input.view ?? 'outstanding';
           const graceDays = input.graceDays ?? DEFAULT_REMITTANCE_GRACE_DAYS;
+          const pageSize = input.limit ?? LIST_REMITTANCES_MAX;
           const today = todayInMexicoCity(new Date(Date.now()));
 
-          const collection = getFirestore().collection(PAYROLL_REMITTANCES_COLLECTION);
-          const query = input.employerId
-            ? collection.where('employerId', '==', input.employerId)
-            : view === 'outstanding'
-              ? collection.where('status', 'in', OUTSTANDING_STATUSES)
-              : collection;
-          const snap = await query.limit(LIST_REMITTANCES_MAX + 1).get();
-          const truncated = snap.docs.length > LIST_REMITTANCES_MAX;
+          // Overdue implies outstanding, whatever `view` says.
+          const outstandingOnly = (input.view ?? 'outstanding') === 'outstanding' || input.overdueOnly === true;
+          const direction = remittancesQueryDirection({ outstandingOnly });
 
-          const remittances = snap.docs
-            .slice(0, LIST_REMITTANCES_MAX)
+          let after: RemittancePosition | undefined;
+          if (input.cursor !== undefined) {
+            const position = decodeRemittanceCursor(input.cursor, direction);
+            if (!position) {
+              throw refusal('invalid-argument', 'cursor-invalid', 'cursor is not a page cursor for this view', {
+                field: 'cursor',
+              });
+            }
+            after = position;
+          }
+
+          // One row more than the page, to learn whether another page exists
+          // without a second query.
+          const snap = await remittancesQuery(getFirestore(), {
+            outstandingOnly,
+            employerId: input.employerId,
+            // "More than graceDays days after payPeriodEnd" is a range on the
+            // sort field, so the server does it: payPeriodEnd < today − grace.
+            periodEndBefore: input.overdueOnly ? calendarDaysBefore(today, graceDays) : undefined,
+            after,
+          })
+            .limit(pageSize + 1)
+            .get();
+          const pageDocs = snap.docs.slice(0, pageSize);
+          const last = pageDocs[pageDocs.length - 1];
+          const nextCursor =
+            snap.docs.length > pageSize && last
+              ? encodeRemittanceCursor(direction, {
+                  payPeriodEnd: String(last.data()['payPeriodEnd'] ?? ''),
+                  batchId: last.id,
+                })
+              : null;
+
+          // No re-sort: the query's order IS the contract, and it must be the
+          // same on every page. The two filters only ever drop a row whose
+          // stored fields disagree with what they derive to (a stale `status`,
+          // an unreadable `payPeriodEnd`), so a page can come back short.
+          const remittances = pageDocs
             .map((d) => toRemittanceView(d.id, d.data(), today, graceDays))
-            .filter((r) => view === 'all' || OUTSTANDING_STATUSES.includes(r.status))
-            .filter((r) => !input.overdueOnly || r.aging.overdue)
-            // Longest-outstanding first; settled records (no age that matters) last.
-            .sort(
-              (a, b) =>
-                b.aging.daysOverdue - a.aging.daysOverdue ||
-                Number(b.aging.outstandingCents > 0) - Number(a.aging.outstandingCents > 0) ||
-                (b.aging.daysSincePeriodEnd ?? -Infinity) - (a.aging.daysSincePeriodEnd ?? -Infinity) ||
-                a.batchId.localeCompare(b.batchId),
-            );
+            .filter((r) => !outstandingOnly || OUTSTANDING_REMITTANCE_STATUSES.includes(r.status))
+            .filter((r) => !input.overdueOnly || r.aging.overdue);
 
           const totals = remittances.reduce(
             (t, r) => ({
@@ -643,7 +814,7 @@ export const listPayrollRemittances = onCall(
             { count: 0, expectedCents: 0, receivedCents: 0, outstandingCents: 0, overdueCount: 0, overdueCents: 0 },
           );
 
-          return { asOf: today, graceDays, remittances, totals, truncated };
+          return { asOf: today, graceDays, pageSize, remittances, totals, nextCursor, truncated: nextCursor !== null };
         },
       ),
   ),

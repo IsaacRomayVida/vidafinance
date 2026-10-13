@@ -45,8 +45,14 @@ const mockStore: Record<CollectionName, Record<string, Doc>> = {
   audit_log: {},
 };
 let mockAutoId = 0;
-/** Every query the code ran, so a test can pin that it filtered server-side. */
-const mockQueries: Array<{ collection: string; filters: Filter[]; limit: number | null }> = [];
+type Filter = { field: string; op: string; value: unknown };
+type Order = { field: string; direction: 'asc' | 'desc' };
+type QuerySpec = { filters: Filter[]; orders: Order[]; after: unknown[] | null; limit: number | null };
+type Ref = { _collection: CollectionName; id: string };
+type Query = { _collection: CollectionName; _spec: QuerySpec };
+
+/** Every query the code ran, so a test can pin that it filtered, ordered and limited server-side. */
+const mockQueries: Array<{ collection: string } & QuerySpec> = [];
 
 const mockFieldValue = { serverTimestamp: jest.fn(() => ({ _serverTimestamp: true })) };
 
@@ -60,36 +66,53 @@ class MockTimestamp {
   }
 }
 
-type Filter = { field: string; op: string; value: unknown };
-type Ref = { _collection: CollectionName; id: string };
-type Query = { _collection: CollectionName; _filters: Filter[] };
+const mockCompare = (a: unknown, b: unknown) => (a === b ? 0 : (a as string | number) < (b as string | number) ? -1 : 1);
 
-function mockRunQuery(collection: CollectionName, filters: Filter[], limit: number | null) {
-  mockQueries.push({ collection, filters, limit });
+function mockRunQuery(collection: CollectionName, spec: QuerySpec) {
+  mockQueries.push({ collection, ...spec });
+  const sortKey = (id: string, doc: Doc) => spec.orders.map((o) => (o.field === '__name__' ? id : doc[o.field]));
+  const compareKeys = (a: unknown[], b: unknown[]) => {
+    for (let i = 0; i < spec.orders.length; i++) {
+      const c = mockCompare(a[i], b[i]) * (spec.orders[i]!.direction === 'desc' ? -1 : 1);
+      if (c !== 0) return c;
+    }
+    return 0;
+  };
   const docs = Object.entries(mockStore[collection])
     .filter(([, doc]) =>
-      filters.every((f) => {
+      spec.filters.every((f) => {
         if (f.op === '==') return doc[f.field] === f.value;
         if (f.op === 'in') return (f.value as unknown[]).includes(doc[f.field]);
+        if (f.op === '<') return typeof doc[f.field] === 'string' && (doc[f.field] as string) < (f.value as string);
         throw new Error(`unsupported operator ${f.op}`);
       }),
     )
-    .slice(0, limit ?? Infinity)
+    // Like Firestore: a document without an ordered field is not in the result.
+    .filter(([, doc]) => spec.orders.every((o) => o.field === '__name__' || doc[o.field] !== undefined))
+    .sort(([aId, a], [bId, b]) => compareKeys(sortKey(aId, a), sortKey(bId, b)))
+    .filter(([id, doc]) => spec.after === null || compareKeys(sortKey(id, doc), spec.after) > 0)
+    .slice(0, spec.limit ?? Infinity)
     .map(([id, data]) => ({ id, data: () => data }));
   return { docs, size: docs.length, empty: docs.length === 0 };
 }
 
-const mockMakeQuery = (collection: CollectionName, filters: Filter[]): Record<string, unknown> => ({
+const mockMakeQuery = (collection: CollectionName, spec: QuerySpec): Record<string, unknown> => ({
   _collection: collection,
-  _filters: filters,
-  where: (field: string, op: string, value: unknown) => mockMakeQuery(collection, [...filters, { field, op, value }]),
-  limit: (n: number) => ({ get: async () => mockRunQuery(collection, filters, n) }),
-  get: async () => mockRunQuery(collection, filters, null),
+  _spec: spec,
+  where: (field: string, op: string, value: unknown) =>
+    mockMakeQuery(collection, { ...spec, filters: [...spec.filters, { field, op, value }] }),
+  orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') =>
+    mockMakeQuery(collection, { ...spec, orders: [...spec.orders, { field, direction }] }),
+  startAfter: (...values: unknown[]) => mockMakeQuery(collection, { ...spec, after: values }),
+  limit: (n: number) => mockMakeQuery(collection, { ...spec, limit: n }),
+  get: async () => mockRunQuery(collection, spec),
 });
+
+const MOCK_EMPTY_SPEC: QuerySpec = { filters: [], orders: [], after: null, limit: null };
 
 const mockDb = {
   collection: jest.fn((name: CollectionName) => ({
-    ...mockMakeQuery(name, []),
+    ...mockMakeQuery(name, MOCK_EMPTY_SPEC),
     doc: (id?: string) => ({ _collection: name, id: id ?? `auto-${++mockAutoId}` }),
   })),
   runTransaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
@@ -100,7 +123,7 @@ const mockDb = {
     const tx = {
       get: jest.fn(async (target: Ref | Query) => {
         if (staged.length > 0) throw new Error('Firestore transactions require all reads before all writes');
-        if ('_filters' in target) return mockRunQuery(target._collection, target._filters, null);
+        if ('_spec' in target) return mockRunQuery(target._collection, target._spec);
         const entry = mockStore[target._collection][target.id];
         return { exists: entry !== undefined, data: () => entry };
       }),
@@ -134,10 +157,13 @@ jest.mock('firebase-admin/firestore', () => ({
 }));
 
 import {
+  LIST_REMITTANCES_MAX,
   recordPayrollRemittance,
   voidPayrollRemittanceReceipt,
   listPayrollRemittances,
   toRemittanceView,
+  encodeRemittanceCursor,
+  decodeRemittanceCursor,
 } from '../remittance';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<Record<string, unknown>>;
@@ -327,7 +353,7 @@ describe('recordPayrollRemittance — receivedOn must be a real date, not in the
   );
 
   it('accepts a real leap day', async () => {
-    seedRemittance();
+    seedRemittance({ payPeriodStart: '2024-02-16', payPeriodEnd: '2024-02-29' });
     await expect(record(opsRequest(receipt({ receivedOn: '2024-02-29' })))).resolves.toMatchObject({ status: 'partial' });
   });
 
@@ -352,6 +378,156 @@ describe('recordPayrollRemittance — receivedOn must be a real date, not in the
       code: 'invalid-argument',
     });
     await expect(record(opsRequest(receipt({ receivedOn: '2026-07-20' })))).resolves.toMatchObject({ status: 'partial' });
+  });
+});
+
+describe('recordPayrollRemittance — receivedOn cannot precede the pay period', () => {
+  // The seeded batch covers 2026-07-01 … 2026-07-15.
+  it('refuses a date before the period began, with the period start in the details', async () => {
+    seedRemittance();
+
+    await expect(record(opsRequest(receipt({ receivedOn: '2026-06-30' })))).rejects.toMatchObject({
+      code: 'invalid-argument',
+      details: { reason: 'received-on-before-pay-period', field: 'receivedOn', payPeriodStart: '2026-07-01' },
+    });
+    // The classic typo: right day, last year.
+    await expect(record(opsRequest(receipt({ receivedOn: '2025-07-17' })))).rejects.toMatchObject({
+      details: { reason: 'received-on-before-pay-period' },
+    });
+    expect(storedReceipts()).toEqual([]);
+    expect(mockStore.payrollRemittanceReferences).toEqual({});
+    expect(auditEntries()).toEqual([]);
+  });
+
+  it('accepts the first day of the period, and a day inside it before it closes', async () => {
+    seedRemittance();
+
+    await expect(record(opsRequest(receipt({ receivedOn: '2026-07-01' })))).resolves.toMatchObject({ status: 'partial' });
+    await expect(
+      record(opsRequest(receipt({ receivedOn: '2026-07-10', bankReference: 'SPEI-0002', amountCents: 70000 }))),
+    ).resolves.toMatchObject({ status: 'received' });
+  });
+
+  it('applies the same bound to a record it creates on demand for a pre-ledger batch', async () => {
+    mockStore.payrollBatches[BATCH_ID] = {
+      employerId: 'employer-uid-1',
+      payPeriodStart: '2026-07-01',
+      payPeriodEnd: '2026-07-15',
+      status: 'completed',
+    };
+    mockStore.payrollDeductions['d1'] = { batchId: BATCH_ID, deductionAmount: 1000 };
+
+    await expect(record(opsRequest(receipt({ receivedOn: '2026-06-30' })))).rejects.toMatchObject({
+      details: { reason: 'received-on-before-pay-period' },
+    });
+    expect(mockStore.payrollRemittances).toEqual({});
+  });
+
+  it('does not refuse money because a record has no readable period start', async () => {
+    seedRemittance({ payPeriodStart: undefined });
+    await expect(record(opsRequest(receipt({ receivedOn: '2020-01-01' })))).resolves.toMatchObject({ status: 'partial' });
+
+    seedRemittance({ payPeriodStart: '2026-02-30' }, OTHER_BATCH_ID);
+    await expect(
+      record(opsRequest(receipt({ batchId: OTHER_BATCH_ID, receivedOn: '2020-01-01', bankReference: 'SPEI-0009' }))),
+    ).resolves.toMatchObject({ status: 'partial' });
+  });
+});
+
+describe('every refusal carries a stable details.reason the UI can translate', () => {
+  it.each([
+    ['no input at all', undefined, 'input-invalid'],
+    ['a missing batch id', { batchId: undefined }, 'batch-id-invalid'],
+    ['an empty batch id', { batchId: '' }, 'batch-id-invalid'],
+    ['a peso amount instead of centavos', { amountCents: 1000.5 }, 'amount-invalid'],
+    ['a zero amount', { amountCents: 0 }, 'amount-invalid'],
+    ['a missing amount', { amountCents: undefined }, 'amount-invalid'],
+    ['an amount typed as text', { amountCents: '1000' }, 'amount-invalid'],
+    ['a free-text date', { receivedOn: 'yesterday' }, 'received-on-invalid-format'],
+    ['a date in the wrong order', { receivedOn: '17/07/2026' }, 'received-on-invalid-format'],
+    ['a missing date', { receivedOn: undefined }, 'received-on-invalid-format'],
+    ['a day that does not exist', { receivedOn: '2026-02-30' }, 'received-on-not-a-date'],
+    ['a date after today', { receivedOn: '2026-07-21' }, 'received-on-future'],
+    ['a date before the pay period', { receivedOn: '2026-06-30' }, 'received-on-before-pay-period'],
+    ['a blank bank reference', { bankReference: '   ' }, 'bank-reference-invalid'],
+    ['a bank reference over 100 characters', { bankReference: 'X'.repeat(101) }, 'bank-reference-invalid'],
+    ['a non-boolean sharedTransfer', { sharedTransfer: 'yes' }, 'shared-transfer-invalid'],
+  ])('recordPayrollRemittance: %s → %s', async (_label, over, reason) => {
+    seedRemittance();
+
+    await expect(record(opsRequest(over === undefined ? undefined : receipt(over)))).rejects.toMatchObject({
+      code: 'invalid-argument',
+      details: { reason },
+    });
+    expect(stored()['receivedCents']).toBe(0);
+  });
+
+  it('recordPayrollRemittance: names the field that failed', async () => {
+    seedRemittance();
+    await expect(record(opsRequest(receipt({ amountCents: -1 })))).rejects.toMatchObject({
+      details: { reason: 'amount-invalid', field: 'amountCents' },
+    });
+  });
+
+  it('recordPayrollRemittance: an unknown batch → not-found / remittance-not-expected', async () => {
+    await expect(record(opsRequest(receipt()))).rejects.toMatchObject({
+      code: 'not-found',
+      details: { reason: 'remittance-not-expected' },
+    });
+  });
+
+  it.each([
+    ['a missing batch id', { batchId: undefined }, 'batch-id-invalid'],
+    ['a missing receipt id', { receiptId: undefined }, 'receipt-id-invalid'],
+    ['an empty receipt id', { receiptId: '' }, 'receipt-id-invalid'],
+    ['no reason', { reason: undefined }, 'void-reason-invalid'],
+    ['a two-letter reason', { reason: 'no' }, 'void-reason-invalid'],
+    ['a reason over 500 characters', { reason: 'x'.repeat(501) }, 'void-reason-invalid'],
+  ])('voidPayrollRemittanceReceipt: %s → %s', async (_label, over, reason) => {
+    await expect(
+      voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId: 'r1', reason: 'wrong batch', ...over })),
+    ).rejects.toMatchObject({ code: 'invalid-argument', details: { reason } });
+  });
+
+  it('voidPayrollRemittanceReceipt: not-found says whether the record or the receipt is missing', async () => {
+    await expect(
+      voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId: 'r1', reason: 'wrong batch' })),
+    ).rejects.toMatchObject({ code: 'not-found', details: { reason: 'remittance-not-found' } });
+
+    seedRemittance();
+    await expect(
+      voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId: 'r1', reason: 'wrong batch' })),
+    ).rejects.toMatchObject({ code: 'not-found', details: { reason: 'receipt-not-found' } });
+  });
+
+  it.each([
+    ['an unknown view', { view: 'mine' }, 'view-invalid'],
+    ['an empty employer id', { employerId: '' }, 'employer-id-invalid'],
+    ['a non-boolean overdueOnly', { overdueOnly: 'yes' }, 'overdue-only-invalid'],
+    ['a negative grace period', { graceDays: -1 }, 'grace-days-invalid'],
+    ['a fractional grace period', { graceDays: 1.5 }, 'grace-days-invalid'],
+    ['a zero page size', { limit: 0 }, 'limit-invalid'],
+    ['a page size over the maximum', { limit: LIST_REMITTANCES_MAX + 1 }, 'limit-invalid'],
+    ['an empty cursor', { cursor: '' }, 'cursor-invalid'],
+    ['a cursor that is not one', { cursor: 'not-a-cursor' }, 'cursor-invalid'],
+    ['a non-object argument', 'outstanding', 'input-invalid'],
+  ])('listPayrollRemittances: %s → %s', async (_label, input, reason) => {
+    await expect(list(opsRequest(input))).rejects.toMatchObject({ code: 'invalid-argument', details: { reason } });
+  });
+
+  it('the existing duplicate-reference reasons are unchanged', async () => {
+    seedRemittance();
+    seedRemittance({}, OTHER_BATCH_ID);
+    await record(opsRequest(receipt()));
+
+    await expect(record(opsRequest(receipt()))).rejects.toMatchObject({
+      code: 'already-exists',
+      details: { reason: 'bank-reference-in-batch', batchIds: [BATCH_ID] },
+    });
+    await expect(record(opsRequest(receipt({ batchId: OTHER_BATCH_ID })))).rejects.toMatchObject({
+      code: 'already-exists',
+      details: { reason: 'bank-reference-in-other-batch', batchIds: [BATCH_ID] },
+    });
   });
 });
 
@@ -690,7 +866,13 @@ describe('listPayrollRemittances', () => {
 
     const res = await list(opsRequest(undefined));
 
-    expect(res).toMatchObject({ asOf: '2026-07-20', graceDays: 7, truncated: false });
+    expect(res).toMatchObject({
+      asOf: '2026-07-20',
+      graceDays: 7,
+      pageSize: LIST_REMITTANCES_MAX,
+      nextCursor: null,
+      truncated: false,
+    });
     const rows = res['remittances'] as Array<Record<string, unknown>>;
     expect(rows.map((r) => r['batchId'])).toEqual(['emp-a_old', 'emp-a_recent', 'emp-b_current']);
     expect(rows[0]).toMatchObject({
@@ -708,9 +890,16 @@ describe('listPayrollRemittances', () => {
       overdueCount: 2,
       overdueCents: 290000,
     });
-    expect(mockQueries[0]).toMatchObject({
+    // Ordered and limited by Firestore, not in memory after an unordered read.
+    expect(mockQueries[0]).toEqual({
       collection: 'payrollRemittances',
       filters: [{ field: 'status', op: 'in', value: ['expected', 'partial'] }],
+      orders: [
+        { field: 'payPeriodEnd', direction: 'asc' },
+        { field: '__name__', direction: 'asc' },
+      ],
+      after: null,
+      limit: LIST_REMITTANCES_MAX + 1,
     });
   });
 
@@ -734,14 +923,61 @@ describe('listPayrollRemittances', () => {
     expect((res['remittances'] as unknown[])).toHaveLength(3);
   });
 
-  it('view "all" includes settled records, after the ones that owe', async () => {
+  it('view "all" includes settled records, newest pay period first', async () => {
     seedFour();
 
     const res = await list(opsRequest({ view: 'all' }));
 
     const rows = res['remittances'] as Array<Record<string, unknown>>;
-    expect(rows.map((r) => r['batchId'])).toEqual(['emp-a_old', 'emp-a_recent', 'emp-b_current', 'emp-a_settled']);
+    expect(rows.map((r) => r['batchId'])).toEqual(['emp-b_current', 'emp-a_recent', 'emp-a_old', 'emp-a_settled']);
     expect(rows[3]).toMatchObject({ status: 'received', aging: { bucket: 'settled', outstandingCents: 0 } });
+    expect(mockQueries[0]).toMatchObject({
+      filters: [],
+      orders: [
+        { field: 'payPeriodEnd', direction: 'desc' },
+        { field: '__name__', direction: 'desc' },
+      ],
+    });
+  });
+
+  it('overdueOnly is a range on the sort field, applied by Firestore', async () => {
+    seedFour();
+
+    await list(opsRequest({ overdueOnly: true }));
+    // Overdue = more than 7 days after payPeriodEnd as of 2026-07-20.
+    expect(mockQueries[0]!.filters).toEqual([
+      { field: 'status', op: 'in', value: ['expected', 'partial'] },
+      { field: 'payPeriodEnd', op: '<', value: '2026-07-13' },
+    ]);
+
+    await list(opsRequest({ overdueOnly: true, graceDays: 0 }));
+    expect(mockQueries[1]!.filters).toContainEqual({ field: 'payPeriodEnd', op: '<', value: '2026-07-20' });
+  });
+
+  it('overdueOnly with view "all" still lists only records that owe', async () => {
+    seedFour();
+
+    const res = await list(opsRequest({ view: 'all', overdueOnly: true }));
+
+    expect((res['remittances'] as Array<Record<string, unknown>>).map((r) => r['batchId'])).toEqual([
+      'emp-a_old',
+      'emp-a_recent',
+    ]);
+  });
+
+  it('filters by employer and outstanding status together, in the same order', async () => {
+    seedFour();
+
+    const res = await list(opsRequest({ employerId: 'employer-uid-1' }));
+
+    expect((res['remittances'] as Array<Record<string, unknown>>).map((r) => r['batchId'])).toEqual([
+      'emp-a_old',
+      'emp-a_recent',
+    ]);
+    expect(mockQueries[0]!.filters).toEqual([
+      { field: 'employerId', op: '==', value: 'employer-uid-1' },
+      { field: 'status', op: 'in', value: ['expected', 'partial'] },
+    ]);
   });
 
   it('filters by employer', async () => {
@@ -785,6 +1021,129 @@ describe('listPayrollRemittances', () => {
     ['a fractional grace period', { graceDays: 1.5 }],
   ])('rejects %s', async (_label, input) => {
     await expect(list(opsRequest(input))).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+});
+
+describe('listPayrollRemittances — pagination', () => {
+  const batchIds = (res: Record<string, unknown>) =>
+    (res['remittances'] as Array<Record<string, unknown>>).map((r) => r['batchId'] as string);
+
+  /** Walk every page; fails the test rather than looping forever. */
+  async function walk(input: Record<string, unknown>) {
+    const pages: Array<Record<string, unknown>> = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 50; i++) {
+      const res = await list(opsRequest({ ...input, ...(cursor ? { cursor } : {}) }));
+      pages.push(res);
+      if (res['nextCursor'] === null) return pages;
+      cursor = res['nextCursor'] as string;
+    }
+    throw new Error('pagination did not terminate');
+  }
+
+  it('returns the OLDEST outstanding records first when more match than one page holds', async () => {
+    // Insertion order is the reverse of age: the store hands back the newest
+    // first. Reading 500 unordered and sorting those would drop the 120 oldest
+    // — the records ops most needs to see.
+    const total = LIST_REMITTANCES_MAX + 120;
+    const dayOf = (i: number) => new Date(Date.UTC(2020, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
+    for (let i = total - 1; i >= 0; i--) {
+      seedRemittance({ payPeriodEnd: dayOf(i) }, `batch-${String(i).padStart(4, '0')}`);
+    }
+
+    const first = await list(opsRequest({}));
+
+    expect(first).toMatchObject({ truncated: true, pageSize: LIST_REMITTANCES_MAX });
+    expect(typeof first['nextCursor']).toBe('string');
+    const firstIds = batchIds(first);
+    expect(firstIds).toHaveLength(LIST_REMITTANCES_MAX);
+    expect(firstIds[0]).toBe('batch-0000');
+    expect(firstIds[LIST_REMITTANCES_MAX - 1]).toBe(`batch-${String(LIST_REMITTANCES_MAX - 1).padStart(4, '0')}`);
+
+    const second = await list(opsRequest({ cursor: first['nextCursor'] }));
+
+    expect(second).toMatchObject({ truncated: false, nextCursor: null });
+    const secondIds = batchIds(second);
+    expect(secondIds).toHaveLength(120);
+    expect(secondIds[0]).toBe(`batch-${String(LIST_REMITTANCES_MAX).padStart(4, '0')}`);
+    expect(new Set([...firstIds, ...secondIds]).size).toBe(total);
+  });
+
+  it('pages in a stable order with no record skipped or repeated, ties broken by batch id', async () => {
+    // Three records share a pay period end, straddling a page boundary.
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'b');
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'c');
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+    seedRemittance({ payPeriodEnd: '2026-05-31' }, 'z-oldest');
+    seedRemittance({ payPeriodEnd: '2026-07-10' }, '0-newest');
+
+    const pages = await walk({ limit: 2 });
+
+    expect(pages.map(batchIds)).toEqual([['z-oldest', 'a'], ['b', 'c'], ['0-newest']]);
+    expect(pages.map((p) => p['truncated'])).toEqual([true, true, false]);
+    expect(pages[0]).toMatchObject({ pageSize: 2 });
+    // The second page asked Firestore to start after the first page's last row.
+    expect(mockQueries[1]).toMatchObject({ after: ['2026-06-15', 'a'], limit: 3 });
+  });
+
+  it('pages view "all" newest first', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+    seedRemittance({ payPeriodEnd: '2026-06-15', receivedCents: 170000, status: 'received' }, 'b');
+    seedRemittance({ payPeriodEnd: '2026-07-10' }, 'c');
+
+    const pages = await walk({ view: 'all', limit: 1 });
+
+    expect(pages.map(batchIds)).toEqual([['c'], ['b'], ['a']]);
+  });
+
+  it('says there is no next page when the last page is exactly full', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+    seedRemittance({ payPeriodEnd: '2026-06-16' }, 'b');
+
+    const res = await list(opsRequest({ limit: 2 }));
+
+    expect(res).toMatchObject({ nextCursor: null, truncated: false });
+    expect(batchIds(res)).toEqual(['a', 'b']);
+  });
+
+  it('totals cover the page that was returned', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+    seedRemittance({ payPeriodEnd: '2026-06-16' }, 'b');
+    seedRemittance({ payPeriodEnd: '2026-06-17' }, 'c');
+
+    const res = await list(opsRequest({ limit: 2 }));
+
+    expect(res['totals']).toMatchObject({ count: 2, expectedCents: 340000, outstandingCents: 340000 });
+  });
+
+  it('refuses a cursor from a view sorted the other way', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+    seedRemittance({ payPeriodEnd: '2026-06-16' }, 'b');
+    const outstanding = await list(opsRequest({ limit: 1 }));
+
+    await expect(list(opsRequest({ view: 'all', cursor: outstanding['nextCursor'] }))).rejects.toMatchObject({
+      code: 'invalid-argument',
+      details: { reason: 'cursor-invalid', field: 'cursor' },
+    });
+  });
+
+  it('a cursor round-trips, and anything else decodes to null', () => {
+    const cursor = encodeRemittanceCursor('asc', { payPeriodEnd: '2026-06-15', batchId: 'emp_2026-06-01_2026-06-15' });
+
+    expect(decodeRemittanceCursor(cursor, 'asc')).toEqual({ payPeriodEnd: '2026-06-15', batchId: 'emp_2026-06-01_2026-06-15' });
+    expect(decodeRemittanceCursor(cursor, 'desc')).toBeNull();
+    const forged = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    for (const bad of [
+      'garbage',
+      forged({}),
+      forged(['asc', '2026-06-15']),
+      forged(['asc', 20260615, 'a']),
+      forged(['asc', '2026-06-15', '']),
+      forged(['asc', '2026-06-15', 'a/b']),
+      forged(['asc', '2026-06-15', 7]),
+    ]) {
+      expect(decodeRemittanceCursor(bad, 'asc')).toBeNull();
+    }
   });
 });
 

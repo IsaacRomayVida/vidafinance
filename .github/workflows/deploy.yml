@@ -633,6 +633,7 @@ jobs:
             requestLoan getLoanConfig onLoanApproved generatePaymentLink markLoanDisbursed
             metamapWebhook getSystemHealth systemHealthCheck queueHealthCheck
             processPayroll recordPayrollRemittance voidPayrollRemittanceReceipt listPayrollRemittances
+            remittanceOverdueCheck
             satBlacklistRefresh refreshSatBlacklists
             api checkEmailAvailability validateCURP updateLoanStatus
             approveEmployer getPortfolioReport getAdminDashboard getEmployerDashboard

@@ -3943,6 +3943,8 @@ export {
   voidPayrollRemittanceReceipt,
   listPayrollRemittances,
 } from './payroll/remittance';
+// Daily alert (ops Alerts page + Slack) for remittances that stay unpaid.
+export { remittanceOverdueCheck } from './scheduled/remittanceOverdueCheck';
 
 // ─── SAT blacklist refresh (VID3-714) ───────────────────────────────────────
 // Self-hosts SAT public EFOS + Art. 69 CSVs to unblock employer-screening.
