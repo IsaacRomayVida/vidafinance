@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { Firestore, Transaction } from 'firebase-admin/firestore';
+import type { Firestore, Query, Transaction } from 'firebase-admin/firestore';
 
 /**
  * The remittance ledger's arithmetic and document shape, with no Firebase
@@ -312,4 +312,82 @@ export function remittanceAging(
   else if (daysOverdue > 0) bucket = 'overdue_1_15';
 
   return { outstandingCents, daysSincePeriodEnd, daysOverdue, overdue: daysOverdue > 0, bucket };
+}
+
+// ─── Reading the ledger in order ─────────────────────────────────────────────
+
+export const OUTSTANDING_REMITTANCE_STATUSES: RemittanceStatus[] = ['expected', 'partial'];
+
+/** Where a page of `remittancesQuery` ended: the last row's sort key. */
+export interface RemittancePosition {
+  payPeriodEnd: string;
+  batchId: string;
+}
+
+export interface RemittancesQueryOptions {
+  /**
+   * true: only records still owing (`status` expected or partial), OLDEST pay
+   * period first — the order ops works them in. false: every record, NEWEST
+   * pay period first.
+   */
+  outstandingOnly: boolean;
+  employerId?: string;
+  /** Only records whose `payPeriodEnd` is strictly before this YYYY-MM-DD date. */
+  periodEndBefore?: string;
+  /** Continue after this row (the last row of the previous page). */
+  after?: RemittancePosition;
+}
+
+/** The direction `remittancesQuery` sorts in for these options. */
+export function remittancesQueryDirection(options: Pick<RemittancesQueryOptions, 'outstandingOnly'>): 'asc' | 'desc' {
+  return options.outstandingOnly ? 'asc' : 'desc';
+}
+
+/**
+ * The one ordered query over `payrollRemittances`, shared by the ops list and
+ * the overdue alert so both walk the ledger the same way.
+ *
+ * Sorted on `payPeriodEnd` then document id (= batchId), which is a total
+ * order, so a page boundary can never skip or repeat a record. The composite
+ * indexes this needs are in firestore.indexes.json (collection group
+ * `payrollRemittances`); see docs/runbooks/payroll-remittances.md.
+ *
+ * A record with no `payPeriodEnd` is not returned (Firestore leaves documents
+ * without the sort field out of an ordered query). Every writer sets it:
+ * `batchFromBatchDoc` refuses a batch without one.
+ */
+export function remittancesQuery(db: Firestore, options: RemittancesQueryOptions): Query {
+  const direction = remittancesQueryDirection(options);
+  let query: Query = db.collection(PAYROLL_REMITTANCES_COLLECTION);
+  if (options.employerId) query = query.where('employerId', '==', options.employerId);
+  if (options.outstandingOnly) query = query.where('status', 'in', OUTSTANDING_REMITTANCE_STATUSES);
+  if (options.periodEndBefore) query = query.where('payPeriodEnd', '<', options.periodEndBefore);
+  // '__name__' is the document id. It sorts the same way as the field before
+  // it, so each direction needs one index rather than two.
+  query = query.orderBy('payPeriodEnd', direction).orderBy('__name__', direction);
+  if (options.after) query = query.startAfter(options.after.payPeriodEnd, options.after.batchId);
+  return query;
+}
+
+/** The date `days` calendar days before `iso` (YYYY-MM-DD in, YYYY-MM-DD out). */
+export function calendarDaysBefore(iso: string, days: number): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+}
+
+// ─── Overdue alert thresholds ────────────────────────────────────────────────
+
+/**
+ * Days overdue at which ops is alerted, one alert per record per threshold.
+ * They are the lower edges of the aging buckets above (1–15, 16–30, 31+), so an
+ * alert means "this record just moved into a worse bucket".
+ */
+export const REMITTANCE_ALERT_THRESHOLD_DAYS = [1, 16, 31] as const;
+
+/** The highest threshold a record `daysOverdue` days late has reached, or null if it is not overdue. */
+export function remittanceAlertThreshold(daysOverdue: number): number | null {
+  let reached: number | null = null;
+  for (const threshold of REMITTANCE_ALERT_THRESHOLD_DAYS) {
+    if (daysOverdue >= threshold) reached = threshold;
+  }
+  return reached;
 }
