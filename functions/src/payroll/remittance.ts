@@ -7,6 +7,44 @@ import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { enforceRateLimit } from '../utils/rateLimiter';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
+import {
+  DEFAULT_REMITTANCE_GRACE_DAYS,
+  PAYROLL_BATCHES_COLLECTION,
+  PAYROLL_REMITTANCES_COLLECTION,
+  PAYROLL_REMITTANCE_REFERENCES_COLLECTION,
+  bankReferenceDocId,
+  batchFromBatchDoc,
+  expectedRemittanceFields,
+  isRealCalendarDate,
+  isVoided,
+  lastReceivedOnOf,
+  normalizeBankReference,
+  readExpectedInTx,
+  receiptIdOf,
+  receiptReferenceKey,
+  receiptsOf,
+  receivedCentsOf,
+  remittanceAging,
+  remittanceStatus,
+  todayInMexicoCity,
+  upsertExpectedRemittance,
+  type RemittanceAging,
+  type RemittanceBatch,
+  type RemittanceStatus,
+  type StoredReceipt,
+} from './remittanceLedger';
+
+export {
+  PAYROLL_REMITTANCES_COLLECTION,
+  PAYROLL_REMITTANCE_REFERENCES_COLLECTION,
+  pesosToCents,
+  remittanceStatus,
+  remittanceAging,
+  normalizeBankReference,
+  isRealCalendarDate,
+  todayInMexicoCity,
+} from './remittanceLedger';
+export type { RemittanceStatus, RemittanceAging } from './remittanceLedger';
 
 /**
  * Payroll remittance record (AUDIT_EMPLOYER_PATH.md E18).
@@ -20,31 +58,19 @@ import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
  *    the batch's own `payrollDeductions` rows — not from the attempt's results,
  *    so an interrupted batch that is retried with a partial CSV still expects
  *    every peso the batch actually deducted.
- *  - `receivedCents` / `receipts[]` are written only by `recordPayrollRemittance`,
- *    an ops/admin callable. The employer cannot self-assert a remittance: the
- *    point of the record is that someone other than the employer saw the money
- *    arrive at the bank.
+ *  - `receivedCents` / `receipts[]` are written only by `recordPayrollRemittance`
+ *    and `voidPayrollRemittanceReceipt`, ops/admin callables. The employer
+ *    cannot self-assert a remittance: the point of the record is that someone
+ *    other than the employer saw the money arrive at the bank.
  *  - `status` is derived from the two figures here and nowhere else.
  *
  * Money is integer centavos throughout this document. The deduction ledger
  * stores pesos rounded to cents, and a float sum of many of those drifts; a
  * reconciliation that reads "partial" because of 0.0000001 is worse than none.
+ *
+ * The arithmetic and the document shape live in `remittanceLedger.ts`, shared
+ * with the backfill script. Callable contracts: docs/runbooks/payroll-remittances.md.
  */
-export const PAYROLL_REMITTANCES_COLLECTION = 'payrollRemittances';
-
-export type RemittanceStatus = 'expected' | 'partial' | 'received' | 'overpaid';
-
-/** Pesos (rounded to centavos, as the deduction ledger stores them) → integer centavos. */
-export function pesosToCents(pesos: number): number {
-  return Math.round(pesos * 100);
-}
-
-export function remittanceStatus(expectedCents: number, receivedCents: number): RemittanceStatus {
-  if (receivedCents <= 0) return 'expected';
-  if (receivedCents < expectedCents) return 'partial';
-  if (receivedCents === expectedCents) return 'received';
-  return 'overpaid';
-}
 
 /**
  * Write (or refresh) the expected side of a batch's remittance record.
@@ -62,39 +88,19 @@ export function remittanceStatus(expectedCents: number, receivedCents: number): 
  */
 export async function recordExpectedRemittance(
   db: Firestore,
-  batch: { batchId: string; employerId: string; payPeriodStart: string; payPeriodEnd: string },
+  batch: RemittanceBatch,
 ): Promise<{ expectedCents: number; status: RemittanceStatus } | null> {
-  const remittanceRef = db.collection(PAYROLL_REMITTANCES_COLLECTION).doc(batch.batchId);
-  const deductionsQuery = db.collection('payrollDeductions').where('batchId', '==', batch.batchId);
+  const written = await upsertExpectedRemittance(db, batch, () => FieldValue.serverTimestamp());
+  return written && { expectedCents: written.expectedCents, status: written.status };
+}
 
-  return db.runTransaction(async (tx) => {
-    const deductions = await tx.get(deductionsQuery);
-    const remittanceSnap = await tx.get(remittanceRef);
+const OPS_ROLES = ['ops', 'admin', 'super_admin'] as const;
 
-    const expectedCents = deductions.docs.reduce(
-      (sum, d) => sum + pesosToCents(Number(d.data()['deductionAmount'] ?? 0)),
-      0,
-    );
-    if (expectedCents <= 0 && !remittanceSnap.exists) return null;
+type ReferenceHolder = { batchId: string; receiptId: string; employerId: string | null };
 
-    const receivedCents = Number(remittanceSnap.data()?.['receivedCents'] ?? 0);
-    const status = remittanceStatus(expectedCents, receivedCents);
-
-    tx.set(remittanceRef, {
-      batchId: batch.batchId,
-      employerId: batch.employerId,
-      payPeriodStart: batch.payPeriodStart,
-      payPeriodEnd: batch.payPeriodEnd,
-      expectedCents,
-      deductionCount: deductions.size,
-      receivedCents,
-      status,
-      ...(remittanceSnap.exists ? {} : { receipts: [], createdAt: FieldValue.serverTimestamp() }),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    return { expectedCents, status };
-  });
+function holdersOf(indexDoc: Record<string, unknown> | undefined): ReferenceHolder[] {
+  const holders = indexDoc?.['holders'];
+  return Array.isArray(holders) ? (holders as ReferenceHolder[]) : [];
 }
 
 // ─── Ops: record a received remittance ───────────────────────────────────────
@@ -102,23 +108,35 @@ export async function recordExpectedRemittance(
 const RecordPayrollRemittanceSchema = z.object({
   batchId: z.string().min(1).max(200),
   amountCents: z.number().int().positive(),
-  receivedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected a YYYY-MM-DD date'),
+  receivedOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected a YYYY-MM-DD date')
+    .refine(isRealCalendarDate, 'receivedOn is not a real calendar date'),
   bankReference: z.string().trim().min(1).max(100),
+  /**
+   * Ops' explicit acknowledgement that this one bank transfer pays more than
+   * one batch. Without it a reference already booked against another batch is
+   * refused as a duplicate.
+   */
+  sharedTransfer: z.boolean().optional(),
 });
 
 export type RecordPayrollRemittanceInput = z.infer<typeof RecordPayrollRemittanceSchema>;
 
 export interface RecordPayrollRemittanceResult {
   batchId: string;
+  receiptId: string;
   expectedCents: number;
   receivedCents: number;
   status: RemittanceStatus;
+  /** True when the batch predates the ledger and its record was created by this call. */
+  createdRecord: boolean;
 }
 
 export const recordPayrollRemittance = onCall(
   { region: 'us-central1', enforceAppCheck: true },
   withAuth<RecordPayrollRemittanceInput, RecordPayrollRemittanceResult>(
-    ['ops', 'admin', 'super_admin'],
+    [...OPS_ROLES],
     async (data, auth) =>
       withErrorHandling(
         { functionName: 'recordPayrollRemittance', uid: auth.uid },
@@ -134,49 +152,124 @@ export const recordPayrollRemittance = onCall(
           }
           const input = parsed.data;
 
+          // Money that has not arrived cannot have been received. Compared as
+          // strings: both sides are zero-padded YYYY-MM-DD.
+          const today = todayInMexicoCity(new Date(Date.now()));
+          if (input.receivedOn > today) {
+            throw new HttpsError(
+              'invalid-argument',
+              `receivedOn ${input.receivedOn} is in the future (today is ${today} in Mexico City)`,
+            );
+          }
+
+          const bankReferenceKey = normalizeBankReference(input.bankReference);
+
           const db = getFirestore();
           const now = Timestamp.now();
           const remittanceRef = db.collection(PAYROLL_REMITTANCES_COLLECTION).doc(input.batchId);
+          const referenceRef = db
+            .collection(PAYROLL_REMITTANCE_REFERENCES_COLLECTION)
+            .doc(bankReferenceDocId(bankReferenceKey));
           const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
+          // Generated outside the transaction: a retried transaction body must
+          // not mint a second id for the same receipt.
+          const receiptId = db.collection(PAYROLL_REMITTANCES_COLLECTION).doc().id;
 
           const result = await db.runTransaction(async (tx): Promise<RecordPayrollRemittanceResult> => {
+            // ── Reads (Firestore requires every read before the first write) ──
             const snap = await tx.get(remittanceRef);
-            if (!snap.exists) {
-              // Only processPayroll creates these: a receipt against a batch
-              // that deducted nothing (or does not exist) is a typo, not money.
-              throw new HttpsError('not-found', `No remittance expected for batch ${input.batchId}`);
+            let current: Record<string, unknown>;
+            if (snap.exists) {
+              current = snap.data() ?? {};
+            } else {
+              // A batch processed before the ledger shipped has deductions but
+              // no record. Build the expected side now, with the same sum
+              // processPayroll uses. A batch that does not exist, or deducted
+              // nothing, is still a typo rather than money.
+              const batchSnap = await tx.get(db.collection(PAYROLL_BATCHES_COLLECTION).doc(input.batchId));
+              const batch = batchSnap.exists ? batchFromBatchDoc(input.batchId, batchSnap.data()) : null;
+              const expected = batch ? await readExpectedInTx(tx, db, input.batchId) : null;
+              if (!batch || !expected || expected.expectedCents <= 0) {
+                throw new HttpsError('not-found', `No remittance expected for batch ${input.batchId}`);
+              }
+              current = expectedRemittanceFields(batch, expected, undefined, now);
             }
-            const current = snap.data() ?? {};
-            const receipts = Array.isArray(current['receipts'])
-              ? (current['receipts'] as Array<Record<string, unknown>>)
-              : [];
+            const referenceSnap = await tx.get(referenceRef);
+
+            // ── Checks ──
+            const receipts = receiptsOf(current);
 
             // One bank transfer is one receipt. Without this an ops
             // double-submit (or a client retry after a timed-out response)
             // counts the same SPEI transfer twice and reads as reconciled.
-            if (receipts.some((r) => r['bankReference'] === input.bankReference)) {
+            // Compared on the normalised key, and only against receipts that
+            // still count: a voided receipt's reference is free again.
+            if (receipts.some((r) => !isVoided(r) && receiptReferenceKey(r) === bankReferenceKey)) {
               throw new HttpsError(
                 'already-exists',
                 `Bank reference ${input.bankReference} is already recorded for batch ${input.batchId}`,
+                { reason: 'bank-reference-in-batch', batchIds: [input.batchId] },
               );
             }
 
-            const expectedCents = Number(current['expectedCents'] ?? 0);
-            const priorReceivedCents = Number(current['receivedCents'] ?? 0);
-            const receivedCents = priorReceivedCents + input.amountCents;
-            const status = remittanceStatus(expectedCents, receivedCents);
+            // The same transfer booked against a different batch is the same
+            // money counted twice — unless ops says the transfer really did
+            // cover both.
+            const holders = holdersOf(referenceSnap.exists ? referenceSnap.data() : undefined);
+            const otherBatches = [
+              ...new Set(holders.filter((h) => h.batchId !== input.batchId).map((h) => h.batchId)),
+            ];
+            if (otherBatches.length > 0 && input.sharedTransfer !== true) {
+              throw new HttpsError(
+                'already-exists',
+                `Bank reference ${input.bankReference} is already recorded for batch ${otherBatches.join(', ')}`,
+                { reason: 'bank-reference-in-other-batch', batchIds: otherBatches },
+              );
+            }
 
-            tx.update(remittanceRef, {
-              receivedCents,
-              status,
-              receipts: FieldValue.arrayUnion({
+            // ── Writes ──
+            const nextReceipts: StoredReceipt[] = [
+              ...receipts,
+              {
+                receiptId,
                 amountCents: input.amountCents,
                 receivedOn: input.receivedOn,
                 bankReference: input.bankReference,
+                bankReferenceKey,
                 recordedBy: auth.uid,
                 recordedAt: now,
-              }),
-              lastReceivedOn: input.receivedOn,
+              },
+            ];
+            const expectedCents = Number(current['expectedCents'] ?? 0);
+            const priorReceivedCents = Number(current['receivedCents'] ?? 0);
+            const receivedCents = receivedCentsOf(nextReceipts);
+            const status = remittanceStatus(expectedCents, receivedCents);
+            const moved = {
+              receivedCents,
+              status,
+              receipts: nextReceipts,
+              lastReceivedOn: lastReceivedOnOf(nextReceipts),
+              updatedAt: now,
+            };
+
+            if (snap.exists) {
+              tx.update(remittanceRef, moved);
+            } else {
+              tx.set(remittanceRef, { ...current, ...moved, createdOnDemandBy: auth.uid });
+            }
+
+            tx.set(referenceRef, {
+              bankReferenceKey,
+              holders: [
+                // An entry for this batch here is stale: the check above found
+                // no live receipt with this reference on it.
+                ...holders.filter((h) => h.batchId !== input.batchId),
+                {
+                  batchId: input.batchId,
+                  receiptId,
+                  employerId: (current['employerId'] as string | undefined) ?? null,
+                },
+              ],
               updatedAt: now,
             });
 
@@ -186,21 +279,371 @@ export const recordPayrollRemittance = onCall(
               actorRole: auth.role,
               actorEmail: auth.email ?? null,
               targetId: input.batchId,
-              before: { receivedCents: priorReceivedCents, status: current['status'] ?? null },
+              before: { receivedCents: priorReceivedCents, status: snap.exists ? current['status'] ?? null : null },
               after: { receivedCents, status },
               meta: {
                 employerId: current['employerId'] ?? null,
+                receiptId,
                 amountCents: input.amountCents,
                 receivedOn: input.receivedOn,
                 bankReference: input.bankReference,
+                bankReferenceKey,
+                ...(snap.exists ? {} : { createdRecord: true, expectedCents }),
+                ...(otherBatches.length > 0 ? { sharedTransferWith: otherBatches } : {}),
               },
             }, now));
 
-            return { batchId: input.batchId, expectedCents, receivedCents, status };
+            return {
+              batchId: input.batchId,
+              receiptId,
+              expectedCents,
+              receivedCents,
+              status,
+              createdRecord: !snap.exists,
+            };
           });
 
           logger.info({ batchId: input.batchId, status: result.status }, 'Payroll remittance recorded');
           return result;
+        },
+      ),
+  ),
+);
+
+// ─── Ops: void a receipt booked in error ─────────────────────────────────────
+
+const VoidPayrollRemittanceReceiptSchema = z.object({
+  batchId: z.string().min(1).max(200),
+  receiptId: z.string().min(1).max(200),
+  reason: z.string().trim().min(3, 'a reason is required').max(500),
+});
+
+export type VoidPayrollRemittanceReceiptInput = z.infer<typeof VoidPayrollRemittanceReceiptSchema>;
+
+export interface VoidPayrollRemittanceReceiptResult {
+  batchId: string;
+  receiptId: string;
+  expectedCents: number;
+  receivedCents: number;
+  status: RemittanceStatus;
+  /** True when the receipt was already voided and this call changed nothing. */
+  alreadyVoided: boolean;
+}
+
+/**
+ * Take a wrongly booked receipt out of the totals. The receipt is never
+ * deleted: it stays in `receipts[]` marked `voided`, with who voided it, when
+ * and why, and `receivedCents` / `status` are recomputed from the receipts that
+ * remain. Voiding the same receipt again is a no-op, so a retried call cannot
+ * write a second audit entry or disturb a reference since reused.
+ */
+export const voidPayrollRemittanceReceipt = onCall(
+  { region: 'us-central1', enforceAppCheck: true },
+  withAuth<VoidPayrollRemittanceReceiptInput, VoidPayrollRemittanceReceiptResult>(
+    [...OPS_ROLES],
+    async (data, auth) =>
+      withErrorHandling(
+        { functionName: 'voidPayrollRemittanceReceipt', uid: auth.uid },
+        async () => {
+          await enforceRateLimit(`rl:voidPayrollRemittanceReceipt:${auth.uid}`, 20, 60, {
+            onUnavailable: 'closed',
+            context: 'voidPayrollRemittanceReceipt',
+          });
+
+          const parsed = VoidPayrollRemittanceReceiptSchema.safeParse(data);
+          if (!parsed.success) {
+            throw new HttpsError('invalid-argument', parsed.error.issues[0]?.message ?? 'Invalid input');
+          }
+          const input = parsed.data;
+
+          const db = getFirestore();
+          const now = Timestamp.now();
+          const remittanceRef = db.collection(PAYROLL_REMITTANCES_COLLECTION).doc(input.batchId);
+          const logRef = db.collection(AUDIT_LOG_COLLECTION).doc();
+
+          const result = await db.runTransaction(async (tx): Promise<VoidPayrollRemittanceReceiptResult> => {
+            const snap = await tx.get(remittanceRef);
+            if (!snap.exists) {
+              throw new HttpsError('not-found', `No remittance record for batch ${input.batchId}`);
+            }
+            const current = snap.data() ?? {};
+            const receipts = receiptsOf(current);
+            const index = receipts.findIndex((r, i) => receiptIdOf(r, i) === input.receiptId);
+            const target = receipts[index];
+            if (!target) {
+              throw new HttpsError('not-found', `No receipt ${input.receiptId} on batch ${input.batchId}`);
+            }
+
+            const expectedCents = Number(current['expectedCents'] ?? 0);
+            const priorReceivedCents = Number(current['receivedCents'] ?? 0);
+            if (isVoided(target)) {
+              return {
+                batchId: input.batchId,
+                receiptId: input.receiptId,
+                expectedCents,
+                receivedCents: priorReceivedCents,
+                status: remittanceStatus(expectedCents, priorReceivedCents),
+                alreadyVoided: true,
+              };
+            }
+
+            const bankReferenceKey = receiptReferenceKey(target);
+            const referenceRef = db
+              .collection(PAYROLL_REMITTANCE_REFERENCES_COLLECTION)
+              .doc(bankReferenceDocId(bankReferenceKey));
+            const referenceSnap = await tx.get(referenceRef);
+
+            const nextReceipts = receipts.map((r, i) =>
+              i === index
+                ? {
+                    ...r,
+                    // Receipts booked before ids and keys were stored get them
+                    // now, so the voided entry is self-describing.
+                    receiptId: input.receiptId,
+                    bankReferenceKey,
+                    voided: true,
+                    voidedBy: auth.uid,
+                    voidedAt: now,
+                    voidReason: input.reason,
+                  }
+                : r,
+            );
+            const receivedCents = receivedCentsOf(nextReceipts);
+            const status = remittanceStatus(expectedCents, receivedCents);
+
+            tx.update(remittanceRef, {
+              receivedCents,
+              status,
+              receipts: nextReceipts,
+              lastReceivedOn: lastReceivedOnOf(nextReceipts),
+              updatedAt: now,
+            });
+
+            // Release the reference so the transfer can be booked correctly.
+            // The index only says who holds a reference NOW; the history is
+            // the voided receipt above and the audit entry below.
+            if (referenceSnap.exists) {
+              const remaining = holdersOf(referenceSnap.data()).filter(
+                (h) => !(h.batchId === input.batchId && h.receiptId === input.receiptId),
+              );
+              if (remaining.length === 0) tx.delete(referenceRef);
+              else tx.set(referenceRef, { bankReferenceKey, holders: remaining, updatedAt: now });
+            }
+
+            tx.set(logRef, buildAuditLogDocument({
+              action: 'payrollRemittances.receiptVoided',
+              actorUid: auth.uid,
+              actorRole: auth.role,
+              actorEmail: auth.email ?? null,
+              targetId: input.batchId,
+              before: { receivedCents: priorReceivedCents, status: current['status'] ?? null },
+              after: { receivedCents, status },
+              meta: {
+                employerId: current['employerId'] ?? null,
+                receiptId: input.receiptId,
+                amountCents: target['amountCents'] ?? null,
+                receivedOn: target['receivedOn'] ?? null,
+                bankReference: target['bankReference'] ?? null,
+                recordedBy: target['recordedBy'] ?? null,
+                reason: input.reason,
+              },
+            }, now));
+
+            return {
+              batchId: input.batchId,
+              receiptId: input.receiptId,
+              expectedCents,
+              receivedCents,
+              status,
+              alreadyVoided: false,
+            };
+          });
+
+          logger.info(
+            { batchId: input.batchId, receiptId: input.receiptId, status: result.status, alreadyVoided: result.alreadyVoided },
+            'Payroll remittance receipt voided',
+          );
+          return result;
+        },
+      ),
+  ),
+);
+
+// ─── Ops: list remittances with status and aging ─────────────────────────────
+
+/** Most records one call returns. Past this the result is cut and `truncated` is true. */
+export const LIST_REMITTANCES_MAX = 500;
+
+const OUTSTANDING_STATUSES: RemittanceStatus[] = ['expected', 'partial'];
+
+const ListPayrollRemittancesSchema = z
+  .object({
+    /** `outstanding` (default): expected or partial only. `all`: every record. */
+    view: z.enum(['outstanding', 'all']).optional(),
+    employerId: z.string().min(1).max(200).optional(),
+    /** Only records past the grace window with money still missing. */
+    overdueOnly: z.boolean().optional(),
+    graceDays: z.number().int().min(0).max(365).optional(),
+  })
+  .optional();
+
+export type ListPayrollRemittancesInput = z.infer<typeof ListPayrollRemittancesSchema>;
+
+export interface RemittanceReceiptView {
+  receiptId: string;
+  amountCents: number;
+  receivedOn: string | null;
+  bankReference: string | null;
+  recordedBy: string | null;
+  /** ISO 8601, or null if the stored value is not a timestamp. */
+  recordedAt: string | null;
+  voided: boolean;
+  voidedBy: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+}
+
+export interface RemittanceView {
+  batchId: string;
+  employerId: string | null;
+  payPeriodStart: string | null;
+  payPeriodEnd: string | null;
+  expectedCents: number;
+  receivedCents: number;
+  status: RemittanceStatus;
+  deductionCount: number;
+  lastReceivedOn: string | null;
+  aging: RemittanceAging;
+  receipts: RemittanceReceiptView[];
+}
+
+export interface ListPayrollRemittancesResult {
+  /** The Mexico City date aging was computed against. */
+  asOf: string;
+  graceDays: number;
+  remittances: RemittanceView[];
+  totals: {
+    count: number;
+    expectedCents: number;
+    receivedCents: number;
+    outstandingCents: number;
+    overdueCount: number;
+    overdueCents: number;
+  };
+  /** True when more than LIST_REMITTANCES_MAX records matched and the list was cut. */
+  truncated: boolean;
+}
+
+const stringOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+
+function isoOrNull(v: unknown): string | null {
+  const toDate = (v as { toDate?: () => Date } | null)?.toDate;
+  return typeof toDate === 'function' ? toDate.call(v).toISOString() : null;
+}
+
+/** A stored record → the shape the ops UI renders. Pure, so the aging it reports is testable without a callable. */
+export function toRemittanceView(
+  batchId: string,
+  doc: Record<string, unknown>,
+  today: string,
+  graceDays: number,
+): RemittanceView {
+  const expectedCents = Number(doc['expectedCents'] ?? 0);
+  const receivedCents = Number(doc['receivedCents'] ?? 0);
+  return {
+    batchId,
+    employerId: stringOrNull(doc['employerId']),
+    payPeriodStart: stringOrNull(doc['payPeriodStart']),
+    payPeriodEnd: stringOrNull(doc['payPeriodEnd']),
+    expectedCents,
+    receivedCents,
+    // Derived, not read: a stored status can only ever agree with these two figures.
+    status: remittanceStatus(expectedCents, receivedCents),
+    deductionCount: Number(doc['deductionCount'] ?? 0),
+    lastReceivedOn: stringOrNull(doc['lastReceivedOn']),
+    aging: remittanceAging(doc, today, graceDays),
+    receipts: receiptsOf(doc).map((r, i) => ({
+      receiptId: receiptIdOf(r, i),
+      amountCents: Number(r['amountCents'] ?? 0),
+      receivedOn: stringOrNull(r['receivedOn']),
+      bankReference: stringOrNull(r['bankReference']),
+      recordedBy: stringOrNull(r['recordedBy']),
+      recordedAt: isoOrNull(r['recordedAt']),
+      voided: isVoided(r),
+      voidedBy: stringOrNull(r['voidedBy']),
+      voidedAt: isoOrNull(r['voidedAt']),
+      voidReason: stringOrNull(r['voidReason']),
+    })),
+  };
+}
+
+/**
+ * The read path for the ops remittance screen: which batches still owe money,
+ * and for how long. Filters on at most one Firestore field so it needs no
+ * composite index; everything else is filtered here.
+ *
+ * It only knows about batches that have a record. Batches processed before the
+ * ledger shipped get one from the backfill script (or from the first receipt
+ * booked against them).
+ */
+export const listPayrollRemittances = onCall(
+  { region: 'us-central1', enforceAppCheck: true },
+  withAuth<ListPayrollRemittancesInput, ListPayrollRemittancesResult>(
+    [...OPS_ROLES],
+    async (data, auth) =>
+      withErrorHandling(
+        { functionName: 'listPayrollRemittances', uid: auth.uid },
+        async () => {
+          await enforceRateLimit(`rl:listPayrollRemittances:${auth.uid}`, 60, 60, {
+            onUnavailable: 'closed',
+            context: 'listPayrollRemittances',
+          });
+
+          const parsed = ListPayrollRemittancesSchema.safeParse(data ?? undefined);
+          if (!parsed.success) {
+            throw new HttpsError('invalid-argument', parsed.error.issues[0]?.message ?? 'Invalid input');
+          }
+          const input = parsed.data ?? {};
+          const view = input.view ?? 'outstanding';
+          const graceDays = input.graceDays ?? DEFAULT_REMITTANCE_GRACE_DAYS;
+          const today = todayInMexicoCity(new Date(Date.now()));
+
+          const collection = getFirestore().collection(PAYROLL_REMITTANCES_COLLECTION);
+          const query = input.employerId
+            ? collection.where('employerId', '==', input.employerId)
+            : view === 'outstanding'
+              ? collection.where('status', 'in', OUTSTANDING_STATUSES)
+              : collection;
+          const snap = await query.limit(LIST_REMITTANCES_MAX + 1).get();
+          const truncated = snap.docs.length > LIST_REMITTANCES_MAX;
+
+          const remittances = snap.docs
+            .slice(0, LIST_REMITTANCES_MAX)
+            .map((d) => toRemittanceView(d.id, d.data(), today, graceDays))
+            .filter((r) => view === 'all' || OUTSTANDING_STATUSES.includes(r.status))
+            .filter((r) => !input.overdueOnly || r.aging.overdue)
+            // Longest-outstanding first; settled records (no age that matters) last.
+            .sort(
+              (a, b) =>
+                b.aging.daysOverdue - a.aging.daysOverdue ||
+                Number(b.aging.outstandingCents > 0) - Number(a.aging.outstandingCents > 0) ||
+                (b.aging.daysSincePeriodEnd ?? -Infinity) - (a.aging.daysSincePeriodEnd ?? -Infinity) ||
+                a.batchId.localeCompare(b.batchId),
+            );
+
+          const totals = remittances.reduce(
+            (t, r) => ({
+              count: t.count + 1,
+              expectedCents: t.expectedCents + r.expectedCents,
+              receivedCents: t.receivedCents + r.receivedCents,
+              outstandingCents: t.outstandingCents + r.aging.outstandingCents,
+              overdueCount: t.overdueCount + (r.aging.overdue ? 1 : 0),
+              overdueCents: t.overdueCents + (r.aging.overdue ? r.aging.outstandingCents : 0),
+            }),
+            { count: 0, expectedCents: 0, receivedCents: 0, outstandingCents: 0, overdueCount: 0, overdueCents: 0 },
+          );
+
+          return { asOf: today, graceDays, remittances, totals, truncated };
         },
       ),
   ),

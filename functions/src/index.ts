@@ -3938,7 +3938,11 @@ export const queueHealthCheck = onSchedule(
 // ─── Payroll deduction processing (VID3-625) ────────────────────────────────
 export { processPayroll } from './payroll/processPayroll';
 // E18: ops/admin record of what the employer actually remitted per batch.
-export { recordPayrollRemittance } from './payroll/remittance';
+export {
+  recordPayrollRemittance,
+  voidPayrollRemittanceReceipt,
+  listPayrollRemittances,
+} from './payroll/remittance';
 
 // ─── SAT blacklist refresh (VID3-714) ───────────────────────────────────────
 // Self-hosts SAT public EFOS + Art. 69 CSVs to unblock employer-screening.

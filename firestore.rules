@@ -394,6 +394,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Index of which batch holds which bank reference, so one transfer cannot
+    // be booked against two batches unnoticed. Read and written only by the
+    // remittance callables (Admin SDK); ops see its content through
+    // listPayrollRemittances. No client access at all.
+    match /payrollRemittanceReferences/{referenceId} {
+      allow read, write: if false;
+    }
+
     // =============================================
     // REVIEW QUEUE — OPS-ONLY READ, WRITES VIA CLOUD FUNCTIONS
     // =============================================
