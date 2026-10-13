@@ -7,7 +7,11 @@
  * date, reference) and sends the exact callable payload; voiding needs a
  * reason and a second, explicit confirmation before anything is sent; voided
  * receipts read as voided; and server refusals are shown in words ops can act
- * on (the duplicate-reference cases in particular).
+ * on (the duplicate-reference cases in particular) — in Spanish, keyed on the
+ * server's `details.reason`, never its English message. The list is paged:
+ * "load more" sends the server's cursor and appends, the totals are sums of
+ * what is on screen and say so while there is another page, and a void's
+ * timestamp is shown as the Mexico City date.
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -91,22 +95,30 @@ const currentBatch = {
   receipts: [],
 };
 
-const listResult = (remittances: unknown[] = [overdueBatch, currentBatch]) => ({
+// `totals` is deliberately nonsense: the server totals one page, the screen
+// must show the sum of the rows it holds, so nothing may be read from here.
+const listResult = (remittances: unknown[] = [overdueBatch, currentBatch], nextCursor: string | null = null) => ({
   data: {
     asOf: '2026-03-10',
     graceDays: 7,
-    truncated: false,
-    totals: {
-      count: remittances.length,
-      expectedCents: 1284567,
-      receivedCents: 200000,
-      outstandingCents: 1084567,
-      overdueCount: 1,
-      overdueCents: 1034567,
-    },
+    pageSize: 50,
+    nextCursor,
+    truncated: nextCursor !== null,
+    totals: { count: 999, expectedCents: 1, receivedCents: 1, outstandingCents: 1, overdueCount: 999, overdueCents: 1 },
     remittances,
   },
 });
+
+/** A plain outstanding batch, for filling pages. */
+const batch = (batchId: string, expectedCents: number, over: Record<string, unknown> = {}) => ({
+  ...currentBatch,
+  batchId,
+  expectedCents,
+  aging: { ...currentBatch.aging, outstandingCents: expectedCents },
+  ...over,
+});
+
+const kpi = (label: string) => screen.getByText(label, { selector: '.ops-kpi small' }).closest('.ops-kpi') as HTMLElement;
 
 /** The shape the Firebase client throws for an HttpsError. */
 function httpsError(code: string, message: string, details?: unknown) {
@@ -157,7 +169,7 @@ describe('PayrollRemittances — list', () => {
     render(<PayrollRemittances />);
 
     const overdue = within(await row('batch-overdue'));
-    expect(handlers.listPayrollRemittances).toHaveBeenCalledWith({ view: 'outstanding' });
+    expect(handlers.listPayrollRemittances).toHaveBeenCalledWith({ view: 'outstanding', limit: 50 });
 
     expect(overdue.getByText('$12,345.67')).toBeInTheDocument(); // expected
     expect(overdue.getAllByText('$2,000.00').length).toBeGreaterThan(0); // received (and the receipt)
@@ -180,12 +192,17 @@ describe('PayrollRemittances — list', () => {
     expect(current.queryByText(/Vencida/)).toBeNull();
     expect(current.getByText('Por recibir')).toBeInTheDocument();
 
-    // Totals come from the server's totals block, not a client re-sum.
-    const overdueKpi = screen.getByText('Vencido').closest('.ops-kpi') as HTMLElement;
+    // Totals are the sum of the rows on screen (the server totals one page only).
+    const overdueKpi = kpi('Vencido');
     expect(overdueKpi.className).toContain('warn');
     expect(within(overdueKpi).getByText('$10,345.67')).toBeInTheDocument();
     expect(within(overdueKpi).getByText('1 remesa')).toBeInTheDocument();
-    expect(within(screen.getByText('Esperado', { selector: '.ops-kpi small' }).closest('.ops-kpi') as HTMLElement).getByText('$12,845.67')).toBeInTheDocument();
+    expect(within(kpi('Esperado')).getByText('$12,845.67')).toBeInTheDocument();
+    expect(within(kpi('Recibido')).getByText('$2,000.00')).toBeInTheDocument();
+    expect(within(kpi('Pendiente')).getByText('$10,845.67')).toBeInTheDocument();
+    // One page, nothing more to load: no caveat and no button.
+    expect(screen.queryByTestId('remit-totals-partial')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cargar más remesas' })).toBeNull();
   });
 
   it('shows a voided receipt as voided, with its reason, and offers no void action on it', async () => {
@@ -196,11 +213,14 @@ describe('PayrollRemittances — list', () => {
     expect(voided).toHaveAttribute('data-voided', 'true');
     expect(within(voided).getByText('Anulado')).toBeInTheDocument();
     expect(within(voided).getByText(/Motivo: Capturado en el lote equivocado/)).toBeInTheDocument();
-    expect(within(voided).getByText('$9,999.00').style.textDecoration).toBe('line-through');
+    // Struck through by `.ops-remit-receipts li.voided .amt` (ops.css).
+    expect(voided).toHaveClass('voided');
+    expect(within(voided).getByText('$9,999.00')).toHaveClass('amt');
     expect(within(voided).queryByRole('button')).toBeNull();
 
     const live = screen.getByTestId('receipt-r-1');
     expect(live).toHaveAttribute('data-voided', 'false');
+    expect(live).not.toHaveClass('voided');
     expect(within(live).queryByText('Anulado')).toBeNull();
     expect(within(live).getByRole('button', { name: /Anular/ })).toBeInTheDocument();
   });
@@ -210,12 +230,41 @@ describe('PayrollRemittances — list', () => {
     await row('batch-overdue');
 
     fireEvent.click(screen.getByRole('button', { name: 'Todas' }));
-    await waitFor(() => expect(handlers.listPayrollRemittances).toHaveBeenLastCalledWith({ view: 'all' }));
+    await waitFor(() => expect(handlers.listPayrollRemittances).toHaveBeenLastCalledWith({ view: 'all', limit: 50 }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Solo vencidas' }));
     await waitFor(() =>
-      expect(handlers.listPayrollRemittances).toHaveBeenLastCalledWith({ view: 'all', overdueOnly: true }),
+      expect(handlers.listPayrollRemittances).toHaveBeenLastCalledWith({ view: 'all', overdueOnly: true, limit: 50 }),
     );
+  });
+
+  it('shows when a receipt was voided as the Mexico City date, not the UTC date', async () => {
+    // 03:00 UTC on 3 March is 21:00 on 2 March in Mexico City.
+    const lateVoid = {
+      ...overdueBatch,
+      receipts: [receipt({ receiptId: 'r-late', voided: true, voidedBy: 'ops-2', voidedAt: '2026-03-03T03:00:00.000Z', voidReason: 'Duplicado' })],
+    };
+    handlers.listPayrollRemittances.mockResolvedValue(listResult([lateVoid]));
+    render(<PayrollRemittances />);
+
+    const voided = within(await screen.findByTestId('receipt-r-late'));
+    expect(voided.getByText(/Anulado el 2 mar\.? 2026/)).toBeInTheDocument();
+    expect(voided.queryByText(/Anulado el 3 mar/)).toBeNull();
+    // The receipt's own date is a calendar date and is not shifted.
+    expect(voided.getByText(/^2 mar\.? 2026$/)).toBeInTheDocument();
+  });
+
+  it('says which way the list is ordered: oldest first when outstanding, newest first for all', async () => {
+    render(<PayrollRemittances />);
+    await row('batch-overdue');
+    expect(screen.getByText(/Orden: periodo más antiguo primero\./)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Todas' }));
+    expect(await screen.findByText(/Orden: periodo más reciente primero\./)).toBeInTheDocument();
+
+    // "Only overdue" implies outstanding on the server, whatever the view.
+    fireEvent.click(screen.getByRole('button', { name: 'Solo vencidas' }));
+    expect(await screen.findByText(/Orden: periodo más antiguo primero\./)).toBeInTheDocument();
   });
 
   it('says so when nothing is outstanding', async () => {
@@ -391,19 +440,207 @@ describe('PayrollRemittances — recording a transfer', () => {
   });
 
   it.each([
-    ['invalid-argument', 'receivedOn 2026-03-10 is in the future', 'El servidor rechazó los datos. receivedOn 2026-03-10 is in the future'],
-    ['not-found', 'No remittance expected for batch batch-overdue', 'No hay una remesa esperada para este lote.'],
-    ['resource-exhausted', 'Too many requests', 'Demasiadas solicitudes. Por favor espera un minuto e inténtalo de nuevo.'],
-    ['permission-denied', 'Insufficient permissions', 'No tienes permiso para realizar esta acción.'],
-  ])('shows a %s refusal from the server', async (code, serverMessage, shown) => {
-    handlers.recordPayrollRemittance.mockRejectedValue(httpsError(code, serverMessage));
+    [
+      'invalid-argument',
+      'receivedOn 2026-03-10 is in the future',
+      { reason: 'received-on-future', field: 'receivedOn', today: '2026-03-09' },
+      /La fecha no puede ser posterior a hoy \(9 mar\.? 2026, hora de Ciudad de México\)\./,
+    ],
+    [
+      'invalid-argument',
+      'receivedOn 2026-01-10 is before the pay period of batch batch-overdue began (2026-02-01)',
+      { reason: 'received-on-before-pay-period', field: 'receivedOn', payPeriodStart: '2026-02-01' },
+      /La fecha es anterior al inicio del periodo de nómina de este lote \(1 feb\.? 2026\)\. Revisa el año y que sea el lote correcto\./,
+    ],
+    [
+      'invalid-argument',
+      'Too small: expected number to be >0',
+      { reason: 'amount-invalid', field: 'amountCents' },
+      'El monto no es válido. Debe ser mayor que cero, en pesos con hasta dos decimales.',
+    ],
+    [
+      'not-found',
+      'No remittance expected for batch batch-overdue',
+      { reason: 'remittance-not-expected' },
+      'No hay una remesa esperada para este lote: el lote no existe o no tuvo descuentos.',
+    ],
+    // No reason, or one this screen does not know yet: the generic friendly
+    // error — never the server's English sentence.
+    ['invalid-argument', 'receivedOn must be a string', undefined, 'Algo salió mal. Por favor inténtalo de nuevo.'],
+    ['invalid-argument', 'some new rule', { reason: 'a-reason-added-later' }, 'Algo salió mal. Por favor inténtalo de nuevo.'],
+    ['resource-exhausted', 'Too many requests', undefined, 'Demasiadas solicitudes. Por favor espera un minuto e inténtalo de nuevo.'],
+    ['permission-denied', 'Insufficient permissions', undefined, 'No tienes permiso para realizar esta acción.'],
+  ])('shows a %s refusal (%s) in Spanish', async (code, serverMessage, details, shown) => {
+    handlers.recordPayrollRemittance.mockRejectedValue(httpsError(code, serverMessage, details));
     render(<PayrollRemittances />);
     const dialog = await openRecordDialog();
     fillRecordForm(dialog, { amount: '100', date: '2026-03-10', reference: 'SPEI-1' });
     submitRecord(dialog);
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(shown);
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent(shown);
+    expect(alert).not.toHaveTextContent(serverMessage);
+    expect(within(dialog).queryByRole('button', { name: /la misma transferencia cubre/ })).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('refuses a date before the batch pay period began, before any round trip', async () => {
+    render(<PayrollRemittances />);
+    const dialog = await openRecordDialog(); // pay period starts 2026-02-01
+    fillRecordForm(dialog, { amount: '100', date: '2026-01-31', reference: 'SPEI-1' });
+    submitRecord(dialog);
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      /La fecha no puede ser anterior al inicio del periodo de nómina de este lote \(1 feb\.? 2026\)\./,
+    );
+    expect(handlers.recordPayrollRemittance).not.toHaveBeenCalled();
+
+    // The first day of the period is fine.
+    fillRecordForm(dialog, { date: '2026-02-01' });
+    submitRecord(dialog);
+    await waitFor(() => expect(handlers.recordPayrollRemittance).toHaveBeenCalledTimes(1));
+  });
+});
+
+/* ── pagination ───────────────────────────────────────────────────────────── */
+
+describe('PayrollRemittances — pages', () => {
+  const pageOne = [batch('b-1', 10000), batch('b-2', 20000, { status: 'partial', receivedCents: 5000, aging: { ...currentBatch.aging, outstandingCents: 15000, overdue: true, daysOverdue: 3, bucket: 'overdue_1_15' } })];
+  const pageTwo = [batch('b-3', 40000)];
+
+  /** Answers by cursor, like the server: no cursor is page one. */
+  const paged = () =>
+    vi.fn<Handler>(async (args) => {
+      const cursor = (args as { cursor?: string }).cursor;
+      if (cursor === undefined) return listResult(pageOne, 'cursor-after-b-2');
+      if (cursor === 'cursor-after-b-2') return listResult(pageTwo, null);
+      throw httpsError('invalid-argument', 'cursor is not a page cursor for this view', { reason: 'cursor-invalid', field: 'cursor' });
+    });
+
+  it('loads the next page with the server cursor, appends it, and re-sums the totals', async () => {
+    handlers.listPayrollRemittances = paged();
+    render(<PayrollRemittances />);
+    await row('b-2');
+
+    // While there is another page the figures are labelled as partial.
+    expect(screen.getByRole('heading', { name: '2 remesas cargadas · hay más' })).toBeInTheDocument();
+    expect(screen.getByTestId('remit-totals-partial')).toHaveTextContent(
+      'Los totales de arriba suman solo las remesas cargadas hasta ahora, no toda la vista.',
+    );
+    expect(within(kpi('Esperado')).getByText('$300.00')).toBeInTheDocument();
+    expect(within(kpi('Vencido')).getByText('$150.00')).toBeInTheDocument();
+    expect(screen.queryByTestId('remittance-b-3')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar más remesas' }));
+    await row('b-3');
+    expect(handlers.listPayrollRemittances).toHaveBeenLastCalledWith({ view: 'outstanding', limit: 50, cursor: 'cursor-after-b-2' });
+
+    // Appended in the server's order, nothing replaced.
+    const ids = screen.getAllByTestId(/^remittance-/).map((el) => el.getAttribute('data-testid'));
+    expect(ids).toEqual(['remittance-b-1', 'remittance-b-2', 'remittance-b-3']);
+    expect(within(kpi('Esperado')).getByText('$700.00')).toBeInTheDocument();
+    expect(within(kpi('Pendiente')).getByText('$650.00')).toBeInTheDocument();
+
+    // Last page: the caveat and the button go away.
+    expect(screen.getByRole('heading', { name: '3 remesas' })).toBeInTheDocument();
+    expect(screen.queryByTestId('remit-totals-partial')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cargar más remesas' })).toBeNull();
+  });
+
+  it('never shows the same batch twice if a page repeats one', async () => {
+    handlers.listPayrollRemittances = vi.fn<Handler>(async (args) =>
+      (args as { cursor?: string }).cursor ? listResult([pageOne[1], ...pageTwo], null) : listResult(pageOne, 'c'),
+    );
+    render(<PayrollRemittances />);
+    await row('b-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar más remesas' }));
+    await row('b-3');
+    expect(screen.getAllByTestId(/^remittance-/)).toHaveLength(3);
+  });
+
+  it('starts again from page one, without a cursor, when a filter changes', async () => {
+    handlers.listPayrollRemittances = paged();
+    render(<PayrollRemittances />);
+    await row('b-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar más remesas' }));
+    await row('b-3');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Todas' }));
+    await waitFor(() => expect(handlers.listPayrollRemittances).toHaveBeenLastCalledWith({ view: 'all', limit: 50 }));
+    // Page one replaced the list: the row that only page two had is gone.
+    await waitFor(() => expect(screen.queryByTestId('remittance-b-3')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Cargar más remesas' })).toBeInTheDocument();
+  });
+
+  it('a refresh reloads from page one and keeps as many rows as were on screen', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => batch(`p1-${i}`, 100));
+    const more = Array.from({ length: 30 }, (_, i) => batch(`p2-${i}`, 100));
+    handlers.listPayrollRemittances = vi.fn<Handler>(async (args) => {
+      const { cursor, limit } = args as { cursor?: string; limit: number };
+      if (cursor) return listResult(more, null);
+      return limit >= 80 ? listResult([...many, ...more], null) : listResult(many, 'c2');
+    });
+    render(<PayrollRemittances />);
+    await row('p1-0');
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar más remesas' }));
+    await row('p2-29');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actualizar' }));
+    await waitFor(() => expect(handlers.listPayrollRemittances).toHaveBeenLastCalledWith({ view: 'outstanding', limit: 80 }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Actualizar' })).toBeEnabled());
+    expect(screen.getAllByTestId(/^remittance-/)).toHaveLength(80);
+  });
+
+  it('keeps the loaded rows when the next page fails, says why in Spanish, and offers a reload', async () => {
+    handlers.listPayrollRemittances = vi.fn<Handler>(async (args) => {
+      if ((args as { cursor?: string }).cursor) {
+        throw httpsError('invalid-argument', 'cursor is not a page cursor for this view', { reason: 'cursor-invalid', field: 'cursor' });
+      }
+      return listResult(pageOne, 'stale-cursor');
+    });
+    render(<PayrollRemittances />);
+    await row('b-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar más remesas' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'No pudimos cargar más remesas. La página siguiente ya no corresponde a esta vista. Vuelve a cargar la lista desde el inicio.',
+    );
+    expect(alert).not.toHaveTextContent('cursor is not a page cursor');
+    expect(screen.getAllByTestId(/^remittance-/)).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Recargar desde el inicio' }));
+    await waitFor(() => expect(handlers.listPayrollRemittances).toHaveBeenLastCalledWith({ view: 'outstanding', limit: 50 }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('drops a late next page that belongs to a view the user has left', async () => {
+    let releaseMore: (value: { data: unknown }) => void = () => {};
+    handlers.listPayrollRemittances = vi.fn<Handler>((args) => {
+      const { cursor, view } = args as { cursor?: string; view: string };
+      if (cursor) return new Promise((resolvePage) => { releaseMore = resolvePage; });
+      return Promise.resolve(view === 'all' ? listResult([batch('all-1', 100)], null) : listResult(pageOne, 'c'));
+    });
+    render(<PayrollRemittances />);
+    await row('b-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar más remesas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Todas' }));
+    await row('all-1');
+
+    releaseMore(listResult(pageTwo, null));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Actualizar' })).toBeEnabled());
+    expect(screen.queryByTestId('remittance-b-3')).toBeNull();
+    expect(screen.getAllByTestId(/^remittance-/)).toHaveLength(1);
+  });
+
+  it('shows a first-page refusal by its reason, in Spanish', async () => {
+    handlers.listPayrollRemittances.mockRejectedValueOnce(
+      httpsError('invalid-argument', 'Too big: expected number to be <=500', { reason: 'limit-invalid', field: 'limit' }),
+    );
+    render(<PayrollRemittances />);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('No pudimos cargar las remesas. El tamaño de página debe ser un número entero entre 1 y 500.');
+    expect(alert).not.toHaveTextContent('Too big');
   });
 });
 
@@ -472,16 +709,16 @@ describe('PayrollRemittances — voiding a receipt', () => {
 
   it('shows a server refusal on the confirmation step and keeps the dialog open', async () => {
     handlers.voidPayrollRemittanceReceipt.mockRejectedValue(
-      httpsError('not-found', 'No receipt r-1 on batch batch-overdue'),
+      httpsError('not-found', 'No receipt r-1 on batch batch-overdue', { reason: 'receipt-not-found' }),
     );
     const dialog = await openVoidDialog();
     fireEvent.change(within(dialog).getByLabelText('Motivo de la anulación'), { target: { value: 'Lote equivocado' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continuar' }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Sí, anular recibo' }));
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'Ese recibo ya no existe en este lote. Actualiza la lista.',
-    );
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent('Ese recibo ya no existe en este lote. Actualiza la lista.');
+    expect(alert).not.toHaveTextContent('No receipt r-1');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByRole('status')).toBeNull();
   });
