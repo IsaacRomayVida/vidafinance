@@ -632,7 +632,8 @@ jobs:
           FUNCTIONS="
             requestLoan getLoanConfig onLoanApproved generatePaymentLink markLoanDisbursed
             metamapWebhook getSystemHealth systemHealthCheck queueHealthCheck
-            processPayroll recordPayrollRemittance satBlacklistRefresh refreshSatBlacklists
+            processPayroll recordPayrollRemittance voidPayrollRemittanceReceipt listPayrollRemittances
+            satBlacklistRefresh refreshSatBlacklists
             api checkEmailAvailability validateCURP updateLoanStatus
             approveEmployer getPortfolioReport getAdminDashboard getEmployerDashboard
             submitReviewDecision getReviewDetail getReviewQueue updateEmployerTier setEmployerClaims

@@ -634,9 +634,23 @@ resolution and hash-chained receipts, not settlements, so nothing existing fitte
 - `firestore.rules`: the batch's employer admin and ops can read; no client can write.
 - `PayrollUpload.tsx` shows the batch's record read-only after an upload.
 
-Still open: no ops UI to call `recordPayrollRemittance` yet, and nothing alerts on a batch that
-stays `expected` past its due date. A record is only as good as someone booking bank
-transfers against it.
+Follow-ups since (contracts and procedures: `docs/runbooks/payroll-remittances.md`):
+- `receivedOn` must be a real calendar date, not after today in Mexico City.
+- `bankReference` is compared case- and whitespace-insensitively (`bankReferenceKey`), within a
+  batch and — through the `payrollRemittanceReferences` index — across batches, unless ops
+  passes `sharedTransfer: true`.
+- `voidPayrollRemittanceReceipt` marks a receipt voided (kept, with who/when/why), recomputes
+  the totals, frees its bank reference and writes an `audit_log` entry.
+- Batches from before the ledger: `recordPayrollRemittance` creates the record on demand from
+  `payrollDeductions`, and `scripts/migrations/004_backfill_payroll_remittances.ts` backfills
+  the rest (dry run by default; not yet run against any real project).
+- `listPayrollRemittances` returns each record with its aging (`remittanceAging`).
+
+The ops screen that calls these is `/ops/remittances` (`public-v2/src/pages/PayrollRemittances.tsx`).
+
+Still open: scheduled alerting on a batch that stays unpaid — the list shows overdue records
+but nothing pushes them to anyone. The 7-day grace
+period behind `overdue` is a display default, not an agreed remittance term.
 
 ---
 

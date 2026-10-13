@@ -100,6 +100,18 @@ describe("getAccessToken", () => {
 });
 
 describe("createVerification", () => {
+  // Fake timers for the whole block. The retry tests used to sit through the
+  // real backoff (0.5 s + 1.5 s); now they drive the clock by hand. The
+  // top-level beforeEach has already run on the real clock, so the rate
+  // limiter is reset again here, where its lastRefill and Date.now() agree.
+  beforeEach(() => {
+    jest.useFakeTimers();
+    client.__resetForTests();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("starts the KYC flow for STAGE_4_MODULES with a Bearer token", async () => {
     fetch
       .mockResolvedValueOnce(jsonRes({ access_token: "jwt", expiresIn: 3600 }))
@@ -132,19 +144,65 @@ describe("createVerification", () => {
       .mockResolvedValueOnce(textRes("server error", 500))
       .mockResolvedValueOnce(jsonRes({ id: "ver-retry" }));
 
-    const out = await client.createVerification(APPLICANT, client.STAGE_4_MODULES);
-    expect(out.verificationId).toBe("ver-retry");
+    // The backoff runs on Jest's fake clock: the test advances it by hand, so
+    // it both runs in milliseconds and pins WHEN each attempt happens.
+    const pending = client.createVerification(APPLICANT, client.STAGE_4_MODULES);
+    await jest.advanceTimersByTimeAsync(0);
+    // 1 auth + the first verification attempt, which failed
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(jest.getTimerCount()).toBe(1);
+
+    // The first backoff is 500 ms: nothing at 499, the retry at 500.
+    await jest.advanceTimersByTimeAsync(499);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await jest.advanceTimersByTimeAsync(1);
     // 1 auth (cached for the retry) + 2 verification attempts
     expect(fetch).toHaveBeenCalledTimes(3);
+
+    expect((await pending).verificationId).toBe("ver-retry");
+    expect(jest.getTimerCount()).toBe(0);
+    // The retry reused the cached token rather than authenticating again.
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.getmati.com/oauth",
+      "https://api.getmati.com/v2/verifications",
+      "https://api.getmati.com/v2/verifications",
+    ]);
   });
 
-  it("throws once all 3 attempts are exhausted", async () => {
+  it("throws once all 3 attempts are exhausted, backing off 500 ms then 1000 ms", async () => {
     fetch
       .mockResolvedValueOnce(jsonRes({ access_token: "jwt", expiresIn: 3600 }))
       .mockResolvedValue(textRes("server error", 500));
 
-    await expect(client.createVerification(APPLICANT, client.STAGE_4_MODULES))
-      .rejects.toThrow("MetaMap createVerification 500");
+    const pending = client.createVerification(APPLICANT, client.STAGE_4_MODULES);
+    const settled = jest.fn();
+    // Attached now so the eventual rejection is never unhandled.
+    const outcome = pending.then(
+      (value) => { settled(); return { value }; },
+      (error) => { settled(); return { error }; }
+    );
+
+    await jest.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(2); // auth + attempt 1
+
+    await jest.advanceTimersByTimeAsync(499);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await jest.advanceTimersByTimeAsync(1); // 500 ms after attempt 1
+    expect(fetch).toHaveBeenCalledTimes(3); // attempt 2
+
+    // The second backoff doubles: 1000 ms, not another 500.
+    await jest.advanceTimersByTimeAsync(999);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(settled).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1); // 1000 ms after attempt 2
+    expect(fetch).toHaveBeenCalledTimes(4); // attempt 3, the last
+
+    // The third failure is final: it rejects at once, with no further wait and
+    // no fourth attempt however long the clock runs.
+    const { error } = await outcome;
+    expect(error.message).toMatch("MetaMap createVerification 500");
+    expect(jest.getTimerCount()).toBe(0);
+    await jest.advanceTimersByTimeAsync(60_000);
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 });

@@ -1242,6 +1242,29 @@ describe('payrollRemittances collection (E18)', () => {
   });
 });
 
+// ── payrollRemittanceReferences collection (bank-reference index) ───────────
+
+describe('payrollRemittanceReferences collection', () => {
+  const REF = 'payrollRemittanceReferences/abc123';
+
+  it('no client can read or write it — not the employer, not ops, not admin', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), REF), {
+        bankReferenceKey: 'SPEI-0001',
+        holders: [{ batchId: 'employer1_2026-07-01_2026-07-15', receiptId: 'r1', employerId: 'employer1' }],
+      });
+    });
+
+    for (const [uid, role] of [['employer1', 'employer_admin'], ['employee1', 'employee'], ['ops1', 'ops'], ['admin1', 'admin']]) {
+      const ctx = testEnv.authenticatedContext(uid!, { role });
+      await assertFails(getDoc(doc(ctx.firestore(), REF)));
+      await assertFails(getDocs(collection(ctx.firestore(), 'payrollRemittanceReferences')));
+      await assertFails(setDoc(doc(ctx.firestore(), REF), { holders: [] }));
+      await assertFails(deleteDoc(doc(ctx.firestore(), REF)));
+    }
+  });
+});
+
 // ── users collection ─────────────────────────────────────────────────────────
 
 describe('users collection', () => {

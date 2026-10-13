@@ -9,8 +9,8 @@ import { PhotoHero } from '../components/marketing/PhotoHero';
 import type { Film } from '../components/marketing/HeroFilm';
 
 // Empleados hero (docs/design/SHOT_LIST.md, E0): a waiter starting his shift.
-const HERO_WIDE: Film = { film: '/video/employee-hero-16x9.mp4', still: '/images/brand/employee-hero-16x9.jpg' };
-const HERO_TALL: Film = { film: '/video/employee-hero-9x16.mp4', still: '/images/brand/employee-hero-9x16.jpg' };
+const HERO_WIDE: Film = { film: '/video/employee-hero-16x9.mp4', still: '/images/brand/employee-hero-16x9.webp' };
+const HERO_TALL: Film = { film: '/video/employee-hero-9x16.mp4', still: '/images/brand/employee-hero-9x16.webp' };
 
 function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -100,7 +100,7 @@ export function EmployeePage() {
       {/* "Lo que no puede esperar": a father carrying his daughter to the
           neighbourhood clinic (docs/design/SHOT_LIST.md, E1). */}
       <Board className="film" id="use-cases">
-        <BoardPhoto still="/images/brand/moment-clinic.jpg" film="/video/board-usecase-clinic.mp4" />
+        <BoardPhoto still="/images/brand/moment-clinic.webp" film="/video/board-usecase-clinic.mp4" />
         <BoardHead kicker={t('lp_m_use_tag')} title={t('lp_m_use_h')} />
         <div className="mk-gap" />
         <Rows columns={2} items={[1, 2, 3, 4].map((n) => ({ title: t(`lp_m_use_${n}_t`), desc: t(`lp_m_use_${n}_d`) }))} />

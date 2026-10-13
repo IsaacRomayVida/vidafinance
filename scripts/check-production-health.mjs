@@ -115,11 +115,15 @@ export function overallVerdict(rows) {
 const ATTEMPTS = 2; // one retry tolerates a Railway cold start, not an outage
 const TIMEOUT_MS = 20_000;
 
-async function probe(url) {
+/**
+ * One GET, retried once. `fetchImpl` and `retryDelayMs` exist so the retry
+ * rule can be tested without a network or a 3 s wait; production passes neither.
+ */
+export async function probe(url, { fetchImpl = fetch, retryDelayMs = 3000 } = {}) {
   let lastError = 'no attempt made';
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), redirect: 'follow' });
+      const res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS), redirect: 'follow' });
       const text = await res.text();
       let body = null;
       try { body = JSON.parse(text); } catch { /* non-JSON body — classify decides */ }
@@ -129,7 +133,7 @@ async function probe(url) {
       lastError = err?.cause?.code ?? err?.name ?? String(err?.message ?? err);
       if (attempt === ATTEMPTS) return { error: lastError };
     }
-    await new Promise((r) => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, retryDelayMs));
   }
   return { error: lastError };
 }
@@ -139,14 +143,18 @@ export function loadEndpoints(filePath) {
   return JSON.parse(readFileSync(filePath ?? path.join(here, 'production-endpoints.json'), 'utf8'));
 }
 
-async function main() {
-  const endpoints = loadEndpoints(process.env.ENDPOINTS_FILE);
+/**
+ * Run every probe and return one row per claim: `{ name, fail, reason }`.
+ * Which rows gate and which are informational is decided HERE, so it takes
+ * its inputs as arguments — `env` for the `*_URL` secrets, `probeFn` for the
+ * network — and scripts/check-production-health.test.mjs drives it with fakes.
+ */
+export async function collectRows({ endpoints, env = {}, probeFn = probe }) {
   const rows = [];
-  const pad = (s, n) => String(s).padEnd(n);
 
   // 1 + 2: canonical probes, and secret drift (with a probe of drifted secrets).
   for (const [name, canonicalUrl] of Object.entries(endpoints.services)) {
-    const canonical = classifyHealth(await probe(`${canonicalUrl}/health`));
+    const canonical = classifyHealth(await probeFn(`${canonicalUrl}/health`));
     rows.push({ name: `canonical:${name}`, fail: canonical.status !== 'ok', reason: canonical.reason });
 
     // Since deploy.yml switched to writing these URLs from THIS file (the
@@ -155,7 +163,7 @@ async function main() {
     // rows are informational: they never fail the check, they just keep the
     // leftover secrets visible until someone deletes them.
     const secretName = endpoints.secretNames[name];
-    const secret = classifySecret(canonicalUrl, process.env[secretName]);
+    const secret = classifySecret(canonicalUrl, env[secretName]);
     rows.push({
       name: `secret:${secretName}`,
       fail: false,
@@ -171,11 +179,11 @@ async function main() {
   // informational — deploy.yml still writes it into functions/.env — so a
   // drifted secret is probed and gates on its own health.
   const { registry } = endpoints;
-  const registryCanonical = classifyHealth(await probe(`${registry.url}/health`));
+  const registryCanonical = classifyHealth(await probeFn(`${registry.url}/health`));
   rows.push({ name: 'canonical:registry-service', fail: registryCanonical.status !== 'ok', reason: registryCanonical.reason });
-  const registrySecret = classifySecret(registry.url, process.env[registry.secretName]);
+  const registrySecret = classifySecret(registry.url, env[registry.secretName]);
   if (registrySecret.status === 'drift') {
-    const probed = classifyHealth(await probe(`${process.env[registry.secretName].replace(/\/+$/, '')}/health`));
+    const probed = classifyHealth(await probeFn(`${env[registry.secretName].replace(/\/+$/, '')}/health`));
     rows.push({
       name: `secret:${registry.secretName}`,
       fail: probed.status !== 'ok',
@@ -186,8 +194,16 @@ async function main() {
   }
 
   // 3: hosting serves the app shell.
-  const hosting = classifyHosting(await probe(endpoints.hosting.url), endpoints.hosting.mustContain);
+  const hosting = classifyHosting(await probeFn(endpoints.hosting.url), endpoints.hosting.mustContain);
   rows.push({ name: 'hosting', fail: hosting.status !== 'ok', reason: hosting.reason });
+
+  return rows;
+}
+
+async function main() {
+  const endpoints = loadEndpoints(process.env.ENDPOINTS_FILE);
+  const rows = await collectRows({ endpoints, env: process.env });
+  const pad = (s, n) => String(s).padEnd(n);
 
   for (const r of rows) {
     console.log(`${r.fail ? '✗' : '✓'}  ${pad(r.name, 36)} ${r.reason}`);

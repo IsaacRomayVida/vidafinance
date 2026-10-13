@@ -25,6 +25,7 @@ export function AdminLayout() {
     { path: '/ops/review-queue', label: t('ops_nav_review') },
     { path: '/ops/employers', label: t('ops_nav_employers') },
     { path: '/ops/portfolio', label: t('ops_nav_portfolio') },
+    { path: '/ops/remittances', label: t('ops_nav_remittances') },
     { path: '/ops/alerts', label: t('ops_nav_alerts') },
     { path: '/ops/health', label: t('ops_nav_health') },
   ];
