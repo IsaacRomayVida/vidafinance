@@ -130,13 +130,15 @@ async function runFraudGates(applicant, _priorResults, { logger } = {}) {
   const infonavitData = data.infonavit;
   if (infonavitData && !infonavitData.skipped) {
     const records = Array.isArray(infonavitData) ? infonavitData : [infonavitData];
-    const hasActiveCredit = records.some(r =>
+    const activeRecords = records.filter(r =>
       r.credit_status === "active" || r.balance > 0
     );
-    if (hasActiveCredit) {
-      // Not a rejection — just flag for LTI calculation in Stage 2
+    if (activeRecords.length > 0) {
+      // Not a rejection — just flag for LTI calculation in Stage 2.
+      // Only active credits are summed: Stage 2 subtracts this from the
+      // current monthly salary, and a closed credit has no payroll deduction.
       data.infonavitFlag = true;
-      data.infonavitDeduction = records.reduce(
+      data.infonavitDeduction = activeRecords.reduce(
         (sum, r) => sum + (r.monthly_deduction || r.deduction || 0), 0
       );
     }
