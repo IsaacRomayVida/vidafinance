@@ -13,6 +13,14 @@ async function loadI18n() {
   return import('./index');
 }
 
+// The mocked chunk is requested through a real dynamic import, which takes
+// real time even under fake timers: wait for it on the real clock.
+const realSetTimeout = globalThis.setTimeout;
+async function until(condition: () => boolean) {
+  for (let i = 0; i < 2000 && !condition(); i++) await new Promise((r) => realSetTimeout(r, 1));
+  expect(condition()).toBe(true);
+}
+
 beforeEach(() => {
   localStorage.clear();
 });
@@ -69,7 +77,7 @@ describe('i18n — lazy languages', () => {
     vi.useFakeTimers();
     try {
       // The English chunk request hangs: neither resolves nor rejects.
-      let arrive!: () => void;
+      let arrive: (() => void) | undefined;
       vi.doMock('./en.json', () => new Promise((r) => { arrive = () => r({ default: en }); }));
       const { default: i18n, i18nReady, LANGUAGE_TIMEOUT_MS } = await loadI18n();
 
@@ -82,8 +90,56 @@ describe('i18n — lazy languages', () => {
       expect(settled).toBe(true);
       expect(i18n.t('hero_cta_employer')).toBe(es.hero_cta_employer);
 
-      arrive();
+      await until(() => arrive !== undefined);
+      arrive!();
       await vi.advanceTimersByTimeAsync(0);
+      expect(i18n.t('hero_cta_employer')).toBe(en.hero_cta_employer);
+    } finally {
+      vi.doUnmock('./en.json');
+      vi.useRealTimers();
+    }
+  });
+
+  it('the blank wait on a stalled connection is a second at most', async () => {
+    const { LANGUAGE_TIMEOUT_MS } = await loadI18n();
+    expect(LANGUAGE_TIMEOUT_MS).toBeLessThanOrEqual(1000);
+    // …and long enough that an ordinary request is not cut off into Spanish.
+    expect(LANGUAGE_TIMEOUT_MS).toBeGreaterThanOrEqual(750);
+  });
+
+  it('on a normal connection the first render is English, with no Spanish before or after it', async () => {
+    localStorage.setItem('vida_lang', 'en');
+    vi.useFakeTimers();
+    try {
+      let arrive: (() => void) | undefined;
+      vi.doMock('./en.json', () => new Promise((r) => { arrive = () => r({ default: en }); }));
+      const { default: i18n, i18nReady, LANGUAGE_TIMEOUT_MS } = await loadI18n();
+
+      // What main.tsx would paint: it renders once, when i18nReady settles…
+      const painted: string[] = [];
+      void i18nReady.then(() => painted.push(i18n.t('hero_cta_employer')));
+      // …and anything that would re-render the page afterwards.
+      const switches: string[] = [];
+      i18n.on('languageChanged', (lng) => switches.push(lng));
+
+      // The chunk takes a realistic few hundred milliseconds: nothing is
+      // painted meanwhile — in particular, not Spanish.
+      await vi.advanceTimersByTimeAsync(400);
+      expect(painted).toEqual([]);
+
+      await until(() => arrive !== undefined);
+      arrive!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(painted).toEqual([en.hero_cta_employer]);
+      const switchesAtPaint = [...switches];
+
+      // The abandoned timeout must not fire afterwards and swap anything.
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(LANGUAGE_TIMEOUT_MS * 3);
+      expect(painted).toEqual([en.hero_cta_employer]);
+      expect(switches).toEqual(switchesAtPaint);
+      expect(switches.every((lng) => lng === 'en')).toBe(true);
+      expect(i18n.language).toBe('en');
       expect(i18n.t('hero_cta_employer')).toBe(en.hero_cta_employer);
     } finally {
       vi.doUnmock('./en.json');

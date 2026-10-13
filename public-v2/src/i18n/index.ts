@@ -18,8 +18,17 @@ export const lazyLanguages: Record<string, () => Promise<{ default: ResourceKey 
   en: () => import('./en.json'),
 };
 
-/** How long the first render (or the toggle) waits for a language chunk. */
-export const LANGUAGE_TIMEOUT_MS = 3000;
+/**
+ * How long the first render (or the toggle) waits for a language chunk
+ * before going ahead in Spanish. The page is blank while the first render
+ * waits, so this is short: a reader on a stalled connection gets Spanish
+ * after a second and English the moment the chunk lands. On a working
+ * connection the chunk is there well inside it — index.html starts fetching
+ * it alongside the app bundle for a reader who saved that language
+ * (languagePreload.ts), so the wait is normally zero and the first render
+ * is never in the wrong language.
+ */
+export const LANGUAGE_TIMEOUT_MS = 1000;
 
 /**
  * Resolves once the saved language is ready to render. main.tsx waits for it
