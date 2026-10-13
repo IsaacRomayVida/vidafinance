@@ -291,6 +291,8 @@ form.ops-sheet .ops-actions{display:flex;gap:10px;margin-top:4px}
 .ops-actions.end{justify-content:flex-end}
 .ops-actions.between{justify-content:space-between}
 .ops-sheet-alert{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+/* The shared-transfer button carries a full sentence; let it wrap inside the alert on narrow sheets. */
+.ops-sheet-alert .ops-btn{max-width:100%;height:auto;white-space:normal;text-align:left}
 .ops-sheet-quote{overflow-wrap:anywhere}
 
 /* toast */
