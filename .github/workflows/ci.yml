@@ -457,11 +457,11 @@ jobs:
   # it ships at launch (VITE_LAUNCH_MODE=live — the default build is the
   # coming-soon page) with public-v2/lighthouserc.json, and uploads the reports.
   #
-  # Accessibility, best-practices and SEO are `error` assertions — a hard gate.
-  # Performance is a `warn` assertion on purpose: measured 2026-10-13 it is
-  # 0.70-0.75 (LCP 5-7s on mobile throttling), so a >=0.9 error would turn CI
-  # red until that is fixed. The gap is printed on every run and the reports are
-  # the evidence B9 lacked; promote it to `error` when the pages clear 0.9.
+  # Accessibility, best-practices, SEO and performance are all `error`
+  # assertions (median of 3 runs >= 0.9) — a hard gate. Performance was a
+  # `warn` while the pages measured 0.70-0.75 (LCP 5-7s on mobile throttling);
+  # it was promoted once they measured 0.93-0.98 (LCP 2.1-3.0s) on 2026-10-13.
+  # src/perf/*.test.ts in public-v2 guards the delivery changes behind that.
   lighthouse:
     name: Lighthouse (marketing pages)
     runs-on: ubuntu-latest
@@ -483,7 +483,7 @@ jobs:
         env:
           VITE_LAUNCH_MODE: live
 
-      - name: Lighthouse CI — a11y / best-practices / SEO >= 0.9, hard gate
+      - name: Lighthouse CI — performance / a11y / best-practices / SEO >= 0.9, hard gate
         run: cd public-v2 && npx --yes @lhci/cli@0.15.1 autorun
 
       - uses: actions/upload-artifact@v4

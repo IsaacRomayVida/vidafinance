@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Board, BoardHead } from './Board';
 import { Icon, type IconName } from '../shared/Icons';
+import { useNearViewport } from '../../hooks/useNearViewport';
 
 /**
  * Employer section on the ops-side board. The stage is a generated
@@ -9,6 +10,10 @@ import { Icon, type IconName } from '../shared/Icons';
  * things in the operation, each a drawn vector icon. The data panel states
  * product facts (0 MXN for the company, one file per cut-off, the 30% cap)
  * and the cycle — never an invented employer, figure or percentage.
+ *
+ * The photograph is a CSS background, which a browser fetches during page
+ * load however far down the page it is. `.shown` turns it on once the stage
+ * is near the viewport, so it does not compete with the hero image.
  */
 const OBJECTS: { icon: IconName; t: string; d: string; lit?: boolean }[] = [
   { icon: 'nomina', t: 'emp_obj_1_t', d: 'emp_obj_1_d', lit: true },
@@ -24,6 +29,7 @@ const CYCLE: { icon: IconName; t: string; d: string }[] = [
 
 export function EmployerSection() {
   const { t } = useTranslation();
+  const [stage, near] = useNearViewport<HTMLDivElement>();
 
   return (
     <Board tone="ops" id="employers-board">
@@ -31,7 +37,7 @@ export function EmployerSection() {
       <div className="mk-gap" />
 
       <div className="mk-ops-grid">
-        <div className="mk-panel stage photo" aria-hidden="true">
+        <div ref={stage} className={`mk-panel stage photo${near ? ' shown' : ''}`} aria-hidden="true">
           <div className="mk-brand-ops"><b>F</b>FunPay · Ops</div>
           <div className="mk-tags">
             <span className="mk-tag"><i />{t('emp_tag_collections')}</span>

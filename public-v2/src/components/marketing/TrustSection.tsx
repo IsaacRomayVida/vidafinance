@@ -21,7 +21,7 @@ export function TrustSection() {
 
   return (
     <Board className="film" id="trust">
-      <BoardPhoto still="/images/brand/moment-school-walk.jpg" film="/video/board-trust-walk.mp4" />
+      <BoardPhoto still="/images/brand/moment-school-walk.webp" film="/video/board-trust-walk.mp4" />
       <div className="mk-cols">
         <div className="sticky sh">
           <BoardHead kicker={t('trust_tag')} title={t('trust_h2')} lead={t('trust_p')} />

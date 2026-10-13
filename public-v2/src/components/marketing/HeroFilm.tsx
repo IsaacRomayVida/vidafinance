@@ -54,8 +54,22 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
 
   const stillOnly = reel.length === 0 || reel.some((f) => !f.film);
 
+  // The poster is the page's LCP image and the film's first frame, so the
+  // film (0.3–1.8 MB) is only fetched once the page has loaded (poster
+  // included): nothing changes on screen, and the poster and the app bundle
+  // no longer share the connection with the video.
+  const [pageLoaded, setPageLoaded] = useState(
+    () => typeof document === 'undefined' || document.readyState === 'complete'
+  );
   useEffect(() => {
-    if (reduced || stillOnly) return;
+    if (pageLoaded) return;
+    const onLoad = () => setPageLoaded(true);
+    window.addEventListener('load', onLoad, { once: true });
+    return () => window.removeEventListener('load', onLoad);
+  }, [pageLoaded]);
+
+  useEffect(() => {
+    if (reduced || stillOnly || !pageLoaded) return;
     const single = reel.length < 2;
     const showing = front === 'a' ? a.current : b.current;
     const waiting = single ? null : front === 'a' ? b.current : a.current;
@@ -94,7 +108,7 @@ export function HeroFilm({ reel, className }: { reel: Film[]; className?: string
       showing.removeEventListener('ended', advance);
       io?.disconnect();
     };
-  }, [index, front, reel, reduced, stillOnly]);
+  }, [index, front, reel, reduced, stillOnly, pageLoaded]);
 
   const still = reel[index % reel.length]?.still;
   const poster = still ? publicAsset(still) : undefined;

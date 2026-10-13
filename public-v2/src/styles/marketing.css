@@ -244,7 +244,9 @@ select.mk-input{padding-right:44px;background-image:url("data:image/svg+xml,%3Cs
 .mk-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
 .mk-tag{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:var(--r-pill);font-size:13px;color:rgba(242,245,240,.85);background:var(--glass-tag);backdrop-filter:var(--blur-sm);-webkit-backdrop-filter:var(--blur-sm);border:1px solid rgba(255,255,255,.08)}
 .mk-tag i{width:7px;height:7px;border-radius:50%;background:var(--harmony)}
-.mk-panel.stage.photo{background:linear-gradient(180deg,rgba(0,11,26,.55) 0%,rgba(0,11,26,.15) 45%,rgba(0,11,26,.6) 100%),url('/images/brand/stage-employer.jpg') center/cover,var(--stage-grad)}
+/* The photograph is added by .shown (EmployerSection, once the stage nears the viewport). */
+.mk-panel.stage.photo{background:linear-gradient(180deg,rgba(0,11,26,.55) 0%,rgba(0,11,26,.15) 45%,rgba(0,11,26,.6) 100%),var(--stage-grad)}
+.mk-panel.stage.photo.shown{background:linear-gradient(180deg,rgba(0,11,26,.55) 0%,rgba(0,11,26,.15) 45%,rgba(0,11,26,.6) 100%),url('/images/brand/stage-employer.webp') center/cover,var(--stage-grad)}
 .mk-objects{position:absolute;left:24px;right:24px;bottom:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .mk-object{padding:16px 14px 14px;border-radius:18px;background:rgba(255,255,255,.1);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.14);color:var(--paper-dark);min-height:150px;display:flex;flex-direction:column}
 .mk-object svg{width:30px;height:30px;color:var(--harmony);margin-bottom:auto;stroke-width:1.4}

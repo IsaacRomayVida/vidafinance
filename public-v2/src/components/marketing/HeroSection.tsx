@@ -11,8 +11,8 @@ import type { Film } from './HeroFilm';
  * background. Each film starts from its still (also its poster) and plays
  * while on screen.
  */
-const WIDE: Film = { film: '/video/hero-dawn-16x9.mp4', still: '/images/brand/hero-dawn-16x9.jpg' };
-const TALL: Film = { film: '/video/hero-dawn-9x16.mp4', still: '/images/brand/hero-dawn-9x16.jpg' };
+const WIDE: Film = { film: '/video/hero-dawn-16x9.mp4', still: '/images/brand/hero-dawn-16x9.webp' };
+const TALL: Film = { film: '/video/hero-dawn-9x16.mp4', still: '/images/brand/hero-dawn-9x16.webp' };
 
 /** Statement board — the landing hero from funpay-ui, on its film. */
 export function HeroSection() {

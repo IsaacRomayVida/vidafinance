@@ -1,14 +1,16 @@
-import React, { Suspense } from 'react';
 import { HeroSection } from '../components/marketing/HeroSection';
+import { HowItWorks } from '../components/marketing/HowItWorks';
+import { ROICalculator } from '../components/marketing/ROICalculator';
+import { EmployerSection } from '../components/marketing/EmployerSection';
+import { TrustSection } from '../components/marketing/TrustSection';
+import { FAQSection } from '../components/marketing/FAQSection';
+import { ClosingSection } from '../components/marketing/ClosingSection';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
-// Lazy-load below-the-fold boards to reduce initial bundle size
-const HowItWorks = React.lazy(() => import('../components/marketing/HowItWorks').then(m => ({ default: m.HowItWorks })));
-const ROICalculator = React.lazy(() => import('../components/marketing/ROICalculator').then(m => ({ default: m.ROICalculator })));
-const EmployerSection = React.lazy(() => import('../components/marketing/EmployerSection').then(m => ({ default: m.EmployerSection })));
-const TrustSection = React.lazy(() => import('../components/marketing/TrustSection').then(m => ({ default: m.TrustSection })));
-const FAQSection = React.lazy(() => import('../components/marketing/FAQSection').then(m => ({ default: m.FAQSection })));
-const ClosingSection = React.lazy(() => import('../components/marketing/ClosingSection').then(m => ({ default: m.ClosingSection })));
+// The boards below the fold are bundled with the page (~7 KB gzip in all)
+// rather than lazy-loaded: as six React.lazy siblings under one Suspense
+// they loaded one after another, a request waterfall that Lighthouse
+// counted into the hero's LCP.
 
 /**
  * Landing: the statement board, then boards that follow the concept —
@@ -21,14 +23,12 @@ export function HomePage() {
   return (
     <>
       <HeroSection />
-      <Suspense fallback={null}>
-        <HowItWorks />
-        <ROICalculator />
-        <EmployerSection />
-        <TrustSection />
-        <FAQSection />
-        <ClosingSection />
-      </Suspense>
+      <HowItWorks />
+      <ROICalculator />
+      <EmployerSection />
+      <TrustSection />
+      <FAQSection />
+      <ClosingSection />
     </>
   );
 }

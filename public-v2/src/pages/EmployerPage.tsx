@@ -7,8 +7,8 @@ import { PhotoHero } from '../components/marketing/PhotoHero';
 import type { Film } from '../components/marketing/HeroFilm';
 
 // Empleadores hero (docs/design/SHOT_LIST.md, R0): payroll morning in a resort HR office.
-const HERO_WIDE: Film = { film: '/video/employer-hero-16x9.mp4', still: '/images/brand/employer-hero-16x9.jpg' };
-const HERO_TALL: Film = { film: '/video/employer-hero-9x16.mp4', still: '/images/brand/employer-hero-9x16.jpg' };
+const HERO_WIDE: Film = { film: '/video/employer-hero-16x9.mp4', still: '/images/brand/employer-hero-16x9.webp' };
+const HERO_TALL: Film = { film: '/video/employer-hero-9x16.mp4', still: '/images/brand/employer-hero-9x16.webp' };
 
 export function EmployerPage() {
   const { t } = useTranslation();

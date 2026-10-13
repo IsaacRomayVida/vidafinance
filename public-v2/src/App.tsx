@@ -1,19 +1,26 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './hooks/useAuth';
 import { MarketingLayout } from './components/layout/MarketingLayout';
-import { RouteGuard } from './components/RouteGuard';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { EmployeeLayout } from './components/layouts/EmployeeLayout';
-import { EmployerLayout } from './components/layouts/EmployerLayout';
-import { AdminLayout } from './components/layouts/AdminLayout';
+import { HomePage } from './pages/HomePage';
+import { EmployerPage } from './pages/EmployerPage';
+import { EmployeePage } from './pages/EmployeePage';
+import { AboutPage } from './pages/AboutPage';
 import './i18n';
 
-// Lazy-loaded page components for code splitting
-const HomePage = React.lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
-const EmployerPage = React.lazy(() => import('./pages/EmployerPage').then(m => ({ default: m.EmployerPage })));
-const EmployeePage = React.lazy(() => import('./pages/EmployeePage').then(m => ({ default: m.EmployeePage })));
-const AboutPage = React.lazy(() => import('./pages/AboutPage').then(m => ({ default: m.AboutPage })));
+// Auth and the portal shells are lazy too: they pull in Firebase, which the
+// marketing pages never use, so it stays off their critical path (Lighthouse
+// LCP). PortalAuth mounts AuthProvider above the role-guarded routes only.
+const PortalAuth = React.lazy(() => import('./components/PortalAuth').then(m => ({ default: m.PortalAuth })));
+const RouteGuard = React.lazy(() => import('./components/RouteGuard').then(m => ({ default: m.RouteGuard })));
+const EmployeeLayout = React.lazy(() => import('./components/layouts/EmployeeLayout').then(m => ({ default: m.EmployeeLayout })));
+const EmployerLayout = React.lazy(() => import('./components/layouts/EmployerLayout').then(m => ({ default: m.EmployerLayout })));
+const AdminLayout = React.lazy(() => import('./components/layouts/AdminLayout').then(m => ({ default: m.AdminLayout })));
+
+// Lazy-loaded page components for code splitting. The four landing pages
+// above are bundled eagerly: behind a lazy route their hero waited for an
+// extra chunk round-trip plus React's ~300ms Suspense reveal throttle after
+// the spinner, which was most of the marketing pages' LCP render delay.
 const SecurityPage = React.lazy(() => import('./pages/SecurityPage').then(m => ({ default: m.SecurityPage })));
 const PrivacyPage = React.lazy(() => import('./pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
 const TermsPage = React.lazy(() => import('./pages/TermsPage').then(m => ({ default: m.TermsPage })));
@@ -64,7 +71,6 @@ const PageSpinner = () => (
 export default function App() {
   return (
     <ErrorBoundary>
-    <AuthProvider>
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         {/* Marketing pages — gated by VITE_LAUNCH_MODE */}
@@ -72,10 +78,10 @@ export default function App() {
           <Route path="/" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}><ComingSoon /></Suspense></ErrorBoundary>} />
         ) : (
           <Route element={<ErrorBoundary><MarketingLayout /></ErrorBoundary>}>
-            <Route path="/" element={<Suspense fallback={<PageSpinner />}><HomePage /></Suspense>} />
-            <Route path="/employers" element={<Suspense fallback={<PageSpinner />}><EmployerPage /></Suspense>} />
-            <Route path="/employees" element={<Suspense fallback={<PageSpinner />}><EmployeePage /></Suspense>} />
-            <Route path="/about" element={<Suspense fallback={<PageSpinner />}><AboutPage /></Suspense>} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/employers" element={<EmployerPage />} />
+            <Route path="/employees" element={<EmployeePage />} />
+            <Route path="/about" element={<AboutPage />} />
             <Route path="/security" element={<Suspense fallback={<PageSpinner />}><SecurityPage /></Suspense>} />
             <Route path="/privacy" element={<Suspense fallback={<PageSpinner />}><PrivacyPage /></Suspense>} />
             <Route path="/terms" element={<Suspense fallback={<PageSpinner />}><TermsPage /></Suspense>} />
@@ -93,8 +99,12 @@ export default function App() {
         {/* Auth */}
         <Route path="/login" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}><Login /></Suspense></ErrorBoundary>} />
 
-        {/* Employee portal — Suspense is INSIDE the guard so auth checks
-            always run before any lazy chunk is loaded */}
+        {/* Role-guarded portals share one lazily loaded AuthProvider; its
+            Suspense also covers the lazy guard and shell chunks below. */}
+        <Route element={<Suspense fallback={<PageSpinner />}><PortalAuth /></Suspense>}>
+
+        {/* Employee portal — page Suspense is INSIDE the guard so auth checks
+            always run before any lazy page chunk is loaded */}
         <Route element={<RouteGuard allowedRoles={['employee']} />}>
           <Route element={<ErrorBoundary><EmployeeLayout /></ErrorBoundary>}>
             <Route path="/employee" element={<Suspense fallback={<PageSpinner />}><EmployeeDashboard /></Suspense>} />
@@ -131,6 +141,8 @@ export default function App() {
           </Route>
         </Route>
 
+        </Route>
+
         {/* Legacy /admin → /ops redirect */}
         <Route path="/admin" element={<Navigate to="/ops" replace />} />
         <Route path="/admin/*" element={<Navigate to="/ops" replace />} />
@@ -139,7 +151,6 @@ export default function App() {
         <Route path="*" element={<ErrorBoundary><Suspense fallback={<PageSpinner />}>{IS_COMING_SOON ? <ComingSoon /> : <NotFound />}</Suspense></ErrorBoundary>} />
       </Routes>
     </BrowserRouter>
-    </AuthProvider>
     </ErrorBoundary>
   );
 }

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Helmet } from 'react-helmet-async';
+import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { Board, BoardHead, Statement } from '../components/marketing/Board';
 import { FunpayLogo } from '../components/shared/FunpayLogo';
 import { ComingSoonForm } from '../components/marketing/ComingSoonForm';
@@ -33,6 +33,9 @@ export function ComingSoonRedesign() {
 
   return (
     <div className="mk-page">
+      {/* The provider lives here, with its only consumer, so react-helmet-async
+          ships in this lazy chunk and not in the entry bundle of every page. */}
+      <HelmetProvider>
       <Helmet>
         <title>{t('cs_meta_title')}</title>
         <meta name="description" content={t('cs_meta_desc')} />
@@ -40,6 +43,7 @@ export function ComingSoonRedesign() {
         <meta property="og:description" content={t('cs_meta_desc')} />
         <meta property="og:type" content="website" />
       </Helmet>
+      </HelmetProvider>
 
       <a href="#contacto" className="skip-link">{t('a11y_skip_content')}</a>
 
