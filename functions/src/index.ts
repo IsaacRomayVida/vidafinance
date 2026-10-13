@@ -44,7 +44,7 @@ import {
   isDisbursedStatus,
   isRepaidStatus,
 } from './loans/loanStatus';
-import { computeEmployerDashboardStats } from './employers/computeEmployerDashboardStats';
+import { computeEmployerDashboardStats, fetchEmployerStatsLoans } from './employers/computeEmployerDashboardStats';
 import { allowTestBypass } from './utils/environment';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
 import { getQueue } from './utils/queue';
@@ -2306,9 +2306,12 @@ export const getEmployerDashboard = onCall(
 
       const uid = request.auth!.uid;
 
-      const [empDoc, loans, employees] = await Promise.all([
+      // `loans` is the 50 most recent, for display; the stats get their own
+      // uncapped read so the headline numbers cover the whole book.
+      const [empDoc, loans, statsLoans, employees] = await Promise.all([
         db.collection('employers').doc(uid).get(),
         db.collection('loans').where('employerId', '==', uid).orderBy('createdAt', 'desc').limit(50).get(),
+        fetchEmployerStatsLoans(db, uid),
         db.collection('employees').where('employerId', '==', uid).get(),
       ]);
 
@@ -2320,7 +2323,7 @@ export const getEmployerDashboard = onCall(
         employer: projectDoc(empDoc, EMPLOYER_DASHBOARD_FIELDS),
         loans: loanDocs,
         employeeCount: employees.size,
-        stats: computeEmployerDashboardStats(loanDocs, employees.size),
+        stats: computeEmployerDashboardStats(statsLoans, employees.size),
       };
     });
   }
