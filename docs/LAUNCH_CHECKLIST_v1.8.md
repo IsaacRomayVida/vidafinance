@@ -103,13 +103,64 @@ precisely what v1.7 encoded.
 
 ## D. Open gaps found while measuring
 
-**D1 — The deploy blocker cleared itself; nobody would have noticed.** *(still open — needs Isaac /
-ops: the cause lives in GCP billing/IAM history, not in this repo)*
+**D1 — The deploy blocker cleared itself; nobody would have noticed.** *(diagnosed 2026-10-13 — two
+separate 403s, see the update at the end of this item; the billing half still needs Isaac to confirm)*
 Production deploys failed for ~3 days on an HTTP 403 write refusal. Run `30798414554` (2026-08-03
 08:42Z) shows the preflight canary getting **200** and the full deploy landing. No config change
 was made on our side, so the fix was upstream — billing or IAM. Worth confirming *which*, because
 an unexplained recovery can un-recover. The preflight canary itself is the win: it aborts before
 any partial write, so three days of failure changed nothing in prod.
+
+*Update 2026-10-13.* Re-measured from every `main` push run of *VIDA Platform — Deploy*
+2026-07-28..08-04 (`gh run list --workflow 246929693 --created …`, then `gh run view <id> --log-failed`)
+plus read-only `gcloud` on `vida-finance`. Several statements above were wrong: it was **~25 h, not
+~3 days**, it was **two different 403s back to back**, neither "fixed itself", and the first fully green
+deploy was `30793707586` (2026-08-03 ~08:12Z), not `30798414554`. The 2026-07-30 failures are unrelated
+(`onContactCreated` trigger-type change, no 403). No `main` deploy ran between the last good one,
+`30593318133` (2026-07-31 00:21Z), and 2026-08-02 05:38Z. *Deploy Firebase* (245647385) ran once in the
+window (2026-07-30, dispatch, green).
+
+1. **Billing refusal on Cloud Functions writes — 2026-08-02 05:42Z → 17:42Z (observed).** Every
+   functions upload got
+   `POST cloudfunctions.googleapis.com/v2/projects/***/locations/us-central1/functions:generateUploadUrl`
+   → `HTTP Error: 403, Write access to project '***' was denied: please check billing account associated
+   and retry`. First seen in `30734473564` (05:42Z, 256 identical 403s, then the 6 h job limit); last
+   seen in `30759300648` (preflight canary 403 at 17:42Z). The next run, `30760060720`, got canary
+   **200** at ~18:03Z and deployed every function. `deploy.yml` did not change in between (the only
+   commit, `1cf01b6`, is app code, rules and an index — no credentials or API calls), and the secret `FIREBASE_SERVICE_ACCOUNT_PRODUCTION`
+   was last set 2026-03-22 (`gh secret list`), so the same principal went from refused to accepted.
+   During the outage `billingInfo` reported `billingEnabled: true` (commit `e8f0ca4`, run `30756695646`)
+   and Firestore REST said "requires billing to be enabled" (commit `030b993`). Today:
+   `gcloud billing projects describe vida-finance` → `billingAccounts/01B681-29512A-745C5D`,
+   `billingEnabled: true`. **Strongest supported hypothesis:** the linked billing account was in a bad
+   state (suspended / payment failed / delinquent) without being unlinked, and a human cleared it on
+   Sunday 2026-08-02 between 17:42Z and ~18:03Z. **Not proven** — the deploy SA cannot read the
+   billing account or any audit logs (`gcloud billing accounts describe` and `gcloud logging read` both
+   `PERMISSION_DENIED`). **Missing evidence, and who can get it:** Isaac (`roles/owner`), or whoever
+   administers billing account `01B681-29512A-745C5D` — its payment / transaction history and any
+   "account suspended / reinstated" emails for 2026-07-31..08-02, and its audit log
+   (`gcloud logging read 'timestamp>="2026-07-31T00:00:00Z" AND timestamp<="2026-08-02T19:00:00Z"'
+   --billing-account=01B681-29512A-745C5D`). That also gives the true start, which runs cannot: anywhere
+   between 07-31 00:21Z and 08-02 05:42Z.
+2. **IAM refusal on Firestore index creation — 2026-08-02 18:04Z → 2026-08-03 07:19Z.** Once
+   functions were writable, the index step got
+   `POST firestore.googleapis.com/v1/projects/***/databases/(default)/collectionGroups/audit_log/indexes`
+   → `HTTP Error: 403, The caller does not have permission` in every run that reached it — 29 runs,
+   `30760060720` … `30791906109`, last at 07:19:22Z. **Root cause (proven):** a latent IAM gap exposed by code. `1cf01b6`
+   (#402, 2026-08-02 17:58Z) was the first commit in the window to add a composite index (on
+   `audit_log`); before it, the index step was a no-op that "deployed successfully" even mid-billing
+   outage (e.g. `30751081837` 14:02Z, `30757753296` 17:00Z), because the deploy SA could list indexes but
+   not create them. It cleared with **no repo change** (`d1193f1`→`01585bc` touch only `ml-service`),
+   and `30793707586` logged `deployed indexes … successfully` at 08:12:03Z. Today
+   `gcloud projects get-iam-policy vida-finance` shows `roles/datastore.indexAdmin` bound to
+   `firebase-adminsdk-fbsvc@vida-finance.iam.gserviceaccount.com` (the only non-owner principal holding
+   it; the fix #414 had asked for exactly this grant). So someone granted it between 07:19Z and 08:12Z on
+   2026-08-03. Who and exactly when is in the project's Admin Activity log (kept 400 days), readable by
+   Isaac: `gcloud logging read 'protoPayload.methodName="SetIamPolicy" AND
+   timestamp>="2026-08-03T07:00:00Z" AND timestamp<="2026-08-03T08:15:00Z"' --project=vida-finance`.
+
+Remaining action for D1 to close: Isaac confirms (1) from billing history and puts an alert on that
+billing account's payment state, since nothing in this repo can see it coming.
 
 **D2 — Launch monitoring covers 5 services; 7 exist, and the 2 omitted are the important ones.**
 *(closed in code 2026-10-13 — see the update at the end of this item)*
