@@ -5,6 +5,7 @@ import {
   DISBURSED_STATUSES,
   POST_DISBURSEMENT_STATUSES,
   DEFAULT_STATUSES,
+  REPAYABLE_STATUSES,
   isRepaidStatus,
   isDisbursedStatus,
   isDefaultStatus,
@@ -50,6 +51,18 @@ describe('loanStatus — canonical vocabulary', () => {
       new Set([LOAN_STATUS.OVERDUE, LOAN_STATUS.IN_COLLECTIONS, LOAN_STATUS.WRITTEN_OFF])
     );
     expect(isDefaultStatus(LOAN_STATUS.ACTIVE)).toBe(false);
+  });
+
+  // generatePaymentLink's gate. Funds must have gone out and the debt must
+  // still be owed: 'approved' (nothing disbursed yet) and anything repaid or
+  // written off must never mint a checkout link.
+  it('REPAYABLE_STATUSES is exactly the funds-sent statuses plus overdue', () => {
+    expect([...REPAYABLE_STATUSES].sort()).toEqual(
+      [LOAN_STATUS.ACTIVE, LOAN_STATUS.DISBURSED, LOAN_STATUS.OVERDUE].sort()
+    );
+    for (const s of [LOAN_STATUS.APPROVED, LOAN_STATUS.WRITTEN_OFF, ...REPAID_STATUSES]) {
+      expect(REPAYABLE_STATUSES).not.toContain(s);
+    }
   });
 
   it('POST_DISBURSEMENT_STATUSES is a superset of DISBURSED_STATUSES and REPAID_STATUSES', () => {

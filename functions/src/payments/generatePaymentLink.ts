@@ -6,14 +6,7 @@ import { z } from 'zod';
 import { withAuth } from '../middleware/authMiddleware';
 import { withErrorHandling } from '../utils/errorHandler';
 import { enforceRateLimit } from '../utils/rateLimiter';
-import { DISBURSED_STATUSES, LOAN_STATUS } from '../loans/loanStatus';
-
-// A loan is repayable from "funds sent" (`DISBURSED_STATUSES`: 'active' —
-// auto-disbursed, 'disbursed' — manually ops-confirmed) through 'overdue'.
-// Deliberately excludes `approved` (pre-disbursement — nothing to repay yet)
-// and every post-repayment/write-off status (`REPAID_STATUSES`,
-// 'in_collections', 'written_off') via allow-list, not a separate deny check.
-const REPAYABLE_STATUSES: readonly string[] = [...DISBURSED_STATUSES, LOAN_STATUS.OVERDUE];
+import { REPAYABLE_STATUSES } from '../loans/loanStatus';
 
 const GeneratePaymentLinkSchema = z.object({
   loanId: z.string().min(1),
