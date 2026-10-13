@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "dev:emulators": "cross-env VITE_USE_FIREBASE_EMULATORS=true vite",
+    "build": "tsc && vite build && node scripts/check-bundle-no-emulators.mjs",
     "lint": "eslint src",
     "preview": "vite preview",
     "test": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run",
