@@ -193,13 +193,33 @@ therefore sent loan requests at production. There is now **no default**:
 | `TARGET_URL` host | Result |
 |---|---|
 | unset | refuses to start |
-| `localhost` / `127.0.0.1` | label `emulator` |
-| production (`*vida-finance.cloudfunctions.net`, `vida-finance.web.app`, `*-production*.up.railway.app`) | refuses unless `LOAD_TEST_ALLOW_PRODUCTION=I-HAVE-OPS-SIGN-OFF` → label `production` |
-| any other remote host | refuses unless `LOAD_TEST_TARGET_ENV=staging` → label `staging` |
+| `localhost` / `127.0.0.1` / `[::1]` | label `emulator` — unless the URL path names the production project (`http://127.0.0.1:5001/vida-finance/…`), which is refused: an emulator started under the real project id serves functions that talk to production Firestore and Auth for every emulator that is not running |
+| production — Gen-1: `*vida-finance.cloudfunctions.net`; Hosting: `vida-finance.web.app`, `vida-finance.firebaseapp.com`; **Gen-2 (Cloud Run), which never carries the project id:** `<service>-gd5fcu677q-<region code>.a.run.app` (the project's Cloud Run hash, e.g. `requestloan-gd5fcu677q-uc.a.run.app`) and `<service>-447766605132.<region>.run.app` (the project number, e.g. `requestloan-447766605132.us-central1.run.app`); Railway: `*-production*.up.railway.app` | refuses unless `LOAD_TEST_ALLOW_PRODUCTION=I-HAVE-OPS-SIGN-OFF` → label `production`. `npm run load-test*` refuse one step earlier: `tests/load/preflight.mjs` runs before k6 and exits 1 with the instruction instead of a k6 stack trace |
+| any other remote host | refuses unless `LOAD_TEST_TARGET_ENV=staging` → label `staging`. A `*.run.app` host that is not one of the two production forms is *unknown*, not safe: the refusal says to confirm which project owns it first |
+
+**The npm preflight reads the shell, not k6's flags.** `npm run load-test`, `load-test:smoke` and
+`load-test:full` run `node tests/load/preflight.mjs && k6 run …`. The preflight sees `TARGET_URL`
+only as a **shell variable** (`TARGET_URL=… npm run load-test:smoke`). A target passed as
+`npm run load-test -- --env TARGET_URL=…` reaches k6 but not the preflight, which then stops with
+"TARGET_URL is not set". When calling `k6 run --env …` directly (as the commands below do) there
+is no preflight; `target.js` applies the same rules inside k6's init stage.
+
+**Production's Firebase identifiers are refused too, whatever `TARGET_URL` says.**
+`FIREBASE_PROJECT_ID=vida-finance` (or the project number `447766605132`, which Google accepts in
+place of the id, or any id containing `prod`), a `FIREBASE_APP_ID` of project number
+`447766605132`, or production's Web API key in `FIREBASE_API_KEY` stop the run at init:
+always for the pool sign-in and for the App Check debug-token exchange, and for any run whose
+target is not production. `TARGET_URL` only says where `requestLoan` is called; those three say
+which project the pool's passwords and the debug token are sent to. No flag overrides it. The
+signed-off production smoke (below) uses `APP_CHECK_TOKEN` + `AUTH_TOKEN` and none of the three.
 
 The setup step now **aborts** (it used to "proceed anyway") if `/api/health` is not 200.
-Results land in `tests/load/results/<date>-<label>-<profile>-report.md` (committable) and
-`…-summary.json` (gitignored raw output). The label is in the file name *and* the report header.
+Results land in `tests/load/results/<date>T<time>Z-<label>-<profile>-report.md` (committable) and
+`…-summary.json` (gitignored raw output). The label is in the file name *and* the report header;
+the time (UTC) is there so that a second run on the same day never replaces the first one's files.
+An emulator target is written `127.0.0.1`, `localhost` or `[::1]`; any other raw address
+(`0.0.0.0`, `127.1`, a LAN IP) is refused, and the production project is refused wherever it
+appears in an emulator URL's path.
 Pinned by `node --test tests/load/target.test.mjs` (CI hard gate).
 
 **Is there a staging environment?** Not a usable one, as of 2026-10-13:
@@ -253,8 +273,26 @@ of this table said 132 / 12,420; it left out the one extra start per VU.)
 
 Expect roughly 8,000–10,000 real iterations in `full` (6 s mean sleep plus request latency). When
 the pool runs out k6 **aborts** rather than wrapping round. Employers get `maxActiveSlots` equal to
-their member count (50 each, `maxActiveSlotsSource: 'ops_override'`), so the employer slot cap is
-never the thing being measured.
+their member count (`maxActiveSlotsSource: 'ops_override'`), so the employer slot cap is never the
+thing being measured.
+
+**Which employer a member belongs to depends on the member's index only**
+(`employerIndexFor` in `tests/load/seed/pool.js`): members are dealt round-robin over 50 employers
+until each holds 50, then the next 50 employers start. `--count 200` is 50 employers of 4;
+`--count 12500` is 250 employers of 50. So **a pool can be grown while loans are open**: a larger
+`--count` appends members (and, past each 2,500, employers) and raises slot caps; it moves nobody.
+This was not true before 2026-10-13: the assignment was `index % employerCount` with the employer
+count derived from `--count`, so seeding 200 and then 12,600 moved almost every member to another
+employer under loans that still named the old one. The `--employers` flag, which could do the same
+by hand, was removed and is refused with that explanation. The layout itself changed with it
+(`--count 200` was 4 employers of 50), so **a pool seeded by the code from before 2026-10-13 must
+be torn down before it is seeded again**: seeding the new layout over it moves its members once,
+under whatever loans are open. No such pool is known to exist — nothing was ever seeded outside
+the emulator — but check `--teardown --dry-run` on a target you did not seed yourself. Two seeds
+must not run against one target at the same time (the "never lower a cap" check reads and then
+writes; it is not a transaction). A *smaller* `--count` deletes nothing
+(the members above it keep their accounts and documents) and never lowers a slot cap; only teardown
+removes anything.
 
 Two consequences worth knowing before reading a result:
 
@@ -337,7 +375,12 @@ The two setups:
 
 **H1. A non-production target.** None exists today (see above). Required of it:
 
-- a Firebase project that is not `vida-finance`, with the functions deployed from the commit under test;
+- a Firebase project that is not `vida-finance` **and whose project id does not contain `prod`**
+  (not `vida-prod-test`, not `funpay-preprod`). Decide this when the project is created — a
+  project id cannot be changed afterwards. The seed (`tests/load/seed/guard.mjs`) and the k6
+  script (`tests/load/target.js`) both treat any id containing `prod` as production and refuse it,
+  with no override: over-refusing costs a rename now, under-refusing costs real borrowers.
+  The functions are deployed there from the commit under test;
 - Firebase Auth → Sign-in method → **Email/Password enabled** (k6 signs pool members in with a password);
 - `firestore.indexes.json` deployed (`firebase deploy --only firestore:indexes --project <id>`);
 - `REDIS_URL` set for the functions, and the provider settings from the section above;
@@ -355,6 +398,11 @@ The two setups:
 4. The debug token is *not* what goes in the header. k6 exchanges it
    (`…/v1/projects/<project>/apps/<app id>:exchangeDebugToken`) for an App Check token and
    re-exchanges at 80% of its lifetime, so the 2-hour `full` profile outlives the 1-hour token.
+   A failed exchange is **not** retried on every iteration: each VU waits 5 s, then 10 s, 20 s …
+   up to 5 min before asking again, and keeps using the token it has. With no token at all, a
+   400 / 401 / 403 / 404 from the exchange (wrong debug token, app id, key or project) aborts the
+   run at once, and so do five failures in a row — otherwise every request would be a 401 that
+   uses up a pool member.
    To check the token by hand first (one request to the App Check API, not to the app):
 
    ```bash
@@ -378,20 +426,19 @@ real project** — the smoke run in step 5 is its first real test.
 | `POOL_SIZE` | The `--count` the pool was seeded with. |
 | `POOL_OFFSET` | First pool index to use (default 0). |
 | `LOAD_TEST_PASSWORD` | The password the pool was seeded with. |
-| `FIREBASE_API_KEY` | Web API key of the target project (sign-in, and the App Check exchange). |
-| `APP_CHECK_DEBUG_TOKEN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` | Debug token and what is needed to exchange it. |
+| `FIREBASE_API_KEY` | Web API key of the target project (sign-in, and the App Check exchange). Production's key is refused. |
+| `APP_CHECK_DEBUG_TOKEN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` | Debug token and what is needed to exchange it. Production's project id and app id are refused. |
 | `APP_CHECK_TOKEN` | Alternative: an already-exchanged token. Expires; smoke profile only. |
 | `FIREBASE_AUTH_EMULATOR_HOST` | Emulator only: sign in against the Auth emulator instead of Google. |
-| `PROFILE` | `smoke` or `full` (default). |
+| `PROFILE` | `smoke` or `full` (default), lower case. Any other value is refused at init (it used to run the full two hours). |
 | `AUTH_TOKEN` | Legacy, no pool: one uid, so one accepted request and then refusals. |
 
 #### Order of operations
 
-**0. Install k6** (v0.38 or newer; not installed on the dev machine as of 2026-10-13).
-macOS: `brew install k6`. Other systems: <https://grafana.com/docs/k6/latest/set-up/install-k6/>.
-Check with `k6 version`. Because k6 is not installed here, the script changes in this section are
-covered by node tests of the module k6 imports (`tests/load/seed/pool.js`) but **k6 itself has not
-run them yet** — the emulator run in step 2 is the place to find out.
+**0. Install k6** (v0.38 or newer). macOS: `brew install k6`. Other systems:
+<https://grafana.com/docs/k6/latest/set-up/install-k6/>. Check with `k6 version`. It was installed
+on the dev machine on 2026-10-13 (Homebrew, k6 v2.3.0) and the script ran under it for the first
+time that day, against the emulator only — see "Emulator smoke — 2026-10-13" below.
 
 **1. Dry run** — prints the plan; reads and writes nothing, needs no credentials:
 
@@ -415,21 +462,141 @@ REDIS_URL=redis://127.0.0.1:6390 TARGET_URL=http://127.0.0.1:5001/demo-vida-load
 ```
 
 The second command refuses to start if `UNDERWRITING_SERVICE_URL` or `ML_SERVICE_URL` is set in
-the shell or in a `functions/.env*` file: `firebase emulators:exec` hands both to the emulated
-functions, and the "local" check would then post synthetic applicants to the real service. Run it
-from a clean shell (`env -u UNDERWRITING_SERVICE_URL -u ML_SERVICE_URL -u INTERNAL_SECRET …`).
+the shell, in a `functions/.env*` file or in `functions/.secret.local`: the emulated functions are
+handed all three, and the "local" check would then post synthetic applicants to the real service.
+Run it from a clean shell (`env -u UNDERWRITING_SERVICE_URL -u ML_SERVICE_URL -u INTERNAL_SECRET …`).
 
-To drive k6 itself at the emulator, start it with `firebase emulators:start --only
-functions,firestore,auth --project demo-vida-load` (same `REDIS_URL`), seed with
-`FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 node
-tests/load/seed/seed-load-pool.mjs --count 200`, then:
+**To drive k6 itself at the emulator** (smoke profile; this is the sequence that was run on
+2026-10-13). Terminal 1 — Redis and the emulators, with the provider variables removed from the
+environment the functions inherit:
 
 ```bash
+redis-server --port 6390 --save '' &
+(cd functions && npm ci && npm run build)
+env -u UNDERWRITING_SERVICE_URL -u ML_SERVICE_URL -u INTERNAL_SECRET -u GOOGLE_APPLICATION_CREDENTIALS \
+  REDIS_URL=redis://127.0.0.1:6390 \
+  firebase emulators:start --only functions,firestore,auth --project demo-vida-load
+```
+
+Terminal 2 — seed, wait for the creation triggers, run, tear down:
+
+```bash
+export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
+node tests/load/seed/seed-load-pool.mjs --count 200
+sleep 15   # onEmployeeDocCreated runs once per member (claim + credit line)
+
 k6 run --env TARGET_URL=http://127.0.0.1:5001/demo-vida-load/us-central1 \
        --env FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
        --env LOAD_TEST_PASSWORD=loadtest-emulator-only-password \
        --env POOL_SIZE=200 --env PROFILE=smoke tests/load/pipeline-load-test.js
+
+node tests/load/seed/seed-load-pool.mjs --teardown
+redis-cli -p 6390 flushall   # this Redis is yours; it resets the 3/day counters for the next run
 ```
+
+The same run through npm — the preflight and k6 both read the shell here, so every value is a
+shell variable: `TARGET_URL=http://127.0.0.1:5001/demo-vida-load/us-central1
+FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 LOAD_TEST_PASSWORD=loadtest-emulator-only-password
+POOL_SIZE=200 npm run load-test:smoke`.
+
+Things the real run showed that are worth knowing before you start:
+
+- The Functions emulator prints *"Application Default Credentials detected. Non-emulated services
+  will access production using these credentials"* when `gcloud auth application-default login`
+  has been done on the machine. With a `demo-*` project there is no such project to reach, and
+  in the emulator log of the run (290 `requestLoan` executions and the seed's triggers) no call
+  to anything but `127.0.0.1` appears. It is still the reason the project id must be `demo-*` and
+  never a real one (`target.js` refuses an emulator URL that names the production project).
+- If ports 5001 / 8080 / 9099 are taken, pass `--config <file>` with other ports and use those in
+  the three variables. The 2026-10-13 run did (5011 / 8181 / 9109, emulator UI off).
+- A member that was already used does not always answer `DUPLICATE_LOAN_APPLICATION`. The credit
+  check runs before the open-loan guard, so when the first loan left less credit than the second
+  request asks for the answer is `INVALID_ARGUMENT` ("El monto excede tu crédito disponible").
+  The report counts the two separately.
+
+#### Emulator smoke — 2026-10-13 (what it does and does not prove)
+
+The first time `tests/load/pipeline-load-test.js` ran under k6. Report:
+`tests/load/results/2026-10-13-emulator-smoke-report.md`.
+
+**Setup.** k6 v2.3.0 (darwin/arm64), firebase-tools 15.26.0, Node 22, functions built from this
+branch; emulators `functions,firestore,auth`, project `demo-vida-load`; a local Redis; no
+`UNDERWRITING_SERVICE_URL`, `ML_SERVICE_URL` or `INTERNAL_SECRET` (setup A); pool of 200; `smoke`
+profile (5 minutes); App Check by the emulator-only unsigned placeholder.
+
+**Result — three full smoke runs, each on a freshly seeded pool with the Redis counters cleared.**
+
+| Run | Iterations | Sign-in 200 | `requestLoan` 200 | Checks | Failed | p50 / p95 / max |
+|---|---|---|---|---|---|---|
+| 1 (script as merged) | 90 | 90 | 90 | 362 / 362 | 0 | 65 ms / 177 ms / 5,996 ms |
+| 2 (after the report fixes below) | 90 | 90 | 90 | 362 / 362 | 0 | 49 ms / 299 ms / 1,145 ms |
+| 3 (final script, via `npm run load-test:smoke`) | 91 | 91 | 91 | 366 / 366 | 0 | 43 ms / 97 ms / 155 ms |
+
+Every accepted loan was `under_review` (the inline ML gate has no service to call). After run 3
+the emulator held 91 loans across all 50 employers, 91 `review_queue` rows, 182 `audit_log` rows,
+and Redis 91 `rl:loan:*` keys; teardown reported exactly those and left every collection empty.
+90–91 iterations against the ceiling of 137: in runs 1 and 2 (the two with raw k6 output) k6 never
+had more than 4 VUs running — the fifth starts only as the run ends — and run 2 peaked at 28
+requests in one minute.
+
+**Refusal paths, provoked on purpose** with a tiny `POOL_SIZE` on members that already held a loan
+(each run ends with k6's abort "User pool exhausted", exit 108, as designed):
+
+| What was done | Answer |
+|---|---|
+| 8 members used a second time | 5 × HTTP 400 `FAILED_PRECONDITION` `DUPLICATE_LOAN_APPLICATION`, 3 × HTTP 400 `INVALID_ARGUMENT` (amount over the credit left) |
+| 3 members, third call of the day | 3 × HTTP 400 `DUPLICATE_LOAN_APPLICATION` |
+| the same 3, fourth call | 3 × HTTP 429 `RESOURCE_EXHAUSTED` ("Too many loan requests today") |
+| 2 members, wrong pool password | 2 × sign-in HTTP 400, then 2 × HTTP 401 `UNAUTHENTICATED` |
+| `FIREBASE_PROJECT_ID=vida-finance` with a debug token; an emulator URL naming `vida-finance` | refused at init (exit 107), no request sent |
+
+**What the first run changed in the script.** Nothing failed — run 1 was 90 of 90. But its report
+showed three things that were not true, and they were fixed before runs 2 and 3:
+
+- "Per-Stage Latency" printed validation / Firestore / queue figures. No function sends the
+  `X-Stage-*-Ms` headers they were meant to come from; the script was filling them with 10% / 40% /
+  20% of the total. The section now reads "not instrumented", and the stage thresholds in
+  `config.js` are marked as passing on no data.
+- "2x target without errors: PASS" on a profile that never reaches the target rate. It is `N/A`
+  outside the `full` profile, and an emulator report says in its own text that it closes nothing.
+- Failed requests other than 429 / timeout / 5xx were not counted anywhere. The report now has
+  buckets for 401, `FAILED_PRECONDITION`, `INVALID_ARGUMENT`, "other" and failed pool sign-ins.
+
+**Zero failures is not a stable property of a smoke run.** At ~90 iterations one failed request
+is over the 1% threshold, and k6 then exits 99. A review re-run the same day (same setup, ports
+5031 / 8231 / 9139, load average ~150) measured 89 iterations, 88 accepted and 1 failed: the Auth
+emulator reset one sign-in connection (status 0), which the script counted as one sign-in failure
+and one HTTP 401. Since then a sign-in that gets no HTTP answer is sent once more
+(`sendWithOneTransportRetry`); that retry has unit tests only and has not been seen to fire in a
+run. The committed report above is run 3; a new run writes a time-stamped file and leaves it alone.
+
+Run 4, after those changes (same setup, ports 5041 / 8241 / 9141, via `npm run load-test:smoke`,
+load average 48 at the start and 157 at the end): 90 iterations, 90 accepted, 0 failed, no sign-in
+retried, p50 61 ms / p95 115 ms / max 2,286 ms; teardown removed 90 loans, 90 `review_queue` and
+180 `audit_log` rows. Report: `tests/load/results/2026-10-13T140725Z-emulator-smoke-report.md`.
+Under k6 the new refusals each stopped at init (exit 107, no request sent): `PROFILE=Full`,
+`FIREBASE_PROJECT_ID=447766605132`, a `0.0.0.0` target declared as staging, and an emulator URL
+with `%76ida-finance` in its path.
+
+**It proves:** the script loads and runs under a current k6; the seed, the k6 side and
+`requestLoan` agree on ids, amounts, sign-in and the callable protocol; one uid gives one accepted
+loan; the refusals above are told apart; teardown removes what a run leaves.
+
+**It does not prove — none of this was exercised:**
+
+- any latency or throughput of the platform. The numbers are one laptop's emulators, taken while
+  the machine was busy with other work (run 1's 6-second maximum is a single request); they are
+  not a baseline and must not be compared with a deployed run;
+- App Check. The emulator does not verify tokens, and the debug-token exchange (and its new
+  back-off) has still **never been run against a real project** — only its unit tests have run;
+- Google's sign-in endpoint and its quotas (the Auth emulator answered every sign-in);
+- the `full` profile: 28 VUs, ~12,000 members, two hours; Firestore contention and quotas; Cloud
+  Functions cold starts and concurrency; Redis over a network;
+- setup B, or any provider at all;
+- anything after the loan document exists (ops review, disbursement, notifications).
+
+**B8 stays open.** Only a `staging` or `production` report at the `full` profile can close it,
+and that still needs H1 and H2.
 
 **3. Seed the non-production target** (after H1):
 
@@ -440,10 +607,12 @@ node tests/load/seed/seed-load-pool.mjs --project <STAGING_PROJECT> --count 1250
 ```
 
 The seed refuses: the production project (hard-coded, no flag overrides it), any project id
-containing `prod`, a key that belongs to a different project, a missing `--project` when no
-emulator is configured (`GCLOUD_PROJECT` is not enough), and a half-configured emulator. It is
-idempotent — every id is `loadtest-emp-NNNNNN` / `loadtest-employer-NNNN` — and re-running it
-restores every member's credit line.
+containing `prod` (see H1), a key that belongs to a different project, a missing `--project` when
+no emulator is configured (`GCLOUD_PROJECT` is not enough), and a half-configured emulator. It is
+idempotent — every id is `loadtest-emp-NNNNNN` / `loadtest-employer-NNNN`, and member N always
+belongs to the same employer — and re-running it restores every member's credit line. Re-running
+it with a larger `--count` adds members without moving the existing ones, so it is safe while
+loans from an earlier run are still open ("uid-pool arithmetic" above).
 
 **4. Check the target** — `curl <TARGET_URL>/api/health`, and the provider variables above.
 
@@ -458,9 +627,12 @@ k6 run --env TARGET_URL=https://us-central1-<STAGING_PROJECT>.cloudfunctions.net
        --env POOL_SIZE=12500 --env PROFILE=smoke tests/load/pipeline-load-test.js
 ```
 
-Read the report before going on: `loans_succeeded` should be close to `loans_submitted`. All 401
-means App Check or sign-in; `UNAVAILABLE` means Redis; `rate_limited_requests` climbing means the
-members were already used today.
+Read the report before going on: `loans_succeeded` should be close to `loans_submitted`. The
+"Error Breakdown" names the cause: `Unauthenticated (401)` is App Check or sign-in (and "Pool
+sign-in failures" says which); `Refused (FAILED_PRECONDITION)` / `Refused (INVALID_ARGUMENT)` on
+every request means the members already hold a loan (tear down, or use `POOL_OFFSET`);
+`Rate limited (429)` means they were already used three times today; 5xx with `UNAVAILABLE` means
+Redis. "Per-Stage Latency" reads "not instrumented": only end-to-end latency is measured.
 
 **6. Stages.** Either teardown + re-seed (steps 7 and 3), or keep going past the members the
 smoke used: same command without `PROFILE=smoke`, plus `--env POOL_OFFSET=<n>` where `<n>` is
@@ -543,7 +715,7 @@ check the Cloud Monitoring request graph for the chosen night first.
 | Real-user impact | any alert from `docs/runbooks/alerting-runbook.md`, or a support report |
 | Firestore writes/sec | > 80% of quota (B5) |
 
-After the run: commit `tests/load/results/<date>-<label>-<profile>-report.md`; only a
+After the run: commit `tests/load/results/<date>T<time>Z-<label>-<profile>-report.md`; only a
 `production` or `staging` report at the `full` profile can close B8.
 
 ---

@@ -9,7 +9,10 @@ import {
   EMULATOR_DEFAULT_PROJECT,
   EMULATOR_PASSWORD,
   PRODUCTION_PROJECT_IDS,
+  PRODUCTION_PROJECT_NUMBER,
   SeedRefusal,
+  functionsProviderLeaks,
+  isFunctionsEnvFile,
   isProductionProjectId,
   parseArgs,
   resolvePassword,
@@ -36,6 +39,12 @@ test('isProductionProjectId', () => {
   for (const id of ['vida-finance-staging', 'demo-vida-load', 'funpay-stg', '', null, undefined]) {
     assert.equal(isProductionProjectId(id), false, String(id));
   }
+  // the project number names the same project to Google, and is the one in the web config
+  assert.ok(repo('public-v2/src/lib/firebase.ts').includes(`messagingSenderId: '${PRODUCTION_PROJECT_NUMBER}'`));
+  assert.equal(isProductionProjectId(PRODUCTION_PROJECT_NUMBER), true);
+  assert.equal(isProductionProjectId(` ${PRODUCTION_PROJECT_NUMBER} `), true);
+  assert.equal(isProductionProjectId(`9${PRODUCTION_PROJECT_NUMBER}`), false);
+  assert.throws(() => target(PRODUCTION_PROJECT_NUMBER, EMULATOR), /Refusing/);
 });
 
 test('default is the emulator, with a demo-* project', () => {
@@ -104,13 +113,21 @@ test('parseArgs: defaults and validation', () => {
   });
   const opts = parseArgs(['--count', '2800', '--project', 'vida-staging', '--dry-run', '--teardown']);
   assert.equal(opts.count, 2800);
-  assert.equal(opts.employers, 56);
+  assert.equal(opts.employers, 100); // 2 blocks of 50; see pool.js employerIndexFor
   assert.equal(opts.project, 'vida-staging');
   assert.ok(opts.dryRun && opts.teardown);
-  assert.equal(parseArgs(['--count', '10', '--employers', '1']).employers, 1);
-  for (const bad of [['--count', '0'], ['--count', 'x'], ['--count'], ['--employers', '0'], ['--count', '5', '--employers', '6'], ['--concurrency', '500']]) {
+  assert.equal(parseArgs(['--count', '10']).employers, 10);
+  for (const bad of [['--count', '0'], ['--count', 'x'], ['--count'], ['--concurrency', '500']]) {
     assert.throws(() => parseArgs(bad), SeedRefusal, bad.join(' '));
   }
+});
+
+test('parseArgs: --employers is gone, and says why (a chosen employer count reshuffles the pool)', () => {
+  for (const args of [['--employers', '5'], ['--count', '200', '--employers', '4']]) {
+    assert.throws(() => parseArgs(args), (err) => err instanceof SeedRefusal && /--employers was removed/.test(err.message) && /without moving/.test(err.message));
+  }
+  // and no other spelling sets it
+  assert.equal(parseArgs(['--count', '200']).employers, 50);
 });
 
 test('resolvePassword: emulator has a default, a real project never does', () => {
@@ -149,7 +166,7 @@ test('CLI --dry-run prints the plan and touches nothing (works with no credentia
   assert.match(out, /DRY RUN/);
   assert.match(out, /project: {3}vida-staging/);
   assert.match(out, /employees: 120 {2}\(loadtest-emp-000000 … loadtest-emp-000119\)/);
-  assert.match(out, /employers: 3 /);
+  assert.match(out, /employers: 50 /);
   assert.match(out, /--env POOL_SIZE=120/);
   assert.doesNotMatch(out, /SEED DONE/);
 
@@ -195,6 +212,24 @@ test('functionsProviderLeaks: an emulated requestLoan must not inherit a real un
     ]),
     ['UNDERWRITING_SERVICE_URL is set in functions/.env', 'ML_SERVICE_URL is set in functions/.env.local']
   );
+});
+
+test('functions/.secret.local counts as a file the emulated functions read', async () => {
+  for (const name of ['.env', '.env.local', '.env.demo-vida-load', '.env.vida-finance', '.secret.local']) {
+    assert.equal(isFunctionsEnvFile(name), true, name);
+  }
+  for (const name of ['.env.example', '.secret.local.example', '.envrc', '.eslintrc.js', 'package.json', '.secret', 'secret.local']) {
+    assert.equal(isFunctionsEnvFile(name), false, name);
+  }
+  assert.deepEqual(
+    functionsProviderLeaks({}, [{ name: 'functions/.secret.local', text: 'INTERNAL_SECRET=x\nML_SERVICE_URL=https://ml.example\n' }]),
+    ['ML_SERVICE_URL is set in functions/.secret.local']
+  );
+  // the check script picks its files with that predicate, not with its own `.env` prefix test
+  const { readFileSync } = await import('node:fs');
+  const script = readFileSync(new URL('./emulator-requestloan-check.mjs', import.meta.url), 'utf8');
+  assert.match(script, /readdirSync\(FUNCTIONS_DIR\)\s*\.filter\(isFunctionsEnvFile\)/);
+  assert.doesNotMatch(script, /startsWith\('\.env'\)/);
 });
 
 test('the emulator requestLoan check refuses before seeding when a provider URL is set', async () => {

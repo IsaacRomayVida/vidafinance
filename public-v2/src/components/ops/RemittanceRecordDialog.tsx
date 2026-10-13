@@ -7,8 +7,10 @@ import { formatCents, parsePesosToCents } from '../../lib/money';
 import {
   BANK_REFERENCE_MAX,
   bankReferenceProblem,
-  classifyRemittanceError,
+  formatIsoDate,
+  readRemittanceRefusal,
   receivedOnProblem,
+  remittanceRefusalText,
   todayInMexicoCity,
   type BankReferenceProblem,
   type ReceivedOnProblem,
@@ -40,7 +42,8 @@ const NO_ERRORS: FieldErrors = { amount: null, receivedOn: null, bankReference: 
  * the server re-checks all of them and is the one that knows about duplicates.
  */
 export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onRecorded }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === 'en' ? 'en-US' : 'es-MX';
   const [amount, setAmount] = useState('');
   const [receivedOn, setReceivedOn] = useState('');
   const [bankReference, setBankReference] = useState('');
@@ -53,22 +56,16 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
   const typedCents = parsePesosToCents(amount);
   const overpays = typedCents !== null && typedCents > remittance.aging.outstandingCents;
 
+  // The server answers a refusal with `details.reason`; the words come from
+  // this side, in the UI's language. Its English `message` is never shown.
   const describe = (err: unknown): { message: string; offerShared: boolean } => {
-    const kind = classifyRemittanceError(err);
-    switch (kind.kind) {
-      case 'duplicate_in_batch':
-        return { message: t('remit_err_dup_batch'), offerShared: false };
-      case 'duplicate_in_other_batch':
-        return { message: t('remit_err_dup_other', { batches: kind.batchIds.join(', ') }), offerShared: true };
-      case 'duplicate':
-        return { message: t('remit_err_dup'), offerShared: false };
-      case 'invalid':
-        return { message: t('remit_err_invalid', { detail: kind.detail }), offerShared: false };
-      case 'not_found':
-        return { message: t('remit_err_not_found_record'), offerShared: false };
-      default:
-        return { message: friendlyError(err), offerShared: false };
-    }
+    const refusal = readRemittanceRefusal(err);
+    return {
+      message: remittanceRefusalText(refusal, t, locale) ?? friendlyError(err),
+      // Only this one refusal has a way through: ops saying the transfer
+      // really did pay more than one batch.
+      offerShared: refusal.reason === 'bank-reference-in-other-batch',
+    };
   };
 
   const submit = async (sharedTransfer: boolean) => {
@@ -78,7 +75,7 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
       amount: cents === null ? 'invalid' : cents <= 0 ? 'positive' : null,
       // Read the clock again: a dialog left open over midnight must not keep
       // yesterday's "today".
-      receivedOn: receivedOnProblem(receivedOn, todayInMexicoCity()),
+      receivedOn: receivedOnProblem(receivedOn, todayInMexicoCity(), remittance.payPeriodStart),
       bankReference: bankReferenceProblem(bankReference),
     };
     setErrors(next);
@@ -118,7 +115,9 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
         ? t('remit_val_date_invalid')
         : errors.receivedOn === 'future'
           ? t('remit_val_date_future', { today })
-          : null;
+          : errors.receivedOn === 'before_period'
+            ? t('remit_val_date_before_period', { start: formatIsoDate(remittance.payPeriodStart, locale) })
+            : null;
   const referenceError =
     errors.bankReference === 'required'
       ? t('remit_val_reference_required')
@@ -130,7 +129,7 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
     <div className="ops-overlay" role="dialog" aria-modal="true" aria-labelledby="remit-record-title">
       <form ref={sheetRef} className="ops-card ops-sheet" onSubmit={onSubmit} noValidate>
         <h2 id="remit-record-title" className="ops-h3">{t('remit_dialog_record_title')}</h2>
-        <p className="ops-sub" style={{ marginBottom: 16 }}>
+        <p className="ops-sub">
           {t('remit_dialog_record_sub', {
             employer: employerLabel,
             batch: remittance.batchId,
@@ -138,7 +137,7 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
           })}
         </p>
 
-        <div className="ops-field" style={{ marginBottom: 12 }}>
+        <div className="ops-field">
           <label className="ops-label" htmlFor="remit-amount">{t('remit_field_amount')}</label>
           <input
             id="remit-amount"
@@ -156,7 +155,7 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
           {!amountError && overpays && <span className="ops-note">{t('remit_overpay_note')}</span>}
         </div>
 
-        <div className="ops-field" style={{ marginBottom: 12 }}>
+        <div className="ops-field">
           <label className="ops-label" htmlFor="remit-date">{t('remit_field_received_on')}</label>
           <input
             id="remit-date"
@@ -171,7 +170,7 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
           {dateError && <span id="remit-date-error" role="alert" className="ops-error">{dateError}</span>}
         </div>
 
-        <div className="ops-field" style={{ marginBottom: 16 }}>
+        <div className="ops-field">
           <label className="ops-label" htmlFor="remit-reference">{t('remit_field_reference')}</label>
           <input
             id="remit-reference"
@@ -193,11 +192,11 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
         </div>
 
         {serverError && (
-          <div role="alert" className="ops-toast error">
-            {serverError.message}
+          <div role="alert" className="ops-toast error ops-sheet-alert">
+            <span>{serverError.message}</span>
             {serverError.offerShared && (
               <>
-                <span className="ops-note" style={{ display: 'block', margin: '8px 0' }}>{t('remit_shared_question')}</span>
+                <span className="ops-note">{t('remit_shared_question')}</span>
                 <button type="button" className="ops-btn sm ghost" disabled={submitting} onClick={() => void submit(true)}>
                   {t('remit_shared_confirm')}
                 </button>
@@ -206,7 +205,7 @@ export function RemittanceRecordDialog({ remittance, employerLabel, onClose, onR
           </div>
         )}
 
-        <div className="ops-actions" style={{ justifyContent: 'flex-end', width: '100%', gap: 10 }}>
+        <div className="ops-actions end">
           <button type="button" className="ops-btn ghost" onClick={onClose} disabled={submitting}>{t('remit_cancel')}</button>
           <button type="submit" className="ops-btn on" disabled={submitting}>
             {submitting ? t('remit_submitting') : t('remit_submit_record')}

@@ -644,13 +644,15 @@ Follow-ups since (contracts and procedures: `docs/runbooks/payroll-remittances.m
 - Batches from before the ledger: `recordPayrollRemittance` creates the record on demand from
   `payrollDeductions`, and `scripts/migrations/004_backfill_payroll_remittances.ts` backfills
   the rest (dry run by default; not yet run against any real project).
-- `listPayrollRemittances` returns each record with its aging (`remittanceAging`).
+- `listPayrollRemittances` returns each record with its aging (`remittanceAging`), from one
+  ordered query paged with a cursor (oldest outstanding first).
+- `remittanceOverdueCheck` (scheduled daily) raises an unpaid batch on the ops Alerts page
+  (`incident_log`) and in Slack, once per record at 1, 16 and 31 days overdue.
 
 The ops screen that calls these is `/ops/remittances` (`public-v2/src/pages/PayrollRemittances.tsx`).
 
-Still open: scheduled alerting on a batch that stays unpaid — the list shows overdue records
-but nothing pushes them to anyone. The 7-day grace
-period behind `overdue` is a display default, not an agreed remittance term.
+Still open: the 7-day grace period behind `overdue` (and so behind the alert) is a display
+default, not an agreed remittance term.
 
 ---
 

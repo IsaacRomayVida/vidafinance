@@ -48,15 +48,17 @@ import { check, sleep, group } from 'k6';
 import exec from 'k6/execution';
 import { RAMP_STAGES, SMOKE_STAGES, THRESHOLDS } from './config.js';
 import { generateLoanApplication } from './helpers/synthetic-data.js';
-import { resolveTarget } from './target.js';
+import { resolveProfile, resolveTarget } from './target.js';
+import { resultsBaseName, stageLatencyLines } from './helpers/report.js';
 import {
   ACCEPTED_INITIAL_STATUSES,
   appCheckPlan,
-  appCheckRefreshAfterMs,
   buildPoolApplication,
+  createAppCheckTokenSource,
   poolConfigFromEnv,
   poolIndexFor,
   poolSignInUrl,
+  sendWithOneTransportRetry,
 } from './seed/pool.js';
 import {
   requestLatency,
@@ -74,6 +76,11 @@ import {
   rateLimited,
   timeouts,
   serverErrors,
+  unauthenticated,
+  refusedPrecondition,
+  refusedInvalidArgument,
+  otherFailures,
+  signInFailures,
   activeVUs,
 } from './helpers/metrics.js';
 
@@ -83,7 +90,9 @@ import {
 // unsigned-off production target. TARGET.label names every results file.
 const TARGET = resolveTarget(__ENV);
 const STAGING_URL = TARGET.url;
-const PROFILE = __ENV.PROFILE || 'full';
+// Throws at init on anything but 'smoke' or 'full' (unset = full): the stages
+// below and the report's verdict lines must read the same profile.
+const PROFILE = resolveProfile(__ENV);
 
 const stages = PROFILE === 'smoke' ? SMOKE_STAGES : RAMP_STAGES;
 
@@ -136,25 +145,19 @@ if (POOL && !LOAD_TEST_PASSWORD) {
 // placeholder, which only the emulator accepts).
 const APP_CHECK = appCheckPlan(__ENV, TARGET.label);
 // Module state is per VU in k6, so each VU holds and refreshes its own token.
-let appCheckCache = { token: '', expiresAt: 0 };
-
-function appCheckToken() {
-  if (APP_CHECK.kind === 'static') return APP_CHECK.token;
-  if (appCheckCache.token && Date.now() < appCheckCache.expiresAt) return appCheckCache.token;
-
-  const res = http.post(APP_CHECK.url, APP_CHECK.body, {
-    headers: { 'Content-Type': 'application/json' },
-    tags: { type: 'appcheck', name: 'appcheck-exchange' },
-  });
-  if (res.status !== 200) {
-    // The request that follows will be a 401, and is counted as one.
-    console.warn(`[appcheck] debug-token exchange failed: status=${res.status}`);
-    return appCheckCache.token;
-  }
-  const exchanged = JSON.parse(res.body);
-  appCheckCache = { token: exchanged.token, expiresAt: Date.now() + appCheckRefreshAfterMs(exchanged.ttl) };
-  return appCheckCache.token;
-}
+// A failed exchange backs off (5 s doubling to 5 min) instead of being retried
+// on every iteration, and a refusal that cannot heal stops the run — see
+// createAppCheckTokenSource in ./seed/pool.js.
+const appCheckToken = createAppCheckTokenSource(APP_CHECK, {
+  post: (url, body) =>
+    http.post(url, body, {
+      headers: { 'Content-Type': 'application/json' },
+      tags: { type: 'appcheck', name: 'appcheck-exchange' },
+    }),
+  now: () => Date.now(),
+  warn: (message) => console.warn(message),
+  abort: (message) => exec.test.abort(message),
+});
 
 /**
  * Headers for one request.
@@ -170,13 +173,19 @@ function getAuthHeaders(email) {
 
   // Each member is used once, so there is nothing to cache: one sign-in per
   // iteration, tagged `auth` so it stays out of the requestLoan thresholds.
-  const signInRes = http.post(
-    SIGN_IN_URL,
-    JSON.stringify({ email, password: LOAD_TEST_PASSWORD, returnSecureToken: true }),
-    { headers: { 'Content-Type': 'application/json' }, tags: { type: 'auth', name: 'auth-sign-in' } }
+  // A connection that drops before any HTTP answer is tried once more.
+  const signInRes = sendWithOneTransportRetry(
+    () =>
+      http.post(
+        SIGN_IN_URL,
+        JSON.stringify({ email, password: LOAD_TEST_PASSWORD, returnSecureToken: true }),
+        { headers: { 'Content-Type': 'application/json' }, tags: { type: 'auth', name: 'auth-sign-in' } }
+      ),
+    (first) => console.warn(`[auth] sign-in for ${email} got no answer (${first.error || 'status 0'}); trying once more`)
   );
   if (signInRes.status !== 200) {
     // Without a token the request below is a 401 — which is what gets counted.
+    signInFailures.add(1);
     console.warn(`[auth] sign-in failed for ${email}: status=${signInRes.status}`);
     return base;
   }
@@ -283,7 +292,10 @@ export default function () {
       // Non-JSON response
     }
 
-    // Extract per-stage timing from response headers (if server instruments them)
+    // Per-stage timing, ONLY when the target reports it. No function sends
+    // these headers today, so the stage trends stay empty and the report says
+    // "not instrumented". (This used to fill them with fixed fractions of the
+    // total — 10% / 40% / 20% — and print the result as measured stage latency.)
     if (res.headers['X-Stage-Validation-Ms']) {
       stageValidation.add(parseInt(res.headers['X-Stage-Validation-Ms'], 10));
     }
@@ -295,14 +307,6 @@ export default function () {
     }
     if (res.headers['X-Stage-Ml-Ms']) {
       stageMlScoring.add(parseInt(res.headers['X-Stage-Ml-Ms'], 10));
-    }
-
-    // If server doesn't provide stage headers, estimate from total
-    if (!res.headers['X-Stage-Validation-Ms']) {
-      // Use total latency as a single e2e measurement
-      stageValidation.add(Math.min(totalLatency * 0.1, 500));
-      stageFirestoreWrite.add(Math.min(totalLatency * 0.4, 3000));
-      stageQueueDispatch.add(Math.min(totalLatency * 0.2, 2000));
     }
 
     // Checks
@@ -344,13 +348,22 @@ export default function () {
       loansFailed.add(1);
       errorRate.add(1);
 
-      // Categorize failure
-      if (res.status === 429 || (responseBody && responseBody.error && responseBody.error.status === 'RESOURCE_EXHAUSTED')) {
+      // Categorize failure — exactly one bucket per failed request.
+      const errorStatus = responseBody && responseBody.error ? responseBody.error.status : null;
+      if (res.status === 429 || errorStatus === 'RESOURCE_EXHAUSTED') {
         rateLimited.add(1);
       } else if (res.status === 0 || res.error) {
         timeouts.add(1);
       } else if (res.status >= 500) {
         serverErrors.add(1);
+      } else if (res.status === 401 || errorStatus === 'UNAUTHENTICATED') {
+        unauthenticated.add(1);
+      } else if (errorStatus === 'FAILED_PRECONDITION') {
+        refusedPrecondition.add(1);
+      } else if (errorStatus === 'INVALID_ARGUMENT') {
+        refusedInvalidArgument.add(1);
+      } else {
+        otherFailures.add(1);
       }
 
       if (res.status !== 200) {
@@ -446,25 +459,18 @@ export function handleSummary(data) {
   lines.push(`│  Rate limited (429):   ${rl ? rl.values.count : 0}`);
   lines.push(`│  Timeouts:             ${to ? to.values.count : 0}`);
   lines.push(`│  Server errors (5xx):  ${se ? se.values.count : 0}`);
+  const count = (name) => (data.metrics[name] ? data.metrics[name].values.count : 0);
+  lines.push(`│  Unauthenticated (401): ${count('unauthenticated_requests')}   (App Check or sign-in)`);
+  lines.push(`│  Refused (FAILED_PRECONDITION): ${count('refused_precondition_requests')}   (open loan already / business rule)`);
+  lines.push(`│  Refused (INVALID_ARGUMENT):    ${count('refused_invalid_argument_requests')}   (amount over the credit left — a reused member)`);
+  lines.push(`│  Other:                ${count('other_failed_requests')}`);
+  lines.push(`│  Pool sign-in failures: ${count('auth_sign_in_failures')}`);
   lines.push('└──────────────────────────────────────────────────────────────────┘');
   lines.push('');
 
-  // Per-stage latencies
-  const stageMetrics = [
-    ['Validation', data.metrics['stage_latency_validation']],
-    ['Firestore Write', data.metrics['stage_latency_firestore_write']],
-    ['Queue Dispatch', data.metrics['stage_latency_queue_dispatch']],
-    ['ML Scoring', data.metrics['stage_latency_ml_scoring']],
-  ];
-
+  // Per-stage latencies — or the plain statement that none were measured.
   lines.push('┌─ Per-Stage Latency (P95) ────────────────────────────────────────┐');
-  for (const [name, metric] of stageMetrics) {
-    if (metric && metric.values) {
-      const p95 = (metric.values['p(95)'] || 0).toFixed(0);
-      const p50 = (metric.values['p(50)'] || 0).toFixed(0);
-      lines.push(`│  ${name.padEnd(20)} P50: ${p50.padStart(6)}ms  P95: ${p95.padStart(6)}ms`);
-    }
-  }
+  lines.push(...stageLatencyLines(data.metrics));
   lines.push('└──────────────────────────────────────────────────────────────────┘');
   lines.push('');
 
@@ -483,9 +489,18 @@ export function handleSummary(data) {
   lines.push('┌─ Acceptance Criteria ────────────────────────────────────────────┐');
   const p95 = reqDur && reqDur.values ? reqDur.values['p(95)'] : null;
   const errRate = errRateMetric ? errRateMetric.values.rate : 0;
-  lines.push(`│  P95 < 30s at target rate:  ${p95 !== null ? (p95 < 30000 ? '✓ PASS' : '✗ FAIL') : 'N/A'}  (${p95 ? (p95 / 1000).toFixed(1) + 's' : '-'})`);
+  // Only the full profile reaches the target rate and the 2x stage; a smoke
+  // run that printed "PASS" on those two lines would be claiming a load it never applied.
+  const full = PROFILE === 'full';
+  const notReached = `N/A  (the ${PROFILE} profile does not reach it)`;
+  const p95Verdict = p95 !== null ? (p95 < 30000 ? '✓ PASS' : '✗ FAIL') : 'N/A';
+  lines.push(`│  P95 < 30s:                 ${p95Verdict}  (${p95 ? (p95 / 1000).toFixed(1) + 's' : '-'})${full ? '' : `  — at ${PROFILE} load, not at the target rate`}`);
   lines.push(`│  Error rate < 1%:           ${errRate < 0.01 ? '✓ PASS' : '✗ FAIL'}  (${(errRate * 100).toFixed(2)}%)`);
-  lines.push(`│  2x target without errors:  ${errRate < 0.05 ? '✓ PASS' : '✗ FAIL'}`);
+  lines.push(`│  2x target without errors:  ${full ? (errRate < 0.05 ? '✓ PASS' : '✗ FAIL') : notReached}`);
+  if (TARGET.label === 'emulator') {
+    lines.push('│  EMULATOR run: this proves the script and the seeded pool work.');
+    lines.push('│  The latencies are this machine\'s, not the platform\'s; it closes nothing.');
+  }
   lines.push('└──────────────────────────────────────────────────────────────────┘');
   lines.push('');
 
@@ -494,8 +509,8 @@ export function handleSummary(data) {
   // Named by target so an emulator run can never be mistaken for a production
   // one. The .md report is the committable artifact (*.json / *.txt in
   // results/ are gitignored as raw output).
-  const stamp = summary.timestamp.slice(0, 10);
-  const base = `tests/load/results/${stamp}-${TARGET.label}-${PROFILE}`;
+  // The time of day is in the name too, so a second run never replaces a first.
+  const base = resultsBaseName(summary.timestamp, TARGET.label, PROFILE);
   return {
     stdout: textReport,
     [`${base}-summary.json`]: JSON.stringify(summary, null, 2),

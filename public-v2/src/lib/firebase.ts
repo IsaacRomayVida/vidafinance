@@ -3,6 +3,12 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
+import {
+  connectFirebaseEmulators,
+  emulatorAppOptions,
+  resolveEmulatorConfig,
+  type EmulatorConfig,
+} from './firebaseEmulators';
 
 declare global {
   var FIREBASE_APPCHECK_DEBUG_TOKEN: string | boolean | undefined;
@@ -18,7 +24,17 @@ const firebaseConfig = {
   measurementId: 'G-MLCEK7E9JM',
 };
 
-const app = initializeApp(firebaseConfig);
+// Local development against the Firebase emulators (opt-in, see
+// firebaseEmulators.ts). Every use of it below sits behind a literal
+// `import.meta.env.DEV`, which a production build replaces with `false`: the
+// emulator code is then unreachable and is dropped from the bundle. Keep the
+// literal at each site — hiding it behind a variable would ship the code.
+let emulator: EmulatorConfig | null = null;
+if (import.meta.env.DEV) {
+  emulator = resolveEmulatorConfig(import.meta.env);
+}
+
+const app = initializeApp(import.meta.env.DEV && emulator ? emulatorAppOptions(emulator) : firebaseConfig);
 
 // VID3-677 — App Check with reCAPTCHA Enterprise
 // Only initialize when site key is configured. If unset, Cloud Functions
@@ -27,7 +43,12 @@ const app = initializeApp(firebaseConfig);
 const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
 const appCheckDebugToken = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN as string | undefined;
 
-if (recaptchaSiteKey) {
+// In emulator mode App Check is set up by connectFirebaseEmulators (a local
+// stand-in token): reCAPTCHA would be a call to Google from a session that
+// must make none.
+if (import.meta.env.DEV && emulator) {
+  // nothing here on purpose
+} else if (recaptchaSiteKey) {
   if (import.meta.env.DEV && appCheckDebugToken) {
     globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = appCheckDebugToken;
   } else if (import.meta.env.DEV) {
@@ -53,3 +74,7 @@ if (recaptchaSiteKey) {
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+if (import.meta.env.DEV && emulator) {
+  connectFirebaseEmulators(app, { auth, db, storage }, emulator);
+}

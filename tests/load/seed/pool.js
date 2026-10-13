@@ -5,8 +5,9 @@
  *   - tests/load/pipeline-load-test.js (k6) READS it, by recomputing the same
  *     ids and amounts from an index. No pool file is passed between the two.
  *
- * Pure ESM with no k6 and no Node imports, for the same reason as ../target.js:
- * k6 runs it and `node --test tests/load/seed/pool.test.mjs` tests it.
+ * Pure ESM with no k6 and no Node imports (only ../target.js, which is the
+ * same), for the same reason as ../target.js: k6 runs it and
+ * `node --test tests/load/seed/pool.test.mjs` tests it.
  *
  * Why a pool at all — what requestLoan (functions/src/index.ts) demands of a caller:
  *   - a Firebase ID token whose effective role is `employee`;
@@ -19,6 +20,8 @@
  *   - `employers/<employerId>` with status `active`, and fewer open loans than
  *     its `maxActiveSlots`.
  */
+
+import { assertNoProductionIdentifiers } from '../target.js';
 
 /** Every id, email and employer code this pool creates starts with this. Teardown deletes nothing else. */
 export const POOL_PREFIX = 'loadtest-';
@@ -37,6 +40,14 @@ export const EMAIL_DOMAIN = 'loadtest.invalid';
 export const DEFAULT_POOL_SIZE = 12500;
 /** Keeps the per-employer slot-cap transaction from serialising the whole run on one employer. */
 export const EMPLOYEES_PER_EMPLOYER = 50;
+/**
+ * Employers per block. Members are dealt round-robin over EMPLOYER_STRIDE
+ * employers until each holds EMPLOYEES_PER_EMPLOYER, then the next block of
+ * employers starts (see employerIndexFor). 28 VUs at most run at once, so 50
+ * employers in rotation is ample.
+ */
+export const EMPLOYER_STRIDE = 50;
+const BLOCK_SIZE = EMPLOYER_STRIDE * EMPLOYEES_PER_EMPLOYER;
 
 // Mirrors of functions/src (pinned against the source by pool.test.mjs).
 export const MIN_LOAN_AMOUNT = 500;
@@ -90,8 +101,11 @@ export function employeeEmail(index) {
   return `${employeeUid(index)}@${EMAIL_DOMAIN}`;
 }
 
+/** How many employers a pool of `poolSize` members is spread over (the highest employer index in use, plus one). */
 export function employerCountFor(poolSize) {
-  return Math.max(1, Math.ceil(poolSize / EMPLOYEES_PER_EMPLOYER));
+  if (!Number.isInteger(poolSize) || poolSize < 1) throw new Error(`Pool size must be a positive integer, got ${poolSize}`);
+  const fullBlocks = Math.floor(poolSize / BLOCK_SIZE);
+  return fullBlocks * EMPLOYER_STRIDE + Math.min(EMPLOYER_STRIDE, poolSize % BLOCK_SIZE);
 }
 
 export function employerId(employerIndex) {
@@ -104,10 +118,22 @@ export function employerCode(employerIndex) {
   return `${EMPLOYER_CODE_PREFIX}${pad(employerIndex, 4)}`;
 }
 
-/** Round-robin, so consecutive iterations land on different employers. */
-export function employerIndexFor(index, employerCount) {
+/**
+ * Which employer a member belongs to — a function of the member's index ALONE.
+ *
+ * It used to be `index % employerCount`, and employerCount grew with the pool,
+ * so re-seeding with a larger --count moved almost every existing member to
+ * another employer: open loans kept the old `employerId` while the employee
+ * document and the employers' slot caps described the new layout.
+ *
+ * Now members are dealt in blocks of EMPLOYER_STRIDE * EMPLOYEES_PER_EMPLOYER
+ * (2,500). Inside a block it is round-robin over that block's 50 employers, so
+ * consecutive iterations still land on different employers; a bigger pool only
+ * appends members (and, past a block boundary, employers) and never moves one.
+ */
+export function employerIndexFor(index) {
   assertIndex(index);
-  return index % employerCount;
+  return Math.floor(index / BLOCK_SIZE) * EMPLOYER_STRIDE + (index % EMPLOYER_STRIDE);
 }
 
 export function profileFor(index) {
@@ -188,8 +214,8 @@ export function isPoolRfc(rfc) {
  * `employees/<uid>` exactly as the seed writes it.
  * `createdAt` is supplied by the caller (a server timestamp) so this stays pure.
  */
-export function buildEmployeeDoc(index, employerCount) {
-  const employerIndex = employerIndexFor(index, employerCount);
+export function buildEmployeeDoc(index) {
+  const employerIndex = employerIndexFor(index);
   const creditLimit = creditLimitFor(index);
   const name = `Load Test ${pad(index, 6)}`;
   return {
@@ -243,10 +269,13 @@ export function buildEmployerDoc(employerIndex, slots) {
   };
 }
 
-/** How many of `poolSize` employees round-robin onto employer `employerIndex`. */
-export function slotsFor(employerIndex, poolSize, employerCount) {
-  const base = Math.floor(poolSize / employerCount);
-  return base + (employerIndex < poolSize % employerCount ? 1 : 0);
+/** How many of the first `poolSize` members employerIndexFor() puts on employer `employerIndex`. Never shrinks as the pool grows. */
+export function slotsFor(employerIndex, poolSize) {
+  assertIndex(employerIndex);
+  const block = Math.floor(employerIndex / EMPLOYER_STRIDE);
+  const lane = employerIndex % EMPLOYER_STRIDE;
+  const inBlock = Math.max(0, Math.min(BLOCK_SIZE, poolSize - block * BLOCK_SIZE));
+  return Math.floor(inBlock / EMPLOYER_STRIDE) + (lane < inBlock % EMPLOYER_STRIDE ? 1 : 0);
 }
 
 // ── k6 side ─────────────────────────────────────────────────────────────────
@@ -285,11 +314,17 @@ export function buildPoolApplication(index) {
  *   staging     FIREBASE_AUTH_EMULATOR_HOST must be unset — a leftover one
  *               yields tokens the deployed target rejects (100% 401).
  *
+ * And, before any of that: a production project id, app id or Web API key in
+ * the environment is refused whatever the target is. TARGET_URL says where
+ * requestLoan is called; FIREBASE_API_KEY says which project the pool's
+ * passwords are sent to.
+ *
  * @param {Record<string, string|undefined>} env
  * @param {'emulator'|'staging'|'production'} targetLabel  from ../target.js
  * @returns {string} the sign-in URL (see signInUrl)
  */
 export function poolSignInUrl(env, targetLabel) {
+  assertNoProductionIdentifiers(env, 'to sign the load-test pool in');
   const emulatorHost = env.FIREBASE_AUTH_EMULATOR_HOST || '';
   if (targetLabel === 'production') {
     throw new Error(
@@ -364,13 +399,25 @@ export const EMULATOR_APP_CHECK_TOKEN =
  *                          FIREBASE_PROJECT_ID, FIREBASE_APP_ID, FIREBASE_API_KEY.
  *   (emulator, neither)    the unsigned placeholder above.
  *
+ * Production identifiers (FIREBASE_PROJECT_ID=vida-finance, the production app
+ * id or Web API key — ../target.js productionIdentifiers) are refused:
+ *   - always for the debug-token exchange. A debug token registered on
+ *     production is a standing bypass of App Check there; this script will not
+ *     be the reason one exists;
+ *   - for any run whose target is not production, where they can only be a
+ *     leftover from another shell.
+ * The signed-off production smoke (runbook § Production) passes an
+ * already-exchanged APP_CHECK_TOKEN and needs none of the three.
+ *
  * @param {Record<string, string|undefined>} env
  * @param {'emulator'|'staging'|'production'} targetLabel  from ../target.js
  * @returns {{ kind: 'static', token: string } | { kind: 'exchange', url: string, body: string }}
  */
 export function appCheckPlan(env, targetLabel) {
+  if (targetLabel !== 'production') assertNoProductionIdentifiers(env, `a ${targetLabel} run`);
   if (env.APP_CHECK_TOKEN) return { kind: 'static', token: env.APP_CHECK_TOKEN };
   if (env.APP_CHECK_DEBUG_TOKEN) {
+    assertNoProductionIdentifiers(env, 'to exchange an App Check debug token');
     const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_APP_ID', 'FIREBASE_API_KEY'].filter((name) => !env[name]);
     if (missing.length > 0) {
       throw new Error(`APP_CHECK_DEBUG_TOKEN needs ${missing.join(', ')} to be exchanged for an App Check token.`);
@@ -395,6 +442,121 @@ export function appCheckRefreshAfterMs(ttl) {
   const m = /^(\d+(?:\.\d+)?)s$/.exec(String(ttl));
   const seconds = m ? Number(m[1]) : 1800;
   return Math.max(60, seconds * 0.8) * 1000;
+}
+
+/** First wait after a failed debug-token exchange; doubles on each further failure up to the maximum. */
+export const APP_CHECK_BACKOFF_BASE_MS = 5000;
+export const APP_CHECK_BACKOFF_MAX_MS = 5 * 60 * 1000;
+/** Consecutive failed exchanges, with no token ever obtained, after which the run is stopped. */
+export const APP_CHECK_GIVE_UP_AFTER = 5;
+
+export function appCheckBackoffMs(consecutiveFailures) {
+  const n = Math.max(1, Math.floor(consecutiveFailures));
+  return Math.min(APP_CHECK_BACKOFF_MAX_MS, APP_CHECK_BACKOFF_BASE_MS * 2 ** Math.min(n - 1, 20));
+}
+
+/**
+ * The X-Firebase-AppCheck value for each request of one VU (k6 module state is
+ * per VU, so each VU builds its own source).
+ *
+ * The script used to call the exchange endpoint again on EVERY iteration once
+ * an exchange had failed — up to 28 VUs asking firebaseappcheck.googleapis.com
+ * every 5 s for as long as the token was wrong. Now:
+ *   - a failed exchange is not retried before appCheckBackoffMs() has passed
+ *     (5 s, 10 s, 20 s … 5 min); meanwhile the last token is reused if there is
+ *     one (it is refreshed at 80% of its life, so it usually still has 20% left);
+ *   - a 400 / 401 / 403 / 404 with no token in hand cannot heal by waiting
+ *     (wrong token, app id, key or project): the run is aborted at once;
+ *   - APP_CHECK_GIVE_UP_AFTER failures in a row with no token ever obtained
+ *     abort the run too. Without a token every request is a 401 that burns a
+ *     pool member and measures nothing.
+ *
+ * Pure: the HTTP call, the clock and the abort are injected, so
+ * pool.test.mjs drives the real logic under node.
+ *
+ * @param {{ kind: 'static', token: string } | { kind: 'exchange', url: string, body: string }} plan  from appCheckPlan
+ * @param {object} deps
+ * @param {(url: string, body: string) => { status: number, body: string }} deps.post
+ * @param {() => number} deps.now  milliseconds
+ * @param {(message: string) => void} [deps.warn]
+ * @param {(message: string) => void} deps.abort  stops the whole run (k6: exec.test.abort)
+ * @returns {() => string} the token to send; '' when there is none (that request will be a 401)
+ */
+export function createAppCheckTokenSource(plan, { post, now, warn = () => {}, abort }) {
+  if (plan.kind === 'static') return () => plan.token;
+
+  let token = '';
+  let refreshAt = 0;
+  let failures = 0;
+  let retryAt = 0;
+  let aborted = false;
+  // k6's abort throws, so nothing runs after it there. An injected abort that
+  // returns must still be called once, and the endpoint left alone afterwards.
+  const stop = (message) => {
+    aborted = true;
+    abort(message);
+  };
+
+  return function appCheckToken() {
+    if (aborted) return token;
+    const t = now();
+    if (token && t < refreshAt) return token;
+    if (t < retryAt) return token; // backing off
+
+    let status = 0;
+    let exchanged = null;
+    try {
+      const res = post(plan.url, plan.body);
+      status = res.status;
+      if (status === 200) exchanged = JSON.parse(res.body);
+    } catch {
+      exchanged = null;
+    }
+
+    if (exchanged && typeof exchanged.token === 'string' && exchanged.token) {
+      token = exchanged.token;
+      refreshAt = t + appCheckRefreshAfterMs(exchanged.ttl);
+      failures = 0;
+      retryAt = 0;
+      return token;
+    }
+
+    failures += 1;
+    const wait = appCheckBackoffMs(failures);
+    retryAt = t + wait;
+    warn(`[appcheck] debug-token exchange failed: status=${status}; next attempt in ${Math.round(wait / 1000)}s`);
+    if (!token) {
+      if ([400, 401, 403, 404].includes(status)) {
+        stop(
+          `App Check debug-token exchange was refused (HTTP ${status}). Waiting will not fix a wrong debug token, ` +
+            'app id, API key or project — check them against docs/runbooks/scaling.md § H2.'
+        );
+      } else if (failures >= APP_CHECK_GIVE_UP_AFTER) {
+        stop(`App Check debug-token exchange failed ${failures} times in a row (last HTTP ${status}); no token to send.`);
+      }
+    }
+    return token;
+  };
+}
+
+/**
+ * One request, sent again ONCE when the first attempt got no HTTP answer at
+ * all (k6 reports status 0: connection reset, refused, timed out). A sign-in
+ * is safe to repeat, and at smoke scale (~90 iterations) a single reset
+ * connection is already over the 1% error threshold — a reviewer's re-run on
+ * 2026-10-13 failed on exactly one Auth-emulator reset. Any HTTP status,
+ * including 4xx and 5xx, is an answer and is returned as it is.
+ *
+ * @template {{ status: number }} R
+ * @param {() => R} send
+ * @param {(first: R) => void} [onRetry]
+ * @returns {R}
+ */
+export function sendWithOneTransportRetry(send, onRetry = () => {}) {
+  const first = send();
+  if (first.status !== 0) return first;
+  onRetry(first);
+  return send();
 }
 
 /**

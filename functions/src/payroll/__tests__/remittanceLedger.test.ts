@@ -4,9 +4,12 @@
  * every function here takes what it needs as an argument.
  */
 import {
+  REMITTANCE_ALERT_THRESHOLD_DAYS,
   bankReferenceDocId,
   batchFromBatchDoc,
+  calendarDaysBefore,
   calendarDaysBetween,
+  remittanceAlertThreshold,
   expectedFromDeductionRows,
   expectedRemittanceFields,
   isRealCalendarDate,
@@ -249,5 +252,50 @@ describe('remittanceAging', () => {
 
   it('is not overdue before the period has ended', () => {
     expect(remittanceAging(doc(), '2026-06-25')).toMatchObject({ daysSincePeriodEnd: -6, daysOverdue: 0, overdue: false });
+  });
+});
+
+describe('calendarDaysBefore', () => {
+  it('steps back across month, year and leap-day boundaries', () => {
+    expect(calendarDaysBefore('2026-07-20', 7)).toBe('2026-07-13');
+    expect(calendarDaysBefore('2026-07-20', 0)).toBe('2026-07-20');
+    expect(calendarDaysBefore('2026-03-01', 1)).toBe('2026-02-28');
+    expect(calendarDaysBefore('2024-03-01', 1)).toBe('2024-02-29');
+    expect(calendarDaysBefore('2026-01-03', 7)).toBe('2025-12-27');
+  });
+
+  it('is the exact edge of "overdue": the cutoff date itself is the last day still in grace', () => {
+    const today = '2026-07-20';
+    const cutoff = calendarDaysBefore(today, 7);
+    expect(remittanceAging({ expectedCents: 1, receivedCents: 0, payPeriodEnd: cutoff }, today).overdue).toBe(false);
+    expect(
+      remittanceAging({ expectedCents: 1, receivedCents: 0, payPeriodEnd: calendarDaysBefore(cutoff, 1) }, today).overdue,
+    ).toBe(true);
+  });
+});
+
+describe('remittanceAlertThreshold', () => {
+  it.each([
+    [0, null],
+    [1, 1],
+    [15, 1],
+    [16, 16],
+    [30, 16],
+    [31, 31],
+    [400, 31],
+  ])('%i day(s) overdue → %s', (daysOverdue, threshold) => {
+    expect(remittanceAlertThreshold(daysOverdue)).toBe(threshold);
+  });
+
+  it('has one threshold per overdue aging bucket, at its lower edge', () => {
+    expect([...REMITTANCE_ALERT_THRESHOLD_DAYS]).toEqual([1, 16, 31]);
+    const bucketAt = (daysOverdue: number) =>
+      remittanceAging(
+        { expectedCents: 1, receivedCents: 0, payPeriodEnd: '2026-01-01' },
+        calendarDaysBefore('2026-01-01', -daysOverdue),
+        0,
+      ).bucket;
+    expect(REMITTANCE_ALERT_THRESHOLD_DAYS.map(bucketAt)).toEqual(['overdue_1_15', 'overdue_16_30', 'overdue_31_plus']);
+    expect(REMITTANCE_ALERT_THRESHOLD_DAYS.map((d) => bucketAt(d - 1))).toEqual(['current', 'overdue_1_15', 'overdue_16_30']);
   });
 });
