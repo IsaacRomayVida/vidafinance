@@ -34,7 +34,7 @@ Measured 2026-08-03 against `4581cd6`. Reproduce with the command in the evidenc
 | # | Item | State | Evidence |
 |---|---|---|---|
 | A1 | Full CI green on `main` | ✅ | Run `30798414583` — **10/10 jobs**, incl. both HARD gates (Firestore Rules, Loan Flow E2E). `gh run view 30798414583` |
-| A2 | Production deploy succeeds | ✅ | Run `30798414554` — functions, rules, indexes, hosting all `Deploy complete!`. First fully green deploy since 2026-07-31 (see D1) |
+| A2 | Production deploy succeeds | ✅ | Run `30798414554` — functions, rules, indexes, hosting all `Deploy complete!`. Not the first green one: that was `30793707586` (2026-08-03 ~08:12Z), the first since 2026-07-31 (see D1) |
 | A3 | ESLint + TypeScript zero errors | ✅ | CI job *Lint, Typecheck & Test* + *Frontend Lint, Typecheck & Build*, both green in `30798414583` |
 | A4 | Unit / integration / rules tests pass | ✅ | CI `30798414583`; `functions` suite 431/431 local at `361b09c` |
 | A5 | No `continue-on-error` in CI — every suite is a hard gate | ✅ | `grep -n continue-on-error .github/workflows/ci.yml` → 2 hits, **both comments forbidding it**, zero directives |
@@ -79,7 +79,7 @@ live-infrastructure and third-party facts. They are listed unticked on purpose.
 | B5 | Firestore write quota raised above the 500/sec default | Isaac / ops | GCP quota console |
 | B6 | Hosting traffic split (90% React / 10% legacy) | Isaac / ops | Firebase Hosting runtime config |
 | B7 | Alerting rules configured **and a test alert delivered** | Isaac / ops | Delivery is observable only in the alert sink |
-| B8 | Load test passed at 2x target throughput | Isaac / ops | No load-test artifact committed. If one exists, commit the report and promote this to table A |
+| B8 | Load test passed at 2x target throughput | Isaac / ops | **Not run anywhere.** No artifact in `tests/load/results/`. 2026-10-13: the script no longer defaults to production (it did); runnable once App Check token + seeded employee pool exist — see D3 and `docs/runbooks/scaling.md` § Load test. Only a `staging`/`production` `full`-profile report can close it |
 | B9 | Lighthouse ≥90 on marketing pages | Frontend owner | **Measured, and it fails on performance.** 2026-10-13, local Chrome, LHCI 0.15.1 mobile defaults, `VITE_LAUNCH_MODE=live`, median of 3: `/` perf 0.72, `/employers` 0.74, `/employees` 0.71, `/about` 0.73 (LCP 5–7 s); a11y 0.95–0.96, best-practices 1.0, SEO 0.91. Now in CI (A12). Needs a perf fix, then promote the `warn` to `error` |
 | B10 | The 5 live Railway services actually return 200 | Isaac / ops | A10 proves the route **exists in code**; only prod proves it **answers**. Do not conflate these — v1.7 did |
 | B11 | Champion/challenger/autoencoder models deployed; PSI-CSI baselines saved | Isaac / ops | Model registry state is external. `docs/ML_MODEL_STATUS.md` is the closest in-tree record |
@@ -103,13 +103,103 @@ precisely what v1.7 encoded.
 
 ## D. Open gaps found while measuring
 
-**D1 — The deploy blocker cleared itself; nobody would have noticed.** *(still open — needs Isaac /
-ops: the cause lives in GCP billing/IAM history, not in this repo)*
+**D1 — Two 403s blocked prod deploys for ~25 h; neither cleared itself, and the second left prod
+half-deployed.** *(diagnosed 2026-10-13 — the original v1.8 text is kept below and is wrong in
+several places, see the update; the billing half still needs Isaac to confirm)*
 Production deploys failed for ~3 days on an HTTP 403 write refusal. Run `30798414554` (2026-08-03
 08:42Z) shows the preflight canary getting **200** and the full deploy landing. No config change
 was made on our side, so the fix was upstream — billing or IAM. Worth confirming *which*, because
 an unexplained recovery can un-recover. The preflight canary itself is the win: it aborts before
-any partial write, so three days of failure changed nothing in prod.
+any partial write, so three days of failure changed nothing in prod. *(Wrong for the index phase —
+see item 3 of the update.)*
+
+*Update 2026-10-13.* Re-measured from every `main` push run of *VIDA Platform — Deploy*
+2026-07-28..08-04 (`gh run list --workflow 246929693 --created …`, then `gh run view <id> --log-failed`)
+plus read-only `gcloud` on `vida-finance`. Several statements above were wrong: it was **~25 h, not
+~3 days**, it was **two different 403s back to back**, neither "fixed itself", and the first fully green
+deploy was `30793707586` (2026-08-03 ~08:12Z), not `30798414554`, and the canary did **not** keep
+prod untouched: it protected only the billing phase, and the index phase left prod partly deployed for
+~14 h, 2026-08-02 18:19Z → 08-03 08:12Z (item 3). The 2026-07-30 failures are unrelated
+(`onContactCreated` trigger-type change, no 403). No `main` deploy ran between the last good one,
+`30593318133` (2026-07-31 00:21Z), and 2026-08-02 05:38Z. *Deploy Firebase* (245647385) ran once in the
+window (2026-07-30, dispatch, green).
+
+1. **Billing refusal on Cloud Functions writes — 2026-08-02 05:42Z → 17:42Z (observed).** Every
+   functions upload got
+   `POST cloudfunctions.googleapis.com/v2/projects/***/locations/us-central1/functions:generateUploadUrl`
+   → `HTTP Error: 403, Write access to project '***' was denied: please check billing account associated
+   and retry`. First seen in `30734473564` (05:42Z, 256 identical 403s, then the 6 h job limit); last
+   seen in `30759300648` (preflight canary 403 at 17:42Z). The next run, `30760060720`, proved the
+   billing refusal had cleared: canary **200** at 18:04:00Z ("Preflight OK … (HTTP 200)"). It then
+   skipped `storage.rules` (unchanged), uploaded `firestore.rules` (not released — no "released rules"
+   line), and at 18:04:05Z failed on the index 403 of (2) below and exited 1. **No function deployed
+   in that run.** The first function writes that landed were in `30760666827` (18:19:47Z, run later
+   cancelled), then `30760796507` (18:23Z, cancelled) and `30761707373` (18:48Z). `deploy.yml` did not change in between (the only
+   commit, `1cf01b6`, is app code, rules and an index — no credentials or API calls), and the secret `FIREBASE_SERVICE_ACCOUNT_PRODUCTION`
+   was last set 2026-03-22 (`gh secret list`), so the same principal went from refused to accepted.
+   During the outage `billingInfo` reported `billingEnabled: true` (commit `e8f0ca4`, run `30756695646`)
+   and Firestore REST said "requires billing to be enabled" (commit `030b993`). Today:
+   `gcloud billing projects describe vida-finance` → `billingAccounts/01B681-29512A-745C5D`,
+   `billingEnabled: true`. **Strongest supported hypothesis:** the linked billing account was in a bad
+   state (suspended / payment failed / delinquent) without being unlinked, and a human cleared it on
+   Sunday 2026-08-02 between 17:42Z and ~18:03Z. **Not proven** — the deploy SA cannot read the
+   billing account or any audit logs (`gcloud billing accounts describe` and `gcloud logging read` both
+   `PERMISSION_DENIED`). **Missing evidence, and who can get it:** Isaac (`roles/owner`), or whoever
+   administers billing account `01B681-29512A-745C5D` — its payment / transaction history and any
+   "account suspended / reinstated" emails for 2026-07-31..08-02, and its audit log
+   (`gcloud logging read 'timestamp>="2026-07-31T00:00:00Z" AND timestamp<="2026-08-02T19:00:00Z"'
+   --billing-account=01B681-29512A-745C5D`). That also gives the true start, which runs cannot: anywhere
+   between 07-31 00:21Z and 08-02 05:42Z.
+2. **IAM refusal on Firestore index creation — 2026-08-02 18:04Z → 2026-08-03 07:19Z.** Once
+   functions were writable, the index step got
+   `POST firestore.googleapis.com/v1/projects/***/databases/(default)/collectionGroups/audit_log/indexes`
+   → `HTTP Error: 403, The caller does not have permission` in every run that reached it — 32 runs,
+   `30760060720` … `30791906109`, last at 07:19:22Z. **Root cause (proven):** a latent IAM gap exposed by code. `1cf01b6`
+   (#402, 2026-08-02 17:58Z) was the first commit in the window to add a composite index (on
+   `audit_log`); before it, the index step was a no-op that "deployed successfully" even mid-billing
+   outage (e.g. `30751081837` 14:02Z, `30757753296` 17:00Z), because the deploy SA could list indexes but
+   not create them. It cleared with **no repo change** (`d1193f1`→`01585bc` touch only `ml-service`),
+   and `30793707586` logged `deployed indexes … successfully` at 08:12:03Z. Today
+   `gcloud projects get-iam-policy vida-finance` shows `roles/datastore.indexAdmin` bound to
+   `firebase-adminsdk-fbsvc@vida-finance.iam.gserviceaccount.com` (the only non-owner principal holding
+   it; the fix #414 had asked for exactly this grant). So someone granted it between 07:19Z and 08:12Z on
+   2026-08-03. Who and exactly when is in the project's Admin Activity log (kept 400 days), readable by
+   Isaac: `gcloud logging read 'protoPayload.methodName="SetIamPolicy" AND
+   timestamp>="2026-08-03T07:00:00Z" AND timestamp<="2026-08-03T08:15:00Z"' --project=vida-finance`.
+
+3. **What the canary did and did not protect — the original "changed nothing in prod" is wrong.** The
+   preflight canary probes Cloud Functions writes only. It held through phase (1): no billing-phase run
+   wrote anything (`30734473564` … `30759300648`). It could not see the index 403, because index creation
+   is a different permission, so from 18:04Z every run passed the canary and then wrote part of a
+   deploy before failing. Measured from the run logs (`gh run view <id> --log`, first matching line):
+
+   | Run | Functions (`Successful … operation`) | `firestore.rules` released | Hosting released | Index 403 |
+   |---|---|---|---|---|
+   | `30760060720` | — | — (uploaded only) | — | 18:04:05Z |
+   | `30760666827` (cancelled) | from 18:19:47Z | — | — | — |
+   | `30761707373` | from 18:48:00Z | 20:06:50Z | — | 20:06:53Z |
+   | `30764142125` | from 20:09:29Z | 20:23:38Z | — | 20:23:41Z |
+   | `30765287665` (`913987c`, #414) | from 20:26:14Z | 20:40:30Z | **20:40:40Z** | 20:40:33Z |
+   | 27 more failing runs `30765887091` … `30790896142`, each the same shape as `30765287665` (`30781964666` failed in unit tests and never deployed) | | | | |
+   | `30791906109` (last failure) | from 07:04:43Z | 07:19:19Z | 07:19:29Z | 07:19:22Z |
+
+   (Run order and step order changed under us: #412 batched function deploys, and #414 stopped an
+   index 403 from blocking hosting.) So prod was **not** untouched. Two windows of mixed state:
+   - **2026-08-02 18:19:47Z → 20:40:40Z (~2 h 20 m): new Cloud Functions, then (from 20:06:50Z) new
+     Firestore rules, against the hosting release from 2026-07-31.** That is backend-ahead-of-frontend,
+     the skew the deploy order is meant to avoid. Nobody checked what the old frontend did against it.
+   - **2026-08-02 20:40:40Z → 2026-08-03 08:12:03Z (~11.5 h): everything current except Firestore
+     indexes.** Any query needing the new `audit_log` composite index (#402) would have failed with
+     `FAILED_PRECONDITION` until `30793707586` created it.
+
+   What this means for launch: the canary guards only against a refused *functions* write. It does not
+   make a deploy atomic, and any other permission or quota failure after it leaves prod partly deployed.
+   The job does fail red in that case (every run above exited 1), so it is not silent, but "red" here
+   means "half shipped", not "nothing shipped". Whoever owns deploys should treat a red deploy as a
+   live prod change to check, not as a no-op.
+
+Remaining action for D1 to close: Isaac confirms (1) from billing history and puts an alert on that
+billing account's payment state, since nothing in this repo can see it coming.
 
 **D2 — Launch monitoring covers 5 services; 7 exist, and the 2 omitted are the important ones.**
 *(closed in code 2026-10-13 — see the update at the end of this item)*
@@ -127,10 +217,18 @@ an unset URL env var is recorded as `unconfigured` with no critical incident (`R
 is still sourced from a possibly-empty secret in `deploy.yml`). Evidence:
 `cd functions && npx jest src/scheduled/__tests__/systemHealthCheck.test.ts src/__tests__/duplicateFunctionDefinitions.test.ts`;
 `npx jest services/shared/health-monitor.test.js` (now a CI hard gate).
-Still needing a human: registry-service's public domain is not recorded in
-`scripts/production-endpoints.json`, so the external uptime monitors in
-`docs/runbooks/uptime-monitoring.md` and `docs/monitoring/README.md` do not list it, and only the
-`REGISTRY_SERVICE_URL` secret knows it. Alert *delivery* for either service remains B7.
+*Update 2026-10-13 (domain).* registry-service's public domain is now recorded:
+`scripts/production-endpoints.json` → `registry.url` =
+`https://registry-service-funpay-production-1d23.up.railway.app` (source: commit `433312e`, which
+moved the registry into FunPay's Railway project and set `REGISTRY_SERVICE_URL` to it; live check
+the same day, one `GET /health` → **200** `{"status":"ok","service":"vida-registry-service","db":true}`).
+It is a separate `registry` key, not a `services` entry, so `deploy.yml`'s functions/.env loop and
+`recover-production-services.mjs` do not pick it up. `scripts/check-production-health.mjs` (run by
+`verify-production-live.yml`) now probes it as `canonical:registry-service`, and a
+`REGISTRY_SERVICE_URL` secret that drifts from it gates on its own health. Listed in
+`docs/runbooks/uptime-monitoring.md` (row 8, the UptimeRobot loop) and the scrape config in
+`docs/monitoring/README.md`. Evidence: `node --test scripts/check-production-health.test.mjs`.
+Alert *delivery* for either service remains B7.
 
 **D3 — Lighthouse and load-test claims have no CI home.** *(Lighthouse half closed 2026-10-13;
 load-test half still open)*
@@ -146,6 +244,24 @@ four performance warnings; raising the a11y floor to 0.99 makes `lhci assert` ex
 does bite). The load test (B8) is **not** automated: `tests/load/` holds a k6 script but
 `tests/load/results/` is empty, and running it means sending load at production — that is for ops to
 schedule and commit the report.
+
+*Update 2026-10-13 (ops-prep).* Prepared, **not run**. Findings and changes:
+- The k6 script's default target was `https://us-central1-vida-finance.cloudfunctions.net`, i.e.
+  **production** (`.firebaserc`; `/api/health` → 200, one GET on 2026-10-13). It now has no default;
+  production needs `LOAD_TEST_ALLOW_PRODUCTION=I-HAVE-OPS-SIGN-OFF`; reports are named
+  `<date>-<emulator|staging|production>-<profile>-report.md`. Pinned by
+  `node --test tests/load/target.test.mjs` (11 tests, CI hard gate). Setup now aborts on a failed
+  health check instead of proceeding.
+- **No usable staging:** `develop` is 429 commits behind `main`; its last three `deploy.yml` runs
+  failed (latest 2026-05-29); no staging URL is in-tree.
+- **k6 is not installed** on the prep machine, so nothing was run — not even against the emulator.
+  `tests/load/results/` is still empty; no result is claimed.
+- The script cannot produce a meaningful 2x number yet: `requestLoan` enforces App Check (now
+  supported via `APP_CHECK_TOKEN`), needs an `employees/{uid}` doc, and limits each uid to 3/day;
+  the script's sign-in path invents unseeded users. A seeded load-test user pool is a prerequisite.
+  The dead `LOAD_TEST_AUTH_BYPASS` option (no function implements it) was removed.
+- Exact commands, the recommended window (Tue–Thu 03:00–05:00 CDMX, away from quincenas) and live
+  abort thresholds: `docs/runbooks/scaling.md` § Load test.
 
 **D4 — 11 `console.log` calls remain in services; v1.7 claimed zero.** *(the two that mattered are
 fixed — 2026-10-13)*
@@ -189,6 +305,17 @@ Two things were genuinely open, and are now addressed:
 
 Until that migration runs, `firestore.rules` deliberately keeps ops read on `auditLogs` so the
 history is not stranded. Removing that rule is a follow-up, gated on the migration being verified.
+
+*Update 2026-10-13 (ops-prep).* The script already had `--dry-run`; it is now importable
+(`planMigration` / `applyPlan` / `run`, main guarded) and pinned by
+`scripts/migrations/__tests__/002_consolidate_audit_logs.test.ts` (5 tests: dry run creates zero
+batches, idempotent re-run, native-id refusal fires in dry run too, copy preserves original
+timestamp; a mutation that lets the dry run write fails the suite). Rehearsed on the Firestore
+emulator with seeded data (27 legacy rows, 2 untimestamped): dry run wrote nothing, real run copied
+25, re-run identical, `auditLogs` untouched — `scripts/migrations/002_emulator_rehearsal.ts`,
+output in the runbook § Rehearsal. Runbook now has the exact commands (compiled with the pinned
+`tsc`; `ts-node` is not a dependency, so the old `npx ts-node` line would have fetched an
+unpinned package) and an evidence-based sign-off list.
 
 *Still open 2026-10-13 — needs a named human:* running
 `scripts/migrations/002_consolidate_audit_logs.ts` against production per

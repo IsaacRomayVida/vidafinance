@@ -24,7 +24,7 @@
  *      URLs from this file directly (2026-09-04): a drifted secret feeds
  *      nothing, so it is reported for cleanup, never failed on.
  *      REGISTRY_SERVICE_URL is the exception — deploy.yml still reads it, so
- *      its probe gates.
+ *      when it drifts from the canonical `registry.url` its probe gates.
  *   3. HOSTING — does the public site serve the app shell (`id="root"`), not
  *      just any 200? An empty 200 is "hosting is up but our app isn't".
  *
@@ -166,13 +166,23 @@ async function main() {
     });
   }
 
-  // registry-service: no canonical URL in-tree (see production-endpoints.json
-  // header) — probe the secret when present, say so when absent.
-  if (process.env.REGISTRY_SERVICE_URL) {
-    const probed = classifyHealth(await probe(`${process.env.REGISTRY_SERVICE_URL.replace(/\/+$/, '')}/health`));
-    rows.push({ name: 'secret:REGISTRY_SERVICE_URL', fail: probed.status !== 'ok', reason: probed.reason });
+  // registry-service: kept apart from `services` (see production-endpoints.json
+  // header). Its canonical URL gates like the others. Its secret is NOT
+  // informational — deploy.yml still writes it into functions/.env — so a
+  // drifted secret is probed and gates on its own health.
+  const { registry } = endpoints;
+  const registryCanonical = classifyHealth(await probe(`${registry.url}/health`));
+  rows.push({ name: 'canonical:registry-service', fail: registryCanonical.status !== 'ok', reason: registryCanonical.reason });
+  const registrySecret = classifySecret(registry.url, process.env[registry.secretName]);
+  if (registrySecret.status === 'drift') {
+    const probed = classifyHealth(await probe(`${process.env[registry.secretName].replace(/\/+$/, '')}/health`));
+    rows.push({
+      name: `secret:${registry.secretName}`,
+      fail: probed.status !== 'ok',
+      reason: `${registrySecret.reason}; the secret's URL is ${probed.reason} — deploy.yml reads this secret`,
+    });
   } else {
-    rows.push({ name: 'secret:REGISTRY_SERVICE_URL', fail: false, reason: 'secret not set in this context' });
+    rows.push({ name: `secret:${registry.secretName}`, fail: false, reason: registrySecret.reason });
   }
 
   // 3: hosting serves the app shell.

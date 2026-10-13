@@ -114,6 +114,11 @@ jobs:
       - name: The recovery planner's guard rails still hold — hard gate
         run: node --test scripts/recover-production-services.test.mjs
 
+      # The k6 script used to default to the production project. Its target
+      # guard (no default, production only with a typed sign-off) is pure.
+      - name: The load test still refuses production by default — hard gate
+        run: node --test tests/load/target.test.mjs
+
       - name: Install root deps (includes ESLint)
         run: npm ci
 

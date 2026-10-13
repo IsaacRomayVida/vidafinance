@@ -8,10 +8,13 @@
     "HTTP 404 health probes unexplainable. If a domain changes, change it here and let",
     "every checker disagree loudly until the secrets catch up.",
     "",
-    "registry-service is NOT listed: its public domain is not recorded in-tree (only the",
-    "REGISTRY_SERVICE_URL secret knows it), and it already has its own reconciliation",
-    "workflow (verify-registry-funpay-deployed.yml). The health checker probes it from",
-    "the secret when present."
+    "registry-service lives under `registry`, NOT `services`, on purpose: deploy.yml writes",
+    "every `services` entry into functions/.env and still appends REGISTRY_SERVICE_URL from",
+    "its secret (a duplicate key there is ambiguous), and recover-production-services.mjs",
+    "auto-redeploys every `services` entry — the ledger is deployed only by",
+    "deploy-registry-funpay.yml and reconciled by verify-registry-funpay-deployed.yml.",
+    "Domain recorded 2026-10-13 from commit 433312e (registry moved into FunPay's Railway",
+    "project) and verified the same day: GET /health → 200 {status: ok, db: true}."
   ],
   "hosting": {
     "url": "https://vida-finance.web.app",
@@ -24,6 +27,10 @@
     "pdf-generator": "https://pdf-generator-production-1a31.up.railway.app",
     "ml-service": "https://ml-service-production-f949.up.railway.app",
     "underwriting-service": "https://underwriting-service-production.up.railway.app"
+  },
+  "registry": {
+    "url": "https://registry-service-funpay-production-1d23.up.railway.app",
+    "secretName": "REGISTRY_SERVICE_URL"
   },
   "secretNames": {
     "payment-server": "PAYMENT_SERVER_URL",

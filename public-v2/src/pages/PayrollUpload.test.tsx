@@ -38,9 +38,26 @@ vi.mock('papaparse', () => ({
 }));
 
 let serverResults: Array<Record<string, unknown>> = [];
+let serverBatchId: string | undefined;
 vi.mock('firebase/functions', () => ({
   getFunctions: vi.fn(() => ({})),
-  httpsCallable: vi.fn(() => async () => ({ data: { processedCount: 0, results: serverResults } })),
+  httpsCallable: vi.fn(() => async () => ({
+    data: { batchId: serverBatchId, processedCount: 0, results: serverResults },
+  })),
+}));
+
+// payrollRemittances/{batchId} as the employer can read it (E18). `null` means
+// no record — a batch that deducted nothing — which the rules deny reading.
+let remittanceDoc: Record<string, unknown> | null = null;
+const remittancePaths: string[] = [];
+vi.mock('../lib/firebase', () => ({ db: {} }));
+vi.mock('firebase/firestore', () => ({
+  doc: vi.fn((_db: unknown, ...segments: string[]) => segments.join('/')),
+  getDoc: vi.fn(async (path: string) => {
+    remittancePaths.push(path);
+    if (remittanceDoc === null) throw new Error('permission-denied');
+    return { exists: () => true, data: () => remittanceDoc };
+  }),
 }));
 
 import i18n from '../i18n';
@@ -61,6 +78,9 @@ async function uploadAndSubmit() {
 
 beforeEach(async () => {
   serverResults = [];
+  serverBatchId = undefined;
+  remittanceDoc = null;
+  remittancePaths.length = 0;
   // The app defaults to Spanish; assert against the English copy so the
   // expectations below read as the strings they are checking.
   await i18n.changeLanguage('en');
@@ -130,5 +150,32 @@ describe('PayrollUpload row status badge', () => {
 
     await waitFor(() => expect(screen.getAllByText('Unknown')).toHaveLength(2));
     expect(screen.queryByText(/payroll_status_/)).not.toBeInTheDocument();
+  });
+});
+
+describe('PayrollUpload remittance indicator (E18)', () => {
+  const BATCH_ID = 'employer-1_2026-07-01_2026-07-15';
+
+  it('shows what the batch expects and what Funpay has confirmed, read from the batch record', async () => {
+    serverBatchId = BATCH_ID;
+    serverResults = [{ employeeId: 'emp-1', status: 'deducted', deductionAmount: 1500, newBalance: 5000 }];
+    remittanceDoc = { expectedCents: 150000, receivedCents: 100000, status: 'partial' };
+
+    await uploadAndSubmit();
+
+    await waitFor(() => expect(screen.getByText('Partially received')).toBeInTheDocument());
+    expect(screen.getByText(/Expected: \$1,500\.00 MXN · Received: \$1,000\.00 MXN/)).toBeInTheDocument();
+    expect(remittancePaths).toEqual([`payrollRemittances/${BATCH_ID}`]);
+  });
+
+  it('shows nothing when the batch has no remittance record', async () => {
+    serverBatchId = BATCH_ID;
+    serverResults = [{ employeeId: 'emp-1', status: 'skipped', deductionAmount: 0, error: 'no_deductible_loan' }];
+
+    await uploadAndSubmit();
+
+    await waitFor(() => expect(remittancePaths).toHaveLength(1));
+    expect(screen.queryByText('Remittance to Funpay')).not.toBeInTheDocument();
+    expect(screen.queryByText(/payroll_remit_/)).not.toBeInTheDocument();
   });
 });

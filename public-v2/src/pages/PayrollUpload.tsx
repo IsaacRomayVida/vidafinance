@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import Papa from 'papaparse';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 
 type PayrollRow = {
@@ -33,6 +35,19 @@ function isKnownRowStatus(status: string | undefined): status is RowStatus {
   return status != null && (ROW_STATUSES as readonly string[]).includes(status);
 }
 
+/**
+ * The batch's remittance record (E18): what this upload deducted, against what
+ * Funpay has confirmed receiving. Written server-side only — processPayroll
+ * sets the expected side, ops records the bank transfer — so the employer
+ * sees it here read-only. Integer centavos.
+ */
+const REMITTANCE_STATUSES = ['expected', 'partial', 'received', 'overpaid'] as const;
+type Remittance = { expectedCents: number; receivedCents: number; status: string };
+
+function formatCents(cents: number): string {
+  return (cents / 100).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const REQUIRED_HEADERS = ['employeeId', 'grossSalary', 'netSalary', 'payPeriod'];
 
@@ -46,6 +61,7 @@ export function PayrollUpload() {
   const [periodEnd, setPeriodEnd] = useState('');
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState<RowResult[] | null>(null);
+  const [remittance, setRemittance] = useState<Remittance | null>(null);
   const [apiError, setApiError] = useState('');
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState('');
@@ -56,6 +72,7 @@ export function PayrollUpload() {
     setPeriodStart('');
     setPeriodEnd('');
     setResults(null);
+    setRemittance(null);
     setApiError('');
     setFileName('');
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -138,13 +155,32 @@ export function PayrollUpload() {
     setProcessing(true);
     setApiError('');
     setResults(null);
+    setRemittance(null);
     try {
       const fn = httpsCallable<
         { employerId: string; payPeriodStart: string; payPeriodEnd: string; rows: PayrollRow[] },
-        { processedCount: number; results: RowResult[] }
+        { batchId?: string; processedCount: number; results: RowResult[] }
       >(getFunctions(), 'processPayroll');
       const out = await fn({ employerId: user!.uid, payPeriodStart: periodStart, payPeriodEnd: periodEnd, rows });
       setResults(out.data.results);
+      if (out.data.batchId) {
+        // Read from the record itself rather than the callable's response, so
+        // an already-processed batch shows the receipts ops has since booked.
+        // A batch that deducted nothing has no record (and the read is denied
+        // for a missing document), so any failure just hides the indicator.
+        getDoc(doc(db, 'payrollRemittances', out.data.batchId))
+          .then(snap => {
+            const data = snap.exists() ? snap.data() : null;
+            if (data && typeof data.expectedCents === 'number') {
+              setRemittance({
+                expectedCents: data.expectedCents,
+                receivedCents: Number(data.receivedCents ?? 0),
+                status: String(data.status ?? ''),
+              });
+            }
+          })
+          .catch(() => {});
+      }
     } catch (e: unknown) {
       setApiError(e instanceof Error ? e.message : t('payroll_error_unknown'));
     } finally {
@@ -311,6 +347,26 @@ export function PayrollUpload() {
             </p>
           </section>
 
+          {remittance && (
+            <section className="ops-card">
+              <h2 className="ops-h3">
+                {t('payroll_remit_title')}{' '}
+                <span className={`ops-status${remittanceClass(remittance.status)}`}>
+                  {(REMITTANCE_STATUSES as readonly string[]).includes(remittance.status)
+                    ? t(`payroll_remit_status_${remittance.status}`)
+                    : t('payroll_status_unknown')}
+                </span>
+              </h2>
+              <p className="ops-sub">
+                {t('payroll_remit_summary', {
+                  expected: formatCents(remittance.expectedCents),
+                  received: formatCents(remittance.receivedCents),
+                })}
+              </p>
+              <p className="ops-sub">{t('payroll_remit_note')}</p>
+            </section>
+          )}
+
           {/* Results table */}
           <section className="ops-card">
             <div className="table-wrap">
@@ -361,6 +417,15 @@ function statusClass(status: string | undefined): string {
     case 'skipped': return ' warn';
     case 'already_processed': return ' mute';
     case 'error': return ' bad';
+    default: return ' mute';
+  }
+}
+
+function remittanceClass(status: string): string {
+  switch (status) {
+    case 'received': return ' g';
+    case 'partial': return ' warn';
+    case 'overpaid': return ' warn';
     default: return ' mute';
   }
 }

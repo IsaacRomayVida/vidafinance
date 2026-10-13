@@ -1,6 +1,8 @@
 # Runbook — Audit log consolidation (`auditLogs` → `audit_log`)
 
-**Status:** migration script committed, **not run in any environment**.
+**Status:** migration script committed, **not run against any real project**.
+Rehearsed on the Firestore emulator with seeded data on 2026-10-13 (dry run, real run,
+idempotent re-run — all passed; see § Rehearsal).
 **Owner:** platform / ops.
 **Related:** gap D5 in `docs/LAUNCH_CHECKLIST_v1.8.md`.
 
@@ -43,6 +45,62 @@ the second is reachable only by hand. That is the residue of D5.
 
 ## Procedure
 
+### How to invoke the script
+
+`ts-node` is **not** a dependency of this repo, so `npx ts-node …` would fetch an unpinned
+package at run time — not acceptable on an audit-trail migration. Compile with the repo's
+pinned `tsc` into the gitignored `.test-build/` and run that:
+
+```bash
+npm ci   # repo root, once
+npx tsc --outDir .test-build/migration-002 --rootDir . --module commonjs --target es2020 \
+  --esModuleInterop --skipLibCheck --strict \
+  scripts/migrations/002_consolidate_audit_logs.ts scripts/migrations/002_emulator_rehearsal.ts
+MIGRATE=.test-build/migration-002/scripts/migrations
+```
+
+The first line the script prints is its target, e.g.
+`Target: project=vida-finance  (LIVE Firestore — not an emulator)`. **Read it before anything
+else; Ctrl-C if it is not the project you meant.**
+
+### Rehearsal (emulator, seeded) — do this first, on the release commit
+
+```bash
+# Temp config on non-default ports; delete it afterwards.
+cat > firebase.rehearsal.tmp.json <<'JSON'
+{ "firestore": { "rules": "firestore.rules" },
+  "emulators": { "firestore": { "port": 8391 }, "hub": { "port": 4491 },
+                 "logging": { "port": 4591 }, "ui": { "enabled": false } } }
+JSON
+firebase emulators:start --config firebase.rehearsal.tmp.json --only firestore --project demo-audit-rehearsal &
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8391 GCLOUD_PROJECT=demo-audit-rehearsal node $MIGRATE/002_emulator_rehearsal.js
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8391 GCLOUD_PROJECT=demo-audit-rehearsal node $MIGRATE/002_consolidate_audit_logs.js --dry-run
+kill %1; rm firebase.rehearsal.tmp.json
+```
+
+`002_emulator_rehearsal.ts` refuses to run unless `FIRESTORE_EMULATOR_HOST` is set **and** the
+project is `demo-*`. It seeds 27 `auditLogs` rows (25 timestamped, 5 of them with unknown
+fields; 2 without a timestamp) plus one native `audit_log` row, then checks the properties below.
+
+Result on 2026-10-13 (branch `swarm2/ops-prep`, firebase-tools emulator, exit 0):
+
+```
+PASS  dry run left audit_log unchanged
+PASS  migrated rows = 25 (expected 25 = legacy − skipped)
+PASS  spot-check legacy_seed_7: action/actorUid/targetId/timestamp match the original
+PASS  re-run added no rows
+PASS  re-run left content identical
+PASS  auditLogs unchanged (copy-only)
+PASS  native audit_log row unchanged
+REHEARSAL PASSED
+```
+
+The CLI entry point's own `--dry-run` against the same emulator printed
+`Target: project=demo-audit-rehearsal  EMULATOR=127.0.0.1:8391`, planned 25 copies and 2 skips,
+and exited **1** (skips are a non-zero exit, in a dry run too — by design). The same properties
+are unit-tested without an emulator in
+`scripts/migrations/__tests__/002_consolidate_audit_logs.test.ts` (`npm run test:migrations`).
+
 ### 0. Prerequisites
 
 - Firebase credentials with Firestore read/write on the target project
@@ -66,7 +124,7 @@ Record the count. You will reconcile against it in step 4.
 ### 2. Dry run
 
 ```bash
-npx ts-node scripts/migrations/002_consolidate_audit_logs.ts --dry-run
+GCLOUD_PROJECT=<PROJECT> node $MIGRATE/002_consolidate_audit_logs.js --dry-run | tee dry-run-002.log
 ```
 
 Writes nothing. It prints each destination document it would create and lists
@@ -80,7 +138,7 @@ remain only in `auditLogs`.
 gcloud firestore export gs://<BACKUP_BUCKET>/pre-audit-consolidation-$(date +%Y%m%d) \
   --collection-ids=auditLogs,audit_log --project <PROJECT>
 
-npx ts-node scripts/migrations/002_consolidate_audit_logs.ts
+GCLOUD_PROJECT=<PROJECT> node $MIGRATE/002_consolidate_audit_logs.js | tee run-002.log
 ```
 
 The script is **copy-only and idempotent**:
@@ -95,6 +153,30 @@ The script is **copy-only and idempotent**:
 - unrecognised legacy fields are preserved under `meta.legacyFields`.
 
 Exit code is non-zero if anything was skipped.
+
+### Sign-offs — what each one must actually check
+
+Two people: the on-call engineer who runs it, and a second reviewer (ops/compliance) who
+reads the logs. Neither box is ticked from memory — each item names its evidence.
+
+**Before step 3 (run):**
+
+- [ ] Rehearsal above passed **on the commit being run** (paste the PASS block).
+- [ ] `dry-run-002.log` first line names the intended project and says `LIVE Firestore`.
+- [ ] Dry-run "Found N" equals the step-1 count. If not, someone is writing to `auditLogs` —
+      stop: the write side was supposed to be consolidated.
+- [ ] Every skipped id in the dry run has a written decision (fix the source row by hand, or
+      accept that it stays only in `auditLogs`).
+- [ ] The dry run did **not** throw `Refusing to overwrite` (a native `audit_log/legacy_*` id).
+- [ ] The `gcloud firestore export` finished and its `gs://` path is recorded in the ticket.
+
+**After step 3, before closing D5:**
+
+- [ ] `run-002.log` "copied" count = dry-run "to copy" count.
+- [ ] Step 4 verification done (count query, console filters, one role-grant spot check);
+      record the spot-checked source id.
+- [ ] A second `--dry-run` now plans the same N copies (all onto existing `legacy_*` ids —
+      re-running is safe) and no new skips.
 
 ### 4. Verify
 
@@ -148,6 +230,8 @@ These are checked by tests; re-run both suites after any change here.
    has run and been verified.
 
 ```bash
+# migration unit tests (dry-run writes nothing, idempotent re-run, native-id refusal)
+npm run test:migrations
 # functions
 cd functions && npm test
 # rules

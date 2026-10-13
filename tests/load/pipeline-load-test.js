@@ -5,18 +5,24 @@
  * pipeline in staging. Ramps through 4 stages up to 2x target (280/min).
  *
  * Prerequisites:
- *   1. All external APIs in mock mode on staging:
+ *   1. All external APIs in mock mode on the target:
  *      METAMAP_MOCK=true, RISKSEAL_MOCK=true
  *   2. Environment variables set:
- *      STAGING_URL      — Firebase Functions base URL
- *      FIREBASE_API_KEY — Firebase Web API key (staging)
+ *      TARGET_URL       — Functions base URL (no default; see ./target.js —
+ *                         production is refused without an explicit sign-off)
+ *      FIREBASE_API_KEY or AUTH_TOKEN — see getAuthHeaders()
+ *      APP_CHECK_TOKEN  — requestLoan has enforceAppCheck: true; without a
+ *                         debug token every request is rejected
+ *
+ * Runbook (commands, low-traffic window, abort thresholds):
+ *   docs/runbooks/scaling.md § Load test
  *
  * Usage:
  *   # Full load test (2 hours)
- *   k6 run tests/load/pipeline-load-test.js
+ *   k6 run --env TARGET_URL=... tests/load/pipeline-load-test.js
  *
  *   # Smoke test (5 minutes)
- *   k6 run --env PROFILE=smoke tests/load/pipeline-load-test.js
+ *   k6 run --env TARGET_URL=... --env PROFILE=smoke tests/load/pipeline-load-test.js
  *
  *   # Output JSON for report generation
  *   k6 run --out json=results.json tests/load/pipeline-load-test.js
@@ -30,6 +36,7 @@ import { check, sleep, group } from 'k6';
 import { SharedArray } from 'k6/data';
 import { RAMP_STAGES, SMOKE_STAGES, THRESHOLDS } from './config.js';
 import { generateLoanApplication } from './helpers/synthetic-data.js';
+import { resolveTarget } from './target.js';
 import {
   requestLatency,
   stageValidation,
@@ -51,7 +58,10 @@ import {
 
 // ── Configuration ───────────────────────────────────────────────────────────
 
-const STAGING_URL = __ENV.STAGING_URL || 'https://us-central1-vida-finance.cloudfunctions.net';
+// Throws at init — before a single request — on a missing, unknown or
+// unsigned-off production target. TARGET.label names every results file.
+const TARGET = resolveTarget(__ENV);
+const STAGING_URL = TARGET.url;
 const FIREBASE_API_KEY = __ENV.FIREBASE_API_KEY || '';
 const PROFILE = __ENV.PROFILE || 'full';
 
@@ -85,33 +95,34 @@ export const options = {
 
 let cachedAuthTokens = {};
 
+// requestLoan enforces App Check. Callable functions read the token from this
+// header; use an App Check *debug* token registered on the target project.
+const APP_CHECK_HEADERS = __ENV.APP_CHECK_TOKEN ? { 'X-Firebase-AppCheck': __ENV.APP_CHECK_TOKEN } : {};
+
 /**
  * Get or create a Firebase ID token for the given synthetic user.
- * In staging with LOAD_TEST_AUTH_BYPASS=true, the function accepts
- * a special x-load-test header instead of real Firebase auth.
+ * (A former `LOAD_TEST_AUTH_BYPASS` / x-load-test-uid option was removed: no
+ * function ever implemented that header, so it only produced 401s.)
  *
  * For production-like testing, use Firebase Auth REST API to create
  * custom tokens via the Admin SDK setup script.
+ *
+ * KNOWN LIMIT: Option 2 signs in `<userId>@loadtest.vida.internal`, and
+ * generateUserId() embeds Date.now(), so those accounts never pre-exist; and
+ * Option 1 is one uid, which requestLoan rate-limits to 3/day. Until a seeded
+ * user pool exists, a run measures the auth/rate-limit path, not underwriting.
  */
 function getAuthHeaders(userId) {
-  // Option 1: Load test bypass header (staging only)
-  if (__ENV.LOAD_TEST_AUTH_BYPASS === 'true') {
-    return {
-      'Content-Type': 'application/json',
-      'x-load-test-uid': userId,
-      'x-load-test-secret': __ENV.INTERNAL_SECRET || '',
-    };
-  }
-
-  // Option 2: Pre-generated bearer token (same token, different user context)
+  // Option 1: Pre-generated bearer token (same token, different user context)
   if (__ENV.AUTH_TOKEN) {
     return {
       'Content-Type': 'application/json',
+      ...APP_CHECK_HEADERS,
       Authorization: `Bearer ${__ENV.AUTH_TOKEN}`,
     };
   }
 
-  // Option 3: Firebase Auth REST API sign-in
+  // Option 2: Firebase Auth REST API sign-in
   // Uses custom token exchange via Firebase Auth emulator or staging project.
   // For load testing, pre-seed users in staging and use email/password sign-in.
   if (FIREBASE_API_KEY && !cachedAuthTokens[userId]) {
@@ -135,6 +146,7 @@ function getAuthHeaders(userId) {
   const token = cachedAuthTokens[userId];
   return {
     'Content-Type': 'application/json',
+    ...APP_CHECK_HEADERS,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
@@ -145,7 +157,7 @@ export function setup() {
   console.log(`\n${'='.repeat(70)}`);
   console.log('  VIDA Load Test — Pipeline Throughput Validation');
   console.log(`  Profile: ${PROFILE}`);
-  console.log(`  Staging URL: ${STAGING_URL}`);
+  console.log(`  Target: ${TARGET.label.toUpperCase()}  ${STAGING_URL}`);
   console.log(`  Stages: ${stages.map((s) => `${s.label}(${s.target}/min × ${s.duration})`).join(' → ')}`);
   console.log(`${'='.repeat(70)}\n`);
 
@@ -166,7 +178,8 @@ export function setup() {
   });
 
   if (!healthOk) {
-    console.error('WARNING: Staging health check failed. Proceeding anyway...');
+    // A dead target makes every number below meaningless; stop here.
+    throw new Error(`Health check failed on ${STAGING_URL}/api/health — aborting before any load.`);
   }
 
   // Verify mock mode is active
@@ -179,6 +192,7 @@ export function setup() {
   return {
     startTime: new Date().toISOString(),
     stagingUrl: STAGING_URL,
+    targetLabel: TARGET.label,
     profile: PROFILE,
   };
 }
@@ -329,7 +343,8 @@ export function handleSummary(data) {
   const summary = {
     timestamp: new Date().toISOString(),
     profile: PROFILE,
-    stagingUrl: STAGING_URL,
+    target: TARGET.label,
+    targetUrl: STAGING_URL,
     metrics: {},
     stages: stages,
   };
@@ -347,6 +362,8 @@ export function handleSummary(data) {
   lines.push('╔══════════════════════════════════════════════════════════════════════╗');
   lines.push('║           VIDA Load Test — Performance Report                       ║');
   lines.push('╚══════════════════════════════════════════════════════════════════════╝');
+  lines.push(`  TARGET: ${TARGET.label.toUpperCase()}  ${STAGING_URL}`);
+  lines.push(`  Profile: ${PROFILE}   Finished: ${summary.timestamp}`);
   lines.push('');
 
   // Request latency
@@ -429,9 +446,14 @@ export function handleSummary(data) {
 
   const textReport = lines.join('\n');
 
+  // Named by target so an emulator run can never be mistaken for a production
+  // one. The .md report is the committable artifact (*.json / *.txt in
+  // results/ are gitignored as raw output).
+  const stamp = summary.timestamp.slice(0, 10);
+  const base = `tests/load/results/${stamp}-${TARGET.label}-${PROFILE}`;
   return {
     stdout: textReport,
-    'tests/load/results/summary.json': JSON.stringify(summary, null, 2),
-    'tests/load/results/report.txt': textReport,
+    [`${base}-summary.json`]: JSON.stringify(summary, null, 2),
+    [`${base}-report.md`]: `# Load test — ${TARGET.label} (${PROFILE})\n\n\`\`\`\n${textReport}\n\`\`\`\n`,
   };
 }

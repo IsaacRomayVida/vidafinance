@@ -156,7 +156,20 @@ describe("stage0-fraud: decision branches", () => {
     expect(result.reason).toBe("DEVICE_FRAUD_DETECTED");
   });
 
-  it("sets infonavitFlag and sums INFONAVIT deductions once any credit is active", async () => {
+  it("sets infonavitFlag and sums only the active INFONAVIT credits' deductions", async () => {
+    getINFONAVIT.mockResolvedValue([
+      { credit_status: "active", monthly_deduction: 1200 },
+      { balance: 5000, deduction: 300 },
+    ]);
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.flags.infonavitFlag).toBe(true);
+    expect(result.data.infonavitFlag).toBe(true);
+    expect(result.data.infonavitDeduction).toBe(1200 + 300);
+  });
+
+  it("leaves closed INFONAVIT credits out of the deduction when mixed with active ones", async () => {
     getINFONAVIT.mockResolvedValue([
       { credit_status: "active", monthly_deduction: 1200 },
       { balance: 5000, deduction: 300 },
@@ -164,12 +177,32 @@ describe("stage0-fraud: decision branches", () => {
     ]);
     const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
 
-    expect(result.pass).toBe(true);
     expect(result.flags.infonavitFlag).toBe(true);
-    expect(result.data.infonavitFlag).toBe(true);
-    // The closed record's deduction is summed too — the stage totals every
-    // record once any one is active. Pinned as current behaviour, not endorsed.
-    expect(result.data.infonavitDeduction).toBe(1200 + 300 + 999);
+    // A closed credit carries no current payroll deduction, and Stage 2
+    // subtracts this sum from the current monthly salary for LTI.
+    expect(result.data.infonavitDeduction).toBe(1200 + 300);
+  });
+
+  it("neither flags nor sets a deduction when every INFONAVIT credit is closed", async () => {
+    getINFONAVIT.mockResolvedValue([
+      { credit_status: "closed", balance: 0, monthly_deduction: 999 },
+      { credit_status: "closed", balance: 0, deduction: 450 },
+    ]);
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.flags.infonavitFlag).toBe(false);
+    expect(result.data.infonavitFlag).toBeUndefined();
+    expect(result.data.infonavitDeduction).toBeUndefined();
+  });
+
+  it("neither flags nor sets a deduction when there are no INFONAVIT credits", async () => {
+    getINFONAVIT.mockResolvedValue([]);
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.flags.infonavitFlag).toBe(false);
+    expect(result.data.infonavitDeduction).toBeUndefined();
   });
 
   it("skips MetaMap and INFONAVIT (and their cost) when sessionKey and CURP are absent", async () => {
