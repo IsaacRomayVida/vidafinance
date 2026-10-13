@@ -2,19 +2,6 @@
 module.exports = {
   testEnvironment: "node",
   testTimeout: 30000,
-  // `roots` deliberately covers src/ only. services/underwriting-service/tests/
-  // also matches testMatch but has never been collected by this config, so its
-  // two suites have never run in CI. That is not a decision anyone recorded —
-  // it is a side effect of this line. Both are stale and neither can be
-  // switched on as-is: tests/metamap-client.test.js throws
-  // "_resetTokenCache is not a function" in beforeEach (the export it needs was
-  // removed from src/metamap-client.js), and tests/decision-engine.test.js does
-  // not terminate — it was still running at a 90s kill on 2026-08-03. Bringing
-  // them in would hang the job, not gate it, so they stay out until someone
-  // repairs or retires them. Flagged rather than fixed here because that is its
-  // own piece of work; see the report on #387/#388. Note src/decision-engine.test.js
-  // is a different, healthy suite that does run — the tests/ copy is not a duplicate
-  // of it, it is an older parallel one.
   roots: ["<rootDir>/src"],
   testMatch: ["**/*.test.js"],
   // employer-b.test.js and stage3-autoapprove.test.js specify features that were
