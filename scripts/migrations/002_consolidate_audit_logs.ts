@@ -15,7 +15,8 @@
  * places to look and only one of them is reachable from the UI. This script
  * closes that gap by copying the legacy records forward.
  *
- * *** NOT YET RUN AGAINST ANY ENVIRONMENT. ***
+ * *** NOT YET RUN AGAINST ANY REAL PROJECT. *** Rehearsed on the Firestore
+ * emulator with seeded data (002_emulator_rehearsal.ts).
  * See docs/runbooks/audit-log-consolidation.md for the execution procedure and
  * the sign-offs required before running it in production.
  *
@@ -37,9 +38,10 @@
  *     verbatim under `meta.legacyFields` rather than dropped.
  *   - `--dry-run` reports exactly what it would write and touches nothing.
  *
- * Usage:
- *   npx ts-node scripts/migrations/002_consolidate_audit_logs.ts --dry-run
- *   npx ts-node scripts/migrations/002_consolidate_audit_logs.ts
+ * Usage (ts-node is not a repo dependency; the runbook compiles with the pinned
+ * tsc first — see "How to invoke the script" there):
+ *   node .test-build/migration-002/scripts/migrations/002_consolidate_audit_logs.js --dry-run
+ *   node .test-build/migration-002/scripts/migrations/002_consolidate_audit_logs.js
  *
  * Requires GOOGLE_APPLICATION_CREDENTIALS or Firebase default credentials.
  */
@@ -47,7 +49,8 @@
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 
-const DRY_RUN = process.argv.includes('--dry-run');
+/** Kept out of module scope so the tests can drive both modes without argv. */
+const DRY_RUN_FLAG = '--dry-run';
 
 const LEGACY_COLLECTION = 'auditLogs';
 /** Keep in sync with functions/src/utils/auditLog.ts */
@@ -73,7 +76,7 @@ const KNOWN_FIELDS = new Set([
   'timestamp',
 ]);
 
-function destinationId(sourceId: string): string {
+export function destinationId(sourceId: string): string {
   return `legacy_${sourceId}`;
 }
 
@@ -85,7 +88,7 @@ function destinationId(sourceId: string): string {
  * field the console orders by; a record without a usable one would sort
  * unpredictably, so the caller drops those into the skip list instead.
  */
-function normalise(sourceId: string, data: Record<string, unknown>) {
+export function normalise(sourceId: string, data: Record<string, unknown>) {
   const action = typeof data['action'] === 'string' ? data['action'] : 'legacy.unknown';
 
   const legacyFields: Record<string, unknown> = {};
@@ -126,22 +129,30 @@ function normalise(sourceId: string, data: Record<string, unknown>) {
   };
 }
 
-async function main() {
-  initializeApp({ credential: applicationDefault() });
-  const db: Firestore = getFirestore();
+export interface PendingCopy {
+  id: string;
+  destId: string;
+  doc: ReturnType<typeof normalise>;
+}
 
-  console.log(`Migration 002: consolidate ${LEGACY_COLLECTION} → ${AUDIT_LOG_COLLECTION}${DRY_RUN ? ' (DRY RUN)' : ''}`);
-  console.log('─'.repeat(60));
+export interface Plan {
+  legacyCount: number;
+  pending: PendingCopy[];
+  skipped: Array<{ id: string; reason: string }>;
+}
 
+/**
+ * Read-only: work out what a run would write. Both the dry run and the real run
+ * go through this, so the dry run's plan IS the real run's plan.
+ *
+ * Throws on a destination id owned by a native record — in dry-run too, so the
+ * rehearsal surfaces the abort before anyone schedules the real run.
+ */
+export async function planMigration(db: Firestore): Promise<Plan> {
   const legacySnap = await db.collection(LEGACY_COLLECTION).get();
-  if (legacySnap.empty) {
-    console.log(`No documents in ${LEGACY_COLLECTION}. Nothing to migrate.`);
-    return;
-  }
-  console.log(`Found ${legacySnap.size} legacy record(s).`);
 
-  const skipped: Array<{ id: string; reason: string }> = [];
-  const pending: Array<{ id: string; destId: string; doc: ReturnType<typeof normalise> }> = [];
+  const skipped: Plan['skipped'] = [];
+  const pending: PendingCopy[] = [];
 
   for (const legacyDoc of legacySnap.docs) {
     const data = legacyDoc.data();
@@ -167,24 +178,46 @@ async function main() {
     pending.push({ id: legacyDoc.id, destId, doc: normalise(legacyDoc.id, data) });
   }
 
+  return { legacyCount: legacySnap.size, pending, skipped };
+}
+
+/** The only function in this file that writes. Never called on a dry run. */
+export async function applyPlan(db: Firestore, pending: PendingCopy[]): Promise<number> {
+  let written = 0;
+  for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+    const chunk = pending.slice(i, i + BATCH_SIZE);
+    const batch = db.batch();
+    for (const p of chunk) {
+      batch.set(db.collection(AUDIT_LOG_COLLECTION).doc(p.destId), p.doc);
+    }
+    await batch.commit();
+    written += chunk.length;
+    console.log(`  ✓ committed ${written}/${pending.length}`);
+  }
+  return written;
+}
+
+/** Returns the plan so callers (and tests) can reconcile counts. */
+export async function run(db: Firestore, dryRun: boolean): Promise<Plan> {
+  console.log(`Migration 002: consolidate ${LEGACY_COLLECTION} → ${AUDIT_LOG_COLLECTION}${dryRun ? ' (DRY RUN)' : ''}`);
+  console.log('─'.repeat(60));
+
+  const plan = await planMigration(db);
+  if (plan.legacyCount === 0) {
+    console.log(`No documents in ${LEGACY_COLLECTION}. Nothing to migrate.`);
+    return plan;
+  }
+  console.log(`Found ${plan.legacyCount} legacy record(s).`);
+
+  const { pending, skipped } = plan;
   console.log(`\n${pending.length} record(s) to copy, ${skipped.length} skipped.`);
 
-  if (DRY_RUN) {
+  if (dryRun) {
     for (const p of pending) {
       console.log(`  → would write ${AUDIT_LOG_COLLECTION}/${p.destId}  (action=${p.doc.action}, targetId=${p.doc.targetId || '—'})`);
     }
   } else {
-    let written = 0;
-    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-      const chunk = pending.slice(i, i + BATCH_SIZE);
-      const batch = db.batch();
-      for (const p of chunk) {
-        batch.set(db.collection(AUDIT_LOG_COLLECTION).doc(p.destId), p.doc);
-      }
-      await batch.commit();
-      written += chunk.length;
-      console.log(`  ✓ committed ${written}/${pending.length}`);
-    }
+    await applyPlan(db, pending);
   }
 
   if (skipped.length > 0) {
@@ -195,9 +228,9 @@ async function main() {
     console.log('\n   Investigate these by hand before retiring the legacy collection.');
   }
 
-  console.log('\n─'.repeat(60));
+  console.log(`\n${'─'.repeat(60)}`);
   console.log(
-    DRY_RUN
+    dryRun
       ? 'DRY RUN complete — nothing was written.'
       : `Done. ${pending.length} record(s) copied. ${LEGACY_COLLECTION} was NOT deleted.`
   );
@@ -206,9 +239,26 @@ async function main() {
   );
 
   if (skipped.length > 0) process.exitCode = 1;
+  return plan;
 }
 
-main().catch((err) => {
-  console.error('Migration 002 failed:', err);
-  process.exit(1);
-});
+async function main() {
+  initializeApp({ credential: applicationDefault() });
+  // Say which database this is about to touch before touching it. The project
+  // comes from the credentials / GCLOUD_PROJECT, so it is easy to be wrong about.
+  const emulator = process.env['FIRESTORE_EMULATOR_HOST'];
+  console.log(
+    `Target: project=${process.env['GCLOUD_PROJECT'] ?? process.env['GOOGLE_CLOUD_PROJECT'] ?? '(from credentials)'}` +
+      (emulator ? `  EMULATOR=${emulator}` : '  (LIVE Firestore — not an emulator)')
+  );
+  await run(getFirestore(), process.argv.includes(DRY_RUN_FLAG));
+}
+
+// Guarded so the helpers above can be imported by the unit tests without the
+// module connecting to Firestore on import.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('Migration 002 failed:', err);
+    process.exit(1);
+  });
+}

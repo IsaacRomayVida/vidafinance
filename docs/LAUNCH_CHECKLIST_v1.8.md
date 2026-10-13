@@ -79,7 +79,7 @@ live-infrastructure and third-party facts. They are listed unticked on purpose.
 | B5 | Firestore write quota raised above the 500/sec default | Isaac / ops | GCP quota console |
 | B6 | Hosting traffic split (90% React / 10% legacy) | Isaac / ops | Firebase Hosting runtime config |
 | B7 | Alerting rules configured **and a test alert delivered** | Isaac / ops | Delivery is observable only in the alert sink |
-| B8 | Load test passed at 2x target throughput | Isaac / ops | No load-test artifact committed. If one exists, commit the report and promote this to table A |
+| B8 | Load test passed at 2x target throughput | Isaac / ops | **Not run anywhere.** No artifact in `tests/load/results/`. 2026-10-13: the script no longer defaults to production (it did); runnable once App Check token + seeded employee pool exist — see D3 and `docs/runbooks/scaling.md` § Load test. Only a `staging`/`production` `full`-profile report can close it |
 | B9 | Lighthouse ≥90 on marketing pages | Frontend owner | **Measured, and it fails on performance.** 2026-10-13, local Chrome, LHCI 0.15.1 mobile defaults, `VITE_LAUNCH_MODE=live`, median of 3: `/` perf 0.72, `/employers` 0.74, `/employees` 0.71, `/about` 0.73 (LCP 5–7 s); a11y 0.95–0.96, best-practices 1.0, SEO 0.91. Now in CI (A12). Needs a perf fix, then promote the `warn` to `error` |
 | B10 | The 5 live Railway services actually return 200 | Isaac / ops | A10 proves the route **exists in code**; only prod proves it **answers**. Do not conflate these — v1.7 did |
 | B11 | Champion/challenger/autoencoder models deployed; PSI-CSI baselines saved | Isaac / ops | Model registry state is external. `docs/ML_MODEL_STATUS.md` is the closest in-tree record |
@@ -245,6 +245,24 @@ does bite). The load test (B8) is **not** automated: `tests/load/` holds a k6 sc
 `tests/load/results/` is empty, and running it means sending load at production — that is for ops to
 schedule and commit the report.
 
+*Update 2026-10-13 (ops-prep).* Prepared, **not run**. Findings and changes:
+- The k6 script's default target was `https://us-central1-vida-finance.cloudfunctions.net`, i.e.
+  **production** (`.firebaserc`; `/api/health` → 200, one GET on 2026-10-13). It now has no default;
+  production needs `LOAD_TEST_ALLOW_PRODUCTION=I-HAVE-OPS-SIGN-OFF`; reports are named
+  `<date>-<emulator|staging|production>-<profile>-report.md`. Pinned by
+  `node --test tests/load/target.test.mjs` (11 tests, CI hard gate). Setup now aborts on a failed
+  health check instead of proceeding.
+- **No usable staging:** `develop` is 429 commits behind `main`; its last three `deploy.yml` runs
+  failed (latest 2026-05-29); no staging URL is in-tree.
+- **k6 is not installed** on the prep machine, so nothing was run — not even against the emulator.
+  `tests/load/results/` is still empty; no result is claimed.
+- The script cannot produce a meaningful 2x number yet: `requestLoan` enforces App Check (now
+  supported via `APP_CHECK_TOKEN`), needs an `employees/{uid}` doc, and limits each uid to 3/day;
+  the script's sign-in path invents unseeded users. A seeded load-test user pool is a prerequisite.
+  The dead `LOAD_TEST_AUTH_BYPASS` option (no function implements it) was removed.
+- Exact commands, the recommended window (Tue–Thu 03:00–05:00 CDMX, away from quincenas) and live
+  abort thresholds: `docs/runbooks/scaling.md` § Load test.
+
 **D4 — 11 `console.log` calls remain in services; v1.7 claimed zero.** *(the two that mattered are
 fixed — 2026-10-13)*
 Most are benign process-start banners (`listening on ${PORT}`) or a CLI backfill script. Two are
@@ -287,6 +305,17 @@ Two things were genuinely open, and are now addressed:
 
 Until that migration runs, `firestore.rules` deliberately keeps ops read on `auditLogs` so the
 history is not stranded. Removing that rule is a follow-up, gated on the migration being verified.
+
+*Update 2026-10-13 (ops-prep).* The script already had `--dry-run`; it is now importable
+(`planMigration` / `applyPlan` / `run`, main guarded) and pinned by
+`scripts/migrations/__tests__/002_consolidate_audit_logs.test.ts` (5 tests: dry run creates zero
+batches, idempotent re-run, native-id refusal fires in dry run too, copy preserves original
+timestamp; a mutation that lets the dry run write fails the suite). Rehearsed on the Firestore
+emulator with seeded data (27 legacy rows, 2 untimestamped): dry run wrote nothing, real run copied
+25, re-run identical, `auditLogs` untouched — `scripts/migrations/002_emulator_rehearsal.ts`,
+output in the runbook § Rehearsal. Runbook now has the exact commands (compiled with the pinned
+`tsc`; `ts-node` is not a dependency, so the old `npx ts-node` line would have fetched an
+unpinned package) and an evidence-based sign-off list.
 
 *Still open 2026-10-13 — needs a named human:* running
 `scripts/migrations/002_consolidate_audit_logs.ts` against production per
