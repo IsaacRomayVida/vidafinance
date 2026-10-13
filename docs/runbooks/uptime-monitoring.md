@@ -10,7 +10,7 @@ This runbook describes the exact monitors to stand up, the alerting contacts, an
 
 ## TL;DR
 
-Provision **7 HTTPS health monitors** in UptimeRobot (or Pingdom, Better Uptime, etc.) pointing at the canonical production URLs below, all on a **1-minute interval**, alerting to **PagerDuty/Slack** after two consecutive failures. Cost: free tier on UptimeRobot covers 50 monitors at 5-min intervals; the 1-min interval needs the Pro plan (~$7/mo) or Better Uptime's free tier.
+Provision **8 HTTPS health monitors** in UptimeRobot (or Pingdom, Better Uptime, etc.) pointing at the canonical production URLs below, all on a **1-minute interval**, alerting to **PagerDuty/Slack** after two consecutive failures. Cost: free tier on UptimeRobot covers 50 monitors at 5-min intervals; the 1-min interval needs the Pro plan (~$7/mo) or Better Uptime's free tier.
 
 Total budget: **$7–10/mo**. Setup time: **~20 minutes**.
 
@@ -33,6 +33,7 @@ Total budget: **$7–10/mo**. Setup time: **~20 minutes**.
 | 5 | PDF generator | `https://pdf-generator-production-1a31.up.railway.app/health` | HTTP 200 | Contract PDFs for legal compliance |
 | 6 | ML service | `https://ml-service-production-f949.up.railway.app/health` | HTTP 200 | Credit scoring; failure falls back to rules engine |
 | 7 | Underwriting service | `https://underwriting-service-production.up.railway.app/health` | HTTP 200 | 7-stage credit pipeline; downtime blocks every new application |
+| 8 | Registry service | `https://registry-service-funpay-production-1d23.up.railway.app/health` | HTTP 200, body contains `"status":"ok"` (`"degraded"` = ledger DB unreachable) | Identity registry + hash-chain ledger; employer approval shadow-writes here (`registry` key in the file, not `services`) |
 
 **Interim monitor, live today:** until the external monitors above are stood
 up, `.github/workflows/verify-production-live.yml` probes every canonical URL
@@ -51,7 +52,7 @@ shrink to a pointer once they exist.
 
 ## 2. Monitor configuration (UptimeRobot)
 
-For each of the 7 services above:
+For each of the 8 services above:
 
 - **Monitor type**: `HTTPS`
 - **URL**: (from table)
@@ -96,7 +97,7 @@ When a monitor pages, the first thing to check is service-specific. Each alert m
 ### Slack
 
 - Channel: `#vida-ops`
-- All 7 monitors post here on both down and recovery events
+- All 8 monitors post here on both down and recovery events
 - Format: `🚨 [DOWN] service | status 500 | runbook: …`
 
 ### Email
@@ -108,7 +109,7 @@ When a monitor pages, the first thing to check is service-specific. Each alert m
 
 ## 5. Creating the monitors (script)
 
-UptimeRobot has a public API. Rather than click through the UI seven times, run:
+UptimeRobot has a public API. Rather than click through the UI eight times, run:
 
 ```bash
 export UPTIMEROBOT_API_KEY="u<your-main-api-key>"
@@ -141,7 +142,7 @@ curl -X POST "https://api.uptimerobot.com/v2/newMonitor" \
   -d "alert_contacts=$CONTACTS_CSV" \
   -d "format=json"
 
-jq -r '.services | to_entries[] | "\(.key)|\(.value)"' "$ENDPOINTS" | while IFS='|' read -r key url; do
+jq -r '(.services + {"registry-service": .registry.url}) | to_entries[] | "\(.key)|\(.value)"' "$ENDPOINTS" | while IFS='|' read -r key url; do
   curl -X POST "https://api.uptimerobot.com/v2/newMonitor" \
     -d "api_key=$UPTIMEROBOT_API_KEY" \
     -d "friendly_name=VIDA ${key}" \
@@ -157,7 +158,8 @@ done
 This reads the six Railway services straight out of the `services` object in
 `scripts/production-endpoints.json` (`payment-server`, `softcredito-adapter`,
 `notification-service`, `pdf-generator`, `ml-service`, `underwriting-service`
-as of 2026-09-19) plus the one `hosting` entry — seven monitors total. If a
+as of 2026-09-19), plus `registry-service` from the separate `registry` entry
+(recorded 2026-10-13), plus the one `hosting` entry — eight monitors total. If a
 service is added to or removed from that file, this loop picks it up on the
 next run without editing this runbook.
 
@@ -169,7 +171,7 @@ Save the resulting monitor IDs to `docs/runbooks/uptime-monitoring.md` §7 (IDs 
 
 After running the script above:
 
-- [ ] All 7 monitors show **"Up"** in the UptimeRobot dashboard after ~2 minutes
+- [ ] All 8 monitors show **"Up"** in the UptimeRobot dashboard after ~2 minutes
 - [ ] Temporarily rename one Railway service to break its URL, wait 2 minutes, confirm Slack + PagerDuty alerts both fire, then restore and confirm recovery alerts
 - [ ] Open the UptimeRobot public status page (if enabled) at `https://status.vidafinance.mx` and confirm it renders
 - [ ] Confirm monthly billing plan shows "Pro ($7/mo)" if using 1-min intervals — free tier caps at 5 min
@@ -186,6 +188,8 @@ After running the script above:
 | VIDA Notifications | _TBD_ | _TBD_ |
 | VIDA PDF Generator | _TBD_ | _TBD_ |
 | VIDA ML Service | _TBD_ | _TBD_ |
+| VIDA Underwriting Service | _TBD_ | _TBD_ |
+| VIDA Registry Service | _TBD_ | _TBD_ |
 
 PagerDuty integration key: _TBD_
 Slack webhook: _TBD_ (check 1Password under `VIDA · UptimeRobot`)

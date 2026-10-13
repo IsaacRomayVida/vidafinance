@@ -308,4 +308,5 @@ After the emergency deploy, **immediately** open a PR with the same fix so git h
 | pdf-generator | https://pdf-generator-production-1a31.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
 | ml-service | https://ml-service-production-f949.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
 | underwriting-service | https://underwriting-service-production.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
+| registry-service-funpay | https://registry-service-funpay-production-1d23.up.railway.app (`registry` key) | not tracked — see `scripts/verify-staging.sh` |
 | reCAPTCHA key (public) | `6LdorcIsAAAAAJ6eGiWpRiwkE_LqTO8_jOrx45Di` | (same, dev allows localhost) |

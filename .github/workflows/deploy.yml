@@ -177,8 +177,10 @@ jobs:
       # UNDERWRITING_SERVICE_URL was empty — so the deployed Functions called
       # dead URLs on every service hop. The canonical file is verified against
       # Railway's own domain records every 2h by verify-production-live.yml.
-      # REGISTRY_SERVICE_URL stays a secret only because its domain is not
-      # recorded in the canonical file (see that file's header).
+      # REGISTRY_SERVICE_URL is still read from its secret. Its domain is now
+      # the file's `registry.url`, deliberately outside `services` so this
+      # loop does not emit it too (see that file's header); switching this
+      # line to the file is a separate, deliberate deploy change.
       - name: Write functions .env (service URLs from the canonical endpoints file)
         run: |
           node -e '

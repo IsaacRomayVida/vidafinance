@@ -76,6 +76,7 @@ curl https://notification-service-production-f49e.up.railway.app/health
 curl https://pdf-generator-production-1a31.up.railway.app/health
 curl https://ml-service-production-f949.up.railway.app/health
 curl https://underwriting-service-production.up.railway.app/health
+curl https://registry-service-funpay-production-1d23.up.railway.app/health   # `registry` key, not `services`
 ```
 
 Live verification (no local env needed):
@@ -87,8 +88,10 @@ Live verification (no local env needed):
   hours and on manual dispatch, and fails loudly. Health red + reconcile
   green ⇒ stale URLs/secrets; both red ⇒ the services are down.
 - `registry-service-funpay` has its own reconciler
-  (`verify-registry-funpay-deployed.yml`, hourly); its public URL is only
-  recorded in the `REGISTRY_SERVICE_URL` secret.
+  (`verify-registry-funpay-deployed.yml`, hourly). Its public URL is the
+  `registry` entry in `scripts/production-endpoints.json` (kept out of
+  `services` so deploy.yml and the auto-recovery script leave it alone);
+  the health checker probes it alongside the others.
 
 ## Staging — honest status
 
@@ -168,7 +171,8 @@ PAYMENT_SERVER_URL,
 NOTIFICATION_SERVICE_URL,
 PDF_GENERATOR_URL,
 ML_SERVICE_URL
-REGISTRY_SERVICE_URL       # still a GitHub secret (domain not in the file)
+REGISTRY_SERVICE_URL       # still a GitHub secret; must equal the file's `registry.url`
+                           #   (verify-production-live.yml gates on it when it drifts)
 INTERNAL_SECRET            # secret: shared inter-service auth token
 INTERNAL_SECRET_ALT        # secret: set only mid-rotation — accepted, never sent
                            #   (docs/runbooks/rotate-internal-secret.md)

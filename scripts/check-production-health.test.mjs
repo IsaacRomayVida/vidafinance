@@ -127,3 +127,14 @@ test('production-endpoints.json parses and covers all six services + hosting', (
     assert.ok(e.secretNames[name], `${name} maps to a secret name`);
   }
 });
+
+test('production-endpoints.json records registry-service apart from `services`', () => {
+  const e = loadEndpoints();
+  assert.match(e.registry.url, /^https:\/\/[^/]+$/, 'https origin, no path or trailing slash');
+  assert.equal(e.registry.secretName, 'REGISTRY_SERVICE_URL');
+  // In `services` it would be written into functions/.env by deploy.yml next
+  // to the REGISTRY_SERVICE_URL secret line, and auto-redeployed by
+  // recover-production-services.mjs.
+  assert.ok(!Object.values(e.services).includes(e.registry.url));
+  assert.ok(!Object.values(e.secretNames).includes('REGISTRY_SERVICE_URL'));
+});

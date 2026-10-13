@@ -78,6 +78,11 @@ metrics:
             - targets: ['underwriting-service-production.up.railway.app:443']
           scheme: https
           metrics_path: /metrics
+        - job_name: vida-registry-service
+          static_configs:
+            - targets: ['registry-service-funpay-production-1d23.up.railway.app:443']
+          scheme: https
+          metrics_path: /metrics
       remote_write:
         - url: https://prometheus-prod-XX.grafana.net/api/prom/push
           basic_auth:
