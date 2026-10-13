@@ -381,6 +381,20 @@ service cloud.firestore {
     }
 
     // =============================================
+    // PAYROLL REMITTANCES (E18) — one per payroll batch: what the employer
+    // deducted (written by processPayroll) against what ops saw arrive at the
+    // bank (written by recordPayrollRemittance). Read: that batch's employer
+    // admin, or ops. No client writes — the employer in particular must never
+    // be able to mark its own remittance received.
+    // =============================================
+    match /payrollRemittances/{batchId} {
+      allow read: if resource != null && (
+                    isEmployerAdminOf(resource.data.employerId) || isOps()
+                  );
+      allow write: if false;
+    }
+
+    // =============================================
     // REVIEW QUEUE — OPS-ONLY READ, WRITES VIA CLOUD FUNCTIONS
     // =============================================
     match /review_queue/{docId} {
