@@ -496,8 +496,8 @@ describe("pipeline result envelope", () => {
 });
 
 // ── Stage 1 identity primitives ────────────────────────────────────────
-// stage1-identity.js has no test file of its own anywhere in the package;
-// these three exports are otherwise reached only indirectly. computeLTI,
+// A smoke check of the three stage-1 exports; the full suite, including
+// runIdentityValidation itself, is src/stages/stage1-identity.test.js. computeLTI,
 // sumCosts and evaluateAutoApprove were also asserted here originally and have
 // been dropped — they are covered directly by
 // src/stages/__tests__/stage2-bureau.test.js, src/decision-engine.test.js and
