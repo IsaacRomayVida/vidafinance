@@ -13,6 +13,7 @@ import {
 import { safeSetItem } from '../lib/safeStorage';
 import { PAY_FREQUENCIES } from '../lib/payFrequencies';
 import { testBypassAllowed } from '../lib/testBypass';
+import { clientWritableKycStatus } from '../lib/kycStatus';
 
 
 type Role = 'employer' | 'employee' | null;
@@ -565,7 +566,9 @@ export function Onboarding() {
         // creditLimit / availableCredit are deliberately NOT written here.
         // They are derived from monthlySalary by onEmployeeDocCreated and are
         // rejected by firestore.rules if a client supplies them.
-        kycStatus: kycStatus,
+        // Clamped to the rules' allowlist: the dev test bypass displays
+        // 'approved', which firestore.rules denies on this create.
+        kycStatus: clientWritableKycStatus(kycStatus),
         ...(metamapVerificationId ? { metamapVerificationId } : {}),
         ...(metamapIdentityId ? { metamapIdentityId } : {}),
         ...(metamapVerificationId ? { kycStartedAt: serverTimestamp() } : {}),
