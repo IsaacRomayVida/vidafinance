@@ -196,6 +196,26 @@ describe("stage0-fraud: decision branches", () => {
     expect(result.data.infonavitDeduction).toBeUndefined();
   });
 
+  it("treats a closed INFONAVIT credit as closed even when it still shows a balance", async () => {
+    getINFONAVIT.mockResolvedValue([
+      { credit_status: "closed", balance: 1800, monthly_deduction: 999 },
+      { balance: 5000, deduction: 300 },
+    ]);
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.flags.infonavitFlag).toBe(true);
+    expect(result.data.infonavitDeduction).toBe(300);
+  });
+
+  it("does not flag when the only INFONAVIT credit is closed with a leftover balance", async () => {
+    getINFONAVIT.mockResolvedValue({ credit_status: "closed", balance: 1800, monthly_deduction: 999 });
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.flags.infonavitFlag).toBe(false);
+    expect(result.data.infonavitDeduction).toBeUndefined();
+  });
+
   it("neither flags nor sets a deduction when there are no INFONAVIT credits", async () => {
     getINFONAVIT.mockResolvedValue([]);
     const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
