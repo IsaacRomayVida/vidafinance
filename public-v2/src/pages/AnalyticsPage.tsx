@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { isActiveDeductionStatus } from '../lib/loanStatus';
+import { getOutstandingBalance } from '../lib/deductionReport';
 
 /* ────────────────────────── types ────────────────────────── */
 
@@ -15,10 +17,16 @@ interface Loan {
   id: string;
   employeeId?: string;
   amount?: number;
+  total?: number;
+  remainingBalance?: number;
   status?: string;
   createdAt?: { seconds: number };
   dueDate?: { seconds: number };
-  paidAt?: { seconds: number };
+  // Two writers, two names: processPayroll stamps `repaidAt` when a payroll
+  // deduction settles the loan; the card channel (services/payment-server/
+  // applyRepayment.js) stamps `paidAt`. See settledAt below.
+  repaidAt?: { seconds: number } | null;
+  paidAt?: { seconds: number } | null;
   [key: string]: unknown;
 }
 
@@ -43,6 +51,17 @@ function monthKey(ts: { seconds: number }): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/**
+ * When the loan was settled, whichever channel settled it.
+ *
+ * This page used to read `paidAt` alone, so every loan repaid through payroll
+ * — the primary channel, which writes `repaidAt` — counted as never repaid and
+ * the employer's repayment rate was pinned near 0% by construction (E12).
+ */
+function settledAt(l: Pick<Loan, 'repaidAt' | 'paidAt'>): { seconds: number } | null {
+  return l.repaidAt ?? l.paidAt ?? null;
+}
+
 function monthLabel(key: string, lang: string): string {
   const [y, m] = key.split('-');
   return new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1)
@@ -52,8 +71,6 @@ function monthLabel(key: string, lang: string): string {
 
 /* ────────────────────────── component ────────────────────────── */
 
-const ACTIVE_STATUSES = new Set(['approved', 'disbursed', 'disbursement_queued']);
-
 export function AnalyticsPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -61,8 +78,9 @@ export function AnalyticsPage() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
   const [loansReady, setLoansReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  const loading = !employeesReady || !loansReady;
+  const loading = !loadError && (!employeesReady || !loansReady);
   const lang = i18n.language;
 
   /* ── real-time employee listener ── */
@@ -72,6 +90,11 @@ export function AnalyticsPage() {
     const unsub = onSnapshot(q, (snap) => {
       setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee)));
       setEmployeesReady(true);
+    }, (listenError) => {
+      // Without an error callback a failed read never set `ready`, and the
+      // page sat on "Loading analytics…" forever (E13).
+      console.error('Firestore listen error:', listenError);
+      setLoadError(true);
     });
     return unsub;
   }, [user]);
@@ -83,6 +106,9 @@ export function AnalyticsPage() {
     const unsub = onSnapshot(q, (snap) => {
       setLoans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Loan)));
       setLoansReady(true);
+    }, (listenError) => {
+      console.error('Firestore listen error:', listenError);
+      setLoadError(true);
     });
     return unsub;
   }, [user]);
@@ -91,10 +117,18 @@ export function AnalyticsPage() {
 
   const totalEmployees = employees.length;
 
-  const activeLoans = useMemo(() => loans.filter((l) => ACTIVE_STATUSES.has(l.status ?? '')), [loans]);
+  // "Active" is the canonical funds-out-and-still-owed set (lib/loanStatus.ts).
+  // This used to be ['approved', 'disbursed', 'disbursement_queued'] — which
+  // omitted 'active', the status the automatic disbursement path writes and so
+  // the majority of live loans, while counting approved/queued loans where no
+  // money had moved (E11).
+  const activeLoans = useMemo(() => loans.filter((l) => isActiveDeductionStatus(l.status)), [loans]);
   const activeLoanCount = activeLoans.length;
+  // The tile reads "… MXN outstanding", so it is the outstanding obligation
+  // (remainingBalance, else total = principal + fee) — not `amount`, the bare
+  // principal, which understated every loan by its whole fee.
   const activeLoanAmount = useMemo(
-    () => activeLoans.reduce((sum, l) => sum + (Number(l.amount) || 0), 0),
+    () => activeLoans.reduce((sum, l) => sum + (getOutstandingBalance(l) ?? 0), 0),
     [activeLoans],
   );
 
@@ -107,8 +141,9 @@ export function AnalyticsPage() {
     const withDue = loans.filter((l) => l.dueDate);
     if (withDue.length === 0) return '–';
     const onTime = withDue.filter((l) => {
-      if (!l.paidAt || !l.dueDate) return false;
-      return l.paidAt.seconds <= l.dueDate.seconds;
+      const settled = settledAt(l);
+      if (!settled || !l.dueDate) return false;
+      return settled.seconds <= l.dueDate.seconds;
     });
     return ((onTime.length / withDue.length) * 100).toFixed(1) + '%';
   }, [loans]);
@@ -151,15 +186,18 @@ export function AnalyticsPage() {
 
   const downloadCSV = useCallback(() => {
     const header = ['Loan ID', 'Employee ID', 'Amount (MXN)', 'Status', 'Created', 'Due Date', 'Paid At'];
-    const rows = loans.map((l) => [
-      l.id,
-      l.employeeId ?? '',
-      String(Number(l.amount) || 0),
-      l.status ?? '',
-      l.createdAt ? new Date(l.createdAt.seconds * 1000).toISOString() : '',
-      l.dueDate ? new Date(l.dueDate.seconds * 1000).toISOString() : '',
-      l.paidAt ? new Date(l.paidAt.seconds * 1000).toISOString() : '',
-    ]);
+    const rows = loans.map((l) => {
+      const settled = settledAt(l);
+      return [
+        l.id,
+        l.employeeId ?? '',
+        String(Number(l.amount) || 0),
+        l.status ?? '',
+        l.createdAt ? new Date(l.createdAt.seconds * 1000).toISOString() : '',
+        l.dueDate ? new Date(l.dueDate.seconds * 1000).toISOString() : '',
+        settled ? new Date(settled.seconds * 1000).toISOString() : '',
+      ];
+    });
     const csv = [header, ...rows].map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -204,8 +242,14 @@ export function AnalyticsPage() {
         </div>
       )}
 
+      {loadError && (
+        <div className="ops-card" role="alert">
+          <div className="ops-error">{t('analytics_load_error')}</div>
+        </div>
+      )}
+
       {/* Main content */}
-      {!loading && (
+      {!loading && !loadError && (
         <>
           {/* KPI tiles */}
           <div className="ops-kpis" style={{ marginTop: 0, marginBottom: 10 }}>

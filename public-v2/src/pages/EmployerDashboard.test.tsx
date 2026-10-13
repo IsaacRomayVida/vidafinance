@@ -9,7 +9,7 @@
  * borrower-side regression tests this mirrors: MyLoans.test.tsx and
  * LoanTable.test.tsx, both "renders the term from loan.term, not loan.termDays".
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/firebase', () => ({ db: {}, auth: {}, storage: {} }));
@@ -95,5 +95,43 @@ describe('EmployerDashboard — loans table term column', () => {
     render(<EmployerDashboard />);
 
     expect(await screen.findByText(/\b30\b/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * E16 / E11 (AUDIT_EMPLOYER_PATH.md): the tabs filtered on `status ===
+ * tab.key`. The "Completados" tab matched the dead spelling 'paid', so it read
+ * (0) forever while repaid loans existed; "Activos" matched 'active' alone and
+ * hid manually disbursed and overdue loans.
+ */
+describe('EmployerDashboard — loan tabs use the canonical status sets', () => {
+  const chip = (name: RegExp) => screen.getByRole('button', { name });
+
+  it('counts repaid loans (and legacy "paid" documents) under Completados', async () => {
+    loanDocs = [
+      loan('r-1', { status: 'repaid' }),
+      loan('r-2', { status: 'paid' }),
+      loan('a-1', { status: 'active' }),
+    ];
+    render(<EmployerDashboard />);
+    await screen.findByText('Employee r-1');
+
+    expect(chip(/^Completados/).textContent).toBe('Completados2');
+    fireEvent.click(chip(/^Completados/));
+    expect(await screen.findByText('Employee r-2')).toBeInTheDocument();
+    expect(screen.queryByText('Employee a-1')).not.toBeInTheDocument();
+  });
+
+  it('counts disbursed and overdue loans under Activos, not only status "active"', async () => {
+    loanDocs = [
+      loan('a-1', { status: 'active' }),
+      loan('d-1', { status: 'disbursed' }),
+      loan('o-1', { status: 'overdue' }),
+      loan('p-1', { status: 'approved' }),
+    ];
+    render(<EmployerDashboard />);
+    await screen.findByText('Employee a-1');
+
+    expect(chip(/^Activos/).textContent).toBe('Activos3');
   });
 });

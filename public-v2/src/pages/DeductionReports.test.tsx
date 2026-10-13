@@ -2,7 +2,7 @@
  * DeductionReports — the employer-facing deduction obligation.
  *
  * Regression coverage for two defects:
- *  - getDeductionAmount() used to fall through to `loan.amount` (bare
+ *  - getOutstandingBalance() used to fall through to `loan.amount` (bare
  *    principal) because `deductionAmount`/`repaymentAmount` are never
  *    written to a loan document. The real obligation is `loan.total`
  *    (amount + fee), or `loan.remainingBalance` once a partial payroll
@@ -51,7 +51,9 @@ vi.mock('firebase/firestore', () => ({
 import '../i18n';
 import {
   buildCsvRows,
-  getDeductionAmount,
+  CSV_HEADERS,
+  installmentRows,
+  getOutstandingBalance,
   getPayFrequency,
   groupByPeriod,
   type Loan,
@@ -89,21 +91,26 @@ const DISBURSED_LOAN: Loan = {
   createdAt: { seconds: 1704067200 },
 };
 
-describe('getDeductionAmount', () => {
+describe('getOutstandingBalance', () => {
+  it('is zero for a repaid loan, even one whose document still carries only `total`', () => {
+    expect(getOutstandingBalance({ ...FEE_LOAN, status: 'repaid' })).toBe(0);
+    expect(getOutstandingBalance({ ...FEE_LOAN, status: 'paid' })).toBe(0);
+  });
+
   it('returns the obligation (amount + fee), not the bare principal', () => {
-    expect(getDeductionAmount(FEE_LOAN)).toBe(1300);
-    expect(getDeductionAmount(FEE_LOAN)).not.toBe(FEE_LOAN.amount);
+    expect(getOutstandingBalance(FEE_LOAN)).toBe(1300);
+    expect(getOutstandingBalance(FEE_LOAN)).not.toBe(FEE_LOAN.amount);
   });
 
   it('returns the remaining balance for a partially-deducted loan, not the original total', () => {
-    expect(getDeductionAmount(PARTIALLY_PAID_LOAN)).toBe(1600);
-    expect(getDeductionAmount(PARTIALLY_PAID_LOAN)).not.toBe(PARTIALLY_PAID_LOAN.total);
-    expect(getDeductionAmount(PARTIALLY_PAID_LOAN)).not.toBe(PARTIALLY_PAID_LOAN.amount);
+    expect(getOutstandingBalance(PARTIALLY_PAID_LOAN)).toBe(1600);
+    expect(getOutstandingBalance(PARTIALLY_PAID_LOAN)).not.toBe(PARTIALLY_PAID_LOAN.total);
+    expect(getOutstandingBalance(PARTIALLY_PAID_LOAN)).not.toBe(PARTIALLY_PAID_LOAN.amount);
   });
 
   it('returns null, not bare principal, when neither remainingBalance nor total is present', () => {
     const legacyLoan: Loan = { id: 'legacy', amount: 900, status: 'active' };
-    expect(getDeductionAmount(legacyLoan)).toBeNull();
+    expect(getOutstandingBalance(legacyLoan)).toBeNull();
   });
 });
 
@@ -208,9 +215,12 @@ describe('CSV export', () => {
     const partialRow = rows.find((r) => r[1] === 'Luis Gómez');
     const disbursedRow = rows.find((r) => r[1] === 'Marta Ruiz');
 
-    expect(feeRow?.[2]).toBe('1,300.00');
-    expect(partialRow?.[2]).toBe('1,600.00');
-    expect(disbursedRow?.[2]).toBe('650.00');
+    // Index 4 is the outstanding balance; these fixtures carry no schedule,
+    // so their per-period deduction (index 3) is an honest '—'.
+    expect(feeRow?.[4]).toBe('1,300.00');
+    expect(partialRow?.[4]).toBe('1,600.00');
+    expect(disbursedRow?.[4]).toBe('650.00');
+    expect(feeRow?.[3]).toBe('—');
   });
 
   it('carries the real cadence, not "monthly", and leaves an assumed cadence blank rather than inventing one', () => {
@@ -221,8 +231,95 @@ describe('CSV export', () => {
     const assumedRow = rows.find((r) => r[1] === 'Diego Ríos');
     const legacyRow = rows.find((r) => r[1] === 'Elena Vidal');
 
-    expect(weeklyRow?.[3]).toBe('weekly');
-    expect(assumedRow?.[3]).toBe('');
-    expect(legacyRow?.[3]).toBe('');
+    expect(weeklyRow?.[5]).toBe('weekly');
+    expect(assumedRow?.[5]).toBe('');
+    expect(legacyRow?.[5]).toBe('');
+  });
+});
+
+/**
+ * E10 (AUDIT_EMPLOYER_PATH.md): the "Deducción" column was the loan's WHOLE
+ * outstanding balance, filed under the month the loan was created. An employer
+ * reconciling payroll against it withheld the entire debt from one paycheck.
+ * It is now the contractual installment still to be withheld, filed under the
+ * month it falls due, with the balance as its own separately-labelled column.
+ */
+describe('E10 — per-period deduction comes from the repayment schedule', () => {
+  // Local-midnight dates, as calculateNextPayrollDate builds them.
+  const jan15 = new Date(2026, 0, 15);
+  const feb15 = new Date(2026, 1, 15);
+  const ts = (d: Date) => ({ seconds: d.getTime() / 1000, toDate: () => d });
+
+  const SCHEDULED_LOAN: Loan = {
+    id: 'loan-scheduled',
+    employeeName: 'Rosa Medina',
+    amount: 1000,
+    fee: 300,
+    total: 1300,
+    status: 'active',
+    // Originated in December — the old grouping filed it there.
+    createdAt: { seconds: new Date(2025, 11, 20).getTime() / 1000 },
+    repaymentSchedule: [
+      { number: 1, amount: 650, dueDate: ts(jan15) },
+      { number: 2, amount: 650, dueDate: ts(feb15) },
+    ],
+  };
+
+  it('bills each installment, not the whole balance, per period', () => {
+    const rows = installmentRows(SCHEDULED_LOAN);
+    expect(rows.map((r) => r.deduction)).toEqual([650, 650]);
+  });
+
+  it('groups by the month an installment falls due, not the month the loan was created', () => {
+    const groups = groupByPeriod([SCHEDULED_LOAN]);
+    expect(groups.map((g) => g.key)).toEqual(['2026-02', '2026-01']);
+    expect(groups.map((g) => g.total)).toEqual([650, 650]);
+  });
+
+  it('nets off what has been collected, oldest installment first', () => {
+    // 400 collected (by payroll or card) leaves 250 of January and all of February.
+    const rows = installmentRows({ ...SCHEDULED_LOAN, remainingBalance: 900 });
+    expect(rows.map((r) => r.deduction)).toEqual([250, 650]);
+  });
+
+  it('asks for nothing more on a repaid loan', () => {
+    const rows = installmentRows({ ...SCHEDULED_LOAN, status: 'repaid' });
+    expect(rows.map((r) => r.deduction)).toEqual([0, 0]);
+  });
+
+  it('accepts a schedule whose dates arrive as {seconds} only', () => {
+    const rows = installmentRows({
+      ...SCHEDULED_LOAN,
+      repaymentSchedule: [{ amount: 1300, dueDate: { seconds: jan15.getTime() / 1000 } }],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].deduction).toBe(1300);
+    expect(rows[0].dueDate?.getTime()).toBe(jan15.getTime());
+  });
+
+  it('refuses to guess for a loan with no (or an unreadable) schedule', () => {
+    expect(installmentRows(FEE_LOAN)).toEqual([{ loan: FEE_LOAN, dueDate: null, deduction: null }]);
+    const broken = { ...SCHEDULED_LOAN, repaymentSchedule: [{ amount: 650, dueDate: ts(jan15) }, { amount: 650 }] };
+    expect(installmentRows(broken)[0].deduction).toBeNull();
+  });
+
+  it('exports the due date, installment and balance as separate columns', () => {
+    expect(CSV_HEADERS.slice(2, 5)).toEqual(['Due Date', 'Deduction Amount', 'Outstanding Balance']);
+    const rows = buildCsvRows(groupByPeriod([SCHEDULED_LOAN]));
+    const jan = rows.find((r) => r[1] === 'Rosa Medina' && r[2] === '2026-01-15');
+    expect(jan?.[0]).toBe('Enero 2026');
+    expect(jan?.[3]).toBe('650.00');
+    expect(jan?.[4]).toBe('1,300.00');
+  });
+
+  it('renders the installment under "Deducción" and the balance under its own header', async () => {
+    snapshotLoans = [{ id: SCHEDULED_LOAN.id, data: SCHEDULED_LOAN }];
+    render(<DeductionReports />);
+
+    expect((await screen.findAllByText('Rosa Medina')).length).toBe(2);
+    expect(screen.getAllByText('$650.00')).toHaveLength(2);
+    expect(screen.getAllByText('$1,300.00')).toHaveLength(2); // balance column, once per row
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual(expect.arrayContaining(['Fecha de cobro', 'Deducción', 'Saldo pendiente']));
   });
 });

@@ -7,6 +7,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db, storage } from '../lib/firebase';
 import { classifyError, friendlyError } from '../lib/errors';
+import { LOAN_STATUS, isActiveDeductionStatus, isRepaidStatus } from '../lib/loanStatus';
 import { useAuth } from '../hooks/useAuth';
 import { signOut } from 'firebase/auth';
 import { SkeletonRows } from '../components/ui/SkeletonLine';
@@ -543,7 +544,8 @@ export function EmployerDashboard() {
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [pageState, setPageState] = useState<'loading' | 'pending_verification' | 'dashboard'>('loading');
+  const [pageState, setPageState] = useState<'loading' | 'pending_verification' | 'dashboard' | 'error'>('loading');
+  const [pageError, setPageError] = useState('');
 
   const needsEmailVerification = user ? (!user.emailVerified && !user.email?.endsWith('@vida-test.com')) : false;
 
@@ -555,7 +557,21 @@ export function EmployerDashboard() {
     const uid = user.uid;
 
     (async () => {
-      const empDoc = await getDoc(doc(db, 'employers', uid));
+      // The employer document gates everything below, so a failed read has to
+      // land somewhere visible. Unguarded, a rejection here (a permission
+      // error, an offline client) left pageState at 'loading' forever — an
+      // endless spinner indistinguishable from a slow network, plus an
+      // unhandled rejection (E13, AUDIT_EMPLOYER_PATH.md).
+      let empDoc;
+      try {
+        empDoc = await getDoc(doc(db, 'employers', uid));
+      } catch (err) {
+        if (!cancelled) {
+          setPageError(friendlyError(err));
+          setPageState('error');
+        }
+        return;
+      }
       if (cancelled) return;
 
       if (!empDoc.exists()) {
@@ -621,14 +637,10 @@ export function EmployerDashboard() {
     return unsub;
   }, [user, pageState]);
 
-  if (pageState === 'loading') {
-    return (
-      <div className="ops-card" style={{ display: 'grid', placeItems: 'center', padding: 80 }} aria-busy="true">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-      </div>
-    );
-  }
-
+  // Checked before pageState: the fetch effect above deliberately never runs
+  // for an unverified address, so pageState stays 'loading' for them — and
+  // with the loading branch first, this screen was unreachable and the
+  // employer sat on a spinner forever.
   if (needsEmailVerification) {
     return (
       <div className="ops-page">
@@ -642,6 +654,36 @@ export function EmployerDashboard() {
             onClick={() => signOut(auth).then(() => navigate('/login'))}
           >
             <i aria-hidden="true" />{t('dash_back_to_login')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (pageState === 'loading') {
+    return (
+      <div className="ops-card" style={{ display: 'grid', placeItems: 'center', padding: 80 }} aria-busy="true">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+      </div>
+    );
+  }
+
+  if (pageState === 'error') {
+    return (
+      <div className="ops-page">
+        <div className="ops-card" style={{ padding: '40px 24px' }}>
+          <ErrorBanner message={`${t('dash_load_error')} ${pageError}`} />
+          <button
+            type="button"
+            className="ops-btn"
+            style={{ marginTop: 12 }}
+            onClick={() => {
+              setPageError('');
+              setPageState('loading');
+              setStatsRetryToken((n) => n + 1);
+            }}
+          >
+            {t('dash_retry')}
           </button>
         </div>
       </div>
@@ -709,16 +751,26 @@ export function EmployerDashboard() {
   };
 
 
-  const filteredLoans = (() => {
-    if (activeTab === 'all') return loans;
-    if (activeTab === 'approved') return loans.filter((l) => l.status === 'approved' || l.status === 'disbursement_queued');
-    return loans.filter((l) => l.status === activeTab);
-  })();
+  // Tabs filter on the canonical status sets (lib/loanStatus.ts), not on a
+  // literal equal to the tab's key. Matching `status === 'paid'` made the
+  // "Completados" tab permanently (0) — 'paid' is a dead spelling no write path
+  // produces; fully repaid loans are 'repaid' (E16) — and `status ===
+  // 'active'` hid every manually disbursed ('disbursed') and every overdue
+  // loan from the "Activos" tab (E11).
+  function tabMatches(key: TabKey, status: string): boolean {
+    switch (key) {
+      case 'all': return true;
+      case 'approved': return status === LOAN_STATUS.APPROVED || status === LOAN_STATUS.DISBURSEMENT_QUEUED;
+      case 'active': return isActiveDeductionStatus(status);
+      case 'paid': return isRepaidStatus(status);
+      default: return status === key;
+    }
+  }
+
+  const filteredLoans = loans.filter((l) => tabMatches(activeTab, l.status));
 
   function tabCount(key: TabKey): number {
-    if (key === 'all') return loans.length;
-    if (key === 'approved') return loans.filter((l) => l.status === 'approved' || l.status === 'disbursement_queued').length;
-    return loans.filter((l) => l.status === key).length;
+    return loans.filter((l) => tabMatches(key, l.status)).length;
   }
 
   /* ── the board: everything below is derived from `employer`, `stats` and
@@ -742,7 +794,10 @@ export function EmployerDashboard() {
     byPeriod.set(key, g);
   }
   const countIn = (start: Date) => byPeriod.get(quincenaKey(start))?.loans.length ?? 0;
-  const isApproved = (l: Loan) => ['approved', 'disbursement_queued', 'active', 'disbursed', 'repaid', 'paid'].includes(l.status);
+  // Approved at some point and not since reversed: includes a loan that has
+  // gone overdue or into collections, which a literal list here used to drop.
+  const isApproved = (l: Loan) =>
+    tabMatches('approved', l.status) || isActiveDeductionStatus(l.status) || isRepaidStatus(l.status);
   const periodRows = [
     { start: cur, loans: byPeriod.get(curKey)?.loans ?? [], current: true },
     ...[...byPeriod.values()]

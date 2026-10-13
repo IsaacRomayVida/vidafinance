@@ -13,7 +13,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 vi.mock('../lib/firebase', () => ({ db: {}, auth: {}, storage: {} }));
 
 const stableUser = { uid: 'employer-1', emailVerified: true, email: 'e@example.com' };
-vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: stableUser }) }));
+let authUser: { uid: string; emailVerified: boolean; email: string } = stableUser;
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: authUser }) }));
 
 vi.mock('firebase/auth', () => ({ signOut: vi.fn() }));
 
@@ -78,6 +79,7 @@ const serverStats = {
 };
 
 beforeEach(() => {
+  authUser = stableUser;
   getDocImpl = () => Promise.resolve(okEmployer);
   snapshotImpl = (_name, ok) => ok({ docs: [] });
   dashboardCallableImpl = () => Promise.resolve({ data: { stats: serverStats } });
@@ -141,5 +143,41 @@ describe('EmployerDashboard — the stats call fails (E4)', () => {
 
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     expect(await screen.findByText('3')).toBeTruthy();
+  });
+});
+
+/**
+ * E13 (AUDIT_EMPLOYER_PATH.md): the employer-document read had no try/catch,
+ * so a rejection left the page on its loading spinner forever (plus an
+ * unhandled rejection) — a permission error looked exactly like slowness.
+ */
+describe('EmployerDashboard — the employer document read fails (E13)', () => {
+  it('shows an error with a retry instead of an endless spinner', async () => {
+    getDocImpl = () => Promise.reject(new Error('permission-denied'));
+    render(<EmployerDashboard />);
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText(/No pudimos cargar la cuenta/)).toBeTruthy();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it('retrying re-reads the document and lands on the dashboard', async () => {
+    getDocImpl = () => Promise.reject(new Error('unavailable'));
+    render(<EmployerDashboard />);
+
+    const retry = await screen.findByRole('button', { name: /reintentar|retry/i });
+    getDocImpl = () => Promise.resolve(okEmployer);
+    retry.click();
+
+    expect(await screen.findByText('$45,000')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows the verify-email screen to an unverified employer instead of a spinner', async () => {
+    authUser = { uid: 'employer-2', emailVerified: false, email: 'new@example.com' };
+    render(<EmployerDashboard />);
+
+    expect(await screen.findByText('Verifica tu correo electrónico')).toBeTruthy();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
   });
 });

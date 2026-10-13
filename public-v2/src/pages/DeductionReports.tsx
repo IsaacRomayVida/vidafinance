@@ -10,7 +10,8 @@ import {
   type PeriodGroup,
   fmt,
   fmtCurrency,
-  getDeductionAmount,
+  formatDueDate,
+  getOutstandingBalance,
   getPayFrequency,
   buildCsv,
   groupByPeriod,
@@ -65,9 +66,12 @@ export function DeductionReports() {
 
   const groups = useMemo(() => groupByPeriod(loans), [loans]);
 
-  // Summary stats
-  const totalDeductions = loans.reduce((s, l) => s + (getDeductionAmount(l) ?? 0), 0);
-  const activeCount = loans.filter((l) => isActiveDeductionStatus(l.status)).length;
+  // Summary stats. The headline is the outstanding balance on the loans still
+  // being deducted, labelled as such — it used to be titled "Total
+  // Deducciones", which invited withholding the whole debt in one paycheck.
+  const activeLoans = loans.filter((l) => isActiveDeductionStatus(l.status));
+  const totalOutstanding = activeLoans.reduce((s, l) => s + (getOutstandingBalance(l) ?? 0), 0);
+  const activeCount = activeLoans.length;
   const completedCount = loans.filter((l) => isRepaidStatus(l.status)).length;
 
   return (
@@ -88,8 +92,8 @@ export function DeductionReports() {
       {/* Stats */}
       <div className="ops-kpis" style={{ marginTop: 0, marginBottom: 10 }}>
         <div className="ops-kpi">
-          <small>{t('ded_total_deductions', 'Total Deducciones')}</small>
-          <b>${fmt(totalDeductions)}<span>MXN</span></b>
+          <small>{t('ded_total_outstanding', 'Saldo pendiente')}</small>
+          <b>${fmt(totalOutstanding)}<span>MXN</span></b>
         </div>
         <div className="ops-kpi">
           <small>{t('ded_active_deductions', 'Activos')}</small>
@@ -131,21 +135,29 @@ export function DeductionReports() {
                 <thead>
                   <tr>
                     <th>{t('dash_th_employee', 'Empleado')}</th>
+                    <th>{t('ded_th_due_date', 'Fecha de cobro')}</th>
                     <th>{t('ded_th_deduction', 'Deducción')}</th>
+                    <th>{t('ded_th_outstanding', 'Saldo pendiente')}</th>
                     <th>{t('ded_th_frequency', 'Frecuencia')}</th>
                     <th>{t('dash_th_status', 'Estatus')}</th>
                     <th>{t('ded_th_deduction_id', 'ID Deducción')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {group.loans.map((loan) => {
-                    const amount = getDeductionAmount(loan);
+                  {group.rows.map(({ loan, dueDate, deduction }) => {
+                    const outstanding = getOutstandingBalance(loan);
                     const frequency = getPayFrequency(loan);
                     return (
-                    <tr key={loan.id}>
+                    <tr key={`${loan.id}_${formatDueDate(dueDate)}`}>
                       <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
+                      <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {dueDate ? formatDueDate(dueDate) : t('ded_no_schedule', 'Sin calendario')}
+                      </td>
                       <td style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
-                        {amount === null ? '—' : `$${fmtCurrency(amount)}`}
+                        {deduction === null ? '—' : `$${fmtCurrency(deduction)}`}
+                      </td>
+                      <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {outstanding === null ? '—' : `$${fmtCurrency(outstanding)}`}
                       </td>
                       <td style={{ textTransform: 'capitalize' }}>
                         {frequency ? t(`freq_${frequency}`, frequency) : '—'}
