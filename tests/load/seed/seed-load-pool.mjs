@@ -26,7 +26,7 @@
 import { readFileSync } from 'node:fs';
 
 import { SeedRefusal, parseArgs, resolvePassword, resolveSeedTarget } from './guard.mjs';
-import { describePlan, seedPool, teardownPool } from './seed-lib.mjs';
+import { TeardownIncomplete, describePlan, seedPool, teardownPool } from './seed-lib.mjs';
 
 function credentialsProjectId(env) {
   const path = env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -63,7 +63,9 @@ async function main() {
   const deps = { db: getFirestore(app), auth: getAuth(app), log: (line) => console.log(line) };
 
   if (opts.teardown) {
-    const result = await teardownPool({ ...deps, documentId: FieldPath.documentId() });
+    // deleteUsers is server-limited to about one call per second (1,000 accounts each).
+    const authBatchPauseMs = target.mode === 'emulator' ? 0 : 1100;
+    const result = await teardownPool({ ...deps, documentId: FieldPath.documentId() }, { authBatchPauseMs });
     console.log(`TEARDOWN DONE ${JSON.stringify(result)}`);
   } else {
     const result = await seedPool(
@@ -77,6 +79,12 @@ async function main() {
 main().then(
   () => process.exit(0),
   (err) => {
+    if (err instanceof TeardownIncomplete) {
+      // Never prints "TEARDOWN DONE": a caller grepping for it must not find it.
+      console.error(`TEARDOWN INCOMPLETE ${JSON.stringify(err.result)}`);
+      console.error(err.message);
+      process.exit(1);
+    }
     console.error(err instanceof SeedRefusal ? err.message : err);
     process.exit(err instanceof SeedRefusal ? 2 : 1);
   }

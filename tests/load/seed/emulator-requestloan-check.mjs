@@ -17,30 +17,50 @@
  * provider is reachable, so the expected answer is `under_review` (the inline
  * ML gate fails closed into manual review).
  *
- * Refuses to start unless both the data target and TARGET_URL are the emulator.
+ * Refuses to start unless both the data target and TARGET_URL are the emulator,
+ * and refuses when UNDERWRITING_SERVICE_URL or ML_SERVICE_URL is set — in the
+ * shell or in a functions/.env* file — because the emulated functions inherit
+ * both and would call the real service.
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
 import { resolveTarget } from '../target.js';
-import { EMULATOR_PASSWORD, resolveSeedTarget } from './guard.mjs';
+import { EMULATOR_PASSWORD, functionsProviderLeaks, resolveSeedTarget } from './guard.mjs';
 import {
   ACCEPTED_INITIAL_STATUSES,
   appCheckPlan,
   buildEmployeeDoc,
   buildPoolApplication,
   employeeUid,
-  signInUrl,
+  poolSignInUrl,
 } from './pool.js';
 
 const seedTarget = resolveSeedTarget({ project: null }, process.env);
 const callTarget = resolveTarget(process.env);
 if (seedTarget.mode !== 'emulator' || callTarget.label !== 'emulator') {
   console.error('Refusing: this check creates loans and only ever runs against the emulator.');
+  process.exit(2);
+}
+
+// The data target being the emulator is not enough: the emulated FUNCTIONS get
+// this shell's environment and functions/.env*.
+const FUNCTIONS_DIR = new URL('../../../functions/', import.meta.url);
+const envFiles = readdirSync(FUNCTIONS_DIR)
+  .filter((name) => name.startsWith('.env') && !name.endsWith('.example'))
+  .map((name) => ({ name: `functions/${name}`, text: readFileSync(new URL(name, FUNCTIONS_DIR), 'utf8') }));
+const leaks = functionsProviderLeaks(process.env, envFiles);
+if (leaks.length > 0) {
+  console.error(
+    'Refusing: the emulated requestLoan would call a real service with synthetic applicants.\n' +
+      leaks.map((line) => `  - ${line}`).join('\n') +
+      '\nUnset them (and INTERNAL_SECRET) for this command, e.g. `env -u UNDERWRITING_SERVICE_URL -u ML_SERVICE_URL …`.'
+  );
   process.exit(2);
 }
 
@@ -58,7 +78,7 @@ function check(ok, label) {
 
 async function requestLoan(index) {
   const app = buildPoolApplication(index);
-  const signIn = await fetch(signInUrl(process.env), {
+  const signIn = await fetch(poolSignInUrl(process.env, callTarget.label), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: app.email, password: EMULATOR_PASSWORD, returnSecureToken: true }),

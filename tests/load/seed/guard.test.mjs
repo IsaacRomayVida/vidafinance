@@ -166,3 +166,42 @@ test('CLI: a real project without LOAD_TEST_PASSWORD stops before any write', ()
   assert.equal(run.status, 2);
   assert.match(run.stderr, /LOAD_TEST_PASSWORD/);
 });
+
+test('functionsProviderLeaks: an emulated requestLoan must not inherit a real underwriting or ML service', async () => {
+  const { FUNCTIONS_PROVIDER_VARS, functionsProviderLeaks } = await import('./guard.mjs');
+  assert.deepEqual([...FUNCTIONS_PROVIDER_VARS], ['UNDERWRITING_SERVICE_URL', 'ML_SERVICE_URL']);
+
+  // clean shell, no env files, or env files that do not set them
+  assert.deepEqual(functionsProviderLeaks({}), []);
+  assert.deepEqual(functionsProviderLeaks({ REDIS_URL: 'redis://127.0.0.1:6390', INTERNAL_SECRET: 'x', ML_SERVICE_URL: '' }), []);
+  assert.deepEqual(
+    functionsProviderLeaks({}, [
+      { name: 'functions/.env', text: '# UNDERWRITING_SERVICE_URL=https://uw.example\nML_SERVICE_URL=\nOTHER_ML_SERVICE_URL_X=1\n' },
+    ]),
+    []
+  );
+
+  // exported in the shell — what `firebase emulators:exec` passes straight through
+  assert.deepEqual(functionsProviderLeaks({ UNDERWRITING_SERVICE_URL: 'https://uw.example' }), [
+    'UNDERWRITING_SERVICE_URL is set in the environment',
+  ]);
+  assert.deepEqual(functionsProviderLeaks({ ML_SERVICE_URL: 'https://ml.example' }), ['ML_SERVICE_URL is set in the environment']);
+
+  // set in a functions/.env* file — which the emulator loads whatever the shell holds
+  assert.deepEqual(
+    functionsProviderLeaks({}, [
+      { name: 'functions/.env', text: 'FOO=1\nUNDERWRITING_SERVICE_URL="https://uw.example"\n' },
+      { name: 'functions/.env.local', text: '  export ML_SERVICE_URL=https://ml.example\n' },
+    ]),
+    ['UNDERWRITING_SERVICE_URL is set in functions/.env', 'ML_SERVICE_URL is set in functions/.env.local']
+  );
+});
+
+test('the emulator requestLoan check refuses before seeding when a provider URL is set', async () => {
+  const { readFileSync } = await import('node:fs');
+  const script = readFileSync(new URL('./emulator-requestloan-check.mjs', import.meta.url), 'utf8');
+  const refusal = script.indexOf('functionsProviderLeaks(process.env, envFiles)');
+  assert.ok(refusal > 0, 'the check must call functionsProviderLeaks');
+  assert.ok(refusal < script.indexOf('cli();'), 'and must do so before the first seed');
+  assert.match(script.slice(refusal, script.indexOf('cli();')), /process\.exit\(2\)/);
+});

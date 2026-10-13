@@ -5,8 +5,11 @@
  * pipeline in staging. Ramps through 4 stages up to 2x target (280/min).
  *
  * Prerequisites:
- *   1. All external APIs in mock mode on the target:
- *      METAMAP_MOCK=true, RISKSEAL_MOCK=true
+ *   1. Every external provider switched off on the target — the full list
+ *      (it is longer than METAMAP_MOCK / RISKSEAL_MOCK) is in
+ *      docs/runbooks/scaling.md § "Keeping bureau / RiskSeal out of it".
+ *      This script CANNOT verify it: /api/health does not report the
+ *      target's configuration. The operator checks it by hand.
  *   2. Environment variables set:
  *      TARGET_URL       — Functions base URL (no default; see ./target.js —
  *                         production is refused without an explicit sign-off)
@@ -53,7 +56,7 @@ import {
   buildPoolApplication,
   poolConfigFromEnv,
   poolIndexFor,
-  signInUrl,
+  poolSignInUrl,
 } from './seed/pool.js';
 import {
   requestLatency,
@@ -112,7 +115,10 @@ export const options = {
 // Init fails — before any request — when neither a pool nor AUTH_TOKEN is given.
 
 const POOL = poolConfigFromEnv(__ENV);
-const SIGN_IN_URL = POOL ? signInUrl(__ENV) : null;
+// Throws at init for a pool aimed at production (it cannot exist there), for an
+// emulator target without the Auth emulator host, and for a deployed target
+// with one left set.
+const SIGN_IN_URL = POOL ? poolSignInUrl(__ENV, TARGET.label) : null;
 const LOAD_TEST_PASSWORD = __ENV.LOAD_TEST_PASSWORD || '';
 
 if (!POOL && !__ENV.AUTH_TOKEN) {
@@ -209,12 +215,9 @@ export function setup() {
     throw new Error(`Health check failed on ${STAGING_URL}/api/health — aborting before any load.`);
   }
 
-  // Verify mock mode is active
-  const mockCheckRes = http.get(`${STAGING_URL}/api/health`, {
-    tags: { type: 'mockCheck' },
-  });
-
-  console.log(`Health check response: ${mockCheckRes.status}`);
+  // Nothing here verifies that the target's providers are mocked: the health
+  // endpoint does not report configuration. See the runbook's provider table.
+  console.log(`Health check response: ${healthRes.status}`);
 
   return {
     startTime: new Date().toISOString(),
@@ -226,7 +229,7 @@ export function setup() {
 
 // ── Main test function ──────────────────────────────────────────────────────
 
-export default function (data) {
+export default function () {
   const vuId = __VU;
   const iter = __ITER;
 

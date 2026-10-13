@@ -11,7 +11,9 @@
  *   3. a pool member can sign in the way the k6 script does, and the ID token
  *      carries role=employee;
  *   4. a second seed is idempotent and restores a spent credit line;
- *   5. teardown removes the pool and what a run left behind, and leaves every
+ *   5. teardown removes the pool and what a run left behind — including the
+ *      review_queue rows Stage 5 of the underwriting-service writes, which carry
+ *      no loan id and are found by the pool's RFC shape — and leaves every
  *      non-load-test document and account exactly as it was;
  *   6. a second teardown deletes nothing.
  *
@@ -26,7 +28,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
 import { EMULATOR_PASSWORD, resolveSeedTarget } from './guard.mjs';
-import { buildEmployeeDoc, employeeEmail, employeeUid, employerCountFor, signInUrl } from './pool.js';
+import { buildEmployeeDoc, employeeEmail, employeeUid, employerCountFor, rfcFor, signInUrl } from './pool.js';
 
 const target = resolveSeedTarget({ project: null }, process.env);
 if (target.mode !== 'emulator') {
@@ -83,6 +85,9 @@ await db.doc('employers/realEmployerUid').set({ companyName: 'Cliente Real SA', 
 await db.doc('loans/realLoan').set({ employeeId: 'realBorrowerUid', employerId: 'realEmployerUid', status: 'active' });
 await db.doc('loans/realLoan/underwritingDetail/detail').set({ decision: 'approved' });
 await db.doc('review_queue/realReview').set({ loanId: 'realLoan' });
+// a Stage 5 row for a real applicant: RFCs either side of the pool's "LTXX" range
+await db.doc('review_queue/realStage5a').set({ loanId: 'uw-1-aaaaaa', correlationId: 'uw-1-aaaaaa', applicantRfc: 'LOAA900101AB1' });
+await db.doc('review_queue/realStage5b').set({ loanId: 'uw-1-bbbbbb', correlationId: 'uw-1-bbbbbb', applicantRfc: 'LUXX900101AB1' });
 await db.doc('audit_log/realAudit').set({ actorUid: 'realBorrowerUid', action: 'loan.requested' });
 await db.doc('config/loan').set({ feeRate: 0.3 });
 await auth.createUser({ uid: 'realBorrowerUid', email: 'ana@example.com', password: 'not-the-pool-password' });
@@ -127,6 +132,15 @@ for (const index of [0, 1, 401]) {
   await db.doc(`loans/${loanId}/underwritingDetail/detail`).set({ decision: 'pending_review' });
   await db.doc(`loans/${loanId}/underwritingDetail/inlineMl`).set({ source: 'inline_ml_gate' });
   await db.collection('review_queue').add({ loanId, reason: 'ml_gate_unavailable' });
+  // What Stage 5 writes on a full-pipeline run (stage5-review.js writeToReviewQueue):
+  // loanId is the pipeline's correlation id, never the loan's id.
+  await db.collection('review_queue').add({
+    loanId: `uw-1700000000000-r${index}`,
+    correlationId: `uw-1700000000000-r${index}`,
+    applicantName: 'undefined undefined',
+    applicantRfc: rfcFor(index),
+    status: 'pending',
+  });
   await db.collection('audit_log').add({ actorUid: employeeUid(index), action: 'loan.requested', targetId: loanId });
   await db.doc(`employees/${employeeUid(index)}`).update({ availableCredit: 0 });
 }
@@ -138,13 +152,13 @@ check(restored === buildEmployeeDoc(401, employerCountFor(COUNT)).availableCredi
 
 // 5 ── teardown
 const torn = cli('--teardown');
-check(/TEARDOWN DONE \{"loans":3,"loanDetails":6,"reviewQueue":3,"auditLog":3,"employees":450,"employers":9,"authUsers":450\}/.test(torn), 'teardown reported what it removed');
+check(/TEARDOWN DONE \{"loans":3,"loanDetails":6,"reviewQueue":3,"reviewQueueStage5":3,"auditLog":3,"employees":450,"employers":9,"authUsers":450\}/.test(torn), 'teardown reported what it removed');
 check(same(await dump(), realDocs), 'every non-load-test document is byte-for-byte unchanged');
 check(same(await listUids(), realUids), 'every non-load-test account is still there (including the foreign-email one)');
 
 // 6 ── teardown again
 const again = cli('--teardown');
-check(/TEARDOWN DONE \{"loans":0,"loanDetails":0,"reviewQueue":0,"auditLog":0,"employees":0,"employers":0,"authUsers":0\}/.test(again), 'second teardown is a no-op');
+check(/TEARDOWN DONE \{"loans":0,"loanDetails":0,"reviewQueue":0,"reviewQueueStage5":0,"auditLog":0,"employees":0,"employers":0,"authUsers":0\}/.test(again), 'second teardown is a no-op');
 
 console.log(failures === 0 ? '\nREHEARSAL OK' : `\nREHEARSAL FAILED (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

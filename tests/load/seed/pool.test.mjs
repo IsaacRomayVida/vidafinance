@@ -1,7 +1,7 @@
 // node --test tests/load/seed/pool.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 import { RAMP_STAGES, SMOKE_STAGES } from '../config.js';
 import * as pool from './pool.js';
@@ -193,6 +193,49 @@ test('signInUrl: emulator host wins and must be loopback; otherwise the API key 
   assert.throws(() => pool.signInUrl({}), /FIREBASE_API_KEY/);
 });
 
+test('poolSignInUrl: the pool and the target must agree', () => {
+  const emulatorHost = { FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099' };
+  assert.equal(pool.poolSignInUrl(emulatorHost, 'emulator'), pool.signInUrl(emulatorHost));
+  assert.equal(pool.poolSignInUrl({ FIREBASE_API_KEY: 'k' }, 'staging'), pool.signInUrl({ FIREBASE_API_KEY: 'k' }));
+
+  // a pool aimed at production: never, whatever else is set
+  for (const env of [{ FIREBASE_API_KEY: 'k' }, emulatorHost, {}]) {
+    assert.throws(() => pool.poolSignInUrl(env, 'production'), /target is PRODUCTION/);
+  }
+  // emulator target, API key, no emulator host: would sign in against Google
+  assert.throws(() => pool.poolSignInUrl({ FIREBASE_API_KEY: 'k' }, 'emulator'), /against Google/);
+  // deployed target with a leftover emulator host: every token would be rejected
+  assert.throws(() => pool.poolSignInUrl({ ...emulatorHost, FIREBASE_API_KEY: 'k' }, 'staging'), /Unset it/);
+  // the underlying checks still apply
+  assert.throws(() => pool.poolSignInUrl({}, 'staging'), /FIREBASE_API_KEY/);
+  assert.throws(() => pool.poolSignInUrl({ FIREBASE_AUTH_EMULATOR_HOST: 'evil.example.com:9099' }, 'emulator'), /loopback/);
+});
+
+test('isPoolRfc is true for every RFC the pool can produce and for nothing a taxpayer can hold', () => {
+  for (let index = 0; index < 1000000; index += 997) assert.ok(pool.isPoolRfc(pool.rfcFor(index)), String(index));
+  for (const index of SAMPLE) {
+    assert.ok(pool.isPoolRfc(pool.buildEmployeeDoc(index, 10).rfc));
+    assert.ok(pool.rfcFor(index).startsWith(pool.POOL_RFC_PREFIX));
+  }
+  for (const rfc of [
+    'LTXX900101AB1', // right prefix, a real-looking homoclave
+    'LTXX600101L0', // too short
+    'LTXX600101L000', // too long
+    'ltxx600101l00',
+    'LTXX601301L00', // month 13
+    'LTXX600129L00', // day 29: the pool never generates one
+    'LTXX590101L00', // born before the pool's range
+    'LOAA900101AB1',
+    'LTE000001LT1', // the pool's EMPLOYER rfc is not an applicant rfc
+    '',
+    null,
+    undefined,
+    600101,
+  ]) {
+    assert.equal(pool.isPoolRfc(rfc), false, String(rfc));
+  }
+});
+
 test('appCheckPlan: a deployed target must be given a token; the emulator gets an unsigned placeholder', () => {
   assert.deepEqual(pool.appCheckPlan({ APP_CHECK_TOKEN: 'jwt' }, 'staging'), { kind: 'static', token: 'jwt' });
   assert.deepEqual(pool.appCheckPlan({}, 'emulator'), { kind: 'static', token: pool.EMULATOR_APP_CHECK_TOKEN });
@@ -241,7 +284,20 @@ test('the default pool covers the full profile; the runbook numbers are the comp
   const full = pool.iterationUpperBound(RAMP_STAGES);
   const smoke = pool.iterationUpperBound(SMOKE_STAGES);
   assert.ok(pool.DEFAULT_POOL_SIZE >= full, `default ${pool.DEFAULT_POOL_SIZE} < full-profile bound ${full}`);
-  assert.equal(pool.iterationUpperBound([{ target: 10, duration: '30m' }]), 360); // 1 VU, 12 iterations/min
+  // 1 VU for 30 min: an iteration starts at t = 0 and every 5 s after it, the last at t = 1795 s … plus the fencepost
+  assert.equal(pool.iterationUpperBound([{ target: 10, duration: '30m' }]), 361);
+  // one extra start per VU ever started (28 at the end of `full`, 5 at the end of `smoke`)
+  assert.equal(full, 12420 + 28);
+  assert.equal(smoke, 132 + 5);
+  // a ramp-down and back up restarts VUs, and each restart is one more start
+  assert.equal(
+    pool.iterationUpperBound([
+      { target: 30, duration: '1m' },
+      { target: 10, duration: '1m' },
+      { target: 30, duration: '1m' },
+    ]),
+    Math.ceil(((2 + 2 + 2) * 60) / 5) + 1 + 2 + 2
+  );
 
   const runbook = repo('docs/runbooks/scaling.md');
   const fmt = (n) => n.toLocaleString('en-US');
@@ -259,7 +315,89 @@ test('the k6 script takes its users from the pool and stops when it runs out', (
   assert.match(script, /buildPoolApplication\(index\)/);
   assert.match(script, /ACCEPTED_INITIAL_STATUSES\.includes\(body\.result\.status\)/);
   assert.match(script, /const APP_CHECK = appCheckPlan\(__ENV, TARGET\.label\)/);
+  // pool + production, and a sign-in endpoint that disagrees with the target, are refused at init
+  assert.match(script, /const SIGN_IN_URL = POOL \? poolSignInUrl\(__ENV, TARGET\.label\) : null/);
+  assert.doesNotMatch(script, /[^l]signInUrl\(__ENV\)/);
+  // the step that claimed to verify mock mode (it re-read /api/health) is gone
+  assert.doesNotMatch(script, /mockCheck|Verify mock mode/);
   assert.match(script, /'X-Firebase-AppCheck': appCheckToken\(\)/);
   // the per-iteration invented account that could never exist is gone
   assert.doesNotMatch(script, /@loadtest\.vida\.internal|LoadTest2024/);
+});
+
+// ── The provider inventory in the runbook ────────────────────────────────────
+// Deliverable: say precisely what a load run can reach. These tests fail when
+// the code grows a provider switch or an outbound host the runbook does not name.
+
+const UW = '../../../services/underwriting-service/';
+function underwritingSources() {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (!['node_modules', '__tests__', '__mocks__', 'test-support'].includes(entry.name)) walk(`${dir}${entry.name}/`);
+      } else if (entry.name.endsWith('.js') && !entry.name.endsWith('.test.js') && !entry.name.endsWith('.config.js')) {
+        files.push(`${dir}${entry.name}`);
+      }
+    }
+  };
+  walk(UW);
+  return files.map((file) => ({ file, text: readFileSync(new URL(file, import.meta.url), 'utf8') }));
+}
+
+test('the runbook names every provider switch and endpoint variable the underwriting-service reads', () => {
+  const runbook = repo('docs/runbooks/scaling.md');
+  const section = runbook.slice(runbook.indexOf('#### Keeping bureau / RiskSeal out of it'), runbook.indexOf('#### Needs a human first'));
+  assert.ok(section.length > 1000, 'provider section not found');
+
+  const names = new Set();
+  for (const { text } of underwritingSources()) {
+    for (const [, name] of text.matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
+      if (/(_URL|_MOCK|_MODE|_PROVIDER|_API_KEY)$/.test(name)) names.add(name);
+    }
+  }
+  // sanity: the scan really sees the ones the review found missing
+  for (const expected of ['ANTHROPIC_API_KEY', 'EMPLOYER_SAT_PROVIDER', 'KYC_MODE', 'SAT_SOAP_CFDI_URL', 'SEP_CEDULAS_URL', 'REPUVE_URL', 'CONDUSEF_URL', 'SW_BASE_URL']) {
+    assert.ok(names.has(expected), `scan did not find ${expected}`);
+  }
+  const missing = [...names].filter((name) => !section.includes(`\`${name}\``)).sort();
+  assert.deepEqual(missing, [], `provider variables read by underwriting-service but absent from the runbook: ${missing.join(', ')}`);
+});
+
+test('the runbook names every third-party host hard-coded in the underwriting-service', () => {
+  const runbook = repo('docs/runbooks/scaling.md');
+  const section = runbook.slice(runbook.indexOf('#### Keeping bureau / RiskSeal out of it'), runbook.indexOf('#### Needs a human first'));
+  const NOT_PROVIDERS = /^(localhost|schemas\.xmlsoap\.org|tempuri\.org|vida-finance\.web\.app)$/;
+
+  const hosts = new Set();
+  for (const { text } of underwritingSources()) {
+    for (const line of text.split('\n')) {
+      if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue; // comments (doc links)
+      for (const [, host] of line.matchAll(/https?:\/\/([a-zA-Z0-9.-]+)/g)) {
+        if (!NOT_PROVIDERS.test(host)) hosts.add(host);
+      }
+    }
+  }
+  for (const expected of ['api.anthropic.com', 'services.sw.com.mx', 'sandbox.belvo.com', 'ip-api.com']) {
+    assert.ok(hosts.has(expected), `scan did not find ${expected}`);
+  }
+  const missing = [...hosts].filter((host) => !section.includes(host)).sort();
+  assert.deepEqual(missing, [], `hosts called by underwriting-service but absent from the runbook: ${missing.join(', ')}`);
+});
+
+test('the runbook does not present the full-pipeline setup as cleared, and states what teardown leaves', () => {
+  const runbook = repo('docs/runbooks/scaling.md');
+  assert.match(runbook, /\*\*B — full pipeline\. NOT cleared to run\b/);
+  assert.doesNotMatch(runbook, /Two workable setups/);
+  // the facts the gap rests on are still the code's
+  const stage5 = repo('services/underwriting-service/src/stages/stage5-review.js');
+  assert.match(stage5, /fetch\("https:\/\/api\.anthropic\.com\/v1\/messages"/);
+  assert.match(stage5, /applicantRfc: data\.applicantRfc/);
+  assert.match(stage5, /loanId: data\.loanId/);
+  const index = repo('functions/src/index.ts');
+  const payload = index.slice(index.indexOf("fetch(uwUrl + '/underwrite'"), index.indexOf('signal: AbortSignal.timeout(30000)'));
+  assert.ok(payload.length > 200 && !/loanId/.test(payload), 'requestLoan now sends a loanId to /underwrite: revisit teardown and the runbook');
+  // teardown section
+  assert.match(runbook, /`applicantRfc` is a pool RFC/);
+  assert.match(runbook, /`employer-a:LTE/);
 });

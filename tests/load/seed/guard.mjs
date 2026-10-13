@@ -153,3 +153,30 @@ export function resolvePassword(mode, env) {
   if (supplied === EMULATOR_PASSWORD) refuse('LOAD_TEST_PASSWORD is the emulator default; generate a real one.');
   return supplied;
 }
+
+/**
+ * Variables that make an EMULATED requestLoan call a real service.
+ * `firebase emulators:exec` hands the parent shell's environment — and
+ * functions/.env* — to the emulated functions, so an operator who has
+ * UNDERWRITING_SERVICE_URL or ML_SERVICE_URL exported (a production shell, a
+ * sourced .env) would have the "local" check post synthetic CURPs to the real
+ * underwriting pipeline (bureau, RiskSeal, Stage 5) or the real ML service.
+ */
+export const FUNCTIONS_PROVIDER_VARS = Object.freeze(['UNDERWRITING_SERVICE_URL', 'ML_SERVICE_URL']);
+
+/**
+ * @param {Record<string, string|undefined>} env  process.env
+ * @param {Array<{ name: string, text: string }>} [envFiles]  functions/.env* files the emulator would load
+ * @returns {string[]} one line per place a provider URL is set; empty when the emulated functions can reach nothing
+ */
+export function functionsProviderLeaks(env, envFiles = []) {
+  const leaks = [];
+  for (const name of FUNCTIONS_PROVIDER_VARS) {
+    if (env[name]) leaks.push(`${name} is set in the environment`);
+    for (const file of envFiles) {
+      const assigned = new RegExp(`^[ \\t]*(?:export[ \\t]+)?${name}[ \\t]*=[ \\t]*['"]?[^\\s'"#]`, 'm').test(file.text);
+      if (assigned) leaks.push(`${name} is set in ${file.name}`);
+    }
+  }
+  return leaks;
+}

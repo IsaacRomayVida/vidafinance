@@ -238,13 +238,18 @@ open-loan rule: the last stage alone can make 7,560 calls, so 2,800 uids run dry
 
 How many iterations a profile can make: the script runs `ceil(target / 10)` VUs per stage, ramped
 linearly from the previous stage, and a VU cannot loop faster than once per 5 s (it sleeps 5–7 s).
-`iterationUpperBound()` in `tests/load/seed/pool.js` computes the ceiling, and
-`pool.test.mjs` fails if this table or the default pool size falls behind `tests/load/config.js`:
+A VU alive for T seconds *starts* `floor(T / 5) + 1` iterations, so the ceiling is VU-seconds / 5
+plus one start per VU ever started. `iterationUpperBound()` in `tests/load/seed/pool.js` computes
+it, and `pool.test.mjs` fails if this table or the default pool size falls behind
+`tests/load/config.js`:
 
 | Profile | Iterations, upper bound | Pool to seed |
 |---|---|---|
-| `smoke` | 132 | `--count 200` |
-| `full` | 12,420 (360 + 1,080 + 3,420 + 7,560 per stage) | `--count 12500` (the default: 12,500) |
+| `smoke` | 137 | `--count 200` |
+| `full` | 12,448 (360 + 1,080 + 3,420 + 7,560 per stage, + 28 VU starts) | `--count 12500` (the default: 12,500) |
+
+k6 ramps in whole VUs, so read these as ceilings to stay above, not predictions. (An earlier version
+of this table said 132 / 12,420; it left out the one extra start per VU.)
 
 Expect roughly 8,000–10,000 real iterations in `full` (6 s mean sleep plus request latency). When
 the pool runs out k6 **aborts** rather than wrapping round. Employers get `maxActiveSlots` equal to
@@ -263,38 +268,70 @@ Two consequences worth knowing before reading a result:
 #### Keeping bureau / RiskSeal out of it
 
 `requestLoan` reaches external providers only through two URLs in the functions environment:
-`UNDERWRITING_SERVICE_URL` (the 6-stage pipeline) and `ML_SERVICE_URL` (the inline gate). There
-is **no single "load-test mode" switch**, and `/api/health` does not report how the target is
-configured — the script's old "verify mock mode" step only ever re-read the health endpoint. The
-operator checks the target's variables by hand before the run. What exists today:
+`UNDERWRITING_SERVICE_URL` (the 6-stage pipeline, used only when `INTERNAL_SECRET` is also set) and
+`ML_SERVICE_URL` (the inline gate). There is **no single "load-test mode" switch**, and
+`/api/health` does not report how the target is configured, so the k6 script cannot verify any of
+this (its old "verify mock mode" step only re-read the health endpoint and has been removed). The
+operator checks the target's variables by hand before the run.
 
-| Provider | Reached from | Switch that exists | Notes |
+**Inventory.** Every outbound call on the `/underwrite` path of
+`services/underwriting-service`, read from the code on 2026-10-13. `pool.test.mjs` fails when that
+service reads a `*_URL` / `*_MOCK` / `*_MODE` / `*_PROVIDER` / `*_API_KEY` variable, or hard-codes a
+host, that this section does not name.
+
+| Provider | Reached from | Switch that exists | Left as it is, a load run… |
 |---|---|---|---|
-| Whole pipeline | `functions/src/index.ts` (`if (uwUrl && intSecret)`) | leave `UNDERWRITING_SERVICE_URL` **unset** on the target's functions | No bureau, RiskSeal, MetaMap or Belvo call is possible. Simplest safe setup. |
-| RiskSeal | `underwriting-service/src/riskseal-client.js` | `RISKSEAL_MOCK=true` | Deterministic mock (score 72, passes) unless the RFC ends `XXX`/`YYY`; pool RFCs never do. |
-| MetaMap | `underwriting-service/src/metamap-client.js` | `METAMAP_MOCK=true` | |
-| Credit bureau (via SoftCrédito) | `softcredito-adapter` `POST /bureau/query` | `BUREAU_MODE=offline` on the adapter (`lib/bureauFallback.js`) | Never calls the bureau; returns a neutral synthetic record marked `_fallback`. |
-| Belvo | `underwriting-service/src/belvo-client.js` | leave `BELVO_BASE_URL` unset with `NODE_ENV` ≠ `production` | Falls back to `sandbox.belvo.com` — still a third party, but not live data. |
-| DENUE / REPSE (and the other `gov-apis.js` lookups) | `underwriting-service/src/gov-apis.js` | **none** | DENUE and REPSE throw when their URL is unset; the check is recorded as `skipped` and escalates to Stage 5. The other lookups in that file were not analysed. |
-| ML service (and the LLM keys it holds) | `ML_SERVICE_URL` | **none** | Point it at a non-production ml-service, or leave it unset. |
+| Whole pipeline | `functions/src/index.ts` (`if (uwUrl && intSecret)`) | leave `UNDERWRITING_SERVICE_URL` **unset** on the target's functions | — nothing below this row is reachable. Simplest safe setup (A). |
+| **Anthropic (Stage 5 risk narrative)** | `stages/stage5-review.js` → `https://api.anthropic.com/v1/messages`, directly from the underwriting-service | `ANTHROPIC_API_KEY` **unset on the non-prod underwriting-service**. There is no mock; an unset key returns a canned narrative without a request. | …makes **one paid LLM call per iteration that reaches Stage 5**. For the pool that is every iteration (see "What setup B measures"): up to ~12,448 calls in `full`. `.github/workflows/railway-setup-env.yml` copies the key to Railway when the secret exists. |
+| MetaMap (Stage 5 AML, Stage 4 KYC, Stage 0 behavioural) | `metamap-client.js` → `METAMAP_BASE_URL`, default `api.getmati.com` | `METAMAP_MOCK=true` | …creates a real MetaMap verification per iteration (Stage 5 AML, MXN 8 each by the service's own cost table). The mock flags RFCs ending `XXX`/`YYY`/`ZZZ`; pool RFCs end `Lnn`. |
+| Stage 4 KYC mode | `stages/stage4-kyc.js` | `KYC_MODE` **unset** (= `real`, which then honours `METAMAP_MOCK`) | `mock_pass` / `mock_fail` skip MetaMap but make Stage 4 approve / reject by itself; neither is wanted in a load run. |
+| RiskSeal | `riskseal-client.js` → `RISKSEAL_BASE_URL` / `RISKSEAL_API_URL` with `RISKSEAL_API_KEY` | `RISKSEAL_MOCK=true` | …calls RiskSeal's scoring API once per applicant that reaches Stage 0. Mock: score 72 unless the RFC ends `XXX`/`YYY`. Unset URL without the mock: throws, recorded as skipped. |
+| SAT blacklists via SW SAPiens | `stages/employer-a.js` → `sw-client.js` → `SW_BASE_URL`, default `https://services.sw.com.mx` | `EMPLOYER_SAT_PROVIDER` unset or `local` (must **not** be `sw`) | …with `sw`: two paid lookups per employer RFC against the live SAT provider. `local` reads two files from the service's own GCS bucket instead (no third party; a missing bucket is recorded as skipped). |
+| DENUE (INEGI), REPSE (STPS) | `gov-apis.js` → `DENUE_API_URL` + `DENUE_API_KEY`, `REPSE_URL` | **no mock.** Unset → the lookup throws, is recorded as `skipped`, and the request escalates to Stage 5. | …if set: live government lookups for a company called `LOAD TEST 0000 — interno, no usar`. DENUE answers "not found" and the employer is **rejected** (`denue_not_found`), cached 24 h. |
+| Other government lookups | `gov-apis.js`: `SAT_SOAP_CFDI_URL` (CFDI), `SEP_CEDULAS_URL` (cédulas), `REPUVE_URL`, `CONDUSEF_URL`, and `http://ip-api.com` (geolocation, hard-coded) | none | **Not reachable from `/underwrite` today:** `checkCFDI`, `checkCedula`, `checkREPUVE`, `checkCONDUSEF` and `checkGeolocation` have no caller outside their own tests. Unset behaviour if that changes: cédulas, REPUVE and CONDUSEF catch the failed request and return `skipped`; CFDI rejects (no guard); geolocation has no URL variable and would call `ip-api.com`. Leave the four variables unset. |
+| Credit bureau (via SoftCrédito) | Stage 2 → `SOFTCREDITO_ADAPTER_URL` → adapter `POST /bureau/query` | `BUREAU_MODE=offline` **on a non-production adapter** (`lib/bureauFallback.js`) | …queries the real bureau for each applicant that reaches Stage 2. `offline` never calls it and returns a neutral record marked `_fallback`. |
+| Belvo | `belvo-client.js` (Stage 0 INFONAVIT, Stage 2 IMSS + AFORE) → `BELVO_BASE_URL` | leave `BELVO_BASE_URL` unset with `NODE_ENV` ≠ `production` → `https://sandbox.belvo.com` | …still sends several requests per applicant that reaches Stages 0 and 2, with synthetic CURPs, to Belvo's sandbox: a third party, though not live data. Whether a load run may do that is Belvo's call, not ours. |
+| ML service | functions (`ML_SERVICE_URL`, inline gate) and underwriting-service Stages 0, 2, 4 (same variable) | none. Point it at a non-production ml-service, or leave it unset. | `services/ml-service/main.py` makes its own Anthropic calls when *its* `ANTHROPIC_API_KEY` is set; unset it there too. |
+| Underwriting-service state | `index.js` (`FIREBASE_SERVICE_ACCOUNT` / `_B64`), `REDIS_URL` | must be the **non-production** project's service account and a non-production Redis | Stage 5 writes `review_queue` rows with *this* service account. A staging service holding the production key writes the load test's rows into production's ops queue. |
+| Alerts | `services/shared/alerting.js` (`SLACK_WEBHOOK_URL`, `PAGERDUTY_ROUTING_KEY`) | unset on the non-production services, or a test channel | …a run that produces 5xx or rate-limit errors pages whoever is on call. |
 
-Gaps, stated plainly: none of the three switches is refused in production (they take effect
-wherever they are set; `.github/workflows/railway-setup-env.yml` pins production's
-`RISKSEAL_MOCK` to `false`); the gov lookups and the ML service have no mock; and
-nothing lets a run confirm the target's settings from outside.
+Document AI (`docai-client.js`) and `payroll-software.js` are not called from the pipeline.
+`requestLoan` itself sends no notification, and pool members have no phone and a
+`@loadtest.invalid` address, so nothing in a run can reach a real person.
 
-Two workable setups:
+Gaps, stated plainly:
 
-- **A — functions only (recommended first).** `UNDERWRITING_SERVICE_URL` unset. With
+- **None of these switches is refused in production, and none is confirmed from outside.** Each
+  takes effect wherever it is set (`railway-setup-env.yml` pins production's `RISKSEAL_MOCK` to
+  `false`); a run cannot ask the target what it is configured to do.
+- **Anthropic, DENUE, REPSE and the ML service have no mock** — only "unset".
+- **This inventory covers the underwriting-service's `/underwrite` path.** In `softcredito-adapter`
+  and `ml-service` only the bureau mode and the Anthropic key were read; the rest of those two
+  services was not analysed.
+
+**What setup B measures today — less than its name says.** Employer screening runs first. With
+DENUE and REPSE unset (the only safe setting) both are `skipped`, the request escalates straight to
+Stage 5, and that verdict is cached per employer RFC for 24 h (`employer-a:<rfc>`). With them set,
+DENUE rejects the pool's employers. Either way **no pool applicant reaches Stages 0–4**: RiskSeal,
+Belvo, the bureau and the ML scores are not exercised at all. A setup-B run is employer screening
+(a cache hit after the first request per employer) + Stage 5 (MetaMap AML, the Anthropic call, one
+`review_queue` write), and every accepted loan is `under_review`. Getting past employer screening
+needs a DENUE/REPSE stub that does not exist; that is a code change, not a configuration.
+
+The two setups:
+
+- **A — functions only. The one that is cleared to run.** `UNDERWRITING_SERVICE_URL` unset. With
   `ML_SERVICE_URL` also unset the inline gate fails closed and every accepted loan is
   `under_review` with a `review_queue` row. This measures auth, the limiter, Firestore and the
   loan transaction. It is what the emulator check in step 2 runs.
-- **B — full pipeline.** A non-production underwriting-service with `RISKSEAL_MOCK=true`,
-  `METAMAP_MOCK=true`, no `BELVO_BASE_URL`, and a non-production softcredito-adapter with
-  `BUREAU_MODE=offline`. Outcomes will skew to manual review because the gov lookups are skipped.
-
-`requestLoan` itself sends no notification, and pool members have no phone and a
-`@loadtest.invalid` address, so nothing in a run can reach a real person.
+- **B — full pipeline. NOT cleared to run.** Do not point a load run at a target whose functions
+  have `UNDERWRITING_SERVICE_URL` set until a named person has checked **every row of the table**
+  on the deployed services and recorded it in the run report: `ANTHROPIC_API_KEY` unset (both
+  services), `METAMAP_MOCK=true`, `KYC_MODE` unset, `RISKSEAL_MOCK=true`,
+  `EMPLOYER_SAT_PROVIDER` not `sw`, `DENUE_API_URL` / `REPSE_URL` and the four other gov URLs
+  unset, `BUREAU_MODE=offline` on a non-production adapter, `BELVO_BASE_URL` unset, a
+  non-production service account and Redis, alerts off. Even then it measures only what the
+  paragraph above says, and it leaves the residue listed under step 7.
 
 #### Needs a human first (console and credential actions — not automated, not done)
 
@@ -377,6 +414,11 @@ REDIS_URL=redis://127.0.0.1:6390 TARGET_URL=http://127.0.0.1:5001/demo-vida-load
   "node tests/load/seed/emulator-requestloan-check.mjs"
 ```
 
+The second command refuses to start if `UNDERWRITING_SERVICE_URL` or `ML_SERVICE_URL` is set in
+the shell or in a `functions/.env*` file: `firebase emulators:exec` hands both to the emulated
+functions, and the "local" check would then post synthetic applicants to the real service. Run it
+from a clean shell (`env -u UNDERWRITING_SERVICE_URL -u ML_SERVICE_URL -u INTERNAL_SECRET …`).
+
 To drive k6 itself at the emulator, start it with `firebase emulators:start --only
 functions,firestore,auth --project demo-vida-load` (same `REDIS_URL`), seed with
 `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 node
@@ -421,9 +463,11 @@ means App Check or sign-in; `UNAVAILABLE` means Redis; `rate_limited_requests` c
 members were already used today.
 
 **6. Stages.** Either teardown + re-seed (steps 7 and 3), or keep going past the members the
-smoke used: same command without `PROFILE=smoke`, plus `--env POOL_OFFSET=132`.
-(12,500 − 132 is 52 short of the theoretical 12,420 ceiling; seed `--count 12600` to rule out
-an abort in the last minute.)
+smoke used: same command without `PROFILE=smoke`, plus `--env POOL_OFFSET=<n>` where `<n>` is
+**"Total submitted" from the smoke report** (`loans_submitted`; at most 137), not a figure from
+this page. The pool must then hold `<n>` + 12,448: seed `--count 12600` in step 3 if you plan to
+run both without a teardown in between (12,600 − 137 = 12,463), otherwise the run can abort with
+"User pool exhausted" in its last minute.
 
 **7. Teardown:**
 
@@ -432,12 +476,40 @@ node tests/load/seed/seed-load-pool.mjs --project <STAGING_PROJECT> --teardown -
 node tests/load/seed/seed-load-pool.mjs --project <STAGING_PROJECT> --teardown
 ```
 
-It deletes pool accounts (uid **and** email must match), `employees/loadtest-emp-*`,
-`employers/loadtest-employer-*`, loans whose `employeeId` is a pool uid (with
-`underwritingDetail`), their `review_queue` rows, and `audit_log` rows whose `actorUid` is a pool
-uid. Every row is re-checked before it is deleted, and a row that is not load-test data stops the
-teardown. It does **not** touch Redis (`rl:loan:*` expire after 24 h), `ml_decisions`, or anything
-a provider stored.
+It deletes:
+
+- pool accounts (uid **and** email must match);
+- `employees/loadtest-emp-*` and `employers/loadtest-employer-*`;
+- loans whose `employeeId` is a pool uid, with their `underwritingDetail`;
+- `review_queue` rows whose `loanId` is one of those loans — the rows `requestLoan` writes when
+  the inline ML gate is unavailable (setup A);
+- `review_queue` rows whose `applicantRfc` is a pool RFC (`LTXXYYMMDDLnn`) — the rows Stage 5 of
+  the underwriting-service writes (setup B). Those carry **no loan id**: `requestLoan` sends
+  `/underwrite` the applicant, the employer and the amount, so the row's `loanId` is the
+  pipeline's own correlation id (`uw-…`), and its `applicantName` is the literal
+  `undefined undefined` (Stage 5 reads `firstName` / `lastName`, `requestLoan` sends `fullName`).
+  The RFC is the only field that identifies them. No real taxpayer's RFC has that shape (second
+  letter `T`, where a person's RFC has a vowel or `X`);
+- `audit_log` rows whose `actorUid` is a pool uid.
+
+Every row is re-checked before it is deleted, and a row that is not load-test data stops the
+teardown. If Auth refuses some deletions (`deleteUsers` allows about one call of 1,000 accounts
+per second; the CLI waits between batches) the command prints `TEARDOWN INCOMPLETE`, exits 1, and
+is safe to run again.
+
+It does **not** touch:
+
+- Redis on the functions side: `rl:loan:*` (expire after 24 h);
+- after a setup-B run, the underwriting-service's Redis cache: `employer-a:LTE…` (one key per
+  pool employer, 24 h);
+- `ml_decisions`, and anything a provider stored (a setup-B run without `METAMAP_MOCK` leaves
+  MetaMap verifications, and their webhooks add `metamap_shadow_log` / `incident_log` rows —
+  with the mock on, nothing calls MetaMap and neither collection is written).
+
+Do not run teardown in the same minute as a seed on a deployed target: `onEmployeeDocCreated`
+events still in flight then find no account and no document and log errors
+(`There is no user record…`, `no entity to update`). Harmless, but it is noise in the error log
+and can trip an error-rate alert. Leave a few minutes, or expect it.
 
 **8. Afterwards.** Delete the debug token (H2.5) and the service-account key; commit the report.
 

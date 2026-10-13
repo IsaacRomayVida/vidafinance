@@ -30,8 +30,8 @@ export const EMPLOYER_CODE_PREFIX = 'LOADTEST-';
 export const EMAIL_DOMAIN = 'loadtest.invalid';
 
 /**
- * Upper bound of iterations in the `full` profile (see iterationUpperBound and
- * docs/runbooks/scaling.md § uid-pool arithmetic), rounded up. One uid per
+ * Upper bound of iterations in the `full` profile (12,448 — see iterationUpperBound
+ * and docs/runbooks/scaling.md § uid-pool arithmetic), rounded up. One uid per
  * iteration, because a uid with an open loan is refused a second one.
  */
 export const DEFAULT_POOL_SIZE = 12500;
@@ -167,6 +167,23 @@ export function rfcFor(index) {
   return `LTXX${birthDateFor(index)}L${pad(Math.floor(index / 10000), 2)}`;
 }
 
+/** Every RFC and CURP of the pool starts with this. */
+export const POOL_RFC_PREFIX = 'LTXX';
+
+/**
+ * True only for an RFC rfcFor() can produce. No real taxpayer has one: the
+ * second letter of a person's RFC is the first inner VOWEL of the surname (or
+ * X when there is none), never "T", and a company's RFC has three letters
+ * before the date, not four.
+ *
+ * Teardown uses this to find what the 6-stage pipeline's Stage 5 wrote: those
+ * review_queue rows carry the applicant's RFC but NOT the loan id (requestLoan
+ * does not send one to /underwrite), so `loanId` cannot find them.
+ */
+export function isPoolRfc(rfc) {
+  return typeof rfc === 'string' && /^LTXX[6-8]\d(0[1-9]|1[0-2])(0[1-9]|1\d|2[0-8])L\d{2}$/.test(rfc);
+}
+
 /**
  * `employees/<uid>` exactly as the seed writes it.
  * `createdAt` is supplied by the caller (a server timestamp) so this stays pure.
@@ -256,6 +273,43 @@ export function buildPoolApplication(index) {
     profile: profileFor(index),
     payload: { amount: loanAmountFor(index), termDays: LOAN_TERM_DAYS },
   };
+}
+
+/**
+ * The pool and the target have to agree, or the run measures sign-in failures:
+ *
+ *   production  never. The pool cannot exist there (the seed refuses), so a
+ *               pool run would only send failed sign-ins and 401s at production.
+ *   emulator    FIREBASE_AUTH_EMULATOR_HOST is mandatory — without it a
+ *               FIREBASE_API_KEY would sign emulator users in against Google.
+ *   staging     FIREBASE_AUTH_EMULATOR_HOST must be unset — a leftover one
+ *               yields tokens the deployed target rejects (100% 401).
+ *
+ * @param {Record<string, string|undefined>} env
+ * @param {'emulator'|'staging'|'production'} targetLabel  from ../target.js
+ * @returns {string} the sign-in URL (see signInUrl)
+ */
+export function poolSignInUrl(env, targetLabel) {
+  const emulatorHost = env.FIREBASE_AUTH_EMULATOR_HOST || '';
+  if (targetLabel === 'production') {
+    throw new Error(
+      'POOL_SIZE is set but the target is PRODUCTION. The load-test pool is never seeded there, so every request ' +
+        'would be a failed sign-in. Production has only the AUTH_TOKEN mode — docs/runbooks/scaling.md § Load test.'
+    );
+  }
+  if (targetLabel === 'emulator' && !emulatorHost) {
+    throw new Error(
+      'The target is the emulator but FIREBASE_AUTH_EMULATOR_HOST is not set; pool members would be signed in ' +
+        'against Google instead of the Auth emulator. Pass --env FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099.'
+    );
+  }
+  if (targetLabel !== 'emulator' && emulatorHost) {
+    throw new Error(
+      `FIREBASE_AUTH_EMULATOR_HOST=${emulatorHost} is set but the target is ${targetLabel}; emulator tokens are ` +
+        'rejected by a deployed target (every request would be a 401). Unset it.'
+    );
+  }
+  return signInUrl(env);
 }
 
 /** Reads POOL_SIZE / POOL_OFFSET from k6's __ENV. Returns null when no pool is configured. */
@@ -348,17 +402,26 @@ export function appCheckRefreshAfterMs(ttl) {
  * stages, as pipeline-load-test.js runs them: VUs = ceil(target / 10), ramped
  * linearly from the previous stage (k6 starts at 1 VU), each VU looping no
  * faster than once per `minIterationSeconds` (the script sleeps 5-7 s).
- * This is the pool size a run of that profile can consume.
+ *
+ * Two terms. A VU alive for T seconds STARTS floor(T / 5) + 1 iterations (the
+ * first at t = 0), so on top of VU-seconds / 5 there is one more start for
+ * every VU that is ever started — the first one, plus every increase of the VU
+ * target (a VU restarted after a ramp-down counts again).
+ *
+ * This is the pool size a run of that profile can consume. k6 ramps in whole
+ * VUs, so treat it as a ceiling to stay above, not as a prediction.
  */
 export function iterationUpperBound(stages, minIterationSeconds = 5) {
   let previousVus = 1;
   let vuMinutes = 0;
+  let vuStarts = 1;
   for (const stage of stages) {
     const m = /^(\d+)m$/.exec(stage.duration);
     if (!m) throw new Error(`Unsupported stage duration ${stage.duration} (expected "<n>m")`);
     const vus = Math.max(1, Math.ceil(stage.target / 10));
     vuMinutes += ((previousVus + vus) / 2) * Number(m[1]);
+    vuStarts += Math.max(0, vus - previousVus);
     previousVus = vus;
   }
-  return Math.ceil((vuMinutes * 60) / minIterationSeconds);
+  return Math.ceil((vuMinutes * 60) / minIterationSeconds) + vuStarts;
 }

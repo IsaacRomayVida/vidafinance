@@ -11,6 +11,7 @@ import {
   EMAIL_DOMAIN,
   EMPLOYEE_UID_PREFIX,
   EMPLOYER_ID_PREFIX,
+  POOL_RFC_PREFIX,
   buildEmployeeDoc,
   buildEmployerDoc,
   employeeEmail,
@@ -18,6 +19,7 @@ import {
   employerId,
   isLoadTestEmail,
   isLoadTestId,
+  isPoolRfc,
   slotsFor,
 } from './pool.js';
 
@@ -29,6 +31,18 @@ const RANGE_END = '';
 
 /** Thrown when teardown meets something it did not create. It stops; it never "skips and continues" past a delete. */
 export class NotLoadTestData extends Error {}
+
+/**
+ * Thrown at the END of a teardown that could not delete everything (Auth
+ * refused some accounts). Everything else has been removed; `result` says what.
+ * Re-running the teardown is safe and picks up what is left.
+ */
+export class TeardownIncomplete extends Error {
+  constructor(message, result) {
+    super(message);
+    this.result = result;
+  }
+}
 
 function assertLoadTestId(id, what) {
   if (!isLoadTestId(id)) {
@@ -63,10 +77,13 @@ export function describePlan(opts, target) {
       `  employees/*  document id starts "${EMPLOYEE_UID_PREFIX}"`,
       `  employers/*  document id starts "${EMPLOYER_ID_PREFIX}"`,
       `  loans/*      employeeId starts "${EMPLOYEE_UID_PREFIX}" (with underwritingDetail/*)`,
-      '  review_queue/*  loanId of one of those loans',
+      '  review_queue/*  loanId of one of those loans (the rows requestLoan writes)',
+      `  review_queue/*  applicantRfc is a pool RFC, "${POOL_RFC_PREFIX}YYMMDDLnn" (the rows Stage 5 of the`,
+      '                  underwriting-service writes; they carry no loan id, and their applicantName is not usable)',
       `  audit_log/*  actorUid starts "${EMPLOYEE_UID_PREFIX}"`,
-      'not touched: Redis rate-limit keys rl:loan:<uid> (they expire 24 h after first use),',
-      '             ml_decisions and any provider-side record.'
+      'not touched: Redis — rate-limit keys rl:loan:<uid> (they expire 24 h after first use) and, after a',
+      '             full-pipeline run, the underwriting-service cache (employer-a:LTE…, 24 h);',
+      '             ml_decisions, incident_log, metamap_shadow_log, and any provider-side record.'
     );
     return lines;
   }
@@ -116,13 +133,19 @@ export async function seedPool({ db, auth, serverTimestamp, log = () => {} }, op
   for (let j = 0; j < employers; j++) {
     const ref = db.collection('employers').doc(employerId(j));
     const doc = { ...buildEmployerDoc(j, slotsFor(j, count, employers)), seededAt: serverTimestamp() };
-    // Two writes on purpose. onEmployerDocCreated grants an employer_admin
-    // claim to the uid of any employer CREATED in an approved status; these
-    // employers have no account, so that trigger would throw once per employer
-    // ("Cannot verify existing privileges …"). Created as pending_verification
-    // the trigger withholds the claim quietly; nothing listens for the update.
-    await ref.set({ ...doc, status: 'pending_verification' }, { merge: true });
-    await ref.set({ status: doc.status }, { merge: true });
+    // Two writes for a NEW employer, on purpose. onEmployerDocCreated grants an
+    // employer_admin claim to the uid of any employer CREATED in an approved
+    // status; these employers have no account, so that trigger would throw once
+    // per employer ("Cannot verify existing privileges …"). Created as
+    // pending_verification the trigger withholds the claim quietly; nothing
+    // listens for the update. An employer that already exists is written once,
+    // so a re-seed never takes an active employer out of `active`.
+    if (!(await ref.get()).exists) {
+      await ref.set({ ...doc, status: 'pending_verification' }, { merge: true });
+      await ref.set({ status: doc.status }, { merge: true });
+    } else {
+      await ref.set(doc, { merge: true });
+    }
   }
   log(`employers written: ${employers}`);
 
@@ -186,7 +209,11 @@ async function drain(db, makeQuery, pageSize, visit) {
  * @param {object} deps.auth
  * @param {unknown} deps.documentId  FieldPath.documentId()
  * @param {(line: string) => void} [deps.log]
- * @param {{ pageSize?: number }} [opts]
+ * @param {{ pageSize?: number, authBatchPauseMs?: number }} [opts]
+ *   authBatchPauseMs: wait between deleteUsers batches. The Identity Platform
+ *   batch-delete endpoint allows about one call per second; the CLI passes
+ *   1100 off the emulator.
+ * @throws {TeardownIncomplete} when Auth reported failed deletions
  */
 export async function teardownPool({ db, auth, documentId, log = () => {} }, opts = {}) {
   const pageSize = opts.pageSize ?? 300;
@@ -195,7 +222,16 @@ export async function teardownPool({ db, auth, documentId, log = () => {} }, opt
   const fieldRange = (collection, field, prefix) => () =>
     db.collection(collection).where(field, '>=', prefix).where(field, '<', prefix + RANGE_END);
 
-  const result = { loans: 0, loanDetails: 0, reviewQueue: 0, auditLog: 0, employees: 0, employers: 0, authUsers: 0 };
+  const result = {
+    loans: 0,
+    loanDetails: 0,
+    reviewQueue: 0,
+    reviewQueueStage5: 0,
+    auditLog: 0,
+    employees: 0,
+    employers: 0,
+    authUsers: 0,
+  };
 
   result.loans = await drain(db, fieldRange('loans', 'employeeId', EMPLOYEE_UID_PREFIX), pageSize, async (docs) => {
     const refs = [];
@@ -218,6 +254,26 @@ export async function teardownPool({ db, auth, documentId, log = () => {} }, opt
     return refs;
   });
   log(`loans deleted: ${result.loans} (+${result.loanDetails} underwritingDetail, ${result.reviewQueue} review_queue)`);
+
+  // Full-pipeline runs only. Stage 5 of the underwriting-service writes its own
+  // review_queue row per escalated request, and requestLoan sends that service
+  // no loan id — the row's `loanId` is the pipeline's correlation id — so the
+  // `loanId in [...]` query above can never find it. What the row does carry is
+  // the applicant's RFC, and a pool RFC is a shape no real taxpayer has.
+  result.reviewQueueStage5 = await drain(
+    db,
+    fieldRange('review_queue', 'applicantRfc', POOL_RFC_PREFIX),
+    pageSize,
+    async (docs) =>
+      docs.map((doc) => {
+        const rfc = doc.data().applicantRfc;
+        if (!isPoolRfc(rfc)) {
+          throw new NotLoadTestData(`Teardown stopped: review_queue/${doc.id}.applicantRfc "${rfc}" is not a load-test RFC.`);
+        }
+        return doc.ref;
+      })
+  );
+  log(`review_queue rows deleted by applicantRfc (Stage 5): ${result.reviewQueueStage5}`);
 
   result.auditLog = await drain(db, fieldRange('audit_log', 'actorUid', EMPLOYEE_UID_PREFIX), pageSize, async (docs) =>
     docs.map((doc) => {
@@ -252,13 +308,27 @@ export async function teardownPool({ db, auth, documentId, log = () => {} }, opt
     }
     pageToken = page.pageToken;
   } while (pageToken);
+  let authFailures = 0;
   for (let i = 0; i < uids.length; i += AUTH_DELETE_BATCH) {
+    if (i > 0 && opts.authBatchPauseMs) await new Promise((resolve) => setTimeout(resolve, opts.authBatchPauseMs));
     const chunk = uids.slice(i, i + AUTH_DELETE_BATCH);
     const outcome = await auth.deleteUsers(chunk);
     result.authUsers += outcome?.successCount ?? chunk.length;
-    if (outcome?.failureCount) log(`auth: ${outcome.failureCount} deletions failed in this batch`);
+    if (outcome?.failureCount) {
+      authFailures += outcome.failureCount;
+      const first = outcome.errors?.[0]?.error?.message;
+      log(`auth: ${outcome.failureCount} deletions failed in this batch${first ? ` (first: ${first})` : ''}`);
+    }
   }
   log(`auth users deleted: ${result.authUsers}`);
 
+  if (authFailures > 0) {
+    // Not "done": pool accounts with a known password are still there.
+    throw new TeardownIncomplete(
+      `Teardown incomplete: ${authFailures} of ${uids.length} pool accounts were NOT deleted from Auth ` +
+        '(deleteUsers is limited to about one call per second). Run the teardown again; it is idempotent.',
+      result
+    );
+  }
   return result;
 }

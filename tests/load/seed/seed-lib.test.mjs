@@ -2,8 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildEmployeeDoc, buildEmployerDoc, employeeEmail, employeeUid, employerId, slotsFor } from './pool.js';
-import { NotLoadTestData, describePlan, seedPool, teardownPool } from './seed-lib.mjs';
+import { buildEmployeeDoc, buildEmployerDoc, employeeEmail, employeeUid, employerId, rfcFor, slotsFor } from './pool.js';
+import { NotLoadTestData, TeardownIncomplete, describePlan, seedPool, teardownPool } from './seed-lib.mjs';
 
 // ── A small in-memory Firestore + Auth with the Admin SDK surface the lib uses ──
 
@@ -16,6 +16,7 @@ function fakeFirestore() {
   const docRef = (path) => ({
     path,
     id: path.split('/').pop(),
+    get: async () => ({ exists: docs.has(path), data: () => docs.get(path) }),
     set: async (data, options) => {
       docs.set(path, options?.merge ? { ...(docs.get(path) ?? {}), ...data } : { ...data });
     },
@@ -111,6 +112,10 @@ function plantRealData(db, auth) {
   db.docs.set('loans/realLoan', { employeeId: 'realBorrowerUid', status: 'active', amount: 3000 });
   db.docs.set('loans/realLoan/underwritingDetail/detail', { decision: 'approved' });
   db.docs.set('review_queue/realReview', { loanId: 'realLoan' });
+  // Stage 5 rows of real applicants: no loan id of ours, RFCs either side of the pool's "LTXX" range
+  db.docs.set('review_queue/realStage5a', { loanId: 'uw-1-aaaaaa', correlationId: 'uw-1-aaaaaa', applicantRfc: 'LOAA900101AB1' });
+  db.docs.set('review_queue/realStage5b', { loanId: 'uw-1-bbbbbb', correlationId: 'uw-1-bbbbbb', applicantRfc: 'LUXX900101AB1' });
+  db.docs.set('review_queue/realStage5c', { loanId: 'uw-1-cccccc', correlationId: 'uw-1-cccccc' });
   db.docs.set('audit_log/realAudit', { actorUid: 'realBorrowerUid', action: 'loan.requested' });
   db.docs.set('config/loan', { feeRate: 0.3 });
   auth.users.set('realBorrowerUid', { uid: 'realBorrowerUid', email: 'ana@example.com' });
@@ -126,6 +131,23 @@ function plantRunResidue(db, index, loanId) {
   db.docs.set(`review_queue/rq-${loanId}`, { loanId, reason: 'ml_gate_unavailable' });
   db.docs.set(`audit_log/a1-${loanId}`, { actorUid: employeeUid(index), action: 'loan.requested', targetId: loanId });
   db.docs.set(`audit_log/a2-${loanId}`, { actorUid: employeeUid(index), action: 'loan.ml_gate_unavailable' });
+}
+
+/**
+ * What a FULL-PIPELINE run leaves for pool member `index`: the review_queue row
+ * written by services/underwriting-service/src/stages/stage5-review.js. Its
+ * `loanId` is the pipeline's correlation id — requestLoan sends /underwrite no
+ * loan id — and its applicantName is built from fields requestLoan does not send.
+ */
+function plantStage5Row(db, index) {
+  const correlationId = `uw-1700000000000-s${index}`;
+  db.docs.set(`review_queue/stage5-${index}`, {
+    loanId: correlationId,
+    correlationId,
+    applicantName: 'undefined undefined',
+    applicantRfc: rfcFor(index),
+    status: 'pending',
+  });
 }
 
 test('seedPool writes exactly the documented shapes, accounts and claims', async () => {
@@ -180,6 +202,36 @@ test('an employer is never CREATED in an approved status (the creation trigger w
   assert.deepEqual([...firstWrite.values()], ['pending_verification', 'pending_verification']);
   // …and ends in the status requestLoan and buildEmployerDoc both mean
   for (let j = 0; j < 2; j++) assert.equal(db.docs.get(`employers/${employerId(j)}`).status, 'active');
+});
+
+test('a re-seed never takes an existing employer out of `active`, not even for one write', async () => {
+  const db = fakeFirestore();
+  const auth = fakeAuth();
+  const opts = { count: 4, employers: 2, password: 'pw-for-test' };
+  await seedPool(seedDeps(db, auth), opts);
+
+  const statusesWritten = [];
+  const original = db.collection;
+  db.collection = (name) => {
+    const ref = original(name);
+    if (name !== 'employers') return ref;
+    return {
+      ...ref,
+      doc: (id) => {
+        const doc = ref.doc(id);
+        return {
+          ...doc,
+          set: async (data, options) => {
+            statusesWritten.push(data.status);
+            return doc.set(data, options);
+          },
+        };
+      },
+    };
+  };
+  await seedPool(seedDeps(db, auth), opts);
+
+  assert.deepEqual(statusesWritten, ['active', 'active']);
 });
 
 test('seedPool is idempotent, restores a spent credit line, and keeps what a trigger added to the employer', async () => {
@@ -241,6 +293,7 @@ test('teardownPool removes the pool and its run residue, and nothing else', asyn
 
   await seedPool(seedDeps(db, auth), { count: 9, employers: 2, password: 'pw-for-test' });
   for (let i = 0; i < 7; i++) plantRunResidue(db, i, `loanOf${i}`);
+  for (let i = 0; i < 5; i++) plantStage5Row(db, i);
 
   // pageSize 2 forces every query through several pages
   const result = await teardownPool(tearDeps(db, auth), { pageSize: 2 });
@@ -249,6 +302,7 @@ test('teardownPool removes the pool and its run residue, and nothing else', asyn
     loans: 7,
     loanDetails: 14,
     reviewQueue: 7,
+    reviewQueueStage5: 5,
     auditLog: 14,
     employees: 9,
     employers: 2,
@@ -261,7 +315,7 @@ test('teardownPool removes the pool and its run residue, and nothing else', asyn
 test('teardownPool on an empty project is a no-op, and a second teardown deletes nothing', async () => {
   const db = fakeFirestore();
   const auth = fakeAuth();
-  const zero = { loans: 0, loanDetails: 0, reviewQueue: 0, auditLog: 0, employees: 0, employers: 0, authUsers: 0 };
+  const zero = { loans: 0, loanDetails: 0, reviewQueue: 0, reviewQueueStage5: 0, auditLog: 0, employees: 0, employers: 0, authUsers: 0 };
   assert.deepEqual(await teardownPool(tearDeps(db, auth)), zero);
 
   await seedPool(seedDeps(db, auth), { count: 3, employers: 1, password: 'pw-for-test' });
@@ -290,6 +344,97 @@ test('teardownPool stops — deleting nothing more — if a query ever hands it 
   assert.ok(db.docs.has('review_queue/realReview'));
 });
 
+test('teardownPool removes Stage 5 review_queue rows of the pool — which no loan id points at — and only those', async () => {
+  const db = fakeFirestore();
+  const auth = fakeAuth();
+  plantRealData(db, auth);
+  const realDocs = structuredClone([...db.docs.entries()]);
+  await seedPool(seedDeps(db, auth), { count: 3, employers: 1, password: 'pw-for-test' });
+
+  // A setup-B run: the loan and, separately, the row Stage 5 wrote for the same request.
+  plantRunResidue(db, 0, 'loanOf0');
+  db.docs.delete('review_queue/rq-loanOf0'); // requestLoan writes its own row only when the inline ML gate is down
+  for (const index of [0, 1, 2]) plantStage5Row(db, index);
+  // nothing links the two: the Stage 5 row's loanId is not the loan's id
+  assert.notEqual(db.docs.get('review_queue/stage5-0').loanId, 'loanOf0');
+
+  const result = await teardownPool(tearDeps(db, auth));
+
+  assert.equal(result.reviewQueue, 0);
+  assert.equal(result.reviewQueueStage5, 3);
+  assert.deepEqual(
+    [...db.docs.keys()].filter((path) => path.startsWith('review_queue/')).sort(),
+    ['review_queue/realReview', 'review_queue/realStage5a', 'review_queue/realStage5b', 'review_queue/realStage5c']
+  );
+  assert.deepEqual([...db.docs.entries()], realDocs);
+});
+
+test('teardownPool stops on a review_queue row whose RFC only LOOKS like the pool', async () => {
+  for (const applicantRfc of ['LTXX900101AB1', 'LTXXA', 'LTXX600101L00X', 'LTXX601301L00', 'LTXX600100L00']) {
+    const db = fakeFirestore();
+    const auth = fakeAuth();
+    await seedPool(seedDeps(db, auth), { count: 2, employers: 1, password: 'pw-for-test' });
+    db.docs.set('review_queue/notOurs', { loanId: 'uw-9-zzzzzz', applicantRfc });
+    plantStage5Row(db, 1); // sorts after "notOurs"? irrelevant: the page is checked whole before any delete
+
+    await assert.rejects(teardownPool(tearDeps(db, auth)), NotLoadTestData, applicantRfc);
+    assert.ok(db.docs.has('review_queue/notOurs'), applicantRfc);
+    assert.ok(db.docs.has('review_queue/stage5-1'), `${applicantRfc}: nothing on the page was deleted`);
+    // it stopped: the pool that comes later in the teardown is still there
+    assert.ok(db.docs.has(`employees/${employeeUid(0)}`));
+    assert.equal(auth.users.size, 2);
+  }
+});
+
+test('teardownPool fails — it does not report success — when Auth refuses some deletions', async () => {
+  const db = fakeFirestore();
+  const auth = fakeAuth();
+  await seedPool(seedDeps(db, auth), { count: 5, employers: 1, password: 'pw-for-test' });
+
+  const realDelete = auth.deleteUsers;
+  auth.deleteUsers = async (uids) => {
+    await realDelete(uids.slice(2));
+    return {
+      successCount: uids.length - 2,
+      failureCount: 2,
+      errors: [{ index: 0, error: { message: 'QUOTA_EXCEEDED' } }],
+    };
+  };
+  const lines = [];
+  const failed = await teardownPool({ ...tearDeps(db, auth), log: (line) => lines.push(line) }).then(
+    () => null,
+    (err) => err
+  );
+
+  assert.ok(failed instanceof TeardownIncomplete, 'a partial Auth teardown must reject');
+  assert.match(failed.message, /2 of 5 pool accounts were NOT deleted/);
+  assert.equal(failed.result.authUsers, 3);
+  assert.equal(failed.result.employees, 5); // the Firestore side did finish
+  assert.equal(auth.users.size, 2);
+  assert.ok(lines.some((line) => line.includes('QUOTA_EXCEEDED')));
+
+  // re-running finishes the job
+  auth.deleteUsers = realDelete;
+  const second = await teardownPool(tearDeps(db, auth));
+  assert.equal(second.authUsers, 2);
+  assert.equal(auth.users.size, 0);
+});
+
+test('teardownPool pauses between Auth batches when asked to (deleteUsers is about 1 call/s)', async () => {
+  const db = fakeFirestore();
+  const auth = fakeAuth();
+  await seedPool(seedDeps(db, auth), { count: 2100, employers: 42, password: 'pw-for-test' });
+  const callTimes = [];
+  const realDelete = auth.deleteUsers;
+  auth.deleteUsers = async (uids) => {
+    callTimes.push(Date.now());
+    return realDelete(uids);
+  };
+  await teardownPool(tearDeps(db, auth), { authBatchPauseMs: 40 });
+  assert.equal(callTimes.length, 3); // 1000 + 1000 + 100
+  assert.ok(callTimes[1] - callTimes[0] >= 35 && callTimes[2] - callTimes[1] >= 35, JSON.stringify(callTimes));
+});
+
 test('teardownPool applies the same stop to employees, employers and audit rows', async () => {
   for (const collection of ['audit_log', 'employees', 'employers']) {
     const db = fakeFirestore();
@@ -314,7 +459,18 @@ test('describePlan states the target, the range and — for teardown — exactly
   assert.ok(!seed.join('\n').includes('pw-for-test'));
 
   const teardown = describePlan({ count: 120, employers: 3, dryRun: false, teardown: true }, { mode: 'emulator', projectId: 'demo-vida-load' }).join('\n');
-  for (const scope of ['auth users', 'employees/*', 'employers/*', 'loans/*', 'review_queue/*', 'audit_log/*', 'rl:loan:<uid>']) {
+  for (const scope of [
+    'auth users',
+    'employees/*',
+    'employers/*',
+    'loans/*',
+    'review_queue/*',
+    'applicantRfc is a pool RFC',
+    'audit_log/*',
+    'rl:loan:<uid>',
+    'employer-a:LTE',
+    'incident_log',
+  ]) {
     assert.ok(teardown.includes(scope), scope);
   }
 });
