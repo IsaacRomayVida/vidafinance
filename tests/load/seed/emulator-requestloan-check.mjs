@@ -19,8 +19,8 @@
  *
  * Refuses to start unless both the data target and TARGET_URL are the emulator,
  * and refuses when UNDERWRITING_SERVICE_URL or ML_SERVICE_URL is set — in the
- * shell or in a functions/.env* file — because the emulated functions inherit
- * both and would call the real service.
+ * shell, in a functions/.env* file or in functions/.secret.local — because the
+ * emulated functions inherit all three and would call the real service.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -31,7 +31,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
 import { resolveTarget } from '../target.js';
-import { EMULATOR_PASSWORD, functionsProviderLeaks, resolveSeedTarget } from './guard.mjs';
+import { EMULATOR_PASSWORD, functionsProviderLeaks, isFunctionsEnvFile, resolveSeedTarget } from './guard.mjs';
 import {
   ACCEPTED_INITIAL_STATUSES,
   appCheckPlan,
@@ -49,10 +49,10 @@ if (seedTarget.mode !== 'emulator' || callTarget.label !== 'emulator') {
 }
 
 // The data target being the emulator is not enough: the emulated FUNCTIONS get
-// this shell's environment and functions/.env*.
+// this shell's environment, functions/.env* and functions/.secret.local.
 const FUNCTIONS_DIR = new URL('../../../functions/', import.meta.url);
 const envFiles = readdirSync(FUNCTIONS_DIR)
-  .filter((name) => name.startsWith('.env') && !name.endsWith('.example'))
+  .filter(isFunctionsEnvFile)
   .map((name) => ({ name: `functions/${name}`, text: readFileSync(new URL(name, FUNCTIONS_DIR), 'utf8') }));
 const leaks = functionsProviderLeaks(process.env, envFiles);
 if (leaks.length > 0) {
@@ -103,7 +103,7 @@ await sleep(Number(process.env.TRIGGER_SETTLE_MS ?? 8000));
 for (const index of [0, 5]) {
   const stored = (await db.doc(`employees/${employeeUid(index)}`).get()).data();
   check(
-    stored.availableCredit === buildEmployeeDoc(index, 1).availableCredit,
+    stored.availableCredit === buildEmployeeDoc(index).availableCredit,
     `member ${index}: the credit-line trigger left the seeded value in place (${stored.availableCredit})`
   );
 

@@ -44,7 +44,9 @@ export const THRESHOLDS = {
   ],
   // Error rate
   'http_req_failed{type:requestLoan}': ['rate<0.01'], // <1% error rate
-  // Custom stage latencies
+  // Custom stage latencies. These trends only receive samples when the target
+  // sends X-Stage-*-Ms headers, which no function does today — until then the
+  // three thresholds below pass with no data and prove nothing.
   'stage_latency_validation': ['p(95)<1000'],
   'stage_latency_firestore_write': ['p(95)<3000'],
   'stage_latency_queue_dispatch': ['p(95)<2000'],

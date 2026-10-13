@@ -10,7 +10,9 @@
  *   2. a seed creates exactly the pool (documents, accounts, claims);
  *   3. a pool member can sign in the way the k6 script does, and the ID token
  *      carries role=employee;
- *   4. a second seed is idempotent and restores a spent credit line;
+ *   4. a second seed is idempotent and restores a spent credit line; a seed
+ *      with a LARGER --count, made while loans are open, adds members and moves
+ *      none of the existing ones to another employer;
  *   5. teardown removes the pool and what a run left behind — including the
  *      review_queue rows Stage 5 of the underwriting-service writes, which carry
  *      no loan id and are found by the pool's RFC shape — and leaves every
@@ -44,6 +46,7 @@ if (process.env.FUNCTIONS_EMULATOR_HOST) {
 }
 
 const COUNT = 450; // crosses a 400-write batch boundary
+const GROWN = 600; // the pool after a re-seed with a larger --count
 const CLI = fileURLToPath(new URL('./seed-load-pool.mjs', import.meta.url));
 const cli = (...args) => execFileSync(process.execPath, [CLI, '--count', String(COUNT), ...args], { encoding: 'utf8' });
 
@@ -110,7 +113,7 @@ check(employers.size === employerCountFor(COUNT), `${employerCountFor(COUNT)} em
 check((await listUids()).length === realUids.length + COUNT, `${COUNT} auth accounts added`);
 const last = (await db.doc(`employees/${employeeUid(COUNT - 1)}`).get()).data();
 const { createdAt, ...lastFields } = last;
-check(same(lastFields, buildEmployeeDoc(COUNT - 1, employerCountFor(COUNT))) && Boolean(createdAt), 'stored employee equals buildEmployeeDoc()');
+check(same(lastFields, buildEmployeeDoc(COUNT - 1)) && Boolean(createdAt), 'stored employee equals buildEmployeeDoc()');
 const slots = employers.docs.reduce((sum, d) => sum + d.data().maxActiveSlots, 0);
 check(slots === COUNT, `employer slots add up to the pool (${slots})`);
 
@@ -148,11 +151,26 @@ cli();
 const reseeded = await db.collection('employees').where('isLoadTest', '==', true).get();
 check(reseeded.size === COUNT && (await listUids()).length === realUids.length + COUNT, 're-seed added nothing');
 const restored = (await db.doc(`employees/${employeeUid(401)}`).get()).data().availableCredit;
-check(restored === buildEmployeeDoc(401, employerCountFor(COUNT)).availableCredit, 're-seed restored the spent credit line');
+check(restored === buildEmployeeDoc(401).availableCredit, 're-seed restored the spent credit line');
+
+// 4b ── grow the pool while those three loans are open (a later --count wins over the first)
+const employerBefore = new Map(reseeded.docs.map((d) => [d.id, d.data().employerId]));
+const slotsBefore = new Map((await db.collection('employers').where('isLoadTest', '==', true).get()).docs.map((d) => [d.id, d.data().maxActiveSlots]));
+const grown = cli('--count', String(GROWN));
+check(grown.includes(`"employees":${GROWN}}`), `seed with --count ${GROWN} on top of a pool of ${COUNT}`);
+const afterGrowth = await db.collection('employees').where('isLoadTest', '==', true).get();
+const moved = afterGrowth.docs.filter((d) => employerBefore.has(d.id) && employerBefore.get(d.id) !== d.data().employerId);
+check(afterGrowth.size === GROWN && moved.length === 0, `growing the pool moved no existing member to another employer (${moved.length} moved)`);
+const employersAfter = await db.collection('employers').where('isLoadTest', '==', true).get();
+check(
+  employersAfter.docs.every((d) => d.data().maxActiveSlots >= (slotsBefore.get(d.id) ?? 0)) &&
+    employersAfter.docs.reduce((sum, d) => sum + d.data().maxActiveSlots, 0) === GROWN,
+  `no employer slot cap shrank, and the caps add up to ${GROWN}`
+);
 
 // 5 ── teardown
 const torn = cli('--teardown');
-check(/TEARDOWN DONE \{"loans":3,"loanDetails":6,"reviewQueue":3,"reviewQueueStage5":3,"auditLog":3,"employees":450,"employers":9,"authUsers":450\}/.test(torn), 'teardown reported what it removed');
+check(/TEARDOWN DONE \{"loans":3,"loanDetails":6,"reviewQueue":3,"reviewQueueStage5":3,"auditLog":3,"employees":600,"employers":50,"authUsers":600\}/.test(torn), 'teardown reported what it removed');
 check(same(await dump(), realDocs), 'every non-load-test document is byte-for-byte unchanged');
 check(same(await listUids(), realUids), 'every non-load-test account is still there (including the foreign-email one)');
 

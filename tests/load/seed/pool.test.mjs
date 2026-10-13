@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
 import { RAMP_STAGES, SMOKE_STAGES } from '../config.js';
+import { PRODUCTION_PROJECT_ID, PRODUCTION_PROJECT_NUMBER, PRODUCTION_WEB_API_KEY, productionIdentifiers } from '../target.js';
 import * as pool from './pool.js';
 
 const repo = (path) => readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
@@ -50,8 +51,7 @@ test('an employer code can never collide with a minted one', () => {
 
 test('every employee document passes every gate requestLoan applies', () => {
   for (const index of SAMPLE) {
-    const employers = 250;
-    const doc = pool.buildEmployeeDoc(index, employers);
+    const doc = pool.buildEmployeeDoc(index);
 
     // identity gate
     assert.equal(doc.metamapStatus, 'verified');
@@ -60,7 +60,7 @@ test('every employee document passes every gate requestLoan applies', () => {
     assert.equal(doc.creditLimit, Math.max(Math.min(doc.monthlySalary * 0.3, 5000), 0));
     assert.equal(doc.availableCredit, doc.creditLimit);
     // employer link
-    assert.equal(doc.employerId, pool.employerId(index % employers));
+    assert.equal(doc.employerId, pool.employerId(pool.employerIndexFor(index)));
     assert.ok(pool.isLoadTestId(doc.employerId));
     // pay frequency is one requestLoan recognises (else it prices on an assumed cadence)
     assert.ok(['weekly', 'biweekly', 'semimonthly', 'monthly'].includes(doc.payFrequency));
@@ -80,7 +80,7 @@ test('every employee document passes every gate requestLoan applies', () => {
 
 test('CLABE check digit is valid', () => {
   for (const index of SAMPLE) {
-    const clabe = pool.buildEmployeeDoc(index, 10).bankClabe;
+    const clabe = pool.buildEmployeeDoc(index).bankClabe;
     const sum = [...clabe.slice(0, 17)].reduce((acc, d, i) => acc + ((Number(d) * [3, 7, 1][i % 3]) % 10), 0);
     assert.equal(Number(clabe[17]), (10 - (sum % 10)) % 10);
   }
@@ -88,7 +88,7 @@ test('CLABE check digit is valid', () => {
 
 test('the amount k6 sends is one requestLoan accepts for that same employee', () => {
   for (let index = 0; index < 5000; index++) {
-    const doc = pool.buildEmployeeDoc(index, 100);
+    const doc = pool.buildEmployeeDoc(index);
     const { payload, userId, email, profile } = pool.buildPoolApplication(index);
     assert.equal(userId, pool.employeeUid(index));
     assert.equal(email, doc.email);
@@ -119,7 +119,8 @@ test('employer documents admit the pool and give every employee a slot', () => {
   assert.equal(employers, 250);
   let slots = 0;
   for (let j = 0; j < employers; j++) {
-    const doc = pool.buildEmployerDoc(j, pool.slotsFor(j, count, employers));
+    const doc = pool.buildEmployerDoc(j, pool.slotsFor(j, count));
+    assert.equal(doc.maxActiveSlots, pool.EMPLOYEES_PER_EMPLOYER);
     assert.equal(doc.status, 'active');
     assert.equal(doc.maxActiveSlotsSource, 'ops_override');
     assert.notEqual(doc.curpConfig.mode, 'allowlist');
@@ -128,13 +129,45 @@ test('employer documents admit the pool and give every employee a slot', () => {
   }
   assert.equal(slots, count);
 
-  // uneven split: the slot count is exactly the number of employees round-robined onto each employer
-  const perEmployer = new Map();
-  for (let i = 0; i < 103; i++) {
-    const j = pool.employerIndexFor(i, 10);
-    perEmployer.set(j, (perEmployer.get(j) ?? 0) + 1);
+  // uneven pools: the slot count is exactly the number of members dealt onto each employer,
+  // and the employer count is exactly the number of employers in use
+  for (const size of [1, 49, 50, 51, 103, 200, 2499, 2500, 2501, 2550, 2551, 5137, 12600]) {
+    const perEmployer = new Map();
+    for (let i = 0; i < size; i++) {
+      const j = pool.employerIndexFor(i);
+      perEmployer.set(j, (perEmployer.get(j) ?? 0) + 1);
+    }
+    assert.equal(pool.employerCountFor(size), perEmployer.size, `employerCountFor(${size})`);
+    assert.equal(Math.max(...perEmployer.keys()), perEmployer.size - 1, `employer indexes are contiguous @${size}`);
+    for (let j = 0; j < perEmployer.size; j++) assert.equal(pool.slotsFor(j, size), perEmployer.get(j), `slotsFor(${j}, ${size})`);
+    assert.equal(pool.slotsFor(perEmployer.size, size), 0);
+    assert.ok(Math.max(...perEmployer.values()) <= pool.EMPLOYEES_PER_EMPLOYER);
   }
-  for (let j = 0; j < 10; j++) assert.equal(pool.slotsFor(j, 103, 10), perEmployer.get(j));
+  for (const bad of [0, -1, 1.5, NaN]) assert.throws(() => pool.employerCountFor(bad), /positive integer/);
+});
+
+test('a member keeps its employer however large the pool is seeded, and neighbours still differ', () => {
+  // employerIndexFor takes the member index and NOTHING else: there is no pool
+  // size for a larger --count to change. (It used to be index % employerCount.)
+  assert.equal(pool.employerIndexFor.length, 1);
+  assert.equal(pool.employerIndexFor(7), 7);
+  assert.equal(pool.employerIndexFor(57), 7);
+  assert.equal(pool.employerIndexFor(2499), 49);
+  assert.equal(pool.employerIndexFor(2500), 50);
+  assert.equal(pool.employerIndexFor(12499), 249);
+  assert.equal(pool.buildEmployeeDoc.length, 1);
+
+  // slot caps only ever grow with the pool
+  for (let j = 0; j < 60; j++) {
+    let previous = 0;
+    for (const size of [1, 50, 137, 200, 450, 2500, 2600, 12500, 12600]) {
+      const slots = pool.slotsFor(j, size);
+      assert.ok(slots >= previous, `slotsFor(${j}) shrank at pool ${size}`);
+      previous = slots;
+    }
+  }
+  // consecutive iterations land on different employers (the slot-cap transaction is per employer)
+  for (let i = 0; i < 12600; i++) assert.notEqual(pool.employerIndexFor(i), pool.employerIndexFor(i + 1), `@${i}`);
 });
 
 test('the constants mirrored here still match functions/src', () => {
@@ -214,7 +247,7 @@ test('poolSignInUrl: the pool and the target must agree', () => {
 test('isPoolRfc is true for every RFC the pool can produce and for nothing a taxpayer can hold', () => {
   for (let index = 0; index < 1000000; index += 997) assert.ok(pool.isPoolRfc(pool.rfcFor(index)), String(index));
   for (const index of SAMPLE) {
-    assert.ok(pool.isPoolRfc(pool.buildEmployeeDoc(index, 10).rfc));
+    assert.ok(pool.isPoolRfc(pool.buildEmployeeDoc(index).rfc));
     assert.ok(pool.rfcFor(index).startsWith(pool.POOL_RFC_PREFIX));
   }
   for (const rfc of [
@@ -241,6 +274,8 @@ test('appCheckPlan: a deployed target must be given a token; the emulator gets a
   assert.deepEqual(pool.appCheckPlan({}, 'emulator'), { kind: 'static', token: pool.EMULATOR_APP_CHECK_TOKEN });
   assert.throws(() => pool.appCheckPlan({}, 'staging'), /Neither APP_CHECK_DEBUG_TOKEN nor APP_CHECK_TOKEN/);
   assert.throws(() => pool.appCheckPlan({}, 'production'), /Neither APP_CHECK_DEBUG_TOKEN nor APP_CHECK_TOKEN/);
+  // the signed-off production smoke: an already-exchanged token, nothing else
+  assert.deepEqual(pool.appCheckPlan({ APP_CHECK_TOKEN: 'jwt' }, 'production'), { kind: 'static', token: 'jwt' });
 
   // The placeholder is not a credential: alg "none" and no signature at all.
   const [header, payload, signature] = pool.EMULATOR_APP_CHECK_TOKEN.split('.');
@@ -271,6 +306,173 @@ test('appCheckPlan: a debug token is exchanged, never sent as the header itself'
     () => pool.appCheckPlan({ APP_CHECK_DEBUG_TOKEN: 'x', FIREBASE_API_KEY: 'k' }, 'staging'),
     /needs FIREBASE_PROJECT_ID, FIREBASE_APP_ID/
   );
+});
+
+// ── Production identifiers, whatever TARGET_URL says ─────────────────────────
+
+const STAGING_EXCHANGE = {
+  APP_CHECK_DEBUG_TOKEN: '11111111-2222-3333-4444-555555555555',
+  FIREBASE_PROJECT_ID: 'vida-staging',
+  FIREBASE_APP_ID: '1:123:web:abc',
+  FIREBASE_API_KEY: 'web-key',
+};
+const PRODUCTION_VALUES = [
+  ['FIREBASE_PROJECT_ID', PRODUCTION_PROJECT_ID, /FIREBASE_PROJECT_ID=vida-finance is the PRODUCTION project/],
+  ['FIREBASE_PROJECT_ID', ' Vida-Finance ', /PRODUCTION project/],
+  ['FIREBASE_PROJECT_ID', 'vida-prod-eu', /PRODUCTION project/],
+  ['FIREBASE_APP_ID', `1:${PRODUCTION_PROJECT_NUMBER}:web:7d747366eb91b2452cb3e9`, /FIREBASE_APP_ID belongs to project number 447766605132/],
+  ['FIREBASE_API_KEY', PRODUCTION_WEB_API_KEY, /FIREBASE_API_KEY is the PRODUCTION project's Web API key/],
+];
+
+test('the production identifiers are the ones in the web config', () => {
+  const firebaseConfig = repo('public-v2/src/lib/firebase.ts');
+  assert.ok(firebaseConfig.includes(`projectId: '${PRODUCTION_PROJECT_ID}'`));
+  assert.ok(firebaseConfig.includes(`apiKey: '${PRODUCTION_WEB_API_KEY}'`));
+  assert.ok(firebaseConfig.includes(`appId: '1:${PRODUCTION_PROJECT_NUMBER}:web:`));
+  // and the seed's own list (guard.mjs cannot be imported by k6, so the id lives in two places)
+  assert.match(repo('tests/load/seed/guard.mjs'), new RegExp(`PRODUCTION_PROJECT_IDS = Object\\.freeze\\(\\['${PRODUCTION_PROJECT_ID}'\\]\\)`));
+  assert.deepEqual(productionIdentifiers(STAGING_EXCHANGE), []);
+  assert.deepEqual(productionIdentifiers({}), []);
+});
+
+test('appCheckPlan refuses a production project id, app id or API key for the exchange — whatever the target', () => {
+  for (const [name, value, message] of PRODUCTION_VALUES) {
+    for (const label of ['staging', 'emulator', 'production']) {
+      assert.throws(() => pool.appCheckPlan({ ...STAGING_EXCHANGE, [name]: value }, label), message, `${name}=${value} on ${label}`);
+    }
+  }
+  // the refusal says no flag changes it, and the sign-off phrase indeed does not
+  assert.throws(
+    () => pool.appCheckPlan({ ...STAGING_EXCHANGE, FIREBASE_PROJECT_ID: 'vida-finance', LOAD_TEST_ALLOW_PRODUCTION: 'I-HAVE-OPS-SIGN-OFF' }, 'production'),
+    /whatever TARGET_URL says, and no flag overrides it/
+  );
+  // a non-production run may not carry them even when the token is static or the emulator placeholder
+  assert.throws(() => pool.appCheckPlan({ APP_CHECK_TOKEN: 'jwt', FIREBASE_PROJECT_ID: 'vida-finance' }, 'staging'), /PRODUCTION project/);
+  assert.throws(() => pool.appCheckPlan({ FIREBASE_API_KEY: PRODUCTION_WEB_API_KEY }, 'emulator'), /PRODUCTION project's Web API key/);
+  // unchanged: a real non-production exchange
+  assert.equal(pool.appCheckPlan(STAGING_EXCHANGE, 'staging').kind, 'exchange');
+});
+
+test('poolSignInUrl refuses production identifiers before it builds any URL — whatever the target', () => {
+  const emulator = { FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099' };
+  for (const [name, value, message] of PRODUCTION_VALUES) {
+    assert.throws(() => pool.poolSignInUrl({ FIREBASE_API_KEY: 'web-key', [name]: value }, 'staging'), message, `${name} on staging`);
+    assert.throws(() => pool.poolSignInUrl({ ...emulator, [name]: value }, 'emulator'), message, `${name} on the emulator`);
+  }
+  assert.equal(
+    pool.poolSignInUrl({ FIREBASE_API_KEY: 'web-key', FIREBASE_PROJECT_ID: 'vida-staging' }, 'staging'),
+    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=web-key'
+  );
+});
+
+// ── Backing off after a failed App Check exchange ────────────────────────────
+
+function exchangeHarness(responses) {
+  const h = { t: 1000000, posts: [], warnings: [], aborts: [] };
+  h.token = pool.createAppCheckTokenSource(
+    { kind: 'exchange', url: 'https://appcheck.example/exchange', body: '{"debug_token":"d"}' },
+    {
+      post: (url, body) => {
+        h.posts.push({ at: h.t, url, body });
+        const next = responses.length > 1 ? responses.shift() : responses[0];
+        if (next instanceof Error) throw next;
+        return next;
+      },
+      now: () => h.t,
+      warn: (m) => h.warnings.push(m),
+      abort: (m) => h.aborts.push(m),
+    }
+  );
+  return h;
+}
+const OK = (token, ttl = '3600s') => ({ status: 200, body: JSON.stringify({ token, ttl }) });
+
+test('a static plan never calls the exchange endpoint', () => {
+  const token = pool.createAppCheckTokenSource({ kind: 'static', token: 'jwt' }, {
+    post: () => assert.fail('no exchange for a static token'),
+    now: () => 0,
+    abort: () => assert.fail('no abort'),
+  });
+  assert.equal(token(), 'jwt');
+});
+
+test('an exchanged token is cached and refreshed at 80% of its life', () => {
+  const h = exchangeHarness([OK('first'), OK('second')]);
+  assert.equal(h.token(), 'first');
+  h.t += 2879000;
+  assert.equal(h.token(), 'first');
+  assert.equal(h.posts.length, 1);
+  h.t += 1000; // 2,880 s = 80% of 3,600 s
+  assert.equal(h.token(), 'second');
+  assert.equal(h.posts.length, 2);
+  assert.deepEqual(h.posts[0], { at: 1000000, url: 'https://appcheck.example/exchange', body: '{"debug_token":"d"}' });
+});
+
+test('a failed exchange is not retried on every iteration: it backs off 5 s, 10 s, 20 s …', () => {
+  const h = exchangeHarness([{ status: 503, body: '' }, { status: 503, body: '' }, { status: 503, body: '' }, OK('late')]);
+  // 100 iterations, one every 500 ms = 50 s of a failing endpoint
+  for (let i = 0; i < 100; i++) {
+    h.token();
+    h.t += 500;
+  }
+  // attempts at +0, +5 s, +15 s (5 + 10) and +35 s (15 + 20) — not 100
+  assert.deepEqual(h.posts.map((p) => p.at - 1000000), [0, 5000, 15000, 35000]);
+  assert.equal(h.token(), 'late');
+  assert.equal(h.warnings.length, 3);
+  assert.match(h.warnings[0], /status=503; next attempt in 5s/);
+  assert.match(h.warnings[2], /next attempt in 20s/);
+  assert.deepEqual(h.aborts, []);
+});
+
+test('the backoff doubles up to five minutes and resets after a success', () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 50].map(pool.appCheckBackoffMs), [5000, 10000, 20000, 40000, 80000, 160000, 300000, 300000, 300000]);
+  assert.equal(pool.appCheckBackoffMs(0), 5000);
+
+  const h = exchangeHarness([OK('one', '100s'), { status: 500, body: '' }, { status: 500, body: '' }, OK('two', '100s'), { status: 500, body: '' }, OK('three')]);
+  assert.equal(h.token(), 'one');
+  h.t += 80000; // refresh due; the endpoint is down
+  assert.equal(h.token(), 'one', 'the token in hand is reused while backing off');
+  h.t += 4999;
+  assert.equal(h.token(), 'one');
+  assert.equal(h.posts.length, 2, 'no second attempt inside the 5 s window');
+  h.t += 1;
+  assert.equal(h.token(), 'one'); // second failure → 10 s
+  h.t += 10000;
+  assert.equal(h.token(), 'two');
+  h.t += 80000;
+  assert.equal(h.token(), 'two'); // fails again: back to a 5 s wait, not 20 s
+  assert.match(h.warnings.at(-1), /next attempt in 5s/);
+  // a failure with a token in hand never aborts the run
+  assert.deepEqual(h.aborts, []);
+});
+
+test('an exchange that cannot heal stops the run instead of sending 401s', () => {
+  for (const status of [400, 401, 403, 404]) {
+    const h = exchangeHarness([{ status, body: '{"error":{}}' }]);
+    assert.equal(h.token(), '');
+    assert.equal(h.aborts.length, 1, `HTTP ${status}`);
+    assert.match(h.aborts[0], new RegExp(`refused \\(HTTP ${status}\\)`));
+  }
+  // transient failures with no token: five in a row, then stop
+  const h = exchangeHarness([{ status: 503, body: '' }]);
+  for (let i = 0; i < 4; i++) {
+    h.token();
+    h.t += 600000;
+  }
+  assert.deepEqual(h.aborts, []);
+  h.token();
+  assert.equal(h.posts.length, pool.APP_CHECK_GIVE_UP_AFTER);
+  assert.match(h.aborts[0], /failed 5 times in a row \(last HTTP 503\)/);
+
+  // a thrown request and a 200 without a token are failures too, not crashes
+  const broken = exchangeHarness([new Error('dial tcp'), { status: 200, body: 'not json' }, { status: 200, body: '{}' }, OK('ok')]);
+  assert.equal(broken.token(), '');
+  broken.t += 5000;
+  assert.equal(broken.token(), '');
+  broken.t += 10000;
+  assert.equal(broken.token(), '');
+  broken.t += 20000;
+  assert.equal(broken.token(), 'ok');
 });
 
 test('appCheckRefreshAfterMs refreshes before the token expires', () => {
@@ -321,8 +523,59 @@ test('the k6 script takes its users from the pool and stops when it runs out', (
   // the step that claimed to verify mock mode (it re-read /api/health) is gone
   assert.doesNotMatch(script, /mockCheck|Verify mock mode/);
   assert.match(script, /'X-Firebase-AppCheck': appCheckToken\(\)/);
+  // the token comes from the backing-off source, and the script has no exchange loop of its own
+  assert.match(script, /const appCheckToken = createAppCheckTokenSource\(APP_CHECK, \{/);
+  assert.match(script, /abort: \(message\) => exec\.test\.abort\(message\)/);
+  assert.doesNotMatch(script, /function appCheckToken\(|APP_CHECK\.url|appCheckCache/);
   // the per-iteration invented account that could never exist is gone
   assert.doesNotMatch(script, /@loadtest\.vida\.internal|LoadTest2024/);
+});
+
+test('the report prints no stage latency the target did not measure, and no verdict for a load it did not apply', () => {
+  const script = repo('tests/load/pipeline-load-test.js');
+  // stage trends are fed from the X-Stage-*-Ms response headers and from nothing else
+  assert.doesNotMatch(script, /totalLatency \* 0\.\d/, 'a fixed fraction of the total is not a stage measurement');
+  for (const trend of ['stageValidation', 'stageFirestoreWrite', 'stageQueueDispatch', 'stageMlScoring']) {
+    const adds = [...script.matchAll(new RegExp(`${trend}\\.add\\(([^;]+);`, 'g'))].map((m) => m[1]);
+    assert.equal(adds.length, 1, `${trend} is added to exactly once`);
+    assert.match(adds[0], /^parseInt\(res\.headers\['X-Stage-[A-Za-z]+-Ms'\], 10\)\)$/, trend);
+  }
+  assert.match(script, /metric\.values\.count > 0/);
+  assert.match(script, /not instrumented — the target sends no X-Stage-\*-Ms headers/);
+  // nothing in functions/ sends those headers; if that changes, the config.js comment and the runbook are stale
+  const functionsSrc = readdirSync(new URL('../../../functions/src/', import.meta.url), { recursive: true })
+    .filter((name) => name.endsWith('.ts') && !name.includes('__tests__') && !name.endsWith('.test.ts'))
+    .map((name) => repo(`functions/src/${name}`))
+    .join('\n');
+  assert.doesNotMatch(functionsSrc, /X-Stage-/i);
+
+  // the 2x line is a verdict only in the full profile; an emulator report says what it is
+  assert.match(script, /const full = PROFILE === 'full';/);
+  assert.match(script, /2x target without errors: {2}\$\{full \? \(errRate < 0\.05 \? '✓ PASS' : '✗ FAIL'\) : notReached\}/);
+  assert.match(script, /if \(TARGET\.label === 'emulator'\) \{\s+lines\.push\('│ {2}EMULATOR run: this proves the script and the seeded pool work\.'\)/);
+});
+
+test('every failed request lands in exactly one named bucket, and failed sign-ins are counted', () => {
+  const script = repo('tests/load/pipeline-load-test.js');
+  const metrics = repo('tests/load/helpers/metrics.js');
+  for (const [name, metric] of [
+    ['unauthenticated', 'unauthenticated_requests'],
+    ['refusedPrecondition', 'refused_precondition_requests'],
+    ['refusedInvalidArgument', 'refused_invalid_argument_requests'],
+    ['otherFailures', 'other_failed_requests'],
+    ['signInFailures', 'auth_sign_in_failures'],
+  ]) {
+    assert.ok(metrics.includes(`export const ${name} = new Counter('${metric}')`), name);
+    assert.match(script, new RegExp(`${name}\\.add\\(1\\)`), `${name} is counted`);
+    assert.ok(script.includes(`count('${metric}')`), `${metric} is in the report`);
+  }
+  // one if / else-if chain ending in a catch-all: no failed request is left uncategorised
+  const chain = script.slice(script.indexOf('// Categorize failure'), script.indexOf("if (res.status !== 200) {"));
+  assert.deepEqual(
+    [...chain.matchAll(/(\w+)\.add\(1\)/g)].map((m) => m[1]),
+    ['rateLimited', 'timeouts', 'serverErrors', 'unauthenticated', 'refusedPrecondition', 'refusedInvalidArgument', 'otherFailures']
+  );
+  assert.match(chain, /\} else \{\s+otherFailures\.add\(1\);/);
 });
 
 // ── The provider inventory in the runbook ────────────────────────────────────
