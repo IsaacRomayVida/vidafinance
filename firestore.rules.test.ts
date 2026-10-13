@@ -1631,6 +1631,24 @@ describe('employee cannot self-assign the identity verdict', () => {
     );
   });
 
+  it("the dev test-bypass registration completes once kycStatus is clamped (E2's failure mode)", async () => {
+    // Onboarding.tsx's dev-build bypass holds kycStatus 'approved' in UI state
+    // and, until clientWritableKycStatus, persisted it — so this final
+    // registration write was denied and the wizard stranded. Full payload as
+    // that path now sends it, metamap ids and kycStartedAt included.
+    const ctx = testEnv.authenticatedContext('employee1');
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'employees/employee1'), {
+        ...registration,
+        kycStatus: 'pending_review',
+        metamapVerificationId: 'test-verification-1700000000000',
+        metamapIdentityId: 'test-identity-1700000000000',
+        kycStartedAt: new Date(),
+        createdAt: new Date(),
+      })
+    );
+  });
+
   // ── the update path ──
   it('the owner cannot raise kycStatus after the fact', async () => {
     await seedEmployee('employee1', 'employer1', { kycStatus: 'pending_review' });
