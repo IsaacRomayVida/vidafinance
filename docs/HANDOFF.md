@@ -25,28 +25,33 @@ that time could have changed (CI state, open PRs, production health).
   seed and runbook, and the Lighthouse work (performance assertion is now `error`; it passed on the
   CI runner).
 
-### In progress: branch `hardening/remittance-alerts-load-run` (based on `main` after #637)
-Three reviewed `swarm4/*` branches merged, plus one orchestrator CSS fix.
+- **PR #638** (`hardening/remittance-alerts-load-run`) merged as `878bb86` on the user's go-ahead after
+  16 checks passed. Deploy run 38447548216 succeeded; `verify-production-live.yml` run 38450876839
+  passed. Contents: paginated `listPayrollRemittances` with three new indexes, `receivedOn` lower
+  bound, `details.reason` on every refusal with Spanish text, backfill 004 reference-index pass,
+  daily `remittanceOverdueCheck`, `public-v2` emulator wiring (dev builds only) and
+  `scripts/seed-remittance-emulator.mjs`, the k6 emulator smoke run (90/90 accepted) and tighter
+  load-target guards, board placeholders and English-chunk preload on the marketing pages.
+  Right after the deploy the three new `payrollRemittances` indexes were still `CREATING`.
 
-| Branch | What | Status |
-|---|---|---|
-| `swarm4/remittance-ops` | `listPayrollRemittances` is one ordered query with cursor pagination (three new composite indexes; `view: 'all'` is now newest first; totals are per page). `receivedOn` may not precede `payPeriodStart`. Every refusal carries `details.reason` (22 codes) and the screen shows Spanish text for each. Backfill 004 also builds reference-index entries (rehearsed on the emulator). New daily scheduled function `remittanceOverdueCheck` raises alerts at 1, 16 and 31 days overdue through the existing incident log / Slack helper. `public-v2` emulator wiring (`npm run dev:emulators`, dev builds only; the production build fails if any emulator marker is in the bundle) and `scripts/seed-remittance-emulator.mjs`. Ops screen checked in headless Chrome on the emulators at 1440 and 390 wide; visual defects fixed. | merged, reviewed (approved first round) |
-| `swarm4/load-run` | k6 v2.3.0 installed with Homebrew and the smoke profile run on the local emulator: 90 iterations, 90 accepted, 0 failed (the reviewer's own run: 89, 88 accepted, 1 Auth-emulator connection reset). Guards now refuse the production project id and number, raw-IP targets, path tricks on emulator URLs and unknown `PROFILE` values. App Check exchange backs off after a failure. Pool assignment is stable when the pool grows. Result files are time-stamped. | merged, reviewed + repaired (first review blocked: production project number accepted as a project id) |
-| `swarm4/marketing-polish` | Boards carry a 24 px inline placeholder of their photograph so a fast scroll never shows a bare scrim. English chunk is preloaded for saved-English readers and the fallback timeout is 1 s. Before/after screenshots against the pre-Lighthouse build found no regressions. Lighthouse medians 0.93–0.98 locally. | merged, reviewed (approved first round) |
+### Checked against production (read-only, 2026-10-13)
+- Backfill 004 dry run (`--allow-production`, no `--apply`, the user's own Google login): **0 batches,
+  0 receipts.** Production has no payroll batches yet, so the backfill is not needed and the first
+  `remittanceOverdueCheck` run has nothing to alert on.
+- `SLACK_WEBHOOK_URL` is not among the repository's GitHub secrets, and `functions/src/utils/slackAlert.ts`
+  is a no-op without it: overdue alerts reach only the ops alerts page.
+- GitHub secrets `FIREBASE_PROJECT_ID_STAGING` and `FIREBASE_SERVICE_ACCOUNT_STAGING` exist, so a
+  staging Firebase project may already exist for the load test.
 
-Local results on the integration branch: functions 1196/1196, public-v2 495/495 (three runs in a
-row), underwriting 452/452 (1 skipped, as before), migrations 65/65, node tests 215/215, lint 0
-errors, production build passes the no-emulator bundle check.
-
-**Merging this branch** deploys the new scheduled function `remittanceOverdueCheck`, three
-Firestore indexes, and a changed `listPayrollRemittances` contract together with the screen that
-uses it. Until the indexes finish building, the list and the overdue check fail. The first
-overdue run raises one alert per already-overdue record.
+### In progress: PR #639 (`hardening/stage0-closed-credit`, open, not merged)
+Stage 0: an INFONAVIT record with `credit_status:"closed"` is never counted as active, even with
+`balance > 0` (it was). Two new tests fail on revert; underwriting 454 passed, 1 skipped. This
+changes approvals, so it waits for the user's explicit go-ahead to merge.
 
 ## 2. Next steps, in order
-1. Get the PR for `hardening/remittance-alerts-load-run` green. Merge only with the user's go-ahead
-   (production deploy), then dispatch `verify-production-live.yml`. After the deploy, confirm the
-   three `payrollRemittances` indexes are built and open `/ops/remittances` once.
+1. PR #639: merge only with the user's go-ahead (production deploy), then dispatch
+   `verify-production-live.yml`. Confirm the three new `payrollRemittances` indexes are `READY`, and
+   have someone with an ops login open `/ops/remittances` in production.
 2. Remittance, still open:
    - Overdue alerts are not resolved when the money arrives, and a record re-opened by a void does not re-raise a threshold it already raised. Whether `SLACK_WEBHOOK_URL` is set in production is unverified.
    - KPI totals on the screen sum only the loaded rows; there is no server-side grand total.
@@ -58,12 +63,12 @@ overdue run raises one alert per already-overdue record.
    - `FIREBASE_PROJECT_ID` should be shape-checked (`^[a-z0-9-]+$`) before it is compared; an expired token with a failing exchange is not aborted.
    - Runbook setup B (full pipeline) is still marked not cleared.
 4. Marketing, still open: the employer "stage" panel can show without its photograph on a very fast scroll; `/` sits at 0.93–0.94, close to the gate; `<html lang>` reads `en` while the Spanish fallback is on screen.
-5. Deferred owner decision: Stage 0 treats `credit_status:"closed"` with `balance > 0` as active.
 
 ## 3. Needs a human (do not fake these)
 - **Load test prerequisites:** create the non-production Firebase project (its id must not contain `prod`), register the App Check debug token, and set the load-test password. Steps are in `docs/runbooks/scaling.md`.
 - **Gen-2 host guard:** confirm in the GCP console that vida-finance's Cloud Run hash is `gd5fcu677q` and its project number is `447766605132` (the hash answered `/health` with 200, which is the only evidence so far).
-- **Backfill 004:** running it against production needs an explicit go-ahead and `--allow-production`.
+- **Slack:** set `SLACK_WEBHOOK_URL` on Functions if overdue-remittance alerts should reach Slack.
+- **Local credentials:** the `gcloud` CLI on this Mac is signed in as the production admin service account. Claude did not use it; the user was asked whether read-only use is acceptable and had not answered when this was written.
 - **Ops remittance screen:** an agent checked it in headless Chrome on the emulators; a person with an ops login should still open it in production.
 - **Marketing pages:** look at them in Safari (iOS and macOS) and Firefox, and watch the route fade and board films; only headless Chrome screenshots were compared.
 - **D1:** confirm the billing cause using billing account `01B681-29512A-745C5D`'s payment history, and see who granted indexAdmin on 2026-08-03. The exact `gcloud logging read` commands are in the checklist D1 section. The deploy SA cannot read those logs. Add a billing-state alert.
