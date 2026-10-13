@@ -127,10 +127,18 @@ an unset URL env var is recorded as `unconfigured` with no critical incident (`R
 is still sourced from a possibly-empty secret in `deploy.yml`). Evidence:
 `cd functions && npx jest src/scheduled/__tests__/systemHealthCheck.test.ts src/__tests__/duplicateFunctionDefinitions.test.ts`;
 `npx jest services/shared/health-monitor.test.js` (now a CI hard gate).
-Still needing a human: registry-service's public domain is not recorded in
-`scripts/production-endpoints.json`, so the external uptime monitors in
-`docs/runbooks/uptime-monitoring.md` and `docs/monitoring/README.md` do not list it, and only the
-`REGISTRY_SERVICE_URL` secret knows it. Alert *delivery* for either service remains B7.
+*Update 2026-10-13 (domain).* registry-service's public domain is now recorded:
+`scripts/production-endpoints.json` → `registry.url` =
+`https://registry-service-funpay-production-1d23.up.railway.app` (source: commit `433312e`, which
+moved the registry into FunPay's Railway project and set `REGISTRY_SERVICE_URL` to it; live check
+the same day, one `GET /health` → **200** `{"status":"ok","service":"vida-registry-service","db":true}`).
+It is a separate `registry` key, not a `services` entry, so `deploy.yml`'s functions/.env loop and
+`recover-production-services.mjs` do not pick it up. `scripts/check-production-health.mjs` (run by
+`verify-production-live.yml`) now probes it as `canonical:registry-service`, and a
+`REGISTRY_SERVICE_URL` secret that drifts from it gates on its own health. Listed in
+`docs/runbooks/uptime-monitoring.md` (row 8, the UptimeRobot loop) and the scrape config in
+`docs/monitoring/README.md`. Evidence: `node --test scripts/check-production-health.test.mjs`.
+Alert *delivery* for either service remains B7.
 
 **D3 — Lighthouse and load-test claims have no CI home.** *(Lighthouse half closed 2026-10-13;
 load-test half still open)*
