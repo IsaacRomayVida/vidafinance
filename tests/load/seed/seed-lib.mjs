@@ -15,6 +15,7 @@ import {
   buildEmployeeDoc,
   buildEmployerDoc,
   employeeEmail,
+  employerCountFor,
   employeeUid,
   employerId,
   isLoadTestEmail,
@@ -64,7 +65,8 @@ async function inParallel(total, concurrency, worker) {
 
 /** What a run would do, without touching anything. Printed by --dry-run. */
 export function describePlan(opts, target) {
-  const { count, employers } = opts;
+  const { count } = opts;
+  const employers = employerCountFor(count);
   const lines = [
     `mode:      ${target.mode}${opts.dryRun ? ' (DRY RUN — nothing is read or written)' : ''}`,
     `project:   ${target.projectId}`,
@@ -92,9 +94,9 @@ export function describePlan(opts, target) {
     `employees: ${count}  (${employeeUid(0)} … ${employeeUid(count - 1)})`,
     `           emails ${employeeEmail(0)} …, password from LOAD_TEST_PASSWORD (not shown)`,
     `sample employers/${employerId(0)}:`,
-    `  ${JSON.stringify(buildEmployerDoc(0, slotsFor(0, count, employers)))}`,
+    `  ${JSON.stringify(buildEmployerDoc(0, slotsFor(0, count)))}`,
     `sample employees/${employeeUid(0)}:`,
-    `  ${JSON.stringify(buildEmployeeDoc(0, employers))}`,
+    `  ${JSON.stringify(buildEmployeeDoc(0))}`,
     `k6:        --env POOL_SIZE=${count}`
   );
   return lines;
@@ -115,24 +117,34 @@ async function ensureAuthUser(auth, index, password) {
 }
 
 /**
- * Idempotent: every id is a pure function of its index, employers are merged,
- * employees are overwritten (which also restores the credit line a previous
- * run spent). Re-running with a larger --count only adds.
+ * Idempotent: every id — and every member's employer — is a pure function of
+ * its index, employers are merged, employees are overwritten (which also
+ * restores the credit line a previous run spent).
+ *
+ * Growing the pool while loans are open is safe: a larger --count appends
+ * members and, past each 2,500, employers; it moves nobody (pool.js
+ * employerIndexFor) and only ever raises an employer's `maxActiveSlots`.
+ * A SMALLER --count deletes nothing — the members above it stay, with their
+ * accounts — and leaves `maxActiveSlots` where it was, so the loans those
+ * members hold still fit under the cap. Only teardown removes anything.
  *
  * @param {object} deps
  * @param {object} deps.db    Firestore (Admin SDK shape)
  * @param {object} deps.auth  Auth (Admin SDK shape)
  * @param {() => unknown} deps.serverTimestamp
  * @param {(line: string) => void} [deps.log]
- * @param {{ count: number, employers: number, password: string, concurrency?: number }} opts
+ * @param {{ count: number, password: string, concurrency?: number }} opts
  */
 export async function seedPool({ db, auth, serverTimestamp, log = () => {} }, opts) {
-  const { count, employers, password, concurrency = 20 } = opts;
+  const { count, password, concurrency = 20 } = opts;
   if (!password) throw new Error('seedPool needs a password');
+  // Derived, never passed in: an employer count chosen by the caller is what
+  // used to reshuffle the pool.
+  const employers = employerCountFor(count);
 
   for (let j = 0; j < employers; j++) {
     const ref = db.collection('employers').doc(employerId(j));
-    const doc = { ...buildEmployerDoc(j, slotsFor(j, count, employers)), seededAt: serverTimestamp() };
+    const doc = { ...buildEmployerDoc(j, slotsFor(j, count)), seededAt: serverTimestamp() };
     // Two writes for a NEW employer, on purpose. onEmployerDocCreated grants an
     // employer_admin claim to the uid of any employer CREATED in an approved
     // status; these employers have no account, so that trigger would throw once
@@ -140,10 +152,15 @@ export async function seedPool({ db, auth, serverTimestamp, log = () => {} }, op
     // pending_verification the trigger withholds the claim quietly; nothing
     // listens for the update. An employer that already exists is written once,
     // so a re-seed never takes an active employer out of `active`.
-    if (!(await ref.get()).exists) {
+    const existing = await ref.get();
+    if (!existing.exists) {
       await ref.set({ ...doc, status: 'pending_verification' }, { merge: true });
       await ref.set({ status: doc.status }, { merge: true });
     } else {
+      // Never lower the cap: after a re-seed with a smaller --count the members
+      // above it still exist and may hold open loans against this employer.
+      const current = existing.data()?.maxActiveSlots;
+      if (Number.isFinite(current) && current > doc.maxActiveSlots) doc.maxActiveSlots = current;
       await ref.set(doc, { merge: true });
     }
   }
@@ -163,7 +180,7 @@ export async function seedPool({ db, auth, serverTimestamp, log = () => {} }, op
     const end = Math.min(count, start + WRITE_BATCH);
     for (let index = start; index < end; index++) {
       batch.set(db.collection('employees').doc(employeeUid(index)), {
-        ...buildEmployeeDoc(index, employers),
+        ...buildEmployeeDoc(index),
         createdAt: serverTimestamp(),
       });
     }

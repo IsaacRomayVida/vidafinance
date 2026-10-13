@@ -153,18 +153,18 @@ function plantStage5Row(db, index) {
 test('seedPool writes exactly the documented shapes, accounts and claims', async () => {
   const db = fakeFirestore();
   const auth = fakeAuth();
-  const result = await seedPool(seedDeps(db, auth), { count: 7, employers: 2, password: 'pw-for-test', concurrency: 3 });
+  const result = await seedPool(seedDeps(db, auth), { count: 7, password: 'pw-for-test', concurrency: 3 });
 
-  assert.deepEqual(result, { employers: 2, employees: 7 });
-  assert.equal(db.docs.size, 9);
+  // 7 members → 7 employers, one each (members 0..49 open employers 0..49)
+  assert.deepEqual(result, { employers: 7, employees: 7 });
+  assert.equal(db.docs.size, 14);
   assert.equal(auth.users.size, 7);
-  for (let j = 0; j < 2; j++) {
-    assert.deepEqual(db.docs.get(`employers/${employerId(j)}`), { ...buildEmployerDoc(j, slotsFor(j, 7, 2)), seededAt: STAMP });
+  for (let j = 0; j < 7; j++) {
+    assert.deepEqual(db.docs.get(`employers/${employerId(j)}`), { ...buildEmployerDoc(j, slotsFor(j, 7)), seededAt: STAMP });
+    assert.equal(db.docs.get(`employers/${employerId(j)}`).maxActiveSlots, 1);
   }
-  assert.equal(db.docs.get(`employers/${employerId(0)}`).maxActiveSlots, 4);
-  assert.equal(db.docs.get(`employers/${employerId(1)}`).maxActiveSlots, 3);
   for (let i = 0; i < 7; i++) {
-    assert.deepEqual(db.docs.get(`employees/${employeeUid(i)}`), { ...buildEmployeeDoc(i, 2), createdAt: STAMP });
+    assert.deepEqual(db.docs.get(`employees/${employeeUid(i)}`), { ...buildEmployeeDoc(i), createdAt: STAMP });
     assert.deepEqual(auth.users.get(employeeUid(i)), {
       uid: employeeUid(i),
       email: employeeEmail(i),
@@ -197,17 +197,17 @@ test('an employer is never CREATED in an approved status (the creation trigger w
       },
     };
   };
-  await seedPool(seedDeps(db, fakeAuth()), { count: 4, employers: 2, password: 'pw-for-test' });
+  await seedPool(seedDeps(db, fakeAuth()), { count: 4, password: 'pw-for-test' });
 
-  assert.deepEqual([...firstWrite.values()], ['pending_verification', 'pending_verification']);
+  assert.deepEqual([...firstWrite.values()], Array(4).fill('pending_verification'));
   // …and ends in the status requestLoan and buildEmployerDoc both mean
-  for (let j = 0; j < 2; j++) assert.equal(db.docs.get(`employers/${employerId(j)}`).status, 'active');
+  for (let j = 0; j < 4; j++) assert.equal(db.docs.get(`employers/${employerId(j)}`).status, 'active');
 });
 
 test('a re-seed never takes an existing employer out of `active`, not even for one write', async () => {
   const db = fakeFirestore();
   const auth = fakeAuth();
-  const opts = { count: 4, employers: 2, password: 'pw-for-test' };
+  const opts = { count: 4, password: 'pw-for-test' };
   await seedPool(seedDeps(db, auth), opts);
 
   const statusesWritten = [];
@@ -231,13 +231,13 @@ test('a re-seed never takes an existing employer out of `active`, not even for o
   };
   await seedPool(seedDeps(db, auth), opts);
 
-  assert.deepEqual(statusesWritten, ['active', 'active']);
+  assert.deepEqual(statusesWritten, Array(4).fill('active'));
 });
 
 test('seedPool is idempotent, restores a spent credit line, and keeps what a trigger added to the employer', async () => {
   const db = fakeFirestore();
   const auth = fakeAuth();
-  const opts = { count: 5, employers: 1, password: 'first-password' };
+  const opts = { count: 5, password: 'first-password' };
   await seedPool(seedDeps(db, auth), opts);
   const before = structuredClone([...db.docs.entries()]);
 
@@ -247,9 +247,9 @@ test('seedPool is idempotent, restores a spent credit line, and keeps what a tri
 
   await seedPool(seedDeps(db, auth), { ...opts, password: 'rotated-password' });
 
-  assert.equal(db.docs.size, 6);
+  assert.equal(db.docs.size, 10);
   assert.equal(auth.users.size, 5);
-  assert.equal(db.docs.get(`employees/${employeeUid(2)}`).availableCredit, buildEmployeeDoc(2, 1).availableCredit);
+  assert.equal(db.docs.get(`employees/${employeeUid(2)}`).availableCredit, buildEmployeeDoc(2).availableCredit);
   assert.equal(db.docs.get(`employers/${employerId(0)}`).totalEmployees, 5);
   assert.equal(auth.users.get(employeeUid(0)).password, 'rotated-password');
   db.docs.get(`employers/${employerId(0)}`).totalEmployees = undefined;
@@ -262,25 +262,26 @@ test('seedPool never writes outside the prefix and batches large pools', async (
   plantRealData(db, auth);
   const real = structuredClone([...db.docs.entries()].filter(([path]) => !path.includes('loadtest-emp-0')));
 
-  await seedPool(seedDeps(db, auth), { count: 1001, employers: 21, password: 'pw-for-test' });
+  await seedPool(seedDeps(db, auth), { count: 1001, password: 'pw-for-test' });
+  const employerDocs = 50;
 
   assert.equal(db.commits(), 3); // 400 + 400 + 201
   for (const [path, data] of real) assert.deepEqual(db.docs.get(path), data, path);
   const written = [...db.docs.keys()].filter((path) => !real.some(([p]) => p === path));
-  assert.equal(written.length, 1001 + 21);
+  assert.equal(written.length, 1001 + employerDocs);
   for (const path of written) assert.match(path, /^(employees\/loadtest-emp-\d{6}|employers\/loadtest-employer-\d{4})$/);
   assert.equal(auth.users.get('realBorrowerUid').email, 'ana@example.com');
 });
 
 test('seedPool refuses to run without a password and surfaces unexpected Auth errors', async () => {
-  await assert.rejects(seedPool(seedDeps(fakeFirestore(), fakeAuth()), { count: 1, employers: 1, password: '' }), /password/);
+  await assert.rejects(seedPool(seedDeps(fakeFirestore(), fakeAuth()), { count: 1, password: '' }), /password/);
 
   const auth = fakeAuth();
   auth.createUser = async () => {
     throw Object.assign(new Error('email taken'), { code: 'auth/email-already-exists' });
   };
   const db = fakeFirestore();
-  await assert.rejects(seedPool(seedDeps(db, auth), { count: 1, employers: 1, password: 'pw' }), /email taken/);
+  await assert.rejects(seedPool(seedDeps(db, auth), { count: 1, password: 'pw' }), /email taken/);
   assert.equal([...db.docs.keys()].filter((p) => p.startsWith('employees/')).length, 0);
 });
 
@@ -291,7 +292,7 @@ test('teardownPool removes the pool and its run residue, and nothing else', asyn
   const realDocs = structuredClone([...db.docs.entries()]);
   const realUsers = structuredClone([...auth.users.entries()]);
 
-  await seedPool(seedDeps(db, auth), { count: 9, employers: 2, password: 'pw-for-test' });
+  await seedPool(seedDeps(db, auth), { count: 9, password: 'pw-for-test' });
   for (let i = 0; i < 7; i++) plantRunResidue(db, i, `loanOf${i}`);
   for (let i = 0; i < 5; i++) plantStage5Row(db, i);
 
@@ -305,7 +306,7 @@ test('teardownPool removes the pool and its run residue, and nothing else', asyn
     reviewQueueStage5: 5,
     auditLog: 14,
     employees: 9,
-    employers: 2,
+    employers: 9,
     authUsers: 9,
   });
   assert.deepEqual([...db.docs.entries()], realDocs);
@@ -318,7 +319,7 @@ test('teardownPool on an empty project is a no-op, and a second teardown deletes
   const zero = { loans: 0, loanDetails: 0, reviewQueue: 0, reviewQueueStage5: 0, auditLog: 0, employees: 0, employers: 0, authUsers: 0 };
   assert.deepEqual(await teardownPool(tearDeps(db, auth)), zero);
 
-  await seedPool(seedDeps(db, auth), { count: 3, employers: 1, password: 'pw-for-test' });
+  await seedPool(seedDeps(db, auth), { count: 3, password: 'pw-for-test' });
   await teardownPool(tearDeps(db, auth));
   assert.deepEqual(await teardownPool(tearDeps(db, auth)), zero);
   assert.equal(db.docs.size, 0);
@@ -329,7 +330,7 @@ test('teardownPool stops — deleting nothing more — if a query ever hands it 
   const db = fakeFirestore();
   const auth = fakeAuth();
   plantRealData(db, auth);
-  await seedPool(seedDeps(db, auth), { count: 2, employers: 1, password: 'pw-for-test' });
+  await seedPool(seedDeps(db, auth), { count: 2, password: 'pw-for-test' });
 
   // A backend (or a future edit to the query) that ignores the range filter:
   const original = db.collection;
@@ -349,7 +350,7 @@ test('teardownPool removes Stage 5 review_queue rows of the pool — which no lo
   const auth = fakeAuth();
   plantRealData(db, auth);
   const realDocs = structuredClone([...db.docs.entries()]);
-  await seedPool(seedDeps(db, auth), { count: 3, employers: 1, password: 'pw-for-test' });
+  await seedPool(seedDeps(db, auth), { count: 3, password: 'pw-for-test' });
 
   // A setup-B run: the loan and, separately, the row Stage 5 wrote for the same request.
   plantRunResidue(db, 0, 'loanOf0');
@@ -373,7 +374,7 @@ test('teardownPool stops on a review_queue row whose RFC only LOOKS like the poo
   for (const applicantRfc of ['LTXX900101AB1', 'LTXXA', 'LTXX600101L00X', 'LTXX601301L00', 'LTXX600100L00']) {
     const db = fakeFirestore();
     const auth = fakeAuth();
-    await seedPool(seedDeps(db, auth), { count: 2, employers: 1, password: 'pw-for-test' });
+    await seedPool(seedDeps(db, auth), { count: 2, password: 'pw-for-test' });
     db.docs.set('review_queue/notOurs', { loanId: 'uw-9-zzzzzz', applicantRfc });
     plantStage5Row(db, 1); // sorts after "notOurs"? irrelevant: the page is checked whole before any delete
 
@@ -389,7 +390,7 @@ test('teardownPool stops on a review_queue row whose RFC only LOOKS like the poo
 test('teardownPool fails — it does not report success — when Auth refuses some deletions', async () => {
   const db = fakeFirestore();
   const auth = fakeAuth();
-  await seedPool(seedDeps(db, auth), { count: 5, employers: 1, password: 'pw-for-test' });
+  await seedPool(seedDeps(db, auth), { count: 5, password: 'pw-for-test' });
 
   const realDelete = auth.deleteUsers;
   auth.deleteUsers = async (uids) => {
@@ -423,7 +424,7 @@ test('teardownPool fails — it does not report success — when Auth refuses so
 test('teardownPool pauses between Auth batches when asked to (deleteUsers is about 1 call/s)', async () => {
   const db = fakeFirestore();
   const auth = fakeAuth();
-  await seedPool(seedDeps(db, auth), { count: 2100, employers: 42, password: 'pw-for-test' });
+  await seedPool(seedDeps(db, auth), { count: 2100, password: 'pw-for-test' });
   const callTimes = [];
   const realDelete = auth.deleteUsers;
   auth.deleteUsers = async (uids) => {
@@ -452,13 +453,13 @@ test('teardownPool applies the same stop to employees, employers and audit rows'
 });
 
 test('describePlan states the target, the range and — for teardown — exactly what is in scope', () => {
-  const seed = describePlan({ count: 120, employers: 3, dryRun: true, teardown: false }, { mode: 'project', projectId: 'vida-staging' });
+  const seed = describePlan({ count: 120, dryRun: true, teardown: false }, { mode: 'project', projectId: 'vida-staging' });
   assert.ok(seed.some((l) => l.includes('DRY RUN')));
   assert.ok(seed.some((l) => l.includes('vida-staging')));
   assert.ok(seed.some((l) => l.includes('loadtest-emp-000000 … loadtest-emp-000119')));
   assert.ok(!seed.join('\n').includes('pw-for-test'));
 
-  const teardown = describePlan({ count: 120, employers: 3, dryRun: false, teardown: true }, { mode: 'emulator', projectId: 'demo-vida-load' }).join('\n');
+  const teardown = describePlan({ count: 120, dryRun: false, teardown: true }, { mode: 'emulator', projectId: 'demo-vida-load' }).join('\n');
   for (const scope of [
     'auth users',
     'employees/*',
@@ -473,4 +474,54 @@ test('describePlan states the target, the range and — for teardown — exactly
   ]) {
     assert.ok(teardown.includes(scope), scope);
   }
+});
+
+// ── Growing the pool while loans are open ───────────────────────────────────
+// The assignment used to be `index % employerCount` with employerCount derived
+// from --count: seeding 200 and then 450 moved 4 employers' worth of members
+// onto 9, under loans that still named the old employer.
+
+function employerOf(db, index) {
+  return db.docs.get(`employees/${employeeUid(index)}`).employerId;
+}
+
+test('re-seeding with a larger --count moves no existing member to another employer', async () => {
+  for (const [small, large] of [
+    [200, 450],
+    [137, 12600],
+    [2499, 2501], // across a block boundary: employers are appended, nobody moves
+    [12500, 20000],
+  ]) {
+    const db = fakeFirestore();
+    const auth = fakeAuth();
+    await seedPool(seedDeps(db, auth), { count: small, password: 'pw-for-test' });
+    const before = Array.from({ length: small }, (_, i) => employerOf(db, i));
+    const slotsBefore = new Map([...db.docs].filter(([path]) => path.startsWith('employers/')).map(([path, doc]) => [path, doc.maxActiveSlots]));
+
+    await seedPool(seedDeps(db, auth), { count: large, password: 'pw-for-test' });
+
+    for (let i = 0; i < small; i++) assert.equal(employerOf(db, i), before[i], `member ${i} moved when the pool grew ${small} → ${large}`);
+    // every employer's cap is exactly its member count, and no cap went down
+    const members = new Map();
+    for (let i = 0; i < large; i++) members.set(employerOf(db, i), (members.get(employerOf(db, i)) ?? 0) + 1);
+    for (const [id, n] of members) {
+      const cap = db.docs.get(`employers/${id}`).maxActiveSlots;
+      assert.equal(cap, n, `${id} cap after growing to ${large}`);
+      assert.ok(cap >= (slotsBefore.get(`employers/${id}`) ?? 0), `${id} cap shrank`);
+    }
+  }
+});
+
+test('re-seeding with a SMALLER --count never lowers an employer below the loans it may already hold', async () => {
+  const db = fakeFirestore();
+  const auth = fakeAuth();
+  await seedPool(seedDeps(db, auth), { count: 450, password: 'pw-for-test' });
+  assert.equal(db.docs.get(`employers/${employerId(0)}`).maxActiveSlots, 9);
+
+  await seedPool(seedDeps(db, auth), { count: 100, password: 'pw-for-test' });
+
+  // members 100..449 still exist (a seed deletes nothing) and still belong where they did
+  assert.equal(auth.users.size, 450);
+  assert.equal(employerOf(db, 449), employerId(49));
+  for (let j = 0; j < 50; j++) assert.equal(db.docs.get(`employers/${employerId(j)}`).maxActiveSlots, 9, `employer ${j}`);
 });

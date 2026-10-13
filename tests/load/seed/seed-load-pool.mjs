@@ -17,8 +17,12 @@
  *   # Remove the pool and the loans / audit rows a run created
  *   … node tests/load/seed/seed-load-pool.mjs --project <staging-project-id> --teardown
  *
- * Flags: --count N (default 12500) · --employers N (default count/50) ·
- *        --project ID · --dry-run · --teardown · --concurrency N (default 20)
+ * Flags: --count N (default 12500) · --project ID · --dry-run · --teardown ·
+ *        --concurrency N (default 20)
+ *
+ * Employers are not a flag: member N always belongs to the same employer (50
+ * employers per 2,500 members), so a larger --count can be seeded on top of a
+ * pool that has open loans.
  *
  * The production project is refused in guard.mjs and there is no flag for it.
  */
@@ -70,7 +74,7 @@ async function main() {
   } else {
     const result = await seedPool(
       { ...deps, serverTimestamp: () => FieldValue.serverTimestamp() },
-      { count: opts.count, employers: opts.employers, password, concurrency: opts.concurrency }
+      { count: opts.count, password, concurrency: opts.concurrency }
     );
     console.log(`SEED DONE ${JSON.stringify(result)}`);
   }

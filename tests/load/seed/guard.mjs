@@ -18,6 +18,8 @@ import { DEFAULT_POOL_SIZE, employerCountFor } from './pool.js';
  * (checklist B8) is a human decision with its own, hand-made fixture.
  */
 export const PRODUCTION_PROJECT_IDS = Object.freeze(['vida-finance']);
+/** Its project number (messagingSenderId in public-v2/src/lib/firebase.ts). Google accepts the number wherever it accepts the id. */
+export const PRODUCTION_PROJECT_NUMBER = '447766605132';
 export const EMULATOR_DEFAULT_PROJECT = 'demo-vida-load';
 export const MIN_PASSWORD_LENGTH = 16;
 /** Emulator only. A real project always needs LOAD_TEST_PASSWORD from the operator. */
@@ -34,7 +36,7 @@ function refuse(message) {
 export function isProductionProjectId(id) {
   const normalised = String(id ?? '').trim().toLowerCase();
   // The exact id, plus anything that calls itself production. Over-refusing costs a rename; under-refusing costs real borrowers.
-  return PRODUCTION_PROJECT_IDS.includes(normalised) || /prod/.test(normalised);
+  return PRODUCTION_PROJECT_IDS.includes(normalised) || normalised === PRODUCTION_PROJECT_NUMBER || /prod/.test(normalised);
 }
 
 /**
@@ -65,14 +67,20 @@ export function parseArgs(argv) {
     else if (arg === '--teardown') opts.teardown = true;
     else if (arg === '--help' || arg === '-h') opts.help = true;
     else if (arg === '--count') opts.count = number(arg, value(), 1);
-    else if (arg === '--employers') opts.employers = number(arg, value(), 1);
+    else if (arg === '--employers') {
+      throw new SeedRefusal(
+        '--employers was removed. Which employer a member belongs to is now a function of the member index alone ' +
+          '(50 employers per 2,500 members), so that a pool can be grown while loans are open without moving ' +
+          'anyone. A hand-picked employer count would bring the reshuffle back.'
+      );
+    }
     else if (arg === '--concurrency') opts.concurrency = number(arg, value(), 1);
     else if (arg === '--project') opts.project = value();
     else throw new SeedRefusal(`Unknown argument ${arg} (there is no flag that allows production)`);
   }
   if (opts.count > 1000000) throw new SeedRefusal('--count must be at most 1000000');
-  if (opts.employers === null) opts.employers = employerCountFor(opts.count);
-  if (opts.employers > opts.count) throw new SeedRefusal('--employers cannot exceed --count');
+  // Reported in the plan only; nothing downstream takes an employer count from the caller.
+  opts.employers = employerCountFor(opts.count);
   if (opts.concurrency > 100) throw new SeedRefusal('--concurrency must be at most 100');
   return opts;
 }
@@ -165,8 +173,20 @@ export function resolvePassword(mode, env) {
 export const FUNCTIONS_PROVIDER_VARS = Object.freeze(['UNDERWRITING_SERVICE_URL', 'ML_SERVICE_URL']);
 
 /**
+ * Is `name` (a file directly inside functions/) one the Functions emulator
+ * loads variables from? `.env`, `.env.<project>`, `.env.local` — and
+ * `.secret.local`, the emulator's override file for `defineSecret` values,
+ * which is the same KEY=VALUE format and reaches the emulated functions just
+ * the same. `*.example` files are templates and are never loaded.
+ */
+export function isFunctionsEnvFile(name) {
+  if (name.endsWith('.example')) return false;
+  return name === '.secret.local' || name === '.env' || name.startsWith('.env.');
+}
+
+/**
  * @param {Record<string, string|undefined>} env  process.env
- * @param {Array<{ name: string, text: string }>} [envFiles]  functions/.env* files the emulator would load
+ * @param {Array<{ name: string, text: string }>} [envFiles]  the files of functions/ that isFunctionsEnvFile() accepts
  * @returns {string[]} one line per place a provider URL is set; empty when the emulated functions can reach nothing
  */
 export function functionsProviderLeaks(env, envFiles = []) {
