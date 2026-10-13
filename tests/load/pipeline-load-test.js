@@ -5,14 +5,26 @@
  * pipeline in staging. Ramps through 4 stages up to 2x target (280/min).
  *
  * Prerequisites:
- *   1. All external APIs in mock mode on the target:
- *      METAMAP_MOCK=true, RISKSEAL_MOCK=true
+ *   1. Every external provider switched off on the target — the full list
+ *      (it is longer than METAMAP_MOCK / RISKSEAL_MOCK) is in
+ *      docs/runbooks/scaling.md § "Keeping bureau / RiskSeal out of it".
+ *      This script CANNOT verify it: /api/health does not report the
+ *      target's configuration. The operator checks it by hand.
  *   2. Environment variables set:
  *      TARGET_URL       — Functions base URL (no default; see ./target.js —
  *                         production is refused without an explicit sign-off)
- *      FIREBASE_API_KEY or AUTH_TOKEN — see getAuthHeaders()
- *      APP_CHECK_TOKEN  — requestLoan has enforceAppCheck: true; without a
- *                         debug token every request is rejected
+ *      POOL_SIZE        — size of the seeded user pool (tests/load/seed/);
+ *                         POOL_OFFSET (default 0) skips members already used today
+ *      LOAD_TEST_PASSWORD + FIREBASE_API_KEY — sign the pool members in
+ *                         (FIREBASE_AUTH_EMULATOR_HOST instead of the key on the emulator)
+ *      APP_CHECK_DEBUG_TOKEN (+ FIREBASE_PROJECT_ID, FIREBASE_APP_ID) — the
+ *                         debug token registered on the target; exchanged for an
+ *                         App Check token and refreshed during the run. Or
+ *                         APP_CHECK_TOKEN, an already-exchanged token (expires).
+ *                         requestLoan has enforceAppCheck: true, so a deployed
+ *                         target with neither is refused at init
+ *      AUTH_TOKEN       — legacy single-uid mode (no pool): measures the
+ *                         duplicate-application guard and the 3/day limiter only
  *
  * Runbook (commands, low-traffic window, abort thresholds):
  *   docs/runbooks/scaling.md § Load test
@@ -33,10 +45,19 @@
 
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
-import { SharedArray } from 'k6/data';
+import exec from 'k6/execution';
 import { RAMP_STAGES, SMOKE_STAGES, THRESHOLDS } from './config.js';
 import { generateLoanApplication } from './helpers/synthetic-data.js';
 import { resolveTarget } from './target.js';
+import {
+  ACCEPTED_INITIAL_STATUSES,
+  appCheckPlan,
+  appCheckRefreshAfterMs,
+  buildPoolApplication,
+  poolConfigFromEnv,
+  poolIndexFor,
+  poolSignInUrl,
+} from './seed/pool.js';
 import {
   requestLatency,
   stageValidation,
@@ -62,7 +83,6 @@ import {
 // unsigned-off production target. TARGET.label names every results file.
 const TARGET = resolveTarget(__ENV);
 const STAGING_URL = TARGET.url;
-const FIREBASE_API_KEY = __ENV.FIREBASE_API_KEY || '';
 const PROFILE = __ENV.PROFILE || 'full';
 
 const stages = PROFILE === 'smoke' ? SMOKE_STAGES : RAMP_STAGES;
@@ -88,67 +108,79 @@ export const options = {
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(50)', 'p(90)', 'p(95)', 'p(99)', 'count'],
 };
 
-// ── Auth token cache ────────────────────────────────────────────────────────
-// In a real staging setup, we'd exchange custom tokens for ID tokens.
-// For load testing, we use a pre-generated service account token or
-// a staging-specific auth bypass.
+// ── Seeded user pool ────────────────────────────────────────────────────────
+// Every iteration uses the next member of the pool seeded by
+// tests/load/seed/seed-load-pool.mjs, exactly once: requestLoan refuses a uid
+// that already has an open loan, and rate-limits each uid to 3 calls a day.
+// Init fails — before any request — when neither a pool nor AUTH_TOKEN is given.
 
-let cachedAuthTokens = {};
+const POOL = poolConfigFromEnv(__ENV);
+// Throws at init for a pool aimed at production (it cannot exist there), for an
+// emulator target without the Auth emulator host, and for a deployed target
+// with one left set.
+const SIGN_IN_URL = POOL ? poolSignInUrl(__ENV, TARGET.label) : null;
+const LOAD_TEST_PASSWORD = __ENV.LOAD_TEST_PASSWORD || '';
 
-// requestLoan enforces App Check. Callable functions read the token from this
-// header; use an App Check *debug* token registered on the target project.
-const APP_CHECK_HEADERS = __ENV.APP_CHECK_TOKEN ? { 'X-Firebase-AppCheck': __ENV.APP_CHECK_TOKEN } : {};
+if (!POOL && !__ENV.AUTH_TOKEN) {
+  throw new Error(
+    'No user pool: set POOL_SIZE (and LOAD_TEST_PASSWORD) after seeding — see docs/runbooks/scaling.md § Load test.'
+  );
+}
+if (POOL && !LOAD_TEST_PASSWORD) {
+  throw new Error('LOAD_TEST_PASSWORD is not set (the password the pool was seeded with).');
+}
+
+// requestLoan enforces App Check; callable functions read the token from the
+// X-Firebase-AppCheck header. Throws at init when a deployed target is given
+// neither a debug token nor an exchanged one (the emulator gets an unsigned
+// placeholder, which only the emulator accepts).
+const APP_CHECK = appCheckPlan(__ENV, TARGET.label);
+// Module state is per VU in k6, so each VU holds and refreshes its own token.
+let appCheckCache = { token: '', expiresAt: 0 };
+
+function appCheckToken() {
+  if (APP_CHECK.kind === 'static') return APP_CHECK.token;
+  if (appCheckCache.token && Date.now() < appCheckCache.expiresAt) return appCheckCache.token;
+
+  const res = http.post(APP_CHECK.url, APP_CHECK.body, {
+    headers: { 'Content-Type': 'application/json' },
+    tags: { type: 'appcheck', name: 'appcheck-exchange' },
+  });
+  if (res.status !== 200) {
+    // The request that follows will be a 401, and is counted as one.
+    console.warn(`[appcheck] debug-token exchange failed: status=${res.status}`);
+    return appCheckCache.token;
+  }
+  const exchanged = JSON.parse(res.body);
+  appCheckCache = { token: exchanged.token, expiresAt: Date.now() + appCheckRefreshAfterMs(exchanged.ttl) };
+  return appCheckCache.token;
+}
 
 /**
- * Get or create a Firebase ID token for the given synthetic user.
+ * Headers for one request.
  * (A former `LOAD_TEST_AUTH_BYPASS` / x-load-test-uid option was removed: no
  * function ever implemented that header, so it only produced 401s.)
  *
- * For production-like testing, use Firebase Auth REST API to create
- * custom tokens via the Admin SDK setup script.
- *
- * KNOWN LIMIT: Option 2 signs in `<userId>@loadtest.vida.internal`, and
- * generateUserId() embeds Date.now(), so those accounts never pre-exist; and
- * Option 1 is one uid, which requestLoan rate-limits to 3/day. Until a seeded
- * user pool exists, a run measures the auth/rate-limit path, not underwriting.
+ * @param {string|null} email  pool member to sign in; null in AUTH_TOKEN mode
  */
-function getAuthHeaders(userId) {
-  // Option 1: Pre-generated bearer token (same token, different user context)
-  if (__ENV.AUTH_TOKEN) {
-    return {
-      'Content-Type': 'application/json',
-      ...APP_CHECK_HEADERS,
-      Authorization: `Bearer ${__ENV.AUTH_TOKEN}`,
-    };
+function getAuthHeaders(email) {
+  const base = { 'Content-Type': 'application/json', 'X-Firebase-AppCheck': appCheckToken() };
+
+  if (!POOL) return { ...base, Authorization: `Bearer ${__ENV.AUTH_TOKEN}` };
+
+  // Each member is used once, so there is nothing to cache: one sign-in per
+  // iteration, tagged `auth` so it stays out of the requestLoan thresholds.
+  const signInRes = http.post(
+    SIGN_IN_URL,
+    JSON.stringify({ email, password: LOAD_TEST_PASSWORD, returnSecureToken: true }),
+    { headers: { 'Content-Type': 'application/json' }, tags: { type: 'auth', name: 'auth-sign-in' } }
+  );
+  if (signInRes.status !== 200) {
+    // Without a token the request below is a 401 — which is what gets counted.
+    console.warn(`[auth] sign-in failed for ${email}: status=${signInRes.status}`);
+    return base;
   }
-
-  // Option 2: Firebase Auth REST API sign-in
-  // Uses custom token exchange via Firebase Auth emulator or staging project.
-  // For load testing, pre-seed users in staging and use email/password sign-in.
-  if (FIREBASE_API_KEY && !cachedAuthTokens[userId]) {
-    const email = `${userId}@loadtest.vida.internal`;
-    const signInRes = http.post(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
-      JSON.stringify({
-        email,
-        password: 'LoadTest2024!',
-        returnSecureToken: true,
-      }),
-      { headers: { 'Content-Type': 'application/json' }, tags: { type: 'auth' } }
-    );
-
-    if (signInRes.status === 200) {
-      const body = JSON.parse(signInRes.body);
-      cachedAuthTokens[userId] = body.idToken;
-    }
-  }
-
-  const token = cachedAuthTokens[userId];
-  return {
-    'Content-Type': 'application/json',
-    ...APP_CHECK_HEADERS,
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  return { ...base, Authorization: `Bearer ${JSON.parse(signInRes.body).idToken}` };
 }
 
 // ── Setup: seed test data ───────────────────────────────────────────────────
@@ -158,6 +190,7 @@ export function setup() {
   console.log('  VIDA Load Test — Pipeline Throughput Validation');
   console.log(`  Profile: ${PROFILE}`);
   console.log(`  Target: ${TARGET.label.toUpperCase()}  ${STAGING_URL}`);
+  console.log(`  Users:  ${POOL ? `pool of ${POOL.size}, from index ${POOL.offset}` : 'single AUTH_TOKEN (no pool)'}`);
   console.log(`  Stages: ${stages.map((s) => `${s.label}(${s.target}/min × ${s.duration})`).join(' → ')}`);
   console.log(`${'='.repeat(70)}\n`);
 
@@ -182,12 +215,9 @@ export function setup() {
     throw new Error(`Health check failed on ${STAGING_URL}/api/health — aborting before any load.`);
   }
 
-  // Verify mock mode is active
-  const mockCheckRes = http.get(`${STAGING_URL}/api/health`, {
-    tags: { type: 'mockCheck' },
-  });
-
-  console.log(`Health check response: ${mockCheckRes.status}`);
+  // Nothing here verifies that the target's providers are mocked: the health
+  // endpoint does not report configuration. See the runbook's provider table.
+  console.log(`Health check response: ${healthRes.status}`);
 
   return {
     startTime: new Date().toISOString(),
@@ -199,13 +229,25 @@ export function setup() {
 
 // ── Main test function ──────────────────────────────────────────────────────
 
-export default function (data) {
+export default function () {
   const vuId = __VU;
   const iter = __ITER;
 
   activeVUs.add(vuId);
 
-  const app = generateLoanApplication(vuId, iter);
+  let app;
+  if (POOL) {
+    // iterationInTest is unique across all VUs, so no two iterations share a uid.
+    const index = poolIndexFor(exec.scenario.iterationInTest, POOL.size, POOL.offset);
+    if (index < 0) {
+      // Wrapping round would only measure the duplicate guard and the limiter.
+      exec.test.abort(`User pool exhausted (POOL_SIZE=${POOL.size}, POOL_OFFSET=${POOL.offset}); seed a larger pool.`);
+      return;
+    }
+    app = buildPoolApplication(index);
+  } else {
+    app = generateLoanApplication(vuId, iter);
+  }
   loansSubmitted.add(1);
 
   // Track profile distribution
@@ -214,7 +256,7 @@ export default function (data) {
   else loansRiskyProfile.add(1);
 
   group('requestLoan', () => {
-    const headers = getAuthHeaders(app.userId);
+    const headers = getAuthHeaders(POOL ? app.email : null);
 
     // Firebase callable function protocol:
     // POST with { data: { ... } } body
@@ -274,10 +316,13 @@ export default function (data) {
           return false;
         }
       },
-      'loan status is pending': (r) => {
+      // 'pending' only when the 6-stage pipeline gave no verdict and the inline
+      // ML gate passed; otherwise an accepted request is under_review / approved /
+      // rejected. All four mean requestLoan ran to completion.
+      'loan status is an accepted one': (r) => {
         try {
           const body = JSON.parse(r.body);
-          return body.result && body.result.status === 'pending';
+          return Boolean(body.result) && ACCEPTED_INITIAL_STATUSES.includes(body.result.status);
         } catch {
           return false;
         }
