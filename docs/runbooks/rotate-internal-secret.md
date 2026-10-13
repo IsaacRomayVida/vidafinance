@@ -3,7 +3,10 @@
 `INTERNAL_SECRET` is the shared bearer of service-to-service trust: the Cloud
 Functions and five Railway services present it as `x-internal-secret`, and
 payment-server, pdf-generator, underwriting-service, softcredito-adapter and
-registry-service refuse every `/internal/*` call without it.
+registry-service refuse every `/internal/*` call without it. A sixth service,
+ml-service, verifies it on its own endpoints too, and since 2026-09-19 accepts
+the same ALT set — see the note under "Who holds the secret" for the two
+details specific to it.
 
 Rotating it naively means editing one value in eight places. That cannot be
 atomic, and for the length of the rollout some caller still sends the old value
@@ -32,7 +35,21 @@ steps, and at no point is there a value in flight that somebody rejects.
 - **Cloud Functions** — from `functions/.env` at deploy time, so functions only
   pick up a new value on the next production deploy.
 
-`ml-service` is not in this set: it has its own `ML_INTERNAL_SECRET`.
+`ml-service` also verifies this secret (`services/ml-service/internal_auth.py`),
+which makes **six** verifiers, not five. As of 2026-09-19 it participates in the
+rollover on the same terms as the other five: `accepted_secrets()` returns the
+non-empty values among `ML_INTERNAL_SECRET`, `INTERNAL_SECRET`,
+`ML_INTERNAL_SECRET_ALT` and `INTERNAL_SECRET_ALT`, compares every candidate
+without short-circuiting, and hashes both sides before `hmac.compare_digest` —
+the same shape as `services/shared/internal-secret.js`. Treat it as a sixth
+Railway service in every step below.
+
+Two details specific to it. `ML_INTERNAL_SECRET` takes precedence over
+`INTERNAL_SECRET` when both are set, matching what `underwriting-service` call
+sites already send (`ML_INTERNAL_SECRET || INTERNAL_SECRET`); if you set the ALT
+under one name, set it under the name whose primary that service is actually
+using. And its boot guard still requires a primary — an ALT alone will not start
+the service.
 
 ## The rotation
 

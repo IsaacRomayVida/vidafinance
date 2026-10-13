@@ -542,6 +542,34 @@ app.post('/curp/validate', requireInternal, async (req, res) => {
   }
 });
 
+// ── Crash safety net ─────────────────────────────────────────────────
+// Global error handler. Must be registered after every route/middleware
+// above -- Express only routes to a 4-arg handler when it is last. Catches
+// whatever a route forwarded via next(err) or threw synchronously; never
+// echoes err.message or a stack to the caller.
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  log.error({ error: err && err.message }, 'unhandled error');
+  res.status(500).json({ error: 'internal_error' });
+});
+
+// A rejected promise with no .catch anywhere up the chain, or a synchronous
+// throw outside Express's request handling, would otherwise crash the
+// process with no log line (unhandledRejection) or an opaque one
+// (uncaughtException). Log and, for the latter, exit so Railway restarts
+// the service into a known-good state rather than carrying on after
+// corrupted state.
+process.on('unhandledRejection', (reason) => {
+  log.error({ error: reason instanceof Error ? reason.message : String(reason) }, 'unhandled promise rejection');
+});
+
+process.on('uncaughtException', (err) => {
+  log.error({ error: err && err.message }, 'uncaught exception');
+  process.exit(1);
+});
+
 if (require.main === module) {
   app.listen(process.env.PORT || 3002, () => log.info({ port: process.env.PORT || 3002 }, 'vida-softcredito-adapter started'));
 }

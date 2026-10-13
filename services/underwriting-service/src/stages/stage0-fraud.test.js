@@ -55,3 +55,145 @@ describe("stage0-fraud: cost accounting", () => {
     expect(risksealCost.mxn).toBeGreaterThan(0);
   });
 });
+
+// ── Decision branches ──────────────────────────────────────────────────
+// Each gate in runFraudGates, in the order the function evaluates them. The
+// pipeline suites reach these only through the full decision engine; here each
+// branch is pinned against the stage's own return shape.
+describe("stage0-fraud: decision branches", () => {
+  it("passes a clean applicant with no flags and all four checks recorded", async () => {
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBeNull();
+    expect(result.escalateToStage).toBeNull();
+    expect(result.flags).toEqual({ behavioralFlag: false, infonavitFlag: false });
+    expect(Object.keys(result.data).sort()).toEqual(
+      ["infonavit", "metamapBehavioral", "mlFraud", "riskseal"]
+    );
+    expect(checkBehavioralRisk).toHaveBeenCalledWith("session-ok", "user-123");
+    expect(getINFONAVIT).toHaveBeenCalledWith(APPLICANT.curp);
+    expect(checkDigitalFootprint).toHaveBeenCalledWith({
+      email: APPLICANT.email, phone: APPLICANT.phone, ip: APPLICANT.ipAddress, rfc: APPLICANT.rfc,
+    });
+  });
+
+  it("hard-rejects on MetaMap behavioral risk very_high", async () => {
+    checkBehavioralRisk.mockResolvedValue({ risk_level: "very_high" });
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe("DEVICE_FRAUD_DETECTED");
+    expect(result.escalateToStage).toBeNull();
+  });
+
+  it("flags but passes on MetaMap behavioral risk high", async () => {
+    checkBehavioralRisk.mockResolvedValue({ risk_level: "high" });
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.flags.behavioralFlag).toBe(true);
+  });
+
+  it("hard-rejects when the ML service reports an anomaly", async () => {
+    fetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ is_fraud: true }) });
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe("ANOMALY_DETECTED");
+    expect(result.escalateToStage).toBeNull();
+  });
+
+  it("sends the ML service the amount-to-salary ratio it scores on", async () => {
+    await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toMatch(/\/underwrite\/employee$/);
+    const body = JSON.parse(init.body);
+    expect(body.monthlySalary).toBe(APPLICANT.monthlySalary);
+    expect(body.amountToSalaryRatio).toBeCloseTo(APPLICANT.principalAmount / APPLICANT.monthlySalary, 10);
+  });
+
+  it("does not reject when the ML service errors — the check is recorded as skipped", async () => {
+    fetch.mockResolvedValue({ ok: false, status: 503 });
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.data.mlFraud).toMatchObject({ is_fraud: false, skipped: true });
+    expect(result.data.mlFraud.error).toMatch(/503/);
+  });
+
+  it("escalates to Stage 5 on a RiskSeal score below 30", async () => {
+    checkDigitalFootprint.mockResolvedValue({ score: 29 });
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe("LOW_DIGITAL_FOOTPRINT");
+    expect(result.escalateToStage).toBe(5);
+  });
+
+  it("does not escalate at a RiskSeal score of exactly 30", async () => {
+    checkDigitalFootprint.mockResolvedValue({ score: 30 });
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+  });
+
+  it("does not escalate on a RiskSeal provider error", async () => {
+    checkDigitalFootprint.mockRejectedValue(new Error("riskseal timeout"));
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.data.riskseal).toMatchObject({ pass: false, skipped: true, error: "riskseal timeout" });
+  });
+
+  it("checks device fraud before ML anomaly when both fire", async () => {
+    checkBehavioralRisk.mockResolvedValue({ risk_level: "very_high" });
+    fetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ is_fraud: true }) });
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.reason).toBe("DEVICE_FRAUD_DETECTED");
+  });
+
+  it("sets infonavitFlag and sums INFONAVIT deductions once any credit is active", async () => {
+    getINFONAVIT.mockResolvedValue([
+      { credit_status: "active", monthly_deduction: 1200 },
+      { balance: 5000, deduction: 300 },
+      { credit_status: "closed", balance: 0, monthly_deduction: 999 },
+    ]);
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.flags.infonavitFlag).toBe(true);
+    expect(result.data.infonavitFlag).toBe(true);
+    // The closed record's deduction is summed too — the stage totals every
+    // record once any one is active. Pinned as current behaviour, not endorsed.
+    expect(result.data.infonavitDeduction).toBe(1200 + 300 + 999);
+  });
+
+  it("skips MetaMap and INFONAVIT (and their cost) when sessionKey and CURP are absent", async () => {
+    const bare = { ...APPLICANT };
+    delete bare.sessionKey;
+    delete bare.curp;
+    const result = await runFraudGates(bare, {}, { logger: silentLogger });
+
+    expect(checkBehavioralRisk).not.toHaveBeenCalled();
+    expect(getINFONAVIT).not.toHaveBeenCalled();
+    expect(result.pass).toBe(true);
+    expect(result.data.metamapBehavioral).toMatchObject({ skipped: true, reason: "no_session_key" });
+    expect(result.data.infonavit).toMatchObject({ skipped: true, reason: "no_curp" });
+    expect(result.cost.map(c => c.api)).toEqual(["riskseal"]);
+  });
+
+  it("treats a MetaMap or INFONAVIT provider error as skipped, not as a rejection", async () => {
+    checkBehavioralRisk.mockRejectedValue(new Error("metamap down"));
+    getINFONAVIT.mockRejectedValue(new Error("belvo down"));
+    const result = await runFraudGates(APPLICANT, {}, { logger: silentLogger });
+
+    expect(result.pass).toBe(true);
+    expect(result.data.metamapBehavioral).toMatchObject({ skipped: true, error: "metamap down" });
+    expect(result.data.infonavit).toMatchObject({ skipped: true, error: "belvo down" });
+    expect(result.flags.infonavitFlag).toBe(false);
+  });
+});

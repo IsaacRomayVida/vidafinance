@@ -3,7 +3,7 @@ import 'dotenv/config';
 // Firebase must be initialized before importing any module that uses it
 import './lib/firebase';
 
-import express from 'express';
+import express, { ErrorRequestHandler } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import pino from 'pino';
@@ -57,6 +57,42 @@ app.get('/health', async (_req, res) => {
     queue_depth: queueDepth,
     ts: new Date().toISOString(),
   });
+});
+
+// ── Global error handler (crash safety net) ──────────────────────────
+// Catches anything thrown/rejected inside a route handler that wasn't
+// already caught by its own try/catch. Must be registered after every
+// route above. Never leak err.message/stack to the client.
+const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  log.error(
+    { error: err instanceof Error ? err.message : String(err), service: 'notification-service' },
+    'Unhandled request error',
+  );
+  res.status(500).json({ error: 'Internal server error' });
+};
+app.use(errorHandler);
+
+// ── Process-level crash safety net ───────────────────────────────────
+// Anything thrown or rejected outside of Express's request/response cycle
+// (the BullMQ worker, a stray promise, a timer callback, etc.) would
+// otherwise kill the process with no log line at all.
+process.on('unhandledRejection', (reason) => {
+  log.error(
+    { error: reason instanceof Error ? reason.message : String(reason), service: 'notification-service' },
+    'Unhandled rejection',
+  );
+});
+
+process.on('uncaughtException', (err) => {
+  log.error({ error: err.message, service: 'notification-service' }, 'Uncaught exception');
+  // Railway restarts the container -- continuing after a truly uncaught
+  // exception risks running in a corrupted state, so exit rather than
+  // trying to carry on.
+  process.exit(1);
 });
 
 const PORT = Number(process.env.PORT ?? 3003);

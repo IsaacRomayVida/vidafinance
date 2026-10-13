@@ -1,0 +1,47 @@
+/*
+   COMING-SOON-LEGACY.CSS
+
+   The redesign (8f389bf, PR #626) deleted these rules along with
+   SplashIntro.tsx when it rewrote legacy.css/index.css for the funpay-ui
+   direction. The business asked for the pre-redesign landing back on the
+   public site (VID3 hold), so pages/ComingSoon.tsx imports this file
+   directly — it rides along with that page's lazy chunk and never loads
+   for VITE_LAUNCH_MODE=live, where the funpay-ui marketing site (Board,
+   HeroSection, etc.) is unaffected.
+
+   Restored verbatim from `git show 8f389bf^:public-v2/src/styles/legacy.css`
+   — the .cs-*, .wrap, .section, .tag etc. selectors these rules pair with
+   still live in index.css/legacy.css and were left untouched; only the
+   rules below had been pruned as "unused" once SplashIntro/ComingSoon were
+   rewritten. var(--brand)/var(--gold)/var(--df) already resolve through
+   legacy.css's funpay-ui token remap, so colors/type follow the current
+   design tokens automatically.
+*/
+
+/* HERO — base layout the old ComingSoon hero section depends on */
+.hero { position: relative; overflow: hidden; padding: 100px 0 100px; }
+
+/* Hero video background — a subtle living backdrop behind the light hero */
+.hero-video-wrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .42; }
+@media (prefers-reduced-motion: reduce) { .hero-video { display: none; } }
+
+/* Splash intro — one-time full-bleed cinematic entrance (SplashIntro.tsx) */
+.splash { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; background: var(--brand); opacity: 1; transition: opacity .85s ease; cursor: pointer; }
+.splash--leaving { opacity: 0; pointer-events: none; }
+.splash-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.splash-scrim { position: absolute; inset: 0; background: radial-gradient(ellipse 120% 100% at 50% 50%, rgba(11,40,41,.35) 0%, rgba(11,40,41,.72) 70%, rgba(11,40,41,.88) 100%); }
+.splash-content { position: relative; z-index: 2; text-align: center; padding: 0 24px; animation: splashIn 1.15s cubic-bezier(.16,1,.3,1) both; }
+.splash-logo { display: block; font-family: var(--df); font-weight: 400; font-size: clamp(52px,12vw,116px); line-height: 1; letter-spacing: -.035em; color: #fff; }
+.splash-logo .g { color: var(--gold); }
+.splash-tagline { display: block; margin-top: 20px; font-size: 11px; font-weight: 700; letter-spacing: 3.5px; text-transform: uppercase; color: rgba(255,255,255,.55); animation: fu 1s ease .5s both; }
+.splash-skip { position: absolute; bottom: 28px; right: 28px; z-index: 3; padding: 10px 20px; border-radius: 100px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06); color: rgba(255,255,255,.85); font-size: 13px; font-weight: 600; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: all .25s; }
+.splash-skip:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.4); }
+.splash-skip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@keyframes splashIn { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* Footer "a venture of Suena" mark */
+.ft-venture { display: inline-flex; align-items: baseline; gap: 6px; width: fit-content; transition: opacity .2s; }
+.ft-venture:hover { opacity: .7; }
+.ft-venture-label { font-size: 12px; color: rgba(255,255,255,0.4); }
+.ft-venture-mark { font-family: var(--db); font-weight: 800; letter-spacing: -0.02em; font-size: 14px; color: rgba(255,255,255,0.85); }

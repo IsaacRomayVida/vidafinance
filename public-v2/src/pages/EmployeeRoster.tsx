@@ -4,6 +4,7 @@ import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/fire
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { isActiveDeductionStatus } from '../lib/loanStatus';
 
 /* ── helpers ─────────────────────────────────────────────── */
 
@@ -108,6 +109,23 @@ export function EmployeeRoster() {
   const [bulkSending, setBulkSending] = useState(false);
   const [toast, setToast] = useState<{ kind: 'success' | 'error' | 'info'; msg: string } | null>(null);
 
+  /* ── "now", for the invite-TTL / resend-cooldown gates below ──
+     getInviteState and canResend used to call Date.now() directly while
+     they ran during render (react-hooks/purity): the same render could read
+     a different instant depending on exactly when React happened to call
+     them, and — more concretely — StrictMode's double-render or a future
+     concurrent-render replay could show two different invite states for the
+     same commit. `now` is sampled once on mount and refreshed on a coarse
+     interval instead, so Date.now() is only ever called from inside an
+     effect/timer callback (never from render), while the 24h/30d gates
+     still move as real time passes — 60s of slack is invisible at that
+     granularity. */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   /* ── fetch employer code ─────────────────────────────── */
   useEffect(() => {
     if (!user) return;
@@ -202,6 +220,11 @@ export function EmployeeRoster() {
         }
       });
       setInvitesByEmployee(map);
+    }, (listenError) => {
+      // Without this, a failed invites read was silent and every employee
+      // looked un-invited — inviting the whole roster again was one click away.
+      console.error('Firestore listen error:', listenError);
+      setError('Error al cargar los datos. Intenta de nuevo.');
     });
     return unsub;
   }, [user]);
@@ -224,8 +247,11 @@ export function EmployeeRoster() {
     return map;
   }, [loans]);
 
+  // The canonical "funds out, still owed" set — `status === 'active'` alone
+  // dropped every manually disbursed ('disbursed') and every overdue loan,
+  // so this disagreed with the deduction report on the very next page (E11).
   const activeLoansCount = useMemo(
-    () => loans.filter((l) => l.status === 'active').length,
+    () => loans.filter((l) => isActiveDeductionStatus(l.status)).length,
     [loans],
   );
 
@@ -248,7 +274,7 @@ export function EmployeeRoster() {
     if (emp.authUid) return 'active';
     const inv = invitesByEmployee[emp.id];
     const sentMs = (inv?.sentAt?.seconds ?? 0) * 1000;
-    if (inv && !inv.acceptedAt && sentMs > 0 && Date.now() - sentMs < INVITE_TTL_MS) {
+    if (inv && !inv.acceptedAt && sentMs > 0 && now - sentMs < INVITE_TTL_MS) {
       return 'invited';
     }
     return 'pending';
@@ -258,7 +284,7 @@ export function EmployeeRoster() {
     const inv = invitesByEmployee[emp.id];
     const sentMs = (inv?.sentAt?.seconds ?? 0) * 1000;
     if (!sentMs) return true;
-    return Date.now() - sentMs >= RESEND_COOLDOWN_MS;
+    return now - sentMs >= RESEND_COOLDOWN_MS;
   };
 
   const sendInvite = async (employeeDocId: string): Promise<void> => {
@@ -291,8 +317,13 @@ export function EmployeeRoster() {
 
   const pendingEmployees = useMemo(
     () => employees.filter((e) => getInviteState(e) === 'pending'),
+    // getInviteState itself is intentionally omitted (it's a fresh closure
+    // every render); `now` is listed explicitly so an invite crossing the
+    // 30-day TTL moves this list (and the bulk-invite count/button) forward
+    // on the same cadence it now updates on, instead of only on the next
+    // unrelated re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [employees, invitesByEmployee],
+    [employees, invitesByEmployee, now],
   );
 
   const handleBulkInvite = async () => {

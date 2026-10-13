@@ -1,5 +1,7 @@
 'use strict';
 
+const os = require('os');
+
 // Every test here exercises the pool's FAILURE modes, not its happy path.
 // The happy path is already covered transitively by resolver.test.js and
 // registry-service/index.test.js -- what was untested, and what this file
@@ -7,8 +9,12 @@
 // slots. That is the state the registry's alerting and 503 handling exist
 // for, and all of it was running on node-postgres' defaults.
 
+// No 'postgres' role exists on a standard Homebrew/local Postgres install --
+// only the OS user's own role does. Fall back to that instead of hardcoding
+// a role that only exists on some machines; DATABASE_URL still wins when set.
+const DEFAULT_DB_USER = process.env.PGUSER || process.env.USER || os.userInfo().username;
 const DATABASE_URL =
-  process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/vida_registry_test';
+  process.env.DATABASE_URL || `postgres://${DEFAULT_DB_USER}@localhost:5432/vida_registry_test`;
 
 describe('getPool', () => {
   let pool;

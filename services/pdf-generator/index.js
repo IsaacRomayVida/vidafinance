@@ -123,7 +123,14 @@ async function renderPDF(html) {
   await page.setContent(html, { waitUntil: "networkidle0" });
   const pdf = await page.pdf({ format: "A4", printBackground: true });
   await page.close();
-  return pdf;
+  // puppeteer >= 23 resolves page.pdf() to a plain Uint8Array, not a Buffer.
+  // That distinction is silent and destructive here: Uint8Array inherits
+  // Object.prototype.toString semantics, so the `pdf.toString("base64")` that
+  // feeds MetaMap's signing API returned "37,80,68,70,..." — the decimal bytes,
+  // comma-separated — instead of base64. The request succeeded and the signed
+  // contract carried a corrupt payload. Normalise once, here, so neither this
+  // nor upload()'s file.save() has to care which type puppeteer returned.
+  return Buffer.from(pdf);
 }
 
 async function upload(buf, filePath) {
@@ -387,6 +394,35 @@ app.get("/health", async (req, res) => {
     queue_depth: queueDepth,
     ts: new Date().toISOString(),
   });
+});
+
+// ── Global error handler (crash safety net) ──────────────────────────
+// Catches anything thrown/rejected inside a route handler that wasn't
+// already caught by its own try/catch. Must be registered after every
+// route above. Never leak err.message/stack to the client.
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  console.error("[pdf-generator] unhandled request error:", err && err.message);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// ── Process-level crash safety net ───────────────────────────────────
+// Anything thrown or rejected outside of Express's request/response cycle
+// (a stray promise in the worker code above, a timer callback, etc.) would
+// otherwise kill the process with no log line at all.
+process.on("unhandledRejection", (reason) => {
+  console.error("[pdf-generator] unhandled rejection:", reason && reason.message ? reason.message : reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[pdf-generator] uncaught exception:", err && err.message);
+  // Railway restarts the container -- continuing after a truly uncaught
+  // exception risks running in a corrupted state, so exit rather than
+  // trying to carry on.
+  process.exit(1);
 });
 
 if (require.main === module) {

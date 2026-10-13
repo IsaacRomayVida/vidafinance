@@ -216,8 +216,7 @@ async function checkAlertingRules() {
 
 // Main polling loop
 async function main() {
-  console.log('[health-monitor] Starting with poll interval', POLL_INTERVAL, 'ms');
-  console.log('[health-monitor] Monitoring services:', Object.keys(SERVICES).join(', '));
+  log.info({ pollIntervalMs: POLL_INTERVAL, services: Object.keys(SERVICES) }, 'Health monitor starting');
 
   while (true) {
     try {
@@ -225,7 +224,7 @@ async function main() {
       const statuses = Object.fromEntries(Object.entries(results).map(([name, h]) => [name, h.status]));
       log.info({ statuses }, 'Health poll complete');
     } catch (err) {
-      console.error('[health-monitor] Error:', err.message);
+      log.error({ err }, 'Health poll failed');
     }
     await new Promise(r => setTimeout(r, POLL_INTERVAL));
   }
@@ -235,5 +234,5 @@ async function main() {
 module.exports = { checkAlertingRules, fetchHealth, SERVICES, SERVICE_DEFS, unconfiguredInProd };
 
 if (require.main === module) {
-  main().catch(err => { console.error(err); process.exit(1); });
+  main().catch(err => { log.fatal({ err }, 'Health monitor crashed'); process.exit(1); });
 }

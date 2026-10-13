@@ -10,7 +10,7 @@ import {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { classifyError, friendlyError } from '../lib/errors';
-import { OUTSTANDING_STATUSES } from '../lib/loanStatus';
+import { OUTSTANDING_STATUSES, REPAYMENT_STATUS, isRepayableStatus } from '../lib/loanStatus';
 import { useAuth } from '../hooks/useAuth';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { costLine, fmtShortDate, initials } from '../components/employee/types';
@@ -72,8 +72,14 @@ function loanTotal(loan: Loan): number {
   return loan.totalRepaymentAmount ?? loan.total ?? 0;
 }
 
-/** The statuses generatePaymentLink.ts accepts — the only ones that get Pagar. */
-const PAYABLE_STATUSES = ['active', 'overdue', 'disbursed'];
+/**
+ * Only money applied against the loan counts. An 'unapplied' row is a payment
+ * received after the loan was already settled; counting it would overstate
+ * what was repaid.
+ */
+function isApplied(r: Repayment): boolean {
+  return r.status === REPAYMENT_STATUS.COMPLETED;
+}
 
 /** Which scheduled deductions the money already paid covers, in order. */
 function scheduleSteps(schedule: ScheduledDeduction[] | undefined, paid: number) {
@@ -176,10 +182,9 @@ export function MyLoans() {
   );
 
   function repaymentTotal(loanId: string): number {
-    return (repaymentsByLoan[loanId] || []).reduce(
-      (sum, r) => sum + (r.amount || 0),
-      0,
-    );
+    return (repaymentsByLoan[loanId] || [])
+      .filter(isApplied)
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
   }
 
   function remainingBalance(loan: Loan): number {
@@ -198,7 +203,7 @@ export function MyLoans() {
     (sum, l) => sum + remainingBalance(l),
     0,
   );
-  const totalRepaid = repayments.reduce((sum, r) => sum + (r.amount || 0), 0);
+  const totalRepaid = repayments.filter(isApplied).reduce((sum, r) => sum + (r.amount || 0), 0);
 
   // The board: the credit still being repaid (newest first, as the listener
   // orders them). Everything else is history below it.
@@ -423,7 +428,7 @@ function RepaymentBoard({
         </div>
       )}
 
-      {PAYABLE_STATUSES.includes(loan.status) && (
+      {isRepayableStatus(loan.status) && (
         <div className="bo-plan-actions">
           <PayButton loanId={loan.id} t={t} className="bo-cta money" label={t('loans_pay_amount', { amount: fmt(remaining) })} />
         </div>
@@ -509,9 +514,6 @@ function LoanRow({
   payOnBoard: boolean;
   t: ReturnType<typeof useTranslation>['t'];
 }) {
-  const hasPending = repayments.some((r) => r.status === 'pending');
-  const hasProcessing = repayments.some((r) => r.status === 'processing');
-
   return (
     <>
       <tr onClick={onToggle} className={`bo-tr${isExpanded ? ' open' : ''}`}>
@@ -526,16 +528,6 @@ function LoanRow({
             <span className={`bo-badge ${loan.status}`}>
               {t(`status_${loan.status}`, loan.status)}
             </span>
-            {hasPending && (
-              <span className="bo-badge">
-                {t('pay_status_pending', 'Pendiente')}
-              </span>
-            )}
-            {hasProcessing && (
-              <span className="bo-badge">
-                {t('pay_status_processing', 'Procesando')}
-              </span>
-            )}
           </div>
         </td>
         <td>{fmtDate(loan.disbursedAt)}</td>
@@ -545,7 +537,7 @@ function LoanRow({
         </td>
         <td>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
-            {!payOnBoard && PAYABLE_STATUSES.includes(loan.status) && (
+            {!payOnBoard && isRepayableStatus(loan.status) && (
               <PayButton loanId={loan.id} t={t} />
             )}
             {loan.contractUrl && (
@@ -598,7 +590,9 @@ function LoanRow({
               />
               <DetailItem
                 label={t('dash_th_term', 'Plazo')}
-                value={`${loan.term ?? 30} ${t('dash_days', 'días')}`}
+                // The loan's own term or nothing — never a client-side
+                // default that would misreport the day a second term ships.
+                value={loan.term != null ? `${loan.term} ${t('dash_days', 'días')}` : '—'}
               />
               <DetailItem
                 label={t('loans_requested', 'Solicitado')}
@@ -641,15 +635,8 @@ function LoanRow({
                           <span className="how">{r.method}</span>
                         )}
                         {r.status && (
-                          <span className={`bo-badge${r.status === 'completed' ? ' paid' : ''}`}>
-                            {t(
-                              `pay_status_${r.status}`,
-                              r.status === 'completed'
-                                ? 'Pagado'
-                                : r.status === 'processing'
-                                  ? 'Procesando'
-                                  : 'Pendiente',
-                            )}
+                          <span className={`bo-badge${isApplied(r) ? ' paid' : ''}`}>
+                            {t(`pay_status_${r.status}`, r.status)}
                           </span>
                         )}
                       </div>

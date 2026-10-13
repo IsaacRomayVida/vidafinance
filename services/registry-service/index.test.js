@@ -1,11 +1,18 @@
 'use strict';
 
+const os = require('os');
+
 // Fixed values for this isolated app-under-test -- unconditional, since the
 // test bodies below assert against the literal 'test-secret' header value
 // and must not silently drift if a real INTERNAL_SECRET happens to be set
 // in the environment (e.g. by CI for other jobs).
+//
+// No 'postgres' role exists on a standard Homebrew/local Postgres install --
+// only the OS user's own role does. Fall back to that instead of hardcoding
+// a role that only exists on some machines; DATABASE_URL still wins when set.
+const DEFAULT_DB_USER = process.env.PGUSER || process.env.USER || os.userInfo().username;
 process.env.REGISTRY_DATABASE_URL =
-  process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/vida_registry_test';
+  process.env.DATABASE_URL || `postgres://${DEFAULT_DB_USER}@localhost:5432/vida_registry_test`;
 process.env.INTERNAL_SECRET = 'test-secret';
 
 const request = require('supertest');

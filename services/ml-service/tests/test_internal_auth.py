@@ -5,6 +5,12 @@ Before the fix, main.py read `SEC = os.environ.get("INTERNAL_SECRET", "")` with
 no boot guard and compared with `if s != SEC`. With INTERNAL_SECRET unset, SEC
 was "" and a request carrying an empty `x-internal-secret` header satisfied the
 comparison — every scoring endpoint was callable by anyone.
+
+TestAcceptedSecrets and TestPresentedSecretAccepted below cover the later
+extension to an accepted SET (ML_INTERNAL_SECRET / INTERNAL_SECRET, plus their
+`_ALT` counterparts) that mirrors services/shared/internal-secret.js and makes
+a fleet rotation possible with no 401 window — see
+docs/runbooks/rotate-internal-secret.md.
 """
 
 import importlib
@@ -14,7 +20,12 @@ import sys
 
 import pytest
 
-from internal_auth import load_internal_secret, secret_matches
+from internal_auth import (
+    accepted_secrets,
+    load_internal_secret,
+    presented_secret_accepted,
+    secret_matches,
+)
 
 
 class TestLoadInternalSecret:
@@ -38,6 +49,24 @@ class TestLoadInternalSecret:
         with pytest.raises(RuntimeError, match="INTERNAL_SECRET is required"):
             load_internal_secret()
 
+    def test_ml_internal_secret_wins_over_internal_secret(self):
+        """Precedence: ML_INTERNAL_SECRET is ml-service's own secret and wins
+        when both are set — see stage0-fraud.js's
+        `ML_INTERNAL_SECRET || INTERNAL_SECRET`."""
+        env = {"ML_INTERNAL_SECRET": "ml-secret", "INTERNAL_SECRET": "fleet-secret"}
+        assert load_internal_secret(env) == "ml-secret"
+
+    def test_falls_back_to_internal_secret_when_ml_unset(self):
+        env = {"INTERNAL_SECRET": "fleet-secret"}
+        assert load_internal_secret(env) == "fleet-secret"
+
+    def test_alt_alone_does_not_satisfy_boot(self):
+        """An `_ALT`-only configuration must not boot: it is not a valid
+        steady state, only a mid-rotation accepted-but-never-sent value."""
+        env = {"ML_INTERNAL_SECRET_ALT": "new", "INTERNAL_SECRET_ALT": "old"}
+        with pytest.raises(RuntimeError, match="INTERNAL_SECRET is required"):
+            load_internal_secret(env)
+
 
 class TestSecretMatches:
     def test_correct_secret_matches(self):
@@ -60,6 +89,79 @@ class TestSecretMatches:
 
     def test_different_lengths_rejected_without_raising(self):
         assert secret_matches("short", "a-much-longer-value") is False
+
+
+class TestAcceptedSecrets:
+    def test_only_primary_configured(self):
+        env = {"INTERNAL_SECRET": "fleet-secret"}
+        assert accepted_secrets(env) == ["fleet-secret"]
+
+    def test_ml_and_fleet_both_configured(self):
+        env = {"ML_INTERNAL_SECRET": "ml-secret", "INTERNAL_SECRET": "fleet-secret"}
+        assert accepted_secrets(env) == ["ml-secret", "fleet-secret"]
+
+    def test_alt_variants_included_when_set(self):
+        env = {
+            "ML_INTERNAL_SECRET": "ml-new",
+            "INTERNAL_SECRET": "fleet-new",
+            "ML_INTERNAL_SECRET_ALT": "ml-old",
+            "INTERNAL_SECRET_ALT": "fleet-old",
+        }
+        assert accepted_secrets(env) == ["ml-new", "fleet-new", "ml-old", "fleet-old"]
+
+    def test_unset_alt_is_dropped_not_treated_as_empty_string(self):
+        """The most important correctness detail: an ALT that was never set
+        must not appear in the accepted set at all, so it can never be the
+        thing an empty presented secret matches against."""
+        env = {"INTERNAL_SECRET": "fleet-secret"}
+        assert "" not in accepted_secrets(env)
+
+    def test_nothing_configured_yields_empty_set(self):
+        assert accepted_secrets({}) == []
+
+
+class TestPresentedSecretAccepted:
+    def test_primary_secret_accepted(self):
+        env = {"INTERNAL_SECRET": "fleet-secret"}
+        assert presented_secret_accepted("fleet-secret", env) is True
+
+    def test_ml_internal_secret_accepted(self):
+        env = {"ML_INTERNAL_SECRET": "ml-secret", "INTERNAL_SECRET": "fleet-secret"}
+        assert presented_secret_accepted("ml-secret", env) is True
+
+    def test_alt_secret_accepted_during_rotation(self):
+        """Step 2 of the runbook: primary already switched to `new`, ALT still
+        holds `old` — a caller sending the not-yet-updated `old` value must
+        still be accepted."""
+        env = {"INTERNAL_SECRET": "new-secret", "INTERNAL_SECRET_ALT": "old-secret"}
+        assert presented_secret_accepted("old-secret", env) is True
+        assert presented_secret_accepted("new-secret", env) is True
+
+    def test_wrong_secret_rejected(self):
+        env = {"INTERNAL_SECRET": "fleet-secret", "INTERNAL_SECRET_ALT": "old-secret"}
+        assert presented_secret_accepted("guess", env) is False
+
+    def test_missing_presented_secret_rejected(self):
+        env = {"INTERNAL_SECRET": "fleet-secret"}
+        assert presented_secret_accepted(None, env) is False
+
+    def test_empty_presented_secret_rejected(self):
+        env = {"INTERNAL_SECRET": "fleet-secret"}
+        assert presented_secret_accepted("", env) is False
+
+    def test_unset_alt_never_lets_an_empty_presented_secret_through(self):
+        """The fail-open this whole module exists to prevent, restated for
+        the accepted set: with INTERNAL_SECRET_ALT never configured, an
+        empty `x-internal-secret` header must not authenticate."""
+        env = {"INTERNAL_SECRET": "fleet-secret"}
+        assert presented_secret_accepted("", env) is False
+
+    def test_nothing_configured_rejects_everything(self):
+        """Fail closed even for the accepted-set path: no configured
+        secrets means no presented value — including an empty one — is ever
+        accepted."""
+        assert presented_secret_accepted("", {}) is False
+        assert presented_secret_accepted(None, {}) is False
 
 
 # ── Boot + endpoint behaviour, exercised against the real app ──────────

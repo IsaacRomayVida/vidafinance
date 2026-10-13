@@ -44,7 +44,7 @@ import {
   isDisbursedStatus,
   isRepaidStatus,
 } from './loans/loanStatus';
-import { computeEmployerDashboardStats } from './employers/computeEmployerDashboardStats';
+import { computeEmployerDashboardStats, fetchEmployerStatsLoans } from './employers/computeEmployerDashboardStats';
 import { allowTestBypass } from './utils/environment';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument, type AuditLogEntry } from './utils/auditLog';
 import { getQueue } from './utils/queue';
@@ -2306,9 +2306,12 @@ export const getEmployerDashboard = onCall(
 
       const uid = request.auth!.uid;
 
-      const [empDoc, loans, employees] = await Promise.all([
+      // `loans` is the 50 most recent, for display; the stats get their own
+      // uncapped read so the headline numbers cover the whole book.
+      const [empDoc, loans, statsLoans, employees] = await Promise.all([
         db.collection('employers').doc(uid).get(),
         db.collection('loans').where('employerId', '==', uid).orderBy('createdAt', 'desc').limit(50).get(),
+        fetchEmployerStatsLoans(db, uid),
         db.collection('employees').where('employerId', '==', uid).get(),
       ]);
 
@@ -2320,7 +2323,7 @@ export const getEmployerDashboard = onCall(
         employer: projectDoc(empDoc, EMPLOYER_DASHBOARD_FIELDS),
         loans: loanDocs,
         employeeCount: employees.size,
-        stats: computeEmployerDashboardStats(loanDocs, employees.size),
+        stats: computeEmployerDashboardStats(statsLoans, employees.size),
       };
     });
   }
@@ -3888,47 +3891,15 @@ export const weeklyPortfolioSnapshot = onSchedule(
   }
 );
 
-export const systemHealthCheck = onSchedule(
-  { schedule: '*/5 * * * *', timeZone: 'America/Mexico_City' },
-  async () => {
-    // Railway services decommissioned — check only Cloud Functions + Firestore
-    const services: { name: string; url: string }[] = [];
-    if (process.env['PAYMENT_SERVER_URL']) services.push({ name: 'payment-server', url: process.env['PAYMENT_SERVER_URL'] + '/health' });
-    if (process.env['ML_SERVICE_URL']) services.push({ name: 'ml-service', url: process.env['ML_SERVICE_URL'] + '/health' });
-
-    const results = await Promise.allSettled(
-      services.map(async (s) => {
-        const start = Date.now();
-         
-        const r = await fetch(s.url, { signal: AbortSignal.timeout(6000) });
-        const d = (await r.json()) as Record<string, unknown>;
-        return { name: s.name, status: d['status'], redis: d['redis'], latencyMs: Date.now() - start };
-      })
-    );
-
-    const data: Record<string, unknown> = {};
-    const ts = FieldValue.serverTimestamp();
-
-    for (let i = 0; i < services.length; i++) {
-      const res = results[i];
-      if (res.status === 'fulfilled') {
-        data[services[i].name] = { ...res.value, checkedAt: ts };
-      } else {
-        data[services[i].name] = { status: 'down', error: res.reason.message, checkedAt: ts };
-        await db.collection('incident_log').add({
-          source: 'health-check',
-          service: services[i].name,
-          error: res.reason.message,
-          severity: 'critical',
-          ts,
-          resolved: false,
-        });
-      }
-    }
-
-    await db.collection('system_health').doc('current').set({ ...data, lastChecked: ts });
-  }
-);
+// ─── Service health sweep (launch checklist v1.8 D2) ─────────────────────────
+// Lives in functions/src/scheduled/systemHealthCheck.ts. This used to be a
+// second, inline definition left over from the "Railway decommissioned" era
+// that probed only payment-server and ml-service — so the module's broader
+// coverage never deployed, and underwriting-service and registry-service (the
+// credit decision and the ledger) were monitored nowhere. Same trap as
+// dailyLoanCheck above; see scheduled/__tests__/systemHealthCheck.test.ts's
+// wiring guard.
+export { systemHealthCheck } from './scheduled/systemHealthCheck';
 
 export const queueHealthCheck = onSchedule(
   { schedule: '*/2 * * * *', timeZone: 'America/Mexico_City' },

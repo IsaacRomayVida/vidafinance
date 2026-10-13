@@ -1,5 +1,6 @@
 /**
- * cloudflare-access.mjs — put alfa.funpay.mx behind Cloudflare Access.
+ * cloudflare-access.mjs — put a portal hostname (HOSTNAME env var) behind
+ * Cloudflare Access.
  *
  * Access is an EDGE gate: Cloudflare authenticates the visitor against the
  * configured identity provider and evaluates the policy before it proxies
@@ -29,7 +30,7 @@ const API = 'https://api.cloudflare.com/client/v4';
 const ACCOUNT = process.env.CF_ACCOUNT;
 const TOKEN = process.env.CF_TOKEN;
 const MODE = process.env.MODE || 'status';
-const HOSTNAME = process.env.HOSTNAME || 'alfa.funpay.mx';
+const HOSTNAME = process.env.HOSTNAME;
 const APP_NAME = 'FunPay team portal';
 const ACME_APP_NAME = 'FunPay portal — ACME challenge (bypass)';
 const ACME_PATH = '/.well-known/acme-challenge';
@@ -38,6 +39,27 @@ const POLICY_NAME = 'FunPay reviewers';
 const list = (v) => (v || '').split(',').map((x) => x.trim()).filter(Boolean);
 const EMAILS = list(process.env.EMAILS);
 const DOMAINS = list(process.env.DOMAINS);
+
+// No default. `alfa.funpay.mx` (the old default) no longer resolves — see
+// SETUP.md §6 and AGENTS.md. The live portal, `alfa.suena.ch`, is Suena's
+// shared review portal: it proxies several projects by path (FunPay is only
+// `/funpay/*`), so silently defaulting HOSTNAME to it would let `MODE=apply`
+// gate the *entire* shared domain — every proxied project, not just
+// FunPay's — behind a policy named "FunPay reviewers". That is worse than
+// failing loudly, especially for someone running this mid-incident. Require
+// the operator to say explicitly which hostname they mean.
+if (!HOSTNAME) {
+  console.error(
+    'Missing HOSTNAME.\n' +
+      'There is no default — the old one (alfa.funpay.mx) no longer resolves,\n' +
+      "and the live portal (alfa.suena.ch) is Suena's shared review portal, not\n" +
+      "FunPay's alone, so guessing it here risks gating other projects too.\n" +
+      'Set HOSTNAME explicitly, e.g.:\n' +
+      '  HOSTNAME=alfa.suena.ch\n' +
+      'Confirm scope with the Suena portal owner before MODE=apply on a shared host.'
+  );
+  process.exit(1);
+}
 
 // `verify` is the one mode that proves the gate from outside, so it must not
 // need a token — it is exactly what a stranger can do.

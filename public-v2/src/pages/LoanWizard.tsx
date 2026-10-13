@@ -349,6 +349,28 @@ export function LoanWizard() {
   const effectiveMax = Math.min(salaryMax, MAX_AMOUNT, employee?.availableCredit ?? MAX_AMOUNT);
   const cappedMax = Math.max(effectiveMax, MIN_AMOUNT);
 
+  // Clamp `amount` to `cappedMax` while rendering rather than in an effect.
+  // `amount` starts at a flat default (1000) before `employee` has loaded,
+  // and `cappedMax` can drop under it the moment the eligibility fetch
+  // resolves (below-average salary, or a tight availableCredit) — this ran
+  // as a useEffect until now (react-hooks/set-state-in-effect), which meant
+  // one full render with the stale, out-of-range `amount` reached the
+  // screen first: the slider's `value` exceeded its own `max`, and the peso
+  // figure above it briefly showed more than the borrower can actually
+  // borrow, before the effect fired a tick later and corrected it. Comparing
+  // against the previous `cappedMax` and adjusting synchronously — react.dev's
+  // "adjust state while rendering" pattern — fixes that: React discards this
+  // render and re-renders with the corrected amount before anything commits
+  // to the screen, and the clamp still only runs on an actual change of
+  // `cappedMax`, not on every render.
+  const [prevCappedMax, setPrevCappedMax] = useState(cappedMax);
+  if (cappedMax !== prevCappedMax) {
+    setPrevCappedMax(cappedMax);
+    if (amount > cappedMax) {
+      setAmount(Math.floor(cappedMax / STEP) * STEP || MIN_AMOUNT);
+    }
+  }
+
   // Calculations
   // `null` here means "we could not read the rate", and it propagates all the
   // way to the screen. It must not degrade to 0 anywhere along this chain —
@@ -411,6 +433,21 @@ export function LoanWizard() {
     if (!uid) return;
     let cancelled = false;
 
+    // react-hooks/set-state-in-effect flags this line: a synchronous setState
+    // as the first statement of an effect. Left as a warning rather than
+    // "fixed" — this is react.dev's own documented shape for an effect that
+    // fetches and shows a loading state (see "you-might-not-need-an-effect",
+    // the SearchResults/isLoading example), not the "state that should have
+    // been computed during render" case the rule mainly exists to catch:
+    // `configStatus` cannot be derived from `uid`/`configAttempt` alone, it
+    // has to remember which of loading/ready/error the last fetch settled
+    // into, across an await. On mount this call is a no-op (configStatus's
+    // initial value is already 'loading'); on retry (configAttempt bumped by
+    // the "Reintentar" button) it's what puts the price card back into its
+    // shimmer state instead of leaving the previous error on screen while the
+    // retry is in flight. The `cancelled` flag below is the actual guard: it
+    // stops a fetch that outlives its effect (unmount, or a newer uid/attempt
+    // superseding it) from writing a result no one asked for anymore.
     setConfigStatus('loading');
     (async () => {
       try {
@@ -529,6 +566,17 @@ export function LoanWizard() {
   // connection", never as a status (F7).
   useEffect(() => {
     if (!success || !user) return;
+    // react-hooks/set-state-in-effect flags this synchronous setState too.
+    // Left as a warning, not "fixed": it's the reset half of subscribing to
+    // an external store (react.dev's other documented effect shape), paired
+    // with the error callback below that sets the same flag true — clearing
+    // it here is what lets a second subscription (a retried submit, if this
+    // effect ever runs more than once in a session) start without the prior
+    // attempt's "connection lost" banner still showing. It is a no-op today:
+    // `statusStale` starts `false` and nothing can set it `true` before this
+    // effect's own onSnapshot below attaches, since `success` flips exactly
+    // once per successful submit. It stays, guarded, so that invariant isn't
+    // silently relied upon if that ever changes.
     setStatusStale(false);
 
     const unsub = onSnapshot(
@@ -549,11 +597,6 @@ export function LoanWizard() {
 
     return unsub;
   }, [success, user]);
-
-  // Clamp amount when effectiveMax changes
-  useEffect(() => {
-    if (amount > cappedMax) setAmount(Math.floor(cappedMax / STEP) * STEP || MIN_AMOUNT);
-  }, [cappedMax, amount]);
 
   const retryLoanConfig = () => setConfigAttempt((n) => n + 1);
 

@@ -16,7 +16,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 load_dotenv()
-from internal_auth import load_internal_secret, secret_matches
+from internal_auth import load_internal_secret, presented_secret_accepted
 from score_contract import assert_scores_in_range, read_scoreable_payload
 from scoring import employer_score, employee_score, fraud_score
 from services.firestore_client import FirestoreClient
@@ -32,9 +32,11 @@ rdb = Redis.from_url(
     os.environ.get("REDIS_URL", "redis://localhost:6379"), decode_responses=True
 )
 # Fail closed: raises at import scope, so uvicorn never gets an app object when
-# INTERNAL_SECRET is unset. See internal_auth.py for why an empty secret is an
-# open door rather than a locked one.
-SEC = load_internal_secret()
+# neither ML_INTERNAL_SECRET nor INTERNAL_SECRET is set. See internal_auth.py
+# for why an empty secret is an open door rather than a locked one. The actual
+# request-time check (auth(), below) accepts the full rotation set — this call
+# only guards against booting with nothing configured at all.
+load_internal_secret()
 AKEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TTL = int(os.environ.get("ML_CACHE_TTL", "86400"))
 
@@ -178,7 +180,7 @@ async def _check_redis_connection():
 
 
 def auth(s):
-    if not secret_matches(SEC, s):
+    if not presented_secret_accepted(s):
         raise HTTPException(401, "Unauthorized")
 
 

@@ -287,13 +287,25 @@ After the emergency deploy, **immediately** open a PR with the same fix so git h
 
 ## Appendix: Key URLs and project IDs
 
+> **Railway service URLs below are read from
+> [`scripts/production-endpoints.json`](../../scripts/production-endpoints.json),
+> the single source of truth** — the same file `uptime-monitoring.md` §1
+> defers to. A previous revision of this table hand-copied
+> `vida-<service>.railway.app` / `vida-<service>-staging.railway.app` URLs
+> that never matched any deployed service. If this table and that file ever
+> disagree, the file wins. Staging Railway URLs are omitted below because
+> none are recorded anywhere in this repo — see the header comment in
+> `scripts/verify-staging.sh`, which refuses to probe production URLs under
+> a staging label for the same reason.
+
 | Resource | Production | Staging |
 |---|---|---|
 | Hosting | https://vida-finance.web.app | https://vida-finance-staging.web.app |
 | Firebase project | `vida-finance` | `vida-finance-staging` |
-| payment-server | https://vida-payment-server.railway.app | https://vida-payment-server-staging.railway.app |
-| softcredito-adapter | https://vida-softcredito.railway.app | https://vida-softcredito-staging.railway.app |
-| notifications | https://vida-notifications.railway.app | https://vida-notifications-staging.railway.app |
-| pdf-generator | https://vida-pdf-generator.railway.app | https://vida-pdf-generator-staging.railway.app |
-| ml-service | https://vida-ml-service.railway.app | https://vida-ml-service-staging.railway.app |
+| payment-server | https://payment-server-production-b9b8.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
+| softcredito-adapter | https://softcredito-adapter-production.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
+| notification-service | https://notification-service-production-f49e.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
+| pdf-generator | https://pdf-generator-production-1a31.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
+| ml-service | https://ml-service-production-f949.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
+| underwriting-service | https://underwriting-service-production.up.railway.app | not tracked — see `scripts/verify-staging.sh` |
 | reCAPTCHA key (public) | `6LdorcIsAAAAAJ6eGiWpRiwkE_LqTO8_jOrx45Di` | (same, dev allows localhost) |

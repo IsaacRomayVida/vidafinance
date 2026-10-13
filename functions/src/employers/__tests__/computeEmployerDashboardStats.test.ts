@@ -1,4 +1,9 @@
-import { computeEmployerDashboardStats } from '../computeEmployerDashboardStats';
+import type { Firestore } from 'firebase-admin/firestore';
+import {
+  computeEmployerDashboardStats,
+  fetchEmployerStatsLoans,
+  EMPLOYER_STATS_LOAN_FIELDS,
+} from '../computeEmployerDashboardStats';
 
 function loan(overrides: Record<string, unknown> = {}) {
   return {
@@ -151,5 +156,54 @@ describe('computeEmployerDashboardStats', () => {
         ['activeLoans', 'adoptionRate', 'outstandingBalance', 'overdueCount', 'totalDisbursed', 'totalEmployees'].sort()
       );
     });
+  });
+});
+
+describe('fetchEmployerStatsLoans', () => {
+  // A query chain that records every call, so the test can assert on the
+  // query's SHAPE — the bug was a limit(50), not a wrong value.
+  function fakeDb(docs: Record<string, unknown>[]) {
+    const calls: Array<[string, unknown[]]> = [];
+    const query: Record<string, unknown> = {};
+    for (const method of ['where', 'select', 'orderBy', 'limit']) {
+      query[method] = (...args: unknown[]) => {
+        calls.push([method, args]);
+        return query;
+      };
+    }
+    query.get = async () => ({ docs: docs.map((d) => ({ data: () => d })) });
+    const db = {
+      collection: (name: string) => {
+        calls.push(['collection', [name]]);
+        return query;
+      },
+    } as unknown as Firestore;
+    return { db, calls };
+  }
+
+  it("reads the employer's whole book, not the dashboard's 50-loan display page", async () => {
+    // 51 loans, the oldest overdue: under the old limit(50) page it was the
+    // one to fall out of every headline number.
+    const docs = Array.from({ length: 51 }, (_, i) =>
+      loan({ status: i === 50 ? 'overdue' : 'active', employeeId: `emp-${i}`, total: 100 })
+    );
+    const { db, calls } = fakeDb(docs);
+
+    const loans = await fetchEmployerStatsLoans(db, 'employer-1');
+    const stats = computeEmployerDashboardStats(loans, 51);
+
+    expect(calls).toContainEqual(['collection', ['loans']]);
+    expect(calls).toContainEqual(['where', ['employerId', '==', 'employer-1']]);
+    expect(calls.map(([m]) => m)).not.toContain('limit');
+    expect(stats.activeLoans).toBe(51);
+    expect(stats.overdueCount).toBe(1);
+    expect(stats.totalDisbursed).toBe(5100);
+    expect(stats.adoptionRate).toBe('100%');
+  });
+
+  it('projects down to exactly the fields the stats read', async () => {
+    const { db, calls } = fakeDb([]);
+    await fetchEmployerStatsLoans(db, 'employer-1');
+    expect(calls).toContainEqual(['select', [...EMPLOYER_STATS_LOAN_FIELDS]]);
   });
 });

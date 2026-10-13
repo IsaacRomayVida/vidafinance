@@ -422,8 +422,8 @@ service cloud.firestore {
     match /portfolio_snapshots/{d}   { allow read: if isOps();    allow write: if false; }
     // Was `if true` — readable by anyone on the internet with the project id and
     // no account at all. systemHealthCheck writes the live up/down state and
-    // latency of the payment server and the ML underwriting service into
-    // system_health/current, and on a failed probe it writes the raw fetch error,
+    // latency of every Railway service (payment, underwriting, registry, ...)
+    // into system_health/current, and on a failed probe it writes the raw fetch error,
     // which carries the internal hostname it could not reach; queueHealthCheck
     // writes per-queue failure counts into system_health/queues. That is an
     // anonymous, real-time feed of which money-moving dependency is down right

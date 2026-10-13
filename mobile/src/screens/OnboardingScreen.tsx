@@ -18,7 +18,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   KeyboardAvoidingView,
@@ -46,7 +46,6 @@ import { useOnboardingHold } from '../hooks/useAuth';
 import { friendlyError } from '../lib/errors';
 import { auth, db } from '../lib/firebase';
 import { launchNativeKyc, nativeKycAvailable } from '../lib/kyc';
-import { formatMxn } from '../lib/money';
 import { registerEmployee } from '../lib/registration';
 import {
   ageEligible,
