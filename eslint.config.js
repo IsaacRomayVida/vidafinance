@@ -134,9 +134,9 @@ module.exports = [
     },
   },
 
-  // ---- scripts/**/*.test.mjs -- built-in node:test runner ----
+  // ---- scripts/**/*.test.mjs, tests/load/*.test.mjs -- built-in node:test runner ----
   {
-    files: ['scripts/**/*.test.mjs'],
+    files: ['scripts/**/*.test.mjs', 'tests/load/**/*.test.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',

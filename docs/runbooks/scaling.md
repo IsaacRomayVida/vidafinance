@@ -163,7 +163,7 @@ If quota increase is pending:
 
 Before scaling for expected traffic:
 
-1. Run load test at 2x target throughput (already validated for v1.7)
+1. Run load test at 2x target throughput (**never yet run against any deployed environment** — see § Load test below and checklist B8; the v1.7 "validated" claim had no artifact)
 2. Monitor all services during test:
    - Response times (p50, p95, p99)
    - Error rates
@@ -180,6 +180,92 @@ Before scaling for expected traffic:
 | Concurrent users | TBD | 2x TBD |
 | API response time (p95) | < 500ms | < 1000ms |
 | Queue processing latency | < 30s | < 60s |
+
+### Load test — how to run it (B8 / D3)
+
+Script: `tests/load/pipeline-load-test.js` (k6). Target resolution: `tests/load/target.js`.
+
+**What changed, and why it matters.** The script used to default its target to
+`https://us-central1-vida-finance.cloudfunctions.net` — the **production** project
+(`.firebaserc` default; `/api/health` answers 200 there). A bare `npm run load-test`
+therefore sent loan requests at production. There is now **no default**:
+
+| `TARGET_URL` host | Result |
+|---|---|
+| unset | refuses to start |
+| `localhost` / `127.0.0.1` | label `emulator` |
+| production (`*vida-finance.cloudfunctions.net`, `vida-finance.web.app`, `*-production*.up.railway.app`) | refuses unless `LOAD_TEST_ALLOW_PRODUCTION=I-HAVE-OPS-SIGN-OFF` → label `production` |
+| any other remote host | refuses unless `LOAD_TEST_TARGET_ENV=staging` → label `staging` |
+
+The setup step now **aborts** (it used to "proceed anyway") if `/api/health` is not 200.
+Results land in `tests/load/results/<date>-<label>-<profile>-report.md` (committable) and
+`…-summary.json` (gitignored raw output). The label is in the file name *and* the report header.
+Pinned by `node --test tests/load/target.test.mjs` (CI hard gate).
+
+**Is there a staging environment?** Not a usable one, as of 2026-10-13:
+`deploy.yml` deploys `develop` → the project in secret `FIREBASE_PROJECT_ID_STAGING`, but
+`develop` is 429 commits behind `main`, its last three deploy runs all **failed**
+(latest 2026-05-29, run 26654665135), and no staging URL is recorded in-tree
+(`scripts/verify-staging.sh` says the same). So the only non-production target available
+today is the local emulator.
+
+**Blockers before any result means anything** (true for staging *and* production):
+
+1. **App Check.** `requestLoan` has `enforceAppCheck: true`. Pass a debug token registered on
+   the target project as `APP_CHECK_TOKEN` (sent as `X-Firebase-AppCheck`), or every request
+   fails before reaching business logic.
+2. **Auth / user pool.** `requestLoan` needs an `employees/{uid}` doc and rate-limits each uid
+   to **3 requests/day**. The script's `FIREBASE_API_KEY` sign-in path invents a fresh email per
+   iteration (never pre-seeded) and `AUTH_TOKEN` is a single uid. A meaningful 2x run needs a
+   seeded pool of load-test employees large enough to stay under 3/day/uid (≈ 280/min × 30 min ⇒
+   ~2,800 uids for the 2x stage alone). That seeding does not exist yet.
+3. **External side effects.** `requestLoan` calls `underwriting-service`, whose pipeline
+   reaches the credit bureau and RiskSeal (`services/underwriting-service/index.js`). On
+   production those providers are live and must stay live — the mock flags the script's header
+   asks for are a staging-only setting. Do **not** run the full profile against production;
+   at most the smoke profile, with a dedicated load-test employer and a cleanup plan for the
+   loan and audit documents it creates.
+
+**Commands.**
+
+```bash
+# Emulator (local; nothing leaves the machine). Functions emulator on a non-default port.
+k6 run --env TARGET_URL=http://127.0.0.1:5011/demo-vida-load/us-central1 \
+       --env PROFILE=smoke tests/load/pipeline-load-test.js
+
+# Staging, once it is deployable again (see above)
+k6 run --env TARGET_URL=https://us-central1-<STAGING_PROJECT>.cloudfunctions.net \
+       --env LOAD_TEST_TARGET_ENV=staging --env APP_CHECK_TOKEN=<debug token> \
+       --env AUTH_TOKEN=<id token of a seeded load-test employee> \
+       tests/load/pipeline-load-test.js
+
+# PRODUCTION — smoke profile only, only with ops sign-off, only in the window below
+k6 run --env TARGET_URL=https://us-central1-vida-finance.cloudfunctions.net \
+       --env LOAD_TEST_ALLOW_PRODUCTION=I-HAVE-OPS-SIGN-OFF \
+       --env APP_CHECK_TOKEN=<debug token> --env AUTH_TOKEN=<seeded load-test employee> \
+       --env PROFILE=smoke tests/load/pipeline-load-test.js
+```
+
+**Recommended window (production).** Tue–Thu, 03:00–05:00 `America/Mexico_City`. Avoid:
+the two days either side of a quincena (15th and last day of month — payroll deduction and
+disbursement peaks); 09:00 (`dailyLoanCheck`); 02:00 on the 15th (`satBlacklistRefresh`).
+This is reasoned from the schedules in `functions/src/scheduled/`, not from measured traffic —
+check the Cloud Monitoring request graph for the chosen night first.
+
+**Abort thresholds (stop k6 with Ctrl-C immediately if any is hit).** k6's own thresholds
+(`tests/load/config.js`) only *grade* the run at the end; these are the live stop rules:
+
+| Signal | Abort when |
+|---|---|
+| `loan_error_rate` (k6 live output) | > 5% over any 1-minute window |
+| `http_req_duration{type:requestLoan}` p95 | > 30 s |
+| HTTP 5xx from any service in `scripts/production-endpoints.json` | any sustained > 1 min |
+| `rate_limited_requests` | climbing on every iteration (= the user pool is exhausted; the run is measuring the limiter) |
+| Real-user impact | any alert from `docs/runbooks/alerting-runbook.md`, or a support report |
+| Firestore writes/sec | > 80% of quota (B5) |
+
+After the run: commit `tests/load/results/<date>-<label>-<profile>-report.md`; only a
+`production` or `staging` report at the `full` profile can close B8.
 
 ---
 
