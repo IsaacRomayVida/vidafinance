@@ -2,8 +2,12 @@
  * Load Test Configuration
  *
  * Environment variables (set before running):
- *   STAGING_URL        — Firebase Functions base URL (e.g. https://us-central1-vida-finance.cloudfunctions.net)
- *   FIREBASE_API_KEY   — Firebase Web API key for staging project
+ *   TARGET_URL         — Functions base URL of a NON-production target. No default.
+ *                        Emulator: http://127.0.0.1:5011/demo-vida-load/us-central1
+ *                        Staging:  https://us-central1-<STAGING_PROJECT>.cloudfunctions.net
+ *                        (STAGING_URL is the old name and is still read. Production
+ *                        hosts are refused — see ./target.js.)
+ *   FIREBASE_API_KEY   — Firebase Web API key for the target project
  *   INTERNAL_SECRET    — Shared internal secret for service-to-service auth
  *
  * Mock mode env vars (set on staging services):
