@@ -484,19 +484,96 @@ one direct read is `employers`, to show company names instead of ids (the id
 is shown if that read fails).
 
 - **List** — `listPayrollRemittances`, outstanding by default, with "Todas"
-  and "Solo vencidas" filters. Totals are the server's `totals` block. Each
-  row shows expected / received / outstanding, the status, the aging pill
-  (peach up to 15 days overdue, red beyond) and every receipt; voided receipts
-  stay visible, struck through, with the reason.
+  and "Solo vencidas" filters. Paged: the screen asks for 50 rows
+  (`REMITTANCE_PAGE_SIZE`) and **Cargar más remesas** sends the page's
+  `nextCursor` and appends. A filter change starts again from page one with no
+  cursor; **Actualizar**, and the reload after a write, ask page one for as
+  many rows as were already on screen (capped at 500) so ops keeps their place.
+  The four totals are sums of the rows on screen, not the server's per-page
+  `totals`; while another page exists the heading reads "N remesas cargadas ·
+  hay más" and a line under the totals says they cover only what is loaded.
+  The order is stated next to the as-of date (oldest period first for
+  outstanding and overdue, newest first for "Todas"). Each row shows expected /
+  received / outstanding, the status, the aging pill (peach up to 15 days
+  overdue, red beyond) and every receipt; voided receipts stay visible, struck
+  through, with the reason and the day they were voided **as a Mexico City
+  date** (`voidedAt` is an instant; 20:00 in Mexico City is already the next
+  day in UTC).
 - **Registrar transferencia** — amount in pesos (converted to integer
   centavos from the typed digits, never through a float), date, bank
   reference. The client mirrors the server checks (real calendar date, not
-  after today in America/Mexico_City, reference 1–100 characters) and the
-  server remains the authority. A `bank-reference-in-other-batch` refusal
-  names the other batch and offers a resend with `sharedTransfer: true`;
-  `bank-reference-in-batch` offers nothing.
+  before the batch's `payPeriodStart`, not after today in America/Mexico_City,
+  reference 1–100 characters) and the server remains the authority. A
+  `bank-reference-in-other-batch` refusal names the other batch and offers a
+  resend with `sharedTransfer: true`; `bank-reference-in-batch` offers nothing.
 - **Anular** — two steps: a required reason (3–500 characters), then an
   explicit confirmation. Nothing is sent before the second step.
+- **Refusals** — every `details.reason` in the table above has Spanish and
+  English text (`REMITTANCE_REASON_KEYS` in `public-v2/src/lib/remittance.ts`,
+  keys `remit_reason_*` / `remit_err_dup_*`). The server's English `message`
+  is never shown. A refusal with no reason, or one the screen does not know,
+  falls back to the generic `friendlyError` text.
+  `remittanceReasons.parity.test.ts` reads `RemittanceRefusalReason` from the
+  functions source and fails when a reason is added there without a text here.
+
+### Running the ops screen locally (emulators only)
+
+A plain `npm run dev` in `public-v2` talks to the **production** project —
+`src/lib/firebase.ts` carries production's config. To look at this screen (or
+any portal page) without touching production, run it against the Firebase
+emulators. Needs the Firebase CLI, Java, and a local Redis (the callables'
+rate limiter fails closed without one). Four terminals, from the repo root:
+
+```bash
+# 1. Redis for the emulated rate limiter (any free port)
+redis-server --port 6397 --save ''
+
+# 2. Emulators, on a demo-* project. Build the functions first.
+(cd functions && npm ci && npm run build)
+REDIS_URL=redis://127.0.0.1:6397 \
+  firebase emulators:start --only auth,firestore,functions,storage --project demo-funpay-local
+
+# 3. Seed: one ops login, three employers, six remittances — current, overdue,
+#    partial, fully received, overpaid, and one with a voided receipt.
+#    Add --bulk 60 to get more than one page.
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+  node scripts/seed-remittance-emulator.mjs
+
+# 4. The web app, wired to the emulators
+(cd public-v2 && npm run dev:emulators)     # = VITE_USE_FIREBASE_EMULATORS=true vite
+```
+
+Open `http://localhost:3000/login`, sign in as `ops@funpay.test` (the password
+is `OPS_PASSWORD` in `scripts/seed-remittance-emulator.mjs`; the account exists
+only in the auth emulator), then go to `/ops/remittances`. The browser console
+prints `[firebase] EMULATOR MODE — project demo-funpay-local …` when the wiring
+is active; if that line is missing, stop — the page is on production.
+
+What keeps this off production:
+
+- **The web app** (`public-v2/src/lib/firebaseEmulators.ts`). Emulator mode
+  needs a dev server *and* `VITE_USE_FIREBASE_EMULATORS=true`. The app is then
+  initialised with a `demo-*` project id and a placeholder API key, Auth,
+  Firestore, Functions and Storage are connected to `127.0.0.1` on the ports in
+  `firebase.json`, and App Check uses a local unsigned stand-in instead of
+  reCAPTCHA. A project id that is not `demo-*` throws at start-up. In a
+  production build every use of that module sits behind `import.meta.env.DEV`
+  and is removed; `npm run build` ends with
+  `scripts/check-bundle-no-emulators.mjs`, which fails the build if the bundle
+  contains any of the emulator strings — so CI and the deploy both check it,
+  including when the flag is exported in the shell that builds.
+- **The seed** refuses unless both emulator hosts are set and loopback and the
+  project id is `demo-*`; it refuses a production project id and any
+  `GOOGLE_APPLICATION_CREDENTIALS`, and has no flag for a real project.
+  Re-running it puts the seeded remittances back to their starting state.
+- **The emulated functions** inherit the shell's environment and any
+  `functions/.env*` file. Start them from a shell with no provider keys set.
+  The remittance callables call no third party; other pages' callables may.
+
+Known noise: `index.html` loads the MetaMap button script from
+`web-button.metamap.com` on every page (the only request the screen makes
+outside loopback), and a refused duplicate reference logs an HTTP 409 in the
+browser console.
 
 ## Correcting a mistake
 
