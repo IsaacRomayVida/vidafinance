@@ -102,6 +102,25 @@ export const DEDUCTIBLE_STATUSES: readonly string[] = [
 ];
 
 /**
+ * The statuses a borrower may repay by card (`generatePaymentLink`): funds have
+ * gone out (both `DISBURSED_STATUSES` spellings) and the debt is still owed,
+ * through `overdue`. Deliberately excludes `approved` (pre-disbursement —
+ * nothing to repay yet) and every post-repayment/write-off status, via
+ * allow-list rather than a separate deny check.
+ *
+ * The public-v2 "Pagar" gates read the mirror in
+ * `public-v2/src/lib/loanStatus.ts`. Both sides used to be written out by hand
+ * and were disjoint — the UI offered Pagar only on 'active'/'overdue' while the
+ * server accepted only 'approved' — so no borrower could ever repay by card
+ * (AUDIT_PUBLIC_V2 F2). public-v2's `loanStatus.test.ts` imports this constant
+ * directly to keep the two equal.
+ */
+export const REPAYABLE_STATUSES: readonly string[] = [
+  ...DISBURSED_STATUSES,
+  LOAN_STATUS.OVERDUE,
+];
+
+/**
  * Everything the employer's deduction report shows: every loan a deduction can
  * still land against, plus the ones already paid off so the period history
  * doesn't lose them (legacy repaid aliases included — a hand-written document

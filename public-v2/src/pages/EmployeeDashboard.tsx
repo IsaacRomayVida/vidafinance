@@ -15,6 +15,7 @@ import { LoanTable } from '../components/employee/LoanTable';
 import { PaymentModal } from '../components/employee/PaymentModal';
 import type { EmployeeData, Loan, Repayment } from '../components/employee/types';
 import { fmt, fmtShortDate, initials, nextScheduledDeduction } from '../components/employee/types';
+import { isRepayableStatus } from '../lib/loanStatus';
 
 const IN_FLIGHT_STATUSES = [
   'pending', 'under_review', 'approved', 'active',
@@ -299,7 +300,9 @@ export function EmployeeDashboard() {
 
   if (!employee) return null;
 
-  const activeLoan = loans.find((l) => l.status === 'active' || l.status === 'overdue');
+  // The credit being repaid right now — the same set the Pagar gate uses, so a
+  // manually ops-disbursed ('disbursed') loan isn't missing from the companion.
+  const activeLoan = loans.find((l) => isRepayableStatus(l.status));
   const counts: Record<LoanFilter, number> = {
     all: loans.length,
     active: loans.filter((l) => IN_FLIGHT_STATUSES.includes(l.status)).length,

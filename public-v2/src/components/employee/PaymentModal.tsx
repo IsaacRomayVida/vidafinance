@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { classifyError, friendlyError } from '../../lib/errors';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { REPAYMENT_STATUS } from '../../lib/loanStatus';
 import type { Loan, Repayment } from './types';
 import { fmt, fmtShortDate } from './types';
 
@@ -27,7 +28,7 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
 
   const totalOwed = loan.repaymentAmount || loan.total || 0;
   const totalPaid = repayments
-    .filter((r) => r.status === 'completed')
+    .filter((r) => r.status === REPAYMENT_STATUS.COMPLETED)
     .reduce((sum, r) => sum + (r.amount || 0), 0);
   const remaining = Math.max(0, totalOwed - totalPaid);
 
@@ -56,14 +57,17 @@ export function PaymentModal({ loan, repayments, onClose }: PaymentModalProps) {
     }
   };
 
+  // Only the two values applyRepayment.js writes. An 'unapplied' row is money
+  // received against a loan that was already settled: it must not read as
+  // paid toward this balance, nor as a pending payment that will be.
   const statusBadge = (status?: string) => {
     switch (status) {
-      case 'completed':
+      case REPAYMENT_STATUS.COMPLETED:
         return <span className="bo-badge paid">{t('pay_status_paid', 'Pagado')}</span>;
-      case 'processing':
-        return <span className="bo-badge">{t('pay_status_processing', 'Procesando')}</span>;
+      case REPAYMENT_STATUS.UNAPPLIED:
+        return <span className="bo-badge">{t('pay_status_unapplied', 'No aplicado')}</span>;
       default:
-        return <span className="bo-badge">{t('pay_status_pending', 'Pendiente')}</span>;
+        return null;
     }
   };
 

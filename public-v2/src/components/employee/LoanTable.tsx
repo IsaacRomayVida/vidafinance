@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { Loan, Repayment } from './types';
 import { fmt, fmtShortDate } from './types';
 import { SkeletonRows } from '../ui/SkeletonLine';
+import { REPAYMENT_STATUS, isRepayableStatus } from '../../lib/loanStatus';
 
 interface LoanTableProps {
   loans: Loan[];
@@ -14,8 +15,8 @@ interface LoanTableProps {
 /**
  * The credit list under the Home filter pills: one frosted pill row per loan
  * — amount, status, term and date — with the Pagar action on the loans the
- * server will actually take a payment for ('active' | 'overdue' | 'disbursed',
- * mirroring generatePaymentLink.ts).
+ * server will actually take a payment for (REPAYABLE_STATUSES, the mirror of
+ * generatePaymentLink.ts's gate).
  */
 export function LoanTable({ loans, repaymentsByLoan, loading, onOpenModal, onPayLoan }: LoanTableProps) {
   const { t, i18n } = useTranslation();
@@ -48,10 +49,8 @@ export function LoanTable({ loans, repaymentsByLoan, loading, onOpenModal, onPay
     <ul className="bo-list" aria-label={t('dash_your_loans')}>
       {loans.map((loan) => {
         const loanRepayments = repaymentsByLoan[loan.id] || [];
-        const hasPending = loanRepayments.some((r) => r.status === 'pending');
-        const hasProcessing = loanRepayments.some((r) => r.status === 'processing');
         const totalPaid = loanRepayments
-          .filter((r) => r.status === 'completed')
+          .filter((r) => r.status === REPAYMENT_STATUS.COMPLETED)
           .reduce((sum, r) => sum + (r.amount || 0), 0);
         const when = fmtShortDate(loan.createdAt, i18n.language);
 
@@ -60,24 +59,20 @@ export function LoanTable({ loans, repaymentsByLoan, loading, onOpenModal, onPay
             <span className="amt money">${fmt(loan.amount)}</span>
             <span className="sub">
               <span className={`bo-badge ${loan.status}`}>{t(`status_${loan.status}`, loan.status)}</span>
-              {hasPending && (
-                <span className="bo-badge" style={{ marginLeft: 4 }}>{t('pay_status_pending', 'Pendiente')}</span>
-              )}
-              {hasProcessing && (
-                <span className="bo-badge" style={{ marginLeft: 4 }}>{t('pay_status_processing', 'Procesando')}</span>
-              )}
-              {totalPaid > 0 && !hasPending && !hasProcessing && (
+              {totalPaid > 0 && (
                 <span className="bo-badge paid" style={{ marginLeft: 4 }}>{t('pay_status_paid', 'Pagado')}</span>
               )}
               <small>
-                <span>{loan.term ?? 30} {t('dash_days')}</span>
+                {/* The loan's own term or nothing — never a client-side default
+                    that would misreport the day a second term ships. */}
+                <span>{loan.term != null ? `${loan.term} ${t('dash_days')}` : '—'}</span>
                 {' · '}
                 <span className="money">{t('dash_th_repayment')} ${fmt(loan.repaymentAmount || loan.total || 0)}</span>
                 {when ? ` · ${when}` : ''}
               </small>
             </span>
             <span className="act">
-              {['active', 'overdue', 'disbursed'].includes(loan.status) ? (
+              {isRepayableStatus(loan.status) ? (
                 <button type="button" onClick={() => onPayLoan(loan)} className="bo-btn light">
                   {t('dash_pay_now')}
                 </button>

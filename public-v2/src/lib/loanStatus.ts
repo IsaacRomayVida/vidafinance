@@ -3,8 +3,8 @@
 // and 'active' are both live "funds sent" spellings, and why 'overdue' is a
 // separate live status. public-v2 and functions are separate TypeScript
 // projects with no shared package (see payFrequencies.ts), so this can't
-// import that module directly; this file mirrors only the subset the
-// deduction report needs, and loanStatus.test.ts is what keeps the two in
+// import that module directly; this file mirrors only the subset public-v2
+// reads, and loanStatus.test.ts is what keeps the two in
 // agreement.
 export const LOAN_STATUS = {
   PENDING: 'pending',
@@ -46,6 +46,18 @@ export const DEDUCTIBLE_STATUSES: readonly string[] = [
 ];
 
 /**
+ * The statuses the server will mint a card-payment link for. Mirrors
+ * REPAYABLE_STATUSES in functions/src/loans/loanStatus.ts, which is
+ * generatePaymentLink's gate. Every "Pagar" control reads this, so a button is
+ * never offered on a loan the server will refuse — the two used to be
+ * disjoint, and no borrower could ever repay by card.
+ */
+export const REPAYABLE_STATUSES: readonly string[] = [
+  ...DISBURSED_STATUSES,
+  LOAN_STATUS.OVERDUE,
+];
+
+/**
  * The full set of statuses that belong on the employer deduction report: every
  * loan a deduction can still land against (DEDUCTIBLE_STATUSES), plus the ones
  * already paid off so the period history doesn't lose them (REPAID_STATUSES,
@@ -84,3 +96,21 @@ export function isRepaidStatus(status: unknown): boolean {
 export function isActiveDeductionStatus(status: unknown): boolean {
   return typeof status === 'string' && DEDUCTIBLE_STATUSES.includes(status);
 }
+
+/** Whether the borrower can pay this loan by card right now. */
+export function isRepayableStatus(status: unknown): boolean {
+  return typeof status === 'string' && REPAYABLE_STATUSES.includes(status);
+}
+
+/**
+ * `repayments/{id}.status` — a different collection from the loan, with its
+ * own vocabulary. services/payment-server/applyRepayment.js is the only
+ * writer, and it writes exactly two values: 'completed' (applied against the
+ * loan) and 'unapplied' (money received against a loan that was already
+ * settled — recorded, but not applied). There is no 'pending' or
+ * 'processing': badges that branched on those could never render.
+ */
+export const REPAYMENT_STATUS = {
+  COMPLETED: 'completed',
+  UNAPPLIED: 'unapplied',
+} as const;
