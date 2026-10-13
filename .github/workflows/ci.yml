@@ -167,6 +167,14 @@ jobs:
       - name: CI/CD workflow audit (deploy.yml Firebase project routing) — hard gate
         run: npx jest tests/ci-workflow-audit.test.js
 
+      # services/shared is not a package, so no service's `npm test` reached
+      # these two suites (registry-service's covers only shared/registry and
+      # internal-secret). alerting.js decides whether an outage pages anyone and
+      # health-monitor.js decides which services are watched at all (launch
+      # checklist v1.8 D2) — both ran nowhere. Root deps carry pino + dotenv.
+      - name: Unit tests (services/shared alerting + health monitor) — hard gate
+        run: npx jest services/shared/alerting.test.js services/shared/health-monitor.test.js
+
   underwriting-service:
     name: "Underwriting Service Tests"
     runs-on: ubuntu-latest
