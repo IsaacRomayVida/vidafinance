@@ -263,6 +263,15 @@ schedule and commit the report.
 - Exact commands, the recommended window (Tue–Thu 03:00–05:00 CDMX, away from quincenas) and live
   abort thresholds: `docs/runbooks/scaling.md` § Load test.
 
+*Update 2026-10-13 (emulator smoke).* The two bullets above about k6 and the user pool are
+superseded: the seeded pool exists (`tests/load/seed/`), k6 v2.3.0 was installed, and the script
+ran for the first time — **against the local emulator only** (`demo-vida-load`), `smoke` profile.
+Three runs, 90 / 90 / 91 iterations, every `requestLoan` HTTP 200 and `under_review`, 0 failures;
+the refusal paths (duplicate, credit, 3/day limiter, 401) were provoked and are told apart.
+Report: `tests/load/results/2026-10-13-emulator-smoke-report.md`. This proves the tooling works. It
+measures nothing about the platform, App Check was not exercised, and **B8 is still not run** —
+details and the list of what it does not prove: `docs/runbooks/scaling.md` § "Emulator smoke".
+
 **D4 — 11 `console.log` calls remain in services; v1.7 claimed zero.** *(the two that mattered are
 fixed — 2026-10-13)*
 Most are benign process-start banners (`listening on ${PORT}`) or a CLI backfill script. Two are
