@@ -1153,6 +1153,95 @@ describe('audit_log collection', () => {
   });
 });
 
+// ── payrollRemittances collection (E18) ─────────────────────────────────────
+
+describe('payrollRemittances collection (E18)', () => {
+  const BATCH = 'employer1_2026-07-01_2026-07-15';
+
+  async function seedRemittance(batchId = BATCH, employerId = 'employer1') {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `payrollRemittances/${batchId}`), {
+        batchId,
+        employerId,
+        expectedCents: 170000,
+        receivedCents: 0,
+        status: 'expected',
+        receipts: [],
+      });
+    });
+  }
+
+  it('the batch\'s employer admin can read its own remittance record', async () => {
+    await seedRemittance();
+
+    const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), `payrollRemittances/${BATCH}`)));
+  });
+
+  it('an employer admin can list its own records, and only its own', async () => {
+    await seedRemittance();
+    await seedRemittance('employer2_2026-07-01_2026-07-15', 'employer2');
+
+    const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertSucceeds(
+      getDocs(query(collection(ctx.firestore(), 'payrollRemittances'), where('employerId', '==', 'employer1')))
+    );
+    await assertFails(getDocs(collection(ctx.firestore(), 'payrollRemittances')));
+  });
+
+  it('another employer cannot read it', async () => {
+    await seedRemittance();
+
+    const ctx = testEnv.authenticatedContext('employer2', { role: 'employer_admin' });
+    await assertFails(getDoc(doc(ctx.firestore(), `payrollRemittances/${BATCH}`)));
+  });
+
+  it('an employee cannot read it', async () => {
+    await seedRemittance();
+
+    const ctx = testEnv.authenticatedContext('employee1', { role: 'employee' });
+    await assertFails(getDoc(doc(ctx.firestore(), `payrollRemittances/${BATCH}`)));
+  });
+
+  it('ops can read it', async () => {
+    await seedRemittance();
+
+    const ctx = testEnv.authenticatedContext('ops1', { role: 'ops' });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), `payrollRemittances/${BATCH}`)));
+  });
+
+  it('the employer cannot mark its own remittance received', async () => {
+    await seedRemittance();
+
+    const ctx = testEnv.authenticatedContext('employer1', { role: 'employer_admin' });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), `payrollRemittances/${BATCH}`), {
+        receivedCents: 170000,
+        status: 'received',
+      })
+    );
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'payrollRemittances/employer1_2026-08-01_2026-08-15'), {
+        employerId: 'employer1',
+        expectedCents: 0,
+        status: 'received',
+      })
+    );
+    await assertFails(deleteDoc(doc(ctx.firestore(), `payrollRemittances/${BATCH}`)));
+  });
+
+  it('even ops and admin cannot write it from a client — only the callable can', async () => {
+    await seedRemittance();
+
+    for (const [uid, role] of [['ops1', 'ops'], ['admin1', 'admin']]) {
+      const ctx = testEnv.authenticatedContext(uid, { role });
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), `payrollRemittances/${BATCH}`), { receivedCents: 1 })
+      );
+    }
+  });
+});
+
 // ── users collection ─────────────────────────────────────────────────────────
 
 describe('users collection', () => {

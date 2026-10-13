@@ -72,6 +72,7 @@ const mockStore: {
   loans: Store;
   payrollDeductions: Store;
   payrollBatches: Store;
+  payrollRemittances: Store;
   /** Fires the first time a transaction reads a loan — used to simulate a
    *  concurrent write landing between the query and the transaction. */
   onTransactionLoanRead: null | (() => void);
@@ -84,6 +85,7 @@ const mockStore: {
   loans: {},
   payrollDeductions: {},
   payrollBatches: {},
+  payrollRemittances: {},
   onTransactionLoanRead: null,
   failTransactionOnRow: null,
   transactionCount: 0,
@@ -98,7 +100,9 @@ const snapshotOf = (collection: keyof typeof mockStore, id: string) => {
   return { exists: entry !== undefined, id, data: () => entry };
 };
 
-const makeDocRef = (collection: 'loans' | 'payrollDeductions' | 'payrollBatches', id: string) => ({
+type DocCollection = 'loans' | 'payrollDeductions' | 'payrollBatches' | 'payrollRemittances';
+
+const makeDocRef = (collection: DocCollection, id: string) => ({
   id,
   _collection: collection,
   get: jest.fn(async () => snapshotOf(collection, id)),
@@ -110,7 +114,10 @@ const makeDocRef = (collection: 'loans' | 'payrollDeductions' | 'payrollBatches'
 
 type Filter = { field: string; op: string; value: unknown };
 
-const makeQuery = (collection: 'loans', filters: Filter[]) => ({
+type QueryCollection = 'loans' | 'payrollDeductions';
+
+const makeQuery = (collection: QueryCollection, filters: Filter[]): Record<string, unknown> => ({
+  _query: { collection, filters },
   where: (field: string, op: string, value: unknown) =>
     makeQuery(collection, [...filters, { field, op, value }]),
   limit: (n: number) => ({
@@ -119,7 +126,7 @@ const makeQuery = (collection: 'loans', filters: Filter[]) => ({
   get: async () => runQuery(collection, filters, Infinity),
 });
 
-function runQuery(collection: 'loans', filters: Filter[], limit: number) {
+function runQuery(collection: QueryCollection, filters: Filter[], limit: number) {
   const matches = Object.entries(mockStore[collection]).filter(([, doc]) =>
     filters.every((f) => {
       const actual = (doc as Record<string, unknown>)[f.field];
@@ -137,7 +144,12 @@ function runQuery(collection: 'loans', filters: Filter[], limit: number) {
 }
 
 const makeTransaction = () => ({
-  get: jest.fn(async (ref: { _collection: keyof typeof mockStore; id: string }) => {
+  get: jest.fn(async (ref: {
+    _collection: keyof typeof mockStore;
+    id: string;
+    _query?: { collection: QueryCollection; filters: Filter[] };
+  }) => {
+    if (ref._query) return runQuery(ref._query.collection, ref._query.filters, Infinity);
     if (ref._collection === 'loans') {
       mockStore.loanReadsInsideTransaction += 1;
       mockStore.onTransactionLoanRead?.();
@@ -158,6 +170,14 @@ const makeTransaction = () => ({
     const store = mockStore[ref._collection] as Store;
     store[ref.id] = { ...(store[ref.id] ?? {}), ...data };
   }),
+  set: jest.fn((
+    ref: { _collection: keyof typeof mockStore; id: string },
+    data: Record<string, unknown>,
+    opts?: { merge?: boolean },
+  ) => {
+    const store = mockStore[ref._collection] as Store;
+    store[ref.id] = opts?.merge ? { ...(store[ref.id] ?? {}), ...data } : { ...data };
+  }),
 });
 
 const mockDb = {
@@ -168,7 +188,13 @@ const mockDb = {
         doc: (id: string) => makeDocRef('loans', id),
       };
     }
-    return { doc: (id: string) => makeDocRef(name as 'payrollDeductions', id) };
+    if (name === 'payrollDeductions') {
+      return {
+        ...makeQuery('payrollDeductions', []),
+        doc: (id: string) => makeDocRef('payrollDeductions', id),
+      };
+    }
+    return { doc: (id: string) => makeDocRef(name as DocCollection, id) };
   }),
   runTransaction: jest.fn(async (fn: (tx: ReturnType<typeof makeTransaction>) => Promise<unknown>) => {
     mockStore.transactionCount += 1;
@@ -284,6 +310,7 @@ beforeEach(() => {
   mockStore.loans = {};
   mockStore.payrollDeductions = {};
   mockStore.payrollBatches = {};
+  mockStore.payrollRemittances = {};
   mockStore.onTransactionLoanRead = null;
   mockStore.failTransactionOnRow = null;
   mockStore.transactionCount = 0;
@@ -987,5 +1014,107 @@ describe('the shared paidAmount ledger', () => {
 
     expect(mockStore.loans['loan-1']?.['paidAmount']).toBe(1000);
     expect(mockStore.loans['loan-1']?.['remainingBalance']).toBe(5500);
+  });
+});
+
+// ─── E18 — the batch records what the employer now owes Funpay ───────────────
+
+describe('E18 — expected remittance per batch', () => {
+  const BATCH_ID = 'employer-uid-1_2026-07-01_2026-07-15';
+
+  it('records the sum deducted, in integer centavos, before the batch completes', async () => {
+    seedLoan('loan-1');
+    seedLoan('loan-2', { employeeId: 'emp-2', remainingBalance: 4000 });
+
+    const res = await processPayroll(employerRequest(payload([
+      row({ deductionAmount: 1000.1 }),
+      row({ employeeId: 'emp-2', deductionAmount: 333.33 }),
+    ])));
+
+    expect(mockStore.payrollRemittances[BATCH_ID]).toMatchObject({
+      batchId: BATCH_ID,
+      employerId: EMPLOYER_UID,
+      payPeriodStart: '2026-07-01',
+      payPeriodEnd: '2026-07-15',
+      expectedCents: 133343,
+      deductionCount: 2,
+      receivedCents: 0,
+      status: 'expected',
+      receipts: [],
+    });
+    expect(res).toMatchObject({ remittance: { expectedCents: 133343, status: 'expected' } });
+  });
+
+  it('does not count skipped or refused rows as money owed', async () => {
+    seedLoan('loan-1');
+    seedLoan('loan-2', { employeeId: 'emp-2', remainingBalance: 100 });
+
+    await processPayroll(employerRequest(payload([
+      row({ deductionAmount: 500 }),
+      row({ employeeId: 'emp-2', deductionAmount: 65000 }),
+      row({ employeeId: 'emp-nobody', deductionAmount: 500 }),
+    ])));
+
+    expect(mockStore.payrollRemittances[BATCH_ID]?.['expectedCents']).toBe(50000);
+  });
+
+  it('writes no record for a batch that deducted nothing', async () => {
+    const res = await processPayroll(employerRequest(payload([row({ employeeId: 'emp-nobody' })])));
+
+    expect(mockStore.payrollRemittances).toEqual({});
+    expect(res).toMatchObject({ remittance: null });
+  });
+
+  it('expects the whole batch after a retry that only re-sends the missing rows', async () => {
+    seedLoan('loan-1');
+    seedLoan('loan-2', { employeeId: 'emp-2', remainingBalance: 4000 });
+
+    mockStore.failTransactionOnRow = 2;
+    await processPayroll(employerRequest(payload([
+      row({ deductionAmount: 1000 }),
+      row({ employeeId: 'emp-2', deductionAmount: 700 }),
+    ])));
+    expect(mockStore.payrollRemittances[BATCH_ID]?.['expectedCents']).toBe(100000);
+
+    mockStore.failTransactionOnRow = null;
+    mockStore.payrollBatches[BATCH_ID] = { status: 'in_progress' };
+    await processPayroll(employerRequest(payload([row({ employeeId: 'emp-2', deductionAmount: 700 })])));
+
+    // Summed from the batch's deduction ledger, not from this attempt's rows.
+    expect(mockStore.payrollRemittances[BATCH_ID]?.['expectedCents']).toBe(170000);
+  });
+
+  it('keeps a receipt ops already recorded when the batch is re-run', async () => {
+    seedLoan('loan-1');
+    const rows = [row({ deductionAmount: 1000 })];
+    await processPayroll(employerRequest(payload(rows)));
+
+    mockStore.payrollRemittances[BATCH_ID] = {
+      ...mockStore.payrollRemittances[BATCH_ID],
+      receivedCents: 100000,
+      status: 'received',
+      receipts: [{ amountCents: 100000, bankReference: 'SPEI-1' }],
+    };
+    mockStore.payrollBatches[BATCH_ID] = { status: 'in_progress' };
+    await processPayroll(employerRequest(payload(rows)));
+
+    expect(mockStore.payrollRemittances[BATCH_ID]).toMatchObject({
+      expectedCents: 100000,
+      receivedCents: 100000,
+      status: 'received',
+      receipts: [{ amountCents: 100000, bankReference: 'SPEI-1' }],
+    });
+  });
+
+  it('leaves the batch in_progress if the remittance record cannot be written', async () => {
+    seedLoan('loan-1');
+    // The single row is transaction 1; the remittance write is transaction 2.
+    mockStore.failTransactionOnRow = 2;
+
+    await expect(
+      processPayroll(employerRequest(payload([row({ deductionAmount: 1000 })]))),
+    ).rejects.toThrow('deadline_exceeded');
+
+    expect(mockStore.payrollBatches[BATCH_ID]?.['status']).toBe('in_progress');
   });
 });

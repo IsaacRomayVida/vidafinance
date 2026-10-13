@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { notifyLoanEvent } from '../utils/notify';
 import { enforceRateLimit } from '../utils/rateLimiter';
 import { DEDUCTIBLE_STATUSES, LOAN_STATUS } from '../loans/loanStatus';
+import { recordExpectedRemittance } from './remittance';
 
 // ─── Input Schema ─────────────────────────────────────────────────────────────
 
@@ -511,6 +512,17 @@ export const processPayroll = onCall(
     const skippedCount = results.filter((r) => r.status === 'skipped').length;
     const alreadyProcessedCount = results.filter((r) => r.status === 'already_processed').length;
     const errorCount = results.filter((r) => r.status === 'error').length;
+
+    // E18: what the employer now owes Funpay for this batch. Written before the
+    // batch is marked completed so a completed batch always has its record; a
+    // failure here leaves the batch in_progress for the idempotent retry.
+    const remittance = await recordExpectedRemittance(db, {
+      batchId,
+      employerId: input.employerId,
+      payPeriodStart: input.payPeriodStart,
+      payPeriodEnd: input.payPeriodEnd,
+    });
+
     await batchRef.set({
       status: 'completed',
       processedCount,
@@ -527,6 +539,7 @@ export const processPayroll = onCall(
       status: 'completed',
       processedCount,
       errorCount: results.length - processedCount,
+      remittance,
       results,
     };
   },

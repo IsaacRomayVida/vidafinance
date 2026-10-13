@@ -618,6 +618,26 @@ the deduction report reads `loans` instead (E10).
 Recorded as informational because it is a design gap rather than a code defect, but it is the
 control that would make E8 non-critical.
 
+**Addressed (minimal remittance record).** Owner decision: build a minimal remittance record.
+It lives in Firestore next to the deduction ledger. The Postgres registry (`services/shared/registry`) models entity
+resolution and hash-chained receipts, not settlements, so nothing existing fitted.
+
+- `payrollRemittances/{batchId}` — one per payroll batch, integer centavos throughout.
+  `processPayroll` writes `expectedCents` (summed from that batch's `payrollDeductions`, so a
+  retry that re-sends only some rows still expects the whole batch) before marking the batch
+  `completed`. A batch that deducted nothing gets no record. See
+  `functions/src/payroll/remittance.ts`.
+- `recordPayrollRemittance` — ops/admin/super_admin callable. Takes `{ batchId, amountCents,
+  receivedOn, bankReference }`, appends a receipt, refuses a repeated `bankReference`, writes
+  an `audit_log` entry in the same transaction, and derives `status` server-side:
+  `expected` / `partial` / `received` / `overpaid`. The employer cannot call it.
+- `firestore.rules`: the batch's employer admin and ops can read; no client can write.
+- `PayrollUpload.tsx` shows the batch's record read-only after an upload.
+
+Still open: no ops UI to call `recordPayrollRemittance` yet, and nothing alerts on a batch that
+stays `expected` past its due date. A record is only as good as someone booking bank
+transfers against it.
+
 ---
 
 # Cleared — checked, no defect found
