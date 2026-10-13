@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { REPAYABLE_STATUSES as SERVER_REPAYABLE_STATUSES } from '../../../functions/src/loans/loanStatus';
 import {
   DEDUCTIBLE_STATUSES,
   DEDUCTION_REPORT_STATUSES,
+  REPAYABLE_STATUSES,
   isActiveDeductionStatus,
   isRepaidStatus,
+  isRepayableStatus,
 } from './loanStatus';
 
 // Mirrors DISBURSED_STATUSES / REPAID_STATUSES / LOAN_STATUS.OVERDUE in
@@ -105,6 +108,29 @@ describe('isActiveDeductionStatus', () => {
     expect(isActiveDeductionStatus('repaid')).toBe(false);
     expect(isActiveDeductionStatus('paid')).toBe(false);
     expect(isActiveDeductionStatus(undefined)).toBe(false);
+  });
+});
+
+// The card-repayment gate. Imported straight from the backend module (it has
+// no firebase imports — see i18n/loanStatusCoverage.test.ts) rather than
+// copied, because a copy is exactly how the two sides drifted apart: the UI
+// offered Pagar only on 'active'/'overdue' while generatePaymentLink accepted
+// only 'approved', so no borrower could ever repay by card.
+describe('repayable status vocabulary', () => {
+  it('equals the set generatePaymentLink accepts, in both directions', () => {
+    expect([...REPAYABLE_STATUSES].sort()).toEqual([...SERVER_REPAYABLE_STATUSES].sort());
+  });
+
+  it('offers Pagar on every live funds-sent spelling and on overdue', () => {
+    for (const s of ['active', 'disbursed', 'overdue']) {
+      expect(isRepayableStatus(s)).toBe(true);
+    }
+  });
+
+  it('never offers Pagar before disbursement or after settlement', () => {
+    for (const s of ['pending', 'approved', 'disbursement_queued', 'repaid', 'paid', 'written_off', undefined]) {
+      expect(isRepayableStatus(s)).toBe(false);
+    }
   });
 });
 
