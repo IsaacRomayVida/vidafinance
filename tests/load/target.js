@@ -15,10 +15,24 @@
 export const PRODUCTION_SIGN_OFF = 'I-HAVE-OPS-SIGN-OFF';
 
 // Hosts that ARE production. Mirrors .firebaserc and scripts/production-endpoints.json.
+//
+// Gen-2 functions are Cloud Run services, and a Cloud Run host does NOT carry
+// the project id. It carries one of two project-specific tokens instead:
+//   <service>-<project hash>-<region code>.a.run.app   e.g. api-gd5fcu677q-uc.a.run.app
+//   <service>-<project number>.<region>.run.app        e.g. api-447766605132.us-central1.run.app
+// `gd5fcu677q` is vida-finance's hash (the live API host probed by
+// e2e-test-v18.mjs) and 447766605132 is its project number (messagingSenderId
+// in public-v2/src/lib/firebase.ts). Both are fixed for the life of the project.
+// The older `-vida-finance-…a.run.app` pattern matched no URL Cloud Run issues.
+export const PRODUCTION_RUN_HASH = 'gd5fcu677q';
+export const PRODUCTION_PROJECT_NUMBER = '447766605132';
+
 const PRODUCTION_HOST_PATTERNS = [
   /(^|[.-])vida-finance\.cloudfunctions\.net$/,
   /^vida-finance\.(web\.app|firebaseapp\.com)$/,
   /-vida-finance-[a-z0-9]+-[a-z0-9]+\.a\.run\.app$/,
+  new RegExp(`(^|-)${PRODUCTION_RUN_HASH}-[a-z0-9]+\\.a\\.run\\.app$`),
+  new RegExp(`(^|-)${PRODUCTION_PROJECT_NUMBER}\\.[a-z0-9-]+\\.run\\.app$`),
   /-production(-[a-z0-9]+)?\.up\.railway\.app$/,
 ];
 
@@ -40,6 +54,7 @@ export function resolveTarget(env) {
   if (!raw) {
     throw new Error(
       'TARGET_URL is not set. There is deliberately no default — the old default was production. ' +
+        'Set it to a NON-production target. ' +
         'Emulator: TARGET_URL=http://127.0.0.1:<functions-port>/<project>/us-central1'
     );
   }
@@ -62,9 +77,48 @@ export function resolveTarget(env) {
   // Any other remote host: no staging URL is recorded in-tree, so we cannot
   // tell staging from something else. Make the operator say which it is.
   if (env.LOAD_TEST_TARGET_ENV !== 'staging') {
+    const runApp = /\.run\.app$/.test(host)
+      ? ' A Cloud Run host does not name its project — confirm which project owns it before declaring it staging.'
+      : '';
     throw new Error(
-      `Unknown remote target ${host}. If this is the staging project, set LOAD_TEST_TARGET_ENV=staging.`
+      `Unknown remote target ${host}. If this is the staging project, set LOAD_TEST_TARGET_ENV=staging.${runApp}`
     );
   }
   return { url, label: 'staging' };
+}
+
+/**
+ * The same decision as resolveTarget, phrased for an operator at a terminal
+ * rather than thrown from inside k6's init stage (where it arrives wrapped in
+ * a stack trace). tests/load/preflight.mjs prints it; the `npm run load-test*`
+ * scripts run that before k6.
+ *
+ * @param {Record<string, string|undefined>} env
+ * @returns {{ ok: true, target: { url: string, label: string }, message: string }
+ *          | { ok: false, message: string }}
+ */
+export function preflight(env) {
+  let target;
+  try {
+    target = resolveTarget(env);
+  } catch (err) {
+    return {
+      ok: false,
+      message: [
+        'Load test not started.',
+        '',
+        `  ${err.message}`,
+        '',
+        'Set TARGET_URL to a non-production target, for example:',
+        '  TARGET_URL=http://127.0.0.1:5011/demo-vida-load/us-central1 npm run load-test:smoke   # local emulator',
+        '  TARGET_URL=https://us-central1-<STAGING_PROJECT>.cloudfunctions.net LOAD_TEST_TARGET_ENV=staging npm run load-test',
+        '',
+        'Why production is refused: every iteration POSTs a real loan request. It writes loan and',
+        'audit documents and reaches the live credit bureau and fraud providers. Nothing here',
+        'defaults to production, on purpose.',
+        'Runbook: docs/runbooks/scaling.md § Load test',
+      ].join('\n'),
+    };
+  }
+  return { ok: true, target, message: `Load-test target: ${target.label.toUpperCase()}  ${target.url}` };
 }
