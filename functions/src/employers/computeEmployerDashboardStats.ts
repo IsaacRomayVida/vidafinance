@@ -1,3 +1,4 @@
+import type { Firestore } from 'firebase-admin/firestore';
 import {
   LOAN_STATUS,
   DEDUCTIBLE_STATUSES,
@@ -36,8 +37,9 @@ function toFiniteNumber(value: unknown): number {
  * write paths rather than a fifth private opinion (E11 in
  * AUDIT_EMPLOYER_PATH.md tracks the other four surfaces that disagree).
  *
- * `loans` is whatever getEmployerDashboard already fetched (currently capped
- * at the 50 most recent) — this function does no fetching of its own.
+ * `loans` must be the employer's WHOLE book (see fetchEmployerStatsLoans) —
+ * this function does no fetching of its own, and every figure it returns is a
+ * sum or count over exactly what it is given.
  */
 export function computeEmployerDashboardStats(
   loans: DashboardLoan[],
@@ -85,4 +87,30 @@ export function computeEmployerDashboardStats(
     outstandingBalance,
     adoptionRate,
   };
+}
+
+/** The only loan fields computeEmployerDashboardStats reads. */
+export const EMPLOYER_STATS_LOAN_FIELDS = ['status', 'employeeId', 'total', 'remainingBalance'] as const;
+
+/**
+ * Every loan the employer has ever had, projected down to the fields the
+ * stats read.
+ *
+ * The stats used to be computed off the dashboard's own loan list, which is
+ * `orderBy('createdAt', 'desc').limit(50)` — a display page, not the book. An
+ * employer's 51st loan silently fell out of every headline number: activeLoans,
+ * overdueCount, totalDisbursed, outstandingBalance and adoptionRate all
+ * undercounted with no indication, and an old overdue loan was exactly the one
+ * to vanish first. The projection keeps the uncapped read cheap.
+ */
+export async function fetchEmployerStatsLoans(
+  db: Firestore,
+  employerId: string
+): Promise<DashboardLoan[]> {
+  const snap = await db
+    .collection('loans')
+    .where('employerId', '==', employerId)
+    .select(...EMPLOYER_STATS_LOAN_FIELDS)
+    .get();
+  return snap.docs.map((d) => d.data());
 }
