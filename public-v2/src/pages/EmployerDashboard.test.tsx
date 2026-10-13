@@ -90,11 +90,13 @@ describe('EmployerDashboard — loans table term column', () => {
     expect(screen.queryByText(/^30$/)).not.toBeInTheDocument();
   });
 
-  it('falls back to 30 days when loan.term is absent (legacy data), same as the borrower-side default', async () => {
+  it('shows "—" when loan.term is absent (legacy data), same as the borrower side, instead of inventing 30 days', async () => {
     loanDocs = [loan('l-2')];
     render(<EmployerDashboard />);
 
-    expect(await screen.findByText(/\b30\b/)).toBeInTheDocument();
+    const row = (await screen.findByText('Employee l-2')).closest('tr') as HTMLElement;
+    expect(row.querySelectorAll('td')[2]).toHaveTextContent(/^—$/);
+    expect(screen.queryByText(/\b30\b/)).not.toBeInTheDocument();
   });
 });
 

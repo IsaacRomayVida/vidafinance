@@ -976,7 +976,7 @@ export function EmployerDashboard() {
                   <tr key={loan.id}>
                     <td style={{ fontWeight: 500 }}>{loan.employeeName || '—'}</td>
                     <td>${fmt(loan.amount)}</td>
-                    <td>{loan.term ?? 30} {t('dash_days')}</td>
+                    <td>{loan.term != null ? `${loan.term} ${t('dash_days')}` : '—'}</td>
                     <td>
                       <span className={`badge badge-${loan.status}`}>
                         {t(`status_${loan.status}`, loan.status)}
