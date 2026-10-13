@@ -1,17 +1,19 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { HelmetProvider } from 'react-helmet-async';
 import App from './App';
 import { initSentry } from './lib/sentry';
+import { i18nReady } from './i18n';
 import './styles/legacy.css';
 import './styles/index.css';
 
 initSentry();
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <HelmetProvider>
+// Spanish is bundled, so this is already settled for the default language;
+// a saved non-default language is fetched first (see i18n/index.ts).
+i18nReady.then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
       <App />
-    </HelmetProvider>
-  </StrictMode>
-);
+    </StrictMode>
+  );
+});
