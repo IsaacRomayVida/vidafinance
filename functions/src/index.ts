@@ -3891,47 +3891,15 @@ export const weeklyPortfolioSnapshot = onSchedule(
   }
 );
 
-export const systemHealthCheck = onSchedule(
-  { schedule: '*/5 * * * *', timeZone: 'America/Mexico_City' },
-  async () => {
-    // Railway services decommissioned — check only Cloud Functions + Firestore
-    const services: { name: string; url: string }[] = [];
-    if (process.env['PAYMENT_SERVER_URL']) services.push({ name: 'payment-server', url: process.env['PAYMENT_SERVER_URL'] + '/health' });
-    if (process.env['ML_SERVICE_URL']) services.push({ name: 'ml-service', url: process.env['ML_SERVICE_URL'] + '/health' });
-
-    const results = await Promise.allSettled(
-      services.map(async (s) => {
-        const start = Date.now();
-         
-        const r = await fetch(s.url, { signal: AbortSignal.timeout(6000) });
-        const d = (await r.json()) as Record<string, unknown>;
-        return { name: s.name, status: d['status'], redis: d['redis'], latencyMs: Date.now() - start };
-      })
-    );
-
-    const data: Record<string, unknown> = {};
-    const ts = FieldValue.serverTimestamp();
-
-    for (let i = 0; i < services.length; i++) {
-      const res = results[i];
-      if (res.status === 'fulfilled') {
-        data[services[i].name] = { ...res.value, checkedAt: ts };
-      } else {
-        data[services[i].name] = { status: 'down', error: res.reason.message, checkedAt: ts };
-        await db.collection('incident_log').add({
-          source: 'health-check',
-          service: services[i].name,
-          error: res.reason.message,
-          severity: 'critical',
-          ts,
-          resolved: false,
-        });
-      }
-    }
-
-    await db.collection('system_health').doc('current').set({ ...data, lastChecked: ts });
-  }
-);
+// ─── Service health sweep (launch checklist v1.8 D2) ─────────────────────────
+// Lives in functions/src/scheduled/systemHealthCheck.ts. This used to be a
+// second, inline definition left over from the "Railway decommissioned" era
+// that probed only payment-server and ml-service — so the module's broader
+// coverage never deployed, and underwriting-service and registry-service (the
+// credit decision and the ledger) were monitored nowhere. Same trap as
+// dailyLoanCheck above; see scheduled/__tests__/systemHealthCheck.test.ts's
+// wiring guard.
+export { systemHealthCheck } from './scheduled/systemHealthCheck';
 
 export const queueHealthCheck = onSchedule(
   { schedule: '*/2 * * * *', timeZone: 'America/Mexico_City' },

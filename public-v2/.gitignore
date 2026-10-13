@@ -3,3 +3,7 @@ dist
 
 # TypeScript incremental build cache — a local artifact, never source
 *.tsbuildinfo
+
+# Lighthouse CI output (lighthouserc.json) — CI uploads it as an artifact
+.lighthouseci
+lighthouse-report

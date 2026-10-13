@@ -167,6 +167,14 @@ jobs:
       - name: CI/CD workflow audit (deploy.yml Firebase project routing) — hard gate
         run: npx jest tests/ci-workflow-audit.test.js
 
+      # services/shared is not a package, so no service's `npm test` reached
+      # these two suites (registry-service's covers only shared/registry and
+      # internal-secret). alerting.js decides whether an outage pages anyone and
+      # health-monitor.js decides which services are watched at all (launch
+      # checklist v1.8 D2) — both ran nowhere. Root deps carry pino + dotenv.
+      - name: Unit tests (services/shared alerting + health monitor) — hard gate
+        run: npx jest services/shared/alerting.test.js services/shared/health-monitor.test.js
+
   underwriting-service:
     name: "Underwriting Service Tests"
     runs-on: ubuntu-latest
@@ -443,6 +451,47 @@ jobs:
 
       - name: Typecheck + Build
         run: cd public-v2 && npm run build
+
+  # Launch checklist v1.8 D3 / B9: "Lighthouse >= 90 on marketing pages" was
+  # ticked in v1.7 with nothing behind it. This measures the marketing site as
+  # it ships at launch (VITE_LAUNCH_MODE=live — the default build is the
+  # coming-soon page) with public-v2/lighthouserc.json, and uploads the reports.
+  #
+  # Accessibility, best-practices and SEO are `error` assertions — a hard gate.
+  # Performance is a `warn` assertion on purpose: measured 2026-10-13 it is
+  # 0.70-0.75 (LCP 5-7s on mobile throttling), so a >=0.9 error would turn CI
+  # red until that is fixed. The gap is printed on every run and the reports are
+  # the evidence B9 lacked; promote it to `error` when the pages clear 0.9.
+  lighthouse:
+    name: Lighthouse (marketing pages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: public-v2/package-lock.json
+
+      - name: Install frontend deps
+        run: cd public-v2 && npm ci --legacy-peer-deps
+
+      - name: Build the launch-mode marketing site
+        run: cd public-v2 && npm run build
+        env:
+          VITE_LAUNCH_MODE: live
+
+      - name: Lighthouse CI — a11y / best-practices / SEO >= 0.9, hard gate
+        run: cd public-v2 && npx --yes @lhci/cli@0.15.1 autorun
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-report
+          path: public-v2/lighthouse-report
+          if-no-files-found: ignore
 
   registry-ledger:
     name: Registry & Ledger (Postgres)

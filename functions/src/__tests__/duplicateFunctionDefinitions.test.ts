@@ -35,7 +35,6 @@ const KNOWN_DUPLICATES: Record<string, string> = {
   onLoanStatusChange: 'loans/onLoanStatusChange.ts',
   approveEmployer: 'employers/approveEmployer.ts',
   queueHealthCheck: 'scheduled/queueHealthCheck.ts',
-  systemHealthCheck: 'scheduled/systemHealthCheck.ts',
   weeklyPortfolioSnapshot: 'scheduled/weeklyPortfolioSnapshot.ts',
 };
 
