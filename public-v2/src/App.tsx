@@ -36,6 +36,7 @@ const ReviewQueue = React.lazy(() => import('./pages/ReviewQueue').then(m => ({ 
 const ReviewDetail = React.lazy(() => import('./pages/ReviewDetail').then(m => ({ default: m.ReviewDetail })));
 const PortfolioPage = React.lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
 const EmployerMgmt = React.lazy(() => import('./pages/EmployerMgmt').then(m => ({ default: m.EmployerMgmt })));
+const PayrollRemittances = React.lazy(() => import('./pages/PayrollRemittances').then(m => ({ default: m.PayrollRemittances })));
 const AlertsPage = React.lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
 const SystemHealth = React.lazy(() => import('./pages/SystemHealth').then(m => ({ default: m.SystemHealth })));
 const Onboarding = React.lazy(() => import('./pages/Onboarding').then(m => ({ default: m.Onboarding })));
@@ -126,6 +127,7 @@ export default function App() {
             <Route path="/ops/review-queue/:id" element={<Suspense fallback={<PageSpinner />}><ReviewDetail /></Suspense>} />
             <Route path="/ops/portfolio" element={<Suspense fallback={<PageSpinner />}><PortfolioPage /></Suspense>} />
             <Route path="/ops/employers" element={<Suspense fallback={<PageSpinner />}><EmployerMgmt /></Suspense>} />
+            <Route path="/ops/remittances" element={<Suspense fallback={<PageSpinner />}><PayrollRemittances /></Suspense>} />
             <Route path="/ops/alerts" element={<Suspense fallback={<PageSpinner />}><AlertsPage /></Suspense>} />
             <Route path="/ops/health" element={<Suspense fallback={<PageSpinner />}><SystemHealth /></Suspense>} />
           </Route>

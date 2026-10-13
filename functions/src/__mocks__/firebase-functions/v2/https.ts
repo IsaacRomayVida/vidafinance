@@ -1,5 +1,6 @@
 export class HttpsError extends Error {
-  constructor(public code: string, message: string) {
+  // `details` is the third argument of the real class and reaches the client as `error.details`.
+  constructor(public code: string, message: string, public details?: unknown) {
     super(message);
     this.name = 'HttpsError';
   }
