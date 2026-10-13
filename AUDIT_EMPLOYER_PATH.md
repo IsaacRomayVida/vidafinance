@@ -646,8 +646,10 @@ Follow-ups since (contracts and procedures: `docs/runbooks/payroll-remittances.m
   the rest (dry run by default; not yet run against any real project).
 - `listPayrollRemittances` returns each record with its aging (`remittanceAging`).
 
-Still open: the ops screen that calls these, and scheduled alerting on a batch that stays
-unpaid — the list shows overdue records but nothing pushes them to anyone. The 7-day grace
+The ops screen that calls these is `/ops/remittances` (`public-v2/src/pages/PayrollRemittances.tsx`).
+
+Still open: scheduled alerting on a batch that stays unpaid — the list shows overdue records
+but nothing pushes them to anyone. The 7-day grace
 period behind `overdue` is a display default, not an agreed remittance term.
 
 ---

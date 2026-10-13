@@ -271,6 +271,7 @@ describe('recordPayrollRemittance — booking a receipt', () => {
     ['a peso amount instead of centavos', { amountCents: 1000.5 }],
     ['a zero amount', { amountCents: 0 }],
     ['a negative amount', { amountCents: -100 }],
+    ['an amount beyond the safe integer range', { amountCents: 1e20 }],
     ['a free-text date', { receivedOn: 'yesterday' }],
     ['an empty bank reference', { bankReference: '   ' }],
   ])('rejects %s', async (_label, over) => {

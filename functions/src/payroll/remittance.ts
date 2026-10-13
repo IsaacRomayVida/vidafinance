@@ -107,7 +107,7 @@ function holdersOf(indexDoc: Record<string, unknown> | undefined): ReferenceHold
 
 const RecordPayrollRemittanceSchema = z.object({
   batchId: z.string().min(1).max(200),
-  amountCents: z.number().int().positive(),
+  amountCents: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   receivedOn: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected a YYYY-MM-DD date')

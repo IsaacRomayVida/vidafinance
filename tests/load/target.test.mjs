@@ -184,3 +184,27 @@ test('unknown remote host needs an explicit staging declaration', () => {
 test('non-http target is rejected', () => {
   assert.throws(() => resolveTarget({ TARGET_URL: 'vida-finance' }), /not an http/);
 });
+
+for (const url of [
+  'https://localhost:x@us-central1-vida-finance.cloudfunctions.net',
+  'http://127.0.0.1@us-central1-vida-finance.cloudfunctions.net/x',
+]) {
+  test(`a URL with userinfo is refused, never read as its fake local host: ${url}`, () => {
+    assert.throws(() => resolveTarget({ TARGET_URL: url }));
+    assert.throws(() => resolveTarget({ TARGET_URL: url, LOAD_TEST_TARGET_ENV: 'staging' }));
+  });
+}
+
+for (const url of [
+  'https://api-gd5fcu677q-uc.a.run.app.',
+  'https://us-central1-vida-finance.cloudfunctions.net./x',
+]) {
+  test(`a trailing-dot production host is still production: ${url}`, () => {
+    assert.throws(() => resolveTarget({ TARGET_URL: url, LOAD_TEST_TARGET_ENV: 'staging' }));
+  });
+}
+
+test('ports and IPv6 loopback still resolve as the emulator', () => {
+  assert.equal(resolveTarget({ TARGET_URL: 'http://127.0.0.1:5001/demo/us-central1' }).label, 'emulator');
+  assert.equal(resolveTarget({ TARGET_URL: 'http://[::1]:5001/demo/us-central1' }).label, 'emulator');
+});

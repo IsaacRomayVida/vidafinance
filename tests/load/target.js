@@ -39,8 +39,12 @@ const PRODUCTION_HOST_PATTERNS = [
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
 function hostOf(url) {
-  const m = /^https?:\/\/([^/:?#]+|\[[^\]]+\])/i.exec(url);
-  return m ? m[1].toLowerCase() : null;
+  const authority = /^https?:\/\/([^/?#]*)/i.exec(url);
+  // Userinfo (`user:pass@host`) would let `localhost:x@<prod host>` read as localhost.
+  if (!authority || authority[1].includes('@')) return null;
+  const m = /^([^:]+|\[[^\]]+\])(:\d*)?$/.exec(authority[1]);
+  // A trailing dot is the same host; strip it so the `$`-anchored patterns still match.
+  return m ? m[1].toLowerCase().replace(/\.+$/, '') || null : null;
 }
 
 /**
