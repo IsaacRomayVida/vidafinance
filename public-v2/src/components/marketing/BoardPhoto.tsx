@@ -13,12 +13,19 @@
  * is only set then, and it takes no `poster` — a poster is fetched eagerly,
  * which pulled these stills ahead of the hero image (Lighthouse LCP).
  *
+ * A reader who gets there faster than the still can load (a flick, an anchor
+ * jump, the End key) would see the scrim over the bare board. So the frame
+ * carries a tiny inline copy of the same photograph (boardPlaceholders.ts,
+ * ~120 bytes, no request) as its background: the real still paints over it,
+ * with the same crop, as soon as it has loaded.
+ *
  * The scrim lives here so type over any photograph has a floor it can rely
  * on.
  */
 import { useEffect, useRef } from 'react';
 import { publicAsset } from '../../lib/publicAsset';
 import { useNearViewport } from '../../hooks/useNearViewport';
+import { BOARD_PLACEHOLDERS } from './boardPlaceholders';
 
 export function BoardPhoto({ still, film, position }: { still: string; film?: string; position?: string }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -62,8 +69,12 @@ export function BoardPhoto({ still, film, position }: { still: string; film?: st
   }, [film, reduced, near]);
 
   const poster = publicAsset(still);
+  const placeholder = BOARD_PLACEHOLDERS[still];
+  const frameStyle = placeholder
+    ? { backgroundImage: `url("${placeholder}")`, ...(position ? { backgroundPosition: position } : null) }
+    : undefined;
   return (
-    <div ref={frame} className="mk-board-film" aria-hidden="true">
+    <div ref={frame} className="mk-board-film" aria-hidden="true" style={frameStyle}>
       <img src={near ? poster : undefined} alt="" loading="lazy" decoding="async" style={position ? { objectPosition: position } : undefined} />
       {film && !reduced && (
         <video ref={ref} muted playsInline preload="metadata" style={position ? { objectPosition: position } : undefined} />

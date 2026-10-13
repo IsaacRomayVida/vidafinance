@@ -9,6 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BoardPhoto } from './BoardPhoto';
 import { NEAR_VIEWPORT_MARGIN } from '../../hooks/useNearViewport';
 import { stubIntersectionObserver, type FakeObserver } from '../../test/intersectionObserver';
+import { BOARD_PLACEHOLDERS } from './boardPlaceholders';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 let observers: FakeObserver[];
 
@@ -70,5 +73,62 @@ describe('BoardPhoto', () => {
     const { container } = renderBoard();
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/images/brand/moment-school-walk.webp');
     expect(container.querySelector('video')?.getAttribute('src')).toBe('/video/board-trust-walk.mp4');
+  });
+
+  // A reader who arrives before the still has loaded (a flick, an anchor
+  // jump) must not see the scrim over the bare board.
+  it('paints an inline copy of the still under it before anything is requested', () => {
+    const { container } = renderBoard();
+    const frame = container.querySelector('.mk-board-film') as HTMLDivElement;
+
+    expect(container.querySelector('img')?.hasAttribute('src')).toBe(false);
+    const placeholder = BOARD_PLACEHOLDERS['/images/brand/moment-school-walk.webp'];
+    expect(placeholder).toMatch(/^data:image\/webp;base64,/);
+    expect(frame.style.backgroundImage).toContain(placeholder);
+
+    // It stays once the photograph is in: the still simply covers it.
+    act(() => observers[0].enter());
+    expect(frame.style.backgroundImage).toContain(placeholder);
+  });
+
+  it('crops the placeholder the way the still is cropped', () => {
+    const { container } = render(<BoardPhoto still="/images/brand/moment-clinic.webp" position="30% 20%" />);
+    const frame = container.querySelector('.mk-board-film') as HTMLDivElement;
+    expect(frame.style.backgroundPosition).toBe('30% 20%');
+    expect((container.querySelector('img') as HTMLImageElement).style.objectPosition).toBe('30% 20%');
+
+    const css = readFileSync(resolve(__dirname, '../../styles/marketing.css'), 'utf8');
+    const rule = css.match(/\.mk-board-film\{[^}]*\}/)?.[0] ?? '';
+    expect(rule).toContain('background-size:cover');
+    expect(rule).toContain('background-position:50% 50%');
+  });
+});
+
+describe('board placeholders', () => {
+  const srcDir = resolve(__dirname, '../..');
+  const sources = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) return sources(full);
+      return /\.tsx$/.test(name) && !/\.test\.tsx$/.test(name) ? [full] : [];
+    });
+  const stillsInUse = sources(srcDir).flatMap((file) =>
+    [...readFileSync(file, 'utf8').matchAll(/<BoardPhoto\s[^>]*?still="([^"]+)"/g)].map((m) => m[1]),
+  );
+
+  it('exist for every still a board uses', () => {
+    expect(stillsInUse.length).toBeGreaterThanOrEqual(2);
+    for (const still of stillsInUse) expect(BOARD_PLACEHOLDERS[still], still).toBeTruthy();
+  });
+
+  it('are real WebP images small enough to inline', () => {
+    for (const [still, uri] of Object.entries(BOARD_PLACEHOLDERS)) {
+      // The file it stands in for is in public/.
+      expect(statSync(resolve(srcDir, '../public', '.' + still)).isFile()).toBe(true);
+      const bytes = Buffer.from(uri.replace(/^data:image\/webp;base64,/, ''), 'base64');
+      expect(bytes.subarray(0, 4).toString('latin1')).toBe('RIFF');
+      expect(bytes.subarray(8, 12).toString('latin1')).toBe('WEBP');
+      expect(bytes.length).toBeLessThan(400);
+    }
   });
 });
