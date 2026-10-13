@@ -19,20 +19,20 @@ that time could have changed (CI state, open PRs, production health).
   migration 002 and load-target prep, legacy underwriting test cleanup.
 
 ### In progress: branch `hardening/remittance-ops-load-prep` (based on `main` at `4390a44`)
-Three reviewed `swarm3/*` branches merged, plus one orchestrator commit with reviewer fixes.
+Three reviewed `swarm3/*` branches and `swarm2/lighthouse-perf` merged, plus one orchestrator commit with reviewer fixes. PR #637.
 
 | Branch | What | Status |
 |---|---|---|
 | `swarm3/remittance-followups` | `receivedOn` must be a real date ≤ today (Mexico City). `bankReference` deduped on a normalised key, in the batch and across batches through `payrollRemittanceReferences` (`sharedTransfer: true` overrides the cross-batch case). New ops-only callables `voidPayrollRemittanceReceipt` (audit-logged, idempotent, frees the reference) and `listPayrollRemittances` (with aging). `recordPayrollRemittance` creates the record on demand for pre-ledger batches; backfill script `scripts/migrations/004_backfill_payroll_remittances.ts` (dry run by default). Ops screen `/ops/remittances`. Contract in `docs/runbooks/payroll-remittances.md`. | merged, reviewed (approved first round) |
 | `swarm3/cleanups` | Load config example no longer production; `npm run load-test*` run a friendly preflight; Gen-2 `run.app` production hosts refused; `check-production-health.mjs` row logic unit-tested; metamap retry tests on fake timers. | merged, reviewed (approved first round) |
 | `swarm3/load-prep` | `tests/load/seed/`: deterministic load-test pool seed and teardown (emulator by default, production project refused with no override), k6 script reads the pool and exchanges the App Check debug token, emulator rehearsals, and a rewritten load section in `docs/runbooks/scaling.md` with the full third-party provider inventory. | merged, reviewed + repaired (first review blocked on an incomplete provider inventory and teardown missing Stage 5 rows) |
-| `swarm2/lighthouse-perf` | Marketing pages to Lighthouse performance ≥ 0.9, then flip the assertion to `error`. | **See the note below this table.** |
+| `swarm2/lighthouse-perf` | Marketing pages measured locally at Lighthouse performance 0.95–0.98 median (was 0.71–0.73; LCP 5.7–6.3 s → 2.1–2.7 s). `performance` in `public-v2/lighthouserc.json` is now `error`. Delivery only: self-hosted preloaded fonts, WebP stills at the same dimensions with per-route hero preload, Firebase/auth behind a lazy `PortalAuth` wrapper, lazy English copy (3 s timeout falls back to Spanish), hero film after load, a Web Animations page transition. | merged, reviewed + repaired (the blocking finding on the page transition was rebutted with evidence; the re-review approved) |
 
 Orchestrator commit on top: the load-target guard refuses userinfo URLs (`localhost:x@<prod host>`
 used to read as the emulator) and trailing-dot production hosts; `amountCents` capped at the safe
 integer range; stale E18 sentence in `AUDIT_EMPLOYER_PATH.md` fixed.
 
-Local results on the integration branch: functions 1116/1116, public-v2 350/350, underwriting
+Local results on the integration branch: functions 1116/1116, public-v2 402/402 (after the Lighthouse merge), underwriting
 452/452 (1 skipped, as before), migrations 58/58, node tests (health, load target, seed) 120/120,
 lint 0 errors everywhere. Rules emulator suite 182/182 on the remittance branch (hard gate in CI).
 
@@ -42,7 +42,7 @@ lint 0 errors everywhere. Rules emulator suite 182/182 on the remittance branch 
 ## 2. Next steps, in order
 1. Get the PR for `hardening/remittance-ops-load-prep` green. Merge only with the user's go-ahead
    (production deploy), then dispatch `verify-production-live.yml`.
-2. Lighthouse: see the status row above.
+2. Lighthouse, still open: the scores were measured on a Mac; `/` had one 0.93 run, so watch the CI Lighthouse job. Nobody has looked at the rendered pages: WebP stills against the JPEGs, self-hosted fonts, and the route fade need a visual check. The first-load fade-in from 0 was removed for LCP. `BoardPhoto` can show only its scrim on a very fast scroll.
 3. Remittance, still open (reviewer notes, none blocking):
    - The ops screen was never looked at in a browser. `public-v2` has no emulator wiring, so a
      local dev server talks to production Firebase; the visual check needs a human with an ops
