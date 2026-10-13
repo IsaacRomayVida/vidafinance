@@ -4,6 +4,7 @@ import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/fire
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { isActiveDeductionStatus } from '../lib/loanStatus';
 
 /* ── helpers ─────────────────────────────────────────────── */
 
@@ -219,6 +220,11 @@ export function EmployeeRoster() {
         }
       });
       setInvitesByEmployee(map);
+    }, (listenError) => {
+      // Without this, a failed invites read was silent and every employee
+      // looked un-invited — inviting the whole roster again was one click away.
+      console.error('Firestore listen error:', listenError);
+      setError('Error al cargar los datos. Intenta de nuevo.');
     });
     return unsub;
   }, [user]);
@@ -241,8 +247,11 @@ export function EmployeeRoster() {
     return map;
   }, [loans]);
 
+  // The canonical "funds out, still owed" set — `status === 'active'` alone
+  // dropped every manually disbursed ('disbursed') and every overdue loan,
+  // so this disagreed with the deduction report on the very next page (E11).
   const activeLoansCount = useMemo(
-    () => loans.filter((l) => l.status === 'active').length,
+    () => loans.filter((l) => isActiveDeductionStatus(l.status)).length,
     [loans],
   );
 
