@@ -1,8 +1,8 @@
 /**
- * `systemHealthCheck` polls five downstream services' `/health` endpoints
+ * `systemHealthCheck` polls seven downstream services' `/health` endpoints
  * every 5 minutes via `Promise.allSettled` — the whole point of
  * `allSettled` over `Promise.all` is that one dependency being down must not
- * blank out the readings for the other four, and must instead produce a
+ * blank out the readings for the other six, and must instead produce a
  * `status: 'down'` entry plus a critical incident for the one that failed.
  * It had zero coverage, so neither the isolation nor the incident-logging
  * side effect was pinned to anything.
@@ -31,8 +31,10 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: jest.fn(() => ({ _serverTimestamp: true })) },
 }));
 
+import * as fs from 'fs';
+import * as path from 'path';
 import fetch from 'node-fetch';
-import { systemHealthCheck } from '../systemHealthCheck';
+import { systemHealthCheck, MONITORED_SERVICES } from '../systemHealthCheck';
 
 const mockFetch = fetch as unknown as jest.Mock;
 
@@ -42,7 +44,11 @@ const SERVICE_URLS: Record<string, string> = {
   'notification-service': 'https://notify.example.test',
   'pdf-generator': 'https://pdf.example.test',
   'ml-service': 'https://ml.example.test',
+  'underwriting-service': 'https://underwriting.example.test',
+  'registry-service': 'https://registry.example.test',
 };
+
+const ENV_KEYS = MONITORED_SERVICES.map((s) => s.env);
 
 async function run(): Promise<void> {
   return (systemHealthCheck as unknown as () => Promise<void>)();
@@ -52,23 +58,11 @@ type WrittenReading = { status: string; redis?: string; latencyMs?: number; erro
 
 beforeEach(() => {
   jest.clearAllMocks();
-  process.env['PAYMENT_SERVER_URL'] = SERVICE_URLS['payment-server'];
-  process.env['SOFTCREDITO_ADAPTER_URL'] = SERVICE_URLS['softcredito-adapter'];
-  process.env['NOTIFICATION_SERVICE_URL'] = SERVICE_URLS['notification-service'];
-  process.env['PDF_GENERATOR_URL'] = SERVICE_URLS['pdf-generator'];
-  process.env['ML_SERVICE_URL'] = SERVICE_URLS['ml-service'];
+  for (const { name, env } of MONITORED_SERVICES) process.env[env] = SERVICE_URLS[name];
 });
 
 afterEach(() => {
-  for (const key of [
-    'PAYMENT_SERVER_URL',
-    'SOFTCREDITO_ADAPTER_URL',
-    'NOTIFICATION_SERVICE_URL',
-    'PDF_GENERATOR_URL',
-    'ML_SERVICE_URL',
-  ]) {
-    delete process.env[key];
-  }
+  for (const key of ENV_KEYS) delete process.env[key];
 });
 
 describe('systemHealthCheck', () => {
@@ -80,7 +74,7 @@ describe('systemHealthCheck', () => {
 
     await run();
 
-    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(mockFetch).toHaveBeenCalledTimes(7);
     const written = mockSet.mock.calls[0]?.[0] as Record<string, WrittenReading>;
     for (const name of Object.keys(SERVICE_URLS)) {
       expect(written[name]).toMatchObject({ status: 'ok', redis: 'connected' });
@@ -89,7 +83,7 @@ describe('systemHealthCheck', () => {
     expect(mockAdd).not.toHaveBeenCalled();
   });
 
-  it('marks a single failed dependency down and logs a critical incident, without losing the other four readings', async () => {
+  it('marks a single failed dependency down and logs a critical incident, without losing the other six readings', async () => {
     mockFetch.mockImplementation(async (url: string) => {
       if (url === `${SERVICE_URLS['ml-service']}/health`) throw new Error('ECONNREFUSED');
       return { ok: true, json: async () => ({ status: 'ok', redis: 'connected' }) };
@@ -100,11 +94,13 @@ describe('systemHealthCheck', () => {
     const written = mockSet.mock.calls[0]?.[0] as Record<string, WrittenReading>;
     expect(written['ml-service']).toMatchObject({ status: 'down', error: 'ECONNREFUSED' });
     // Promise.allSettled, not Promise.all: one dependency throwing must not
-    // prevent the other four healthy readings from being written.
+    // prevent the other six healthy readings from being written.
     expect(written['payment-server']).toMatchObject({ status: 'ok' });
     expect(written['softcredito-adapter']).toMatchObject({ status: 'ok' });
     expect(written['notification-service']).toMatchObject({ status: 'ok' });
     expect(written['pdf-generator']).toMatchObject({ status: 'ok' });
+    expect(written['underwriting-service']).toMatchObject({ status: 'ok' });
+    expect(written['registry-service']).toMatchObject({ status: 'ok' });
 
     expect(mockAdd).toHaveBeenCalledTimes(1);
     expect(mockAdd).toHaveBeenCalledWith(
@@ -136,7 +132,7 @@ describe('systemHealthCheck', () => {
     expect(services).toEqual(['ml-service', 'pdf-generator']);
   });
 
-  it('still writes a full report — all five services down — when every dependency fails', async () => {
+  it('still writes a full report — all seven services down — when every dependency fails', async () => {
     mockFetch.mockRejectedValue(new Error('network unreachable'));
 
     await run();
@@ -145,6 +141,60 @@ describe('systemHealthCheck', () => {
     for (const name of Object.keys(SERVICE_URLS)) {
       expect(written[name]).toMatchObject({ status: 'down', error: 'network unreachable' });
     }
-    expect(mockAdd).toHaveBeenCalledTimes(5);
+    expect(mockAdd).toHaveBeenCalledTimes(7);
+  });
+
+  // Launch checklist v1.8 D2: the two services the product cannot transact
+  // without were monitored nowhere.
+  it('probes underwriting-service and registry-service, and a down one raises a critical incident', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url === `${SERVICE_URLS['registry-service']}/health`) throw new Error('ECONNREFUSED');
+      return { ok: true, json: async () => ({ status: 'ok' }) };
+    });
+
+    await run();
+
+    const urls = mockFetch.mock.calls.map((c) => c[0]);
+    expect(urls).toContain(`${SERVICE_URLS['underwriting-service']}/health`);
+    expect(urls).toContain(`${SERVICE_URLS['registry-service']}/health`);
+    const written = mockSet.mock.calls[0]?.[0] as Record<string, WrittenReading>;
+    expect(written['underwriting-service']).toMatchObject({ status: 'ok' });
+    expect(written['registry-service']).toMatchObject({ status: 'down', error: 'ECONNREFUSED' });
+    expect(mockAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ service: 'registry-service', severity: 'critical' })
+    );
+  });
+
+  it('records an unset service URL as unconfigured — no probe, no incident — and still checks the rest', async () => {
+    // REGISTRY_SERVICE_URL is the one service URL deploy.yml still sources from
+    // a secret that may be empty. Probing "undefined/health" would page every
+    // 5 minutes for a deployment gap, not an outage.
+    delete process.env['REGISTRY_SERVICE_URL'];
+    mockFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ status: 'ok' }) }));
+
+    await run();
+
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+    expect(mockFetch.mock.calls.map((c) => String(c[0]))).not.toContainEqual(
+      expect.stringContaining('undefined')
+    );
+    const written = mockSet.mock.calls[0]?.[0] as Record<string, WrittenReading>;
+    expect(written['registry-service']).toMatchObject({
+      status: 'unconfigured',
+      error: 'REGISTRY_SERVICE_URL not set',
+    });
+    expect(written['underwriting-service']).toMatchObject({ status: 'ok' });
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe('systemHealthCheck wiring (index.ts) — launch checklist v1.8 D2', () => {
+  it('index.ts deploys this module via re-export, not its own inline copy', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../index.ts'), 'utf8');
+
+    expect(src).toMatch(/export\s*\{\s*systemHealthCheck\s*\}\s*from\s*'\.\/scheduled\/systemHealthCheck'/);
+    // The inline copy that shadowed this module probed only payment-server and
+    // ml-service; it must not come back.
+    expect(src).not.toMatch(/export const systemHealthCheck = onSchedule/);
   });
 });
