@@ -1,5 +1,7 @@
 # Session handoff — production readiness (2026-10-13)
 
+Paste-ready kickoff prompt for the next session: `docs/NEXT_SESSION_PROMPT.md`.
+
 Written at the end of a Claude Code session so the next session (on a different
 Claude account, same folder `/Volumes/PortableSSD/Suena/Funpay`) can continue
 without the conversation history. Everything stated here was checked
@@ -25,7 +27,7 @@ that time could have changed (CI state, open PRs, production health).
     That doc is historical and still lists two deleted `tests/` suites; this is known and harmless.
   - `docs/LAUNCH_CHECKLIST_v1.8.md`: D2, D3 (Lighthouse CI job) and D4 were closed in code.
 
-### In progress: branch `hardening/launch-followups` (pushed; see PR below)
+### In progress: branch `hardening/launch-followups` → PR #636 (open, not merged)
 This branch is based on `main` and merges six reviewed follow-up branches.
 
 | Branch | What | Status |
@@ -44,7 +46,7 @@ migrations 49/49. The Firestore rules emulator suite passed on the remittance br
 (181) and runs in CI as a hard gate.
 
 ## 2. Next steps, in order
-1. Check CI on the `hardening/launch-followups` PR. If it is green, merge it to `main`.
+1. Check CI on PR #636 (`hardening/launch-followups`). If it is green, merge it to `main`.
    **Merging to `main` deploys to production** (`deploy.yml` on push). Then dispatch
    `verify-production-live.yml` and confirm it passes.
 2. Finish **lighthouse-perf** (see the table). Do not change the visual design.
