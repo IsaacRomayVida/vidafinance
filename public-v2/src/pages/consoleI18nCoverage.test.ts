@@ -26,6 +26,9 @@ const CONSOLE_PAGES = [
   'src/pages/ReviewQueue.tsx',
   'src/pages/ReviewDetail.tsx',
   'src/pages/PortfolioPage.tsx',
+  'src/pages/PayrollRemittances.tsx',
+  'src/components/ops/RemittanceRecordDialog.tsx',
+  'src/components/ops/RemittanceVoidDialog.tsx',
 ];
 
 /**

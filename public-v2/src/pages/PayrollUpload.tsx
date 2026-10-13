@@ -5,6 +5,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { formatCents } from '../lib/money';
 
 type PayrollRow = {
   employeeId: string;
@@ -43,10 +44,6 @@ function isKnownRowStatus(status: string | undefined): status is RowStatus {
  */
 const REMITTANCE_STATUSES = ['expected', 'partial', 'received', 'overpaid'] as const;
 type Remittance = { expectedCents: number; receivedCents: number; status: string };
-
-function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const REQUIRED_HEADERS = ['employeeId', 'grossSalary', 'netSalary', 'payPeriod'];

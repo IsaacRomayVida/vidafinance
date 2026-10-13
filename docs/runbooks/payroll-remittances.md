@@ -265,6 +265,29 @@ node $BACKFILL --allow-production --apply
 node $BACKFILL --allow-production            # should now report 0 to create
 ```
 
+## Ops screen: `/ops/remittances`
+
+`public-v2/src/pages/PayrollRemittances.tsx`, under the ops route guard
+(`ops`, `admin`, `super_admin`) and listed in the ops navigation as "Remesas".
+It only talks to the three callables above; it never writes to Firestore. The
+one direct read is `employers`, to show company names instead of ids (the id
+is shown if that read fails).
+
+- **List** — `listPayrollRemittances`, outstanding by default, with "Todas"
+  and "Solo vencidas" filters. Totals are the server's `totals` block. Each
+  row shows expected / received / outstanding, the status, the aging pill
+  (peach up to 15 days overdue, red beyond) and every receipt; voided receipts
+  stay visible, struck through, with the reason.
+- **Registrar transferencia** — amount in pesos (converted to integer
+  centavos from the typed digits, never through a float), date, bank
+  reference. The client mirrors the server checks (real calendar date, not
+  after today in America/Mexico_City, reference 1–100 characters) and the
+  server remains the authority. A `bank-reference-in-other-batch` refusal
+  names the other batch and offers a resend with `sharedTransfer: true`;
+  `bank-reference-in-batch` offers nothing.
+- **Anular** — two steps: a required reason (3–500 characters), then an
+  explicit confirmation. Nothing is sent before the second step.
+
 ## Correcting a mistake
 
 - Wrong amount, date, reference or batch on a receipt: `voidPayrollRemittanceReceipt` with a
