@@ -205,16 +205,21 @@ only as a **shell variable** (`TARGET_URL=… npm run load-test:smoke`). A targe
 is no preflight; `target.js` applies the same rules inside k6's init stage.
 
 **Production's Firebase identifiers are refused too, whatever `TARGET_URL` says.**
-`FIREBASE_PROJECT_ID=vida-finance` (or any id containing `prod`), a `FIREBASE_APP_ID` of project
-number `447766605132`, or production's Web API key in `FIREBASE_API_KEY` stop the run at init:
+`FIREBASE_PROJECT_ID=vida-finance` (or the project number `447766605132`, which Google accepts in
+place of the id, or any id containing `prod`), a `FIREBASE_APP_ID` of project number
+`447766605132`, or production's Web API key in `FIREBASE_API_KEY` stop the run at init:
 always for the pool sign-in and for the App Check debug-token exchange, and for any run whose
 target is not production. `TARGET_URL` only says where `requestLoan` is called; those three say
 which project the pool's passwords and the debug token are sent to. No flag overrides it. The
 signed-off production smoke (below) uses `APP_CHECK_TOKEN` + `AUTH_TOKEN` and none of the three.
 
 The setup step now **aborts** (it used to "proceed anyway") if `/api/health` is not 200.
-Results land in `tests/load/results/<date>-<label>-<profile>-report.md` (committable) and
-`…-summary.json` (gitignored raw output). The label is in the file name *and* the report header.
+Results land in `tests/load/results/<date>T<time>Z-<label>-<profile>-report.md` (committable) and
+`…-summary.json` (gitignored raw output). The label is in the file name *and* the report header;
+the time (UTC) is there so that a second run on the same day never replaces the first one's files.
+An emulator target is written `127.0.0.1`, `localhost` or `[::1]`; any other raw address
+(`0.0.0.0`, `127.1`, a LAN IP) is refused, and the production project is refused wherever it
+appears in an emulator URL's path.
 Pinned by `node --test tests/load/target.test.mjs` (CI hard gate).
 
 **Is there a staging environment?** Not a usable one, as of 2026-10-13:
@@ -279,7 +284,13 @@ until each holds 50, then the next 50 employers start. `--count 200` is 50 emplo
 This was not true before 2026-10-13: the assignment was `index % employerCount` with the employer
 count derived from `--count`, so seeding 200 and then 12,600 moved almost every member to another
 employer under loans that still named the old one. The `--employers` flag, which could do the same
-by hand, was removed and is refused with that explanation. A *smaller* `--count` deletes nothing
+by hand, was removed and is refused with that explanation. The layout itself changed with it
+(`--count 200` was 4 employers of 50), so **a pool seeded by the code from before 2026-10-13 must
+be torn down before it is seeded again**: seeding the new layout over it moves its members once,
+under whatever loans are open. No such pool is known to exist — nothing was ever seeded outside
+the emulator — but check `--teardown --dry-run` on a target you did not seed yourself. Two seeds
+must not run against one target at the same time (the "never lower a cap" check reads and then
+writes; it is not a transaction). A *smaller* `--count` deletes nothing
 (the members above it keep their accounts and documents) and never lowers a slot cap; only teardown
 removes anything.
 
@@ -419,7 +430,7 @@ real project** — the smoke run in step 5 is its first real test.
 | `APP_CHECK_DEBUG_TOKEN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` | Debug token and what is needed to exchange it. Production's project id and app id are refused. |
 | `APP_CHECK_TOKEN` | Alternative: an already-exchanged token. Expires; smoke profile only. |
 | `FIREBASE_AUTH_EMULATOR_HOST` | Emulator only: sign in against the Auth emulator instead of Google. |
-| `PROFILE` | `smoke` or `full` (default). |
+| `PROFILE` | `smoke` or `full` (default), lower case. Any other value is refused at init (it used to run the full two hours). |
 | `AUTH_TOKEN` | Legacy, no pool: one uid, so one accepted request and then refusals. |
 
 #### Order of operations
@@ -550,6 +561,22 @@ showed three things that were not true, and they were fixed before runs 2 and 3:
   outside the `full` profile, and an emulator report says in its own text that it closes nothing.
 - Failed requests other than 429 / timeout / 5xx were not counted anywhere. The report now has
   buckets for 401, `FAILED_PRECONDITION`, `INVALID_ARGUMENT`, "other" and failed pool sign-ins.
+
+**Zero failures is not a stable property of a smoke run.** At ~90 iterations one failed request
+is over the 1% threshold, and k6 then exits 99. A review re-run the same day (same setup, ports
+5031 / 8231 / 9139, load average ~150) measured 89 iterations, 88 accepted and 1 failed: the Auth
+emulator reset one sign-in connection (status 0), which the script counted as one sign-in failure
+and one HTTP 401. Since then a sign-in that gets no HTTP answer is sent once more
+(`sendWithOneTransportRetry`); that retry has unit tests only and has not been seen to fire in a
+run. The committed report above is run 3; a new run writes a time-stamped file and leaves it alone.
+
+Run 4, after those changes (same setup, ports 5041 / 8241 / 9141, via `npm run load-test:smoke`,
+load average 48 at the start and 157 at the end): 90 iterations, 90 accepted, 0 failed, no sign-in
+retried, p50 61 ms / p95 115 ms / max 2,286 ms; teardown removed 90 loans, 90 `review_queue` and
+180 `audit_log` rows. Report: `tests/load/results/2026-10-13T140725Z-emulator-smoke-report.md`.
+Under k6 the new refusals each stopped at init (exit 107, no request sent): `PROFILE=Full`,
+`FIREBASE_PROJECT_ID=447766605132`, a `0.0.0.0` target declared as staging, and an emulator URL
+with `%76ida-finance` in its path.
 
 **It proves:** the script loads and runs under a current k6; the seed, the k6 side and
 `requestLoan` agree on ids, amounts, sign-in and the callable protocol; one uid gives one accepted
@@ -688,7 +715,7 @@ check the Cloud Monitoring request graph for the chosen night first.
 | Real-user impact | any alert from `docs/runbooks/alerting-runbook.md`, or a support report |
 | Firestore writes/sec | > 80% of quota (B5) |
 
-After the run: commit `tests/load/results/<date>-<label>-<profile>-report.md`; only a
+After the run: commit `tests/load/results/<date>T<time>Z-<label>-<profile>-report.md`; only a
 `production` or `staging` report at the `full` profile can close B8.
 
 ---

@@ -46,10 +46,45 @@ const PRODUCTION_HOST_PATTERNS = [
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
-/** Same rule as the seed (seed/guard.mjs): the exact id, and anything that calls itself production. */
+/** Quotes and whitespace an operator's shell or .env file may have left round a value. */
+function bare(value) {
+  return String(value ?? '').replace(/^[\s'"`]+|[\s'"`]+$/g, '');
+}
+
+/**
+ * Same rule as the seed (seed/guard.mjs): the exact id, anything that calls
+ * itself production — and the project NUMBER. Google's REST paths accept the
+ * number wherever they accept the id (`/v1/projects/447766605132/apps/…` is the
+ * production project), so FIREBASE_PROJECT_ID=<number> addresses production too.
+ */
 function isProductionProjectId(id) {
-  const normalised = String(id ?? '').trim().toLowerCase();
-  return normalised === PRODUCTION_PROJECT_ID || /prod/.test(normalised);
+  const normalised = bare(id).toLowerCase();
+  return normalised === PRODUCTION_PROJECT_ID || normalised === PRODUCTION_PROJECT_NUMBER || /prod/.test(normalised);
+}
+
+/**
+ * A host written as bare numbers — 0.0.0.0, 127.1, 2130706433, 0x7f.0.0.1 — or
+ * as an IPv6 literal. Several of those ARE this machine, but only the three
+ * LOCAL_HOSTS spellings get the emulator checks, so none of the others may pass
+ * as "staging" on the operator's word.
+ */
+function isRawAddress(host) {
+  return /^\[.*\]$/.test(host) || /^(0x[0-9a-f]+|\d+)(\.(0x[0-9a-f]+|\d+))*$/.test(host);
+}
+
+/** Path segments of a URL, percent-decoded, without the empty, `.` and `..` ones. */
+function pathSegments(url) {
+  const path = /^https?:\/\/[^/?#]*([^?#]*)/i.exec(url);
+  return (path ? path[1] : '')
+    .split('/')
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .filter((segment) => segment && segment !== '.' && segment !== '..');
 }
 
 /**
@@ -65,13 +100,14 @@ export function productionIdentifiers(env) {
   const found = [];
   const projectId = env.FIREBASE_PROJECT_ID || '';
   if (projectId && isProductionProjectId(projectId)) {
-    found.push(`FIREBASE_PROJECT_ID=${projectId} is the PRODUCTION project (or names itself production)`);
+    found.push(`FIREBASE_PROJECT_ID=${projectId} is the PRODUCTION project (its id or its project number, or it names itself production)`);
   }
   // 1:<project number>:web:<hash>
-  if (String(env.FIREBASE_APP_ID || '').split(':')[1] === PRODUCTION_PROJECT_NUMBER) {
+  if (bare(env.FIREBASE_APP_ID).split(':')[1] === PRODUCTION_PROJECT_NUMBER) {
     found.push(`FIREBASE_APP_ID belongs to project number ${PRODUCTION_PROJECT_NUMBER}, the PRODUCTION project`);
   }
-  if (String(env.FIREBASE_API_KEY || '').trim() === PRODUCTION_WEB_API_KEY) {
+  // Contained, not equal: a quoted or padded copy of the key is still that key.
+  if (String(env.FIREBASE_API_KEY || '').includes(PRODUCTION_WEB_API_KEY)) {
     found.push("FIREBASE_API_KEY is the PRODUCTION project's Web API key");
   }
   return found;
@@ -119,11 +155,13 @@ export function resolveTarget(env) {
   if (LOCAL_HOSTS.includes(host)) {
     // http://127.0.0.1:<port>/<project>/<region>. An emulator started under the
     // real project id serves local functions that talk to PRODUCTION Firestore
-    // and Auth for every emulator that is not running.
-    const project = /^https?:\/\/[^/?#]+\/([^/?#]+)/i.exec(url);
-    if (project && isProductionProjectId(project[1])) {
+    // and Auth for every emulator that is not running. Every segment is read,
+    // decoded: `//vida-finance`, `/x/../vida-finance` and `/%76ida-finance` all
+    // reach the same emulator route as `/vida-finance`.
+    const project = pathSegments(url).find(isProductionProjectId);
+    if (project) {
       throw new Error(
-        `Refusing: the emulator URL names the project "${project[1]}", which is PRODUCTION. ` +
+        `Refusing: the emulator URL names the project "${project}", which is PRODUCTION. ` +
           'Start the emulators with a demo-* project (--project demo-vida-load); a demo-* project can never reach Google.'
       );
     }
@@ -140,6 +178,13 @@ export function resolveTarget(env) {
     return { url, label: 'production' };
   }
 
+  if (isRawAddress(host)) {
+    throw new Error(
+      `Refusing: ${host} is a raw address. The emulator is addressed as 127.0.0.1, localhost or [::1] ` +
+        '(0.0.0.0, 127.1 and the like are this machine too, but skip the emulator checks); a deployed target is addressed by its host name.'
+    );
+  }
+
   // Any other remote host: no staging URL is recorded in-tree, so we cannot
   // tell staging from something else. Make the operator say which it is.
   if (env.LOAD_TEST_TARGET_ENV !== 'staging') {
@@ -151,6 +196,25 @@ export function resolveTarget(env) {
     );
   }
   return { url, label: 'staging' };
+}
+
+export const PROFILES = ['full', 'smoke'];
+
+/**
+ * The profile a run uses: `full` when PROFILE is unset, otherwise exactly
+ * `full` or `smoke`. The script used to run the two-hour full ramp for ANY
+ * value that was not `smoke` — `PROFILE=Smoke` or `PROFILE=ramp` — while its
+ * report, which compared against 'full', said the 2x stage was never reached.
+ *
+ * @param {Record<string, string|undefined>} env
+ * @returns {'full'|'smoke'}
+ */
+export function resolveProfile(env) {
+  const profile = env.PROFILE || 'full';
+  if (!PROFILES.includes(profile)) {
+    throw new Error(`Unknown PROFILE=${profile}. Use PROFILE=smoke (5 minutes) or PROFILE=full (2 hours, the default) — lower case.`);
+  }
+  return profile;
 }
 
 /**

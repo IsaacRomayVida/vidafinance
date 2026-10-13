@@ -489,8 +489,16 @@ export function createAppCheckTokenSource(plan, { post, now, warn = () => {}, ab
   let refreshAt = 0;
   let failures = 0;
   let retryAt = 0;
+  let aborted = false;
+  // k6's abort throws, so nothing runs after it there. An injected abort that
+  // returns must still be called once, and the endpoint left alone afterwards.
+  const stop = (message) => {
+    aborted = true;
+    abort(message);
+  };
 
   return function appCheckToken() {
+    if (aborted) return token;
     const t = now();
     if (token && t < refreshAt) return token;
     if (t < retryAt) return token; // backing off
@@ -519,16 +527,36 @@ export function createAppCheckTokenSource(plan, { post, now, warn = () => {}, ab
     warn(`[appcheck] debug-token exchange failed: status=${status}; next attempt in ${Math.round(wait / 1000)}s`);
     if (!token) {
       if ([400, 401, 403, 404].includes(status)) {
-        abort(
+        stop(
           `App Check debug-token exchange was refused (HTTP ${status}). Waiting will not fix a wrong debug token, ` +
             'app id, API key or project — check them against docs/runbooks/scaling.md § H2.'
         );
       } else if (failures >= APP_CHECK_GIVE_UP_AFTER) {
-        abort(`App Check debug-token exchange failed ${failures} times in a row (last HTTP ${status}); no token to send.`);
+        stop(`App Check debug-token exchange failed ${failures} times in a row (last HTTP ${status}); no token to send.`);
       }
     }
     return token;
   };
+}
+
+/**
+ * One request, sent again ONCE when the first attempt got no HTTP answer at
+ * all (k6 reports status 0: connection reset, refused, timed out). A sign-in
+ * is safe to repeat, and at smoke scale (~90 iterations) a single reset
+ * connection is already over the 1% error threshold — a reviewer's re-run on
+ * 2026-10-13 failed on exactly one Auth-emulator reset. Any HTTP status,
+ * including 4xx and 5xx, is an answer and is returned as it is.
+ *
+ * @template {{ status: number }} R
+ * @param {() => R} send
+ * @param {(first: R) => void} [onRetry]
+ * @returns {R}
+ */
+export function sendWithOneTransportRetry(send, onRetry = () => {}) {
+  const first = send();
+  if (first.status !== 0) return first;
+  onRetry(first);
+  return send();
 }
 
 /**

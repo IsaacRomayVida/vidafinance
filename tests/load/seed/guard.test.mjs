@@ -9,6 +9,7 @@ import {
   EMULATOR_DEFAULT_PROJECT,
   EMULATOR_PASSWORD,
   PRODUCTION_PROJECT_IDS,
+  PRODUCTION_PROJECT_NUMBER,
   SeedRefusal,
   functionsProviderLeaks,
   isFunctionsEnvFile,
@@ -38,6 +39,12 @@ test('isProductionProjectId', () => {
   for (const id of ['vida-finance-staging', 'demo-vida-load', 'funpay-stg', '', null, undefined]) {
     assert.equal(isProductionProjectId(id), false, String(id));
   }
+  // the project number names the same project to Google, and is the one in the web config
+  assert.ok(repo('public-v2/src/lib/firebase.ts').includes(`messagingSenderId: '${PRODUCTION_PROJECT_NUMBER}'`));
+  assert.equal(isProductionProjectId(PRODUCTION_PROJECT_NUMBER), true);
+  assert.equal(isProductionProjectId(` ${PRODUCTION_PROJECT_NUMBER} `), true);
+  assert.equal(isProductionProjectId(`9${PRODUCTION_PROJECT_NUMBER}`), false);
+  assert.throws(() => target(PRODUCTION_PROJECT_NUMBER, EMULATOR), /Refusing/);
 });
 
 test('default is the emulator, with a demo-* project', () => {

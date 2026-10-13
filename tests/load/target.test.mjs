@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   resolveTarget,
+  resolveProfile,
   preflight,
   productionIdentifiers,
   PRODUCTION_PROJECT_ID,
@@ -93,6 +94,39 @@ test('productionIdentifiers names each production value found in the Firebase va
   assert.deepEqual(productionIdentifiers({ FIREBASE_APP_ID: `1:9${PRODUCTION_PROJECT_NUMBER}:web:abc` }), []);
 });
 
+test('FIREBASE_PROJECT_ID set to the production project NUMBER is production (Google takes the number in place of the id)', () => {
+  // /v1/projects/447766605132/apps/…:exchangeDebugToken is the production project
+  for (const value of [PRODUCTION_PROJECT_NUMBER, ` ${PRODUCTION_PROJECT_NUMBER} `, `"${PRODUCTION_PROJECT_NUMBER}"`]) {
+    const found = productionIdentifiers({ FIREBASE_PROJECT_ID: value, FIREBASE_APP_ID: '1:1:web:x', FIREBASE_API_KEY: 'k' });
+    assert.equal(found.length, 1, value);
+    assert.match(found[0], /^FIREBASE_PROJECT_ID=.*447766605132.* is the PRODUCTION project/);
+  }
+  // some other project's number is not
+  assert.deepEqual(productionIdentifiers({ FIREBASE_PROJECT_ID: `9${PRODUCTION_PROJECT_NUMBER}` }), []);
+  assert.deepEqual(productionIdentifiers({ FIREBASE_PROJECT_ID: '123456789012' }), []);
+  // and an emulator started under the number is refused like one started under the id
+  assert.throws(() => resolveTarget({ TARGET_URL: `http://127.0.0.1:5001/${PRODUCTION_PROJECT_NUMBER}/us-central1` }), /PRODUCTION/);
+});
+
+test('a quoted or padded copy of a production value is still that value', () => {
+  assert.equal(productionIdentifiers({ FIREBASE_API_KEY: `"${PRODUCTION_WEB_API_KEY}"` }).length, 1);
+  assert.equal(productionIdentifiers({ FIREBASE_API_KEY: ` '${PRODUCTION_WEB_API_KEY}' ` }).length, 1);
+  assert.equal(productionIdentifiers({ FIREBASE_PROJECT_ID: `'${PRODUCTION_PROJECT_ID}'` }).length, 1);
+  assert.equal(productionIdentifiers({ FIREBASE_APP_ID: `"1:${PRODUCTION_PROJECT_NUMBER}:web:abc"` }).length, 1);
+  assert.deepEqual(productionIdentifiers({ FIREBASE_API_KEY: '"AIzaSyNotTheProductionKey"', FIREBASE_PROJECT_ID: '"vida-staging"' }), []);
+});
+
+test('PROFILE is smoke, full, or unset — nothing else runs', () => {
+  assert.equal(resolveProfile({}), 'full');
+  assert.equal(resolveProfile({ PROFILE: '' }), 'full');
+  assert.equal(resolveProfile({ PROFILE: 'full' }), 'full');
+  assert.equal(resolveProfile({ PROFILE: 'smoke' }), 'smoke');
+  // these used to run the two-hour full ramp while the report called it something else
+  for (const PROFILE of ['Full', 'Smoke', 'SMOKE', 'ramp', 'smoke ', 'quick']) {
+    assert.throws(() => resolveProfile({ PROFILE }), /Unknown PROFILE=.*PROFILE=smoke .* or PROFILE=full/, PROFILE);
+  }
+});
+
 test('an emulator URL that names the production project is refused (its functions would reach production data)', () => {
   for (const url of [
     'http://127.0.0.1:5001/vida-finance/us-central1',
@@ -104,6 +138,40 @@ test('an emulator URL that names the production project is refused (its function
   }
   assert.equal(resolveTarget({ TARGET_URL: 'http://127.0.0.1:5001/demo-vida-load/us-central1' }).label, 'emulator');
   assert.equal(resolveTarget({ TARGET_URL: 'http://127.0.0.1:5001' }).label, 'emulator');
+});
+
+test('the production project is found in an emulator URL however the path is written', () => {
+  for (const url of [
+    'http://127.0.0.1:5001//vida-finance/us-central1', // empty first segment
+    'http://127.0.0.1:5001/x/../vida-finance/us-central1', // dot segments
+    'http://127.0.0.1:5001/./vida-finance/us-central1',
+    'http://127.0.0.1:5001/%76ida-finance/us-central1', // percent-encoded
+    'http://127.0.0.1:5001/%56IDA-FINANCE/us-central1',
+    'http://localhost:5001/demo-x/../funpay-prod/us-central1',
+  ]) {
+    assert.throws(() => resolveTarget({ TARGET_URL: url }), /emulator URL names the project .*PRODUCTION/, url);
+  }
+  // a malformed escape does not crash the guard, and an honest path still passes
+  assert.equal(resolveTarget({ TARGET_URL: 'http://127.0.0.1:5001/demo-%zz/us-central1' }).label, 'emulator');
+  assert.equal(resolveTarget({ TARGET_URL: 'http://127.0.0.1:5001//demo-vida-load/us-central1' }).label, 'emulator');
+});
+
+test('a raw address other than 127.0.0.1 / [::1] is refused: it may be this machine, without the emulator checks', () => {
+  for (const url of [
+    'http://0.0.0.0:5001/vida-finance/us-central1',
+    'http://127.1:5001/vida-finance/us-central1',
+    'http://127.0.0.2:5001/demo-vida-load/us-central1',
+    'http://2130706433:5001/vida-finance/us-central1',
+    'http://0x7f.0.0.1:5001/vida-finance/us-central1',
+    'http://[::ffff:127.0.0.1]:5001/vida-finance/us-central1',
+    'https://203.0.113.7/us-central1',
+  ]) {
+    assert.throws(() => resolveTarget({ TARGET_URL: url }), /is a raw address/, url);
+    assert.throws(() => resolveTarget({ TARGET_URL: url, LOAD_TEST_TARGET_ENV: 'staging' }), /is a raw address/, url);
+  }
+  // host names made of hex-looking letters are host names
+  assert.equal(resolveTarget({ TARGET_URL: 'https://abc.de/x', LOAD_TEST_TARGET_ENV: 'staging' }).label, 'staging');
+  assert.equal(resolveTarget({ TARGET_URL: 'https://us-central1-123456.cloudfunctions.net', LOAD_TEST_TARGET_ENV: 'staging' }).label, 'staging');
 });
 
 test('a Cloud Run host of another project is unknown, not production — and says why to be careful', () => {

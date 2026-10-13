@@ -48,7 +48,8 @@ import { check, sleep, group } from 'k6';
 import exec from 'k6/execution';
 import { RAMP_STAGES, SMOKE_STAGES, THRESHOLDS } from './config.js';
 import { generateLoanApplication } from './helpers/synthetic-data.js';
-import { resolveTarget } from './target.js';
+import { resolveProfile, resolveTarget } from './target.js';
+import { resultsBaseName, stageLatencyLines } from './helpers/report.js';
 import {
   ACCEPTED_INITIAL_STATUSES,
   appCheckPlan,
@@ -57,6 +58,7 @@ import {
   poolConfigFromEnv,
   poolIndexFor,
   poolSignInUrl,
+  sendWithOneTransportRetry,
 } from './seed/pool.js';
 import {
   requestLatency,
@@ -88,7 +90,9 @@ import {
 // unsigned-off production target. TARGET.label names every results file.
 const TARGET = resolveTarget(__ENV);
 const STAGING_URL = TARGET.url;
-const PROFILE = __ENV.PROFILE || 'full';
+// Throws at init on anything but 'smoke' or 'full' (unset = full): the stages
+// below and the report's verdict lines must read the same profile.
+const PROFILE = resolveProfile(__ENV);
 
 const stages = PROFILE === 'smoke' ? SMOKE_STAGES : RAMP_STAGES;
 
@@ -169,10 +173,15 @@ function getAuthHeaders(email) {
 
   // Each member is used once, so there is nothing to cache: one sign-in per
   // iteration, tagged `auth` so it stays out of the requestLoan thresholds.
-  const signInRes = http.post(
-    SIGN_IN_URL,
-    JSON.stringify({ email, password: LOAD_TEST_PASSWORD, returnSecureToken: true }),
-    { headers: { 'Content-Type': 'application/json' }, tags: { type: 'auth', name: 'auth-sign-in' } }
+  // A connection that drops before any HTTP answer is tried once more.
+  const signInRes = sendWithOneTransportRetry(
+    () =>
+      http.post(
+        SIGN_IN_URL,
+        JSON.stringify({ email, password: LOAD_TEST_PASSWORD, returnSecureToken: true }),
+        { headers: { 'Content-Type': 'application/json' }, tags: { type: 'auth', name: 'auth-sign-in' } }
+      ),
+    (first) => console.warn(`[auth] sign-in for ${email} got no answer (${first.error || 'status 0'}); trying once more`)
   );
   if (signInRes.status !== 200) {
     // Without a token the request below is a 401 — which is what gets counted.
@@ -459,28 +468,9 @@ export function handleSummary(data) {
   lines.push('└──────────────────────────────────────────────────────────────────┘');
   lines.push('');
 
-  // Per-stage latencies
-  const stageMetrics = [
-    ['Validation', data.metrics['stage_latency_validation']],
-    ['Firestore Write', data.metrics['stage_latency_firestore_write']],
-    ['Queue Dispatch', data.metrics['stage_latency_queue_dispatch']],
-    ['ML Scoring', data.metrics['stage_latency_ml_scoring']],
-  ];
-
+  // Per-stage latencies — or the plain statement that none were measured.
   lines.push('┌─ Per-Stage Latency (P95) ────────────────────────────────────────┐');
-  let stagesReported = 0;
-  for (const [name, metric] of stageMetrics) {
-    if (metric && metric.values && metric.values.count > 0) {
-      stagesReported += 1;
-      const p95 = (metric.values['p(95)'] || 0).toFixed(0);
-      const p50 = (metric.values['p(50)'] || 0).toFixed(0);
-      lines.push(`│  ${name.padEnd(20)} P50: ${p50.padStart(6)}ms  P95: ${p95.padStart(6)}ms`);
-    }
-  }
-  if (stagesReported === 0) {
-    lines.push('│  not instrumented — the target sends no X-Stage-*-Ms headers,');
-    lines.push('│  so only the end-to-end latency above was measured');
-  }
+  lines.push(...stageLatencyLines(data.metrics));
   lines.push('└──────────────────────────────────────────────────────────────────┘');
   lines.push('');
 
@@ -519,8 +509,8 @@ export function handleSummary(data) {
   // Named by target so an emulator run can never be mistaken for a production
   // one. The .md report is the committable artifact (*.json / *.txt in
   // results/ are gitignored as raw output).
-  const stamp = summary.timestamp.slice(0, 10);
-  const base = `tests/load/results/${stamp}-${TARGET.label}-${PROFILE}`;
+  // The time of day is in the name too, so a second run never replaces a first.
+  const base = resultsBaseName(summary.timestamp, TARGET.label, PROFILE);
   return {
     stdout: textReport,
     [`${base}-summary.json`]: JSON.stringify(summary, null, 2),

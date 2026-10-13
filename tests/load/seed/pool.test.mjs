@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 
 import { RAMP_STAGES, SMOKE_STAGES } from '../config.js';
 import { PRODUCTION_PROJECT_ID, PRODUCTION_PROJECT_NUMBER, PRODUCTION_WEB_API_KEY, productionIdentifiers } from '../target.js';
+import { resultsBaseName, stageLatencyLines } from '../helpers/report.js';
 import * as pool from './pool.js';
 
 const repo = (path) => readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
@@ -320,6 +321,10 @@ const PRODUCTION_VALUES = [
   ['FIREBASE_PROJECT_ID', PRODUCTION_PROJECT_ID, /FIREBASE_PROJECT_ID=vida-finance is the PRODUCTION project/],
   ['FIREBASE_PROJECT_ID', ' Vida-Finance ', /PRODUCTION project/],
   ['FIREBASE_PROJECT_ID', 'vida-prod-eu', /PRODUCTION project/],
+  // Google's REST paths take the project number in place of the id
+  ['FIREBASE_PROJECT_ID', PRODUCTION_PROJECT_NUMBER, /FIREBASE_PROJECT_ID=447766605132 is the PRODUCTION project/],
+  ['FIREBASE_PROJECT_ID', `"${PRODUCTION_PROJECT_ID}"`, /PRODUCTION project/],
+  ['FIREBASE_API_KEY', `"${PRODUCTION_WEB_API_KEY}"`, /FIREBASE_API_KEY is the PRODUCTION project's Web API key/],
   ['FIREBASE_APP_ID', `1:${PRODUCTION_PROJECT_NUMBER}:web:7d747366eb91b2452cb3e9`, /FIREBASE_APP_ID belongs to project number 447766605132/],
   ['FIREBASE_API_KEY', PRODUCTION_WEB_API_KEY, /FIREBASE_API_KEY is the PRODUCTION project's Web API key/],
 ];
@@ -463,6 +468,13 @@ test('an exchange that cannot heal stops the run instead of sending 401s', () =>
   h.token();
   assert.equal(h.posts.length, pool.APP_CHECK_GIVE_UP_AFTER);
   assert.match(h.aborts[0], /failed 5 times in a row \(last HTTP 503\)/);
+  // k6's abort throws; an injected one that returns is still called once, and the endpoint is left alone
+  for (let i = 0; i < 1000; i++) {
+    h.t += 1000;
+    assert.equal(h.token(), '');
+  }
+  assert.equal(h.aborts.length, 1);
+  assert.equal(h.posts.length, pool.APP_CHECK_GIVE_UP_AFTER);
 
   // a thrown request and a 200 without a token are failures too, not crashes
   const broken = exchangeHarness([new Error('dial tcp'), { status: 200, body: 'not json' }, { status: 200, body: '{}' }, OK('ok')]);
@@ -540,8 +552,9 @@ test('the report prints no stage latency the target did not measure, and no verd
     assert.equal(adds.length, 1, `${trend} is added to exactly once`);
     assert.match(adds[0], /^parseInt\(res\.headers\['X-Stage-[A-Za-z]+-Ms'\], 10\)\)$/, trend);
   }
-  assert.match(script, /metric\.values\.count > 0/);
-  assert.match(script, /not instrumented — the target sends no X-Stage-\*-Ms headers/);
+  // the box is built by stageLatencyLines and by nothing else
+  assert.match(script, /lines\.push\('┌─ Per-Stage Latency \(P95\) ─+┐'\);\s+lines\.push\(\.\.\.stageLatencyLines\(data\.metrics\)\);/);
+  assert.doesNotMatch(script, /stage_latency_/);
   // nothing in functions/ sends those headers; if that changes, the config.js comment and the runbook are stale
   const functionsSrc = readdirSync(new URL('../../../functions/src/', import.meta.url), { recursive: true })
     .filter((name) => name.endsWith('.ts') && !name.includes('__tests__') && !name.endsWith('.test.ts'))
@@ -551,8 +564,76 @@ test('the report prints no stage latency the target did not measure, and no verd
 
   // the 2x line is a verdict only in the full profile; an emulator report says what it is
   assert.match(script, /const full = PROFILE === 'full';/);
+  // …and PROFILE can only be 'smoke' or 'full', so that line and the stages agree
+  assert.match(script, /const PROFILE = resolveProfile\(__ENV\);/);
+  assert.match(script, /const stages = PROFILE === 'smoke' \? SMOKE_STAGES : RAMP_STAGES;/);
+  assert.doesNotMatch(script, /__ENV\.PROFILE/);
   assert.match(script, /2x target without errors: {2}\$\{full \? \(errRate < 0\.05 \? '✓ PASS' : '✗ FAIL'\) : notReached\}/);
   assert.match(script, /if \(TARGET\.label === 'emulator'\) \{\s+lines\.push\('│ {2}EMULATOR run: this proves the script and the seeded pool work\.'\)/);
+});
+
+test('the stage box says "not instrumented" when no stage trend holds a sample, and prints only the stages that do', () => {
+  const NOT_INSTRUMENTED = [
+    '│  not instrumented — the target sends no X-Stage-*-Ms headers,',
+    '│  so only the end-to-end latency above was measured',
+  ];
+  // what every run so far has produced: the trends exist in k6's summary but are empty, or are absent
+  assert.deepEqual(stageLatencyLines({}), NOT_INSTRUMENTED);
+  assert.deepEqual(
+    stageLatencyLines({
+      stage_latency_validation: { values: { count: 0, 'p(50)': 0, 'p(95)': 0 } },
+      stage_latency_firestore_write: {},
+      request_latency_e2e: { values: { count: 91, 'p(50)': 43, 'p(95)': 97 } },
+    }),
+    NOT_INSTRUMENTED
+  );
+  // a target that does send the headers gets its figures, and no disclaimer
+  assert.deepEqual(
+    stageLatencyLines({
+      stage_latency_validation: { values: { count: 3, 'p(50)': 12.4, 'p(95)': 30.6 } },
+      stage_latency_ml_scoring: { values: { count: 0 } },
+    }),
+    ['│  Validation           P50:     12ms  P95:     31ms']
+  );
+});
+
+test('result files carry the time of day, so a second run on one day does not replace the first (or a committed report)', () => {
+  const first = resultsBaseName('2026-10-13T14:22:33.123Z', 'emulator', 'smoke');
+  assert.equal(first, 'tests/load/results/2026-10-13T142233Z-emulator-smoke');
+  assert.notEqual(resultsBaseName('2026-10-13T14:29:01.000Z', 'emulator', 'smoke'), first);
+  // the committed evidence of 2026-10-13 keeps its date-only name, which no run can produce any more
+  assert.ok(repo('tests/load/results/2026-10-13-emulator-smoke-report.md').includes('TARGET: EMULATOR'));
+  assert.notEqual(`${first}-report.md`, 'tests/load/results/2026-10-13-emulator-smoke-report.md');
+  assert.throws(() => resultsBaseName('yesterday', 'emulator', 'smoke'), /Not an ISO timestamp/);
+  const script = repo('tests/load/pipeline-load-test.js');
+  assert.match(script, /const base = resultsBaseName\(summary\.timestamp, TARGET\.label, PROFILE\);/);
+  assert.ok(repo('docs/runbooks/scaling.md').includes('tests/load/results/<date>T<time>Z-<label>-<profile>-report.md'));
+});
+
+test('a sign-in that got no HTTP answer is sent once more; any HTTP status is final', () => {
+  const run = (responses) => {
+    const sent = [];
+    const retried = [];
+    const res = pool.sendWithOneTransportRetry(
+      () => {
+        sent.push(1);
+        return responses.shift();
+      },
+      (first) => retried.push(first)
+    );
+    return { res, sends: sent.length, retried };
+  };
+  assert.deepEqual(run([{ status: 200, body: 'ok' }]), { res: { status: 200, body: 'ok' }, sends: 1, retried: [] });
+  // connection reset (k6: status 0), then an answer
+  const reset = { status: 0, error: 'read: connection reset by peer' };
+  assert.deepEqual(run([reset, { status: 200, body: 'ok' }]), { res: { status: 200, body: 'ok' }, sends: 2, retried: [reset] });
+  // once, not until it works
+  assert.deepEqual(run([reset, { status: 0 }, { status: 200 }]), { res: { status: 0 }, sends: 2, retried: [reset] });
+  // a wrong password or a server error is an answer
+  for (const status of [400, 401, 429, 500, 503]) assert.equal(run([{ status }, { status: 200 }]).sends, 1, String(status));
+
+  const script = repo('tests/load/pipeline-load-test.js');
+  assert.match(script, /const signInRes = sendWithOneTransportRetry\(\s+\(\) =>\s+http\.post\(\s+SIGN_IN_URL,/);
 });
 
 test('every failed request lands in exactly one named bucket, and failed sign-ins are counted', () => {

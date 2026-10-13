@@ -18,6 +18,8 @@ import { DEFAULT_POOL_SIZE, employerCountFor } from './pool.js';
  * (checklist B8) is a human decision with its own, hand-made fixture.
  */
 export const PRODUCTION_PROJECT_IDS = Object.freeze(['vida-finance']);
+/** Its project number (messagingSenderId in public-v2/src/lib/firebase.ts). Google accepts the number wherever it accepts the id. */
+export const PRODUCTION_PROJECT_NUMBER = '447766605132';
 export const EMULATOR_DEFAULT_PROJECT = 'demo-vida-load';
 export const MIN_PASSWORD_LENGTH = 16;
 /** Emulator only. A real project always needs LOAD_TEST_PASSWORD from the operator. */
@@ -34,7 +36,7 @@ function refuse(message) {
 export function isProductionProjectId(id) {
   const normalised = String(id ?? '').trim().toLowerCase();
   // The exact id, plus anything that calls itself production. Over-refusing costs a rename; under-refusing costs real borrowers.
-  return PRODUCTION_PROJECT_IDS.includes(normalised) || /prod/.test(normalised);
+  return PRODUCTION_PROJECT_IDS.includes(normalised) || normalised === PRODUCTION_PROJECT_NUMBER || /prod/.test(normalised);
 }
 
 /**
