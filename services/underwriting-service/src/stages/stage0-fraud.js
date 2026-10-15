@@ -130,8 +130,11 @@ async function runFraudGates(applicant, _priorResults, { logger } = {}) {
   const infonavitData = data.infonavit;
   if (infonavitData && !infonavitData.skipped) {
     const records = Array.isArray(infonavitData) ? infonavitData : [infonavitData];
+    // "closed" wins over a leftover balance: INFONAVIT's status is the
+    // authoritative field, and a closed credit has no payroll deduction.
     const activeRecords = records.filter(r =>
-      r.credit_status === "active" || r.balance > 0
+      r.credit_status !== "closed" &&
+      (r.credit_status === "active" || r.balance > 0)
     );
     if (activeRecords.length > 0) {
       // Not a rejection — just flag for LTI calculation in Stage 2.
