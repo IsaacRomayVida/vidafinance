@@ -1,4 +1,4 @@
-# Session handoff — production readiness (2026-10-13)
+# Session handoff — production readiness (updated 2026-10-15)
 
 Paste-ready kickoff prompt for the next session: `docs/NEXT_SESSION_PROMPT.md`.
 
@@ -32,7 +32,10 @@ that time could have changed (CI state, open PRs, production health).
   daily `remittanceOverdueCheck`, `public-v2` emulator wiring (dev builds only) and
   `scripts/seed-remittance-emulator.mjs`, the k6 emulator smoke run (90/90 accepted) and tighter
   load-target guards, board placeholders and English-chunk preload on the marketing pages.
-  Right after the deploy the three new `payrollRemittances` indexes were still `CREATING`.
+  The three new `payrollRemittances` indexes were `CREATING` right after the deploy and were all
+  `READY` on 2026-10-14 (checked read-only through the Firestore REST API). Scheduled production
+  checks (`verify-production-live`, registry verify, public-route E2E smoke) kept passing through
+  2026-10-15.
 
 ### Checked against production (read-only, 2026-10-13)
 - Backfill 004 dry run (`--allow-production`, no `--apply`, the user's own Google login): **0 batches,
@@ -45,13 +48,15 @@ that time could have changed (CI state, open PRs, production health).
 
 ### In progress: PR #639 (`hardening/stage0-closed-credit`, open, not merged)
 Stage 0: an INFONAVIT record with `credit_status:"closed"` is never counted as active, even with
-`balance > 0` (it was). Two new tests fail on revert; underwriting 454 passed, 1 skipped. This
-changes approvals, so it waits for the user's explicit go-ahead to merge.
+`balance > 0` (it was). Two new tests fail on revert; underwriting 454 passed, 1 skipped. CI is
+green (16 passing, 3 skipped). It changes who gets approved, so it waits for the user's explicit
+go-ahead ("merge 639"). **This handoff file and the kickoff prompt live on this branch** until
+#639 merges; `main` still has the 2026-10-13 version.
 
 ## 2. Next steps, in order
-1. PR #639: merge only with the user's go-ahead (production deploy), then dispatch
-   `verify-production-live.yml`. Confirm the three new `payrollRemittances` indexes are `READY`, and
-   have someone with an ops login open `/ops/remittances` in production.
+1. PR #639: merge only with the user's explicit go-ahead (production deploy), then dispatch
+   `verify-production-live.yml` and confirm it passes. Then have someone with an ops login open
+   `/ops/remittances` in production.
 2. Remittance, still open:
    - Overdue alerts are not resolved when the money arrives, and a record re-opened by a void does not re-raise a threshold it already raised. Whether `SLACK_WEBHOOK_URL` is set in production is unverified.
    - KPI totals on the screen sum only the loaded rows; there is no server-side grand total.
@@ -68,7 +73,8 @@ changes approvals, so it waits for the user's explicit go-ahead to merge.
 - **Load test prerequisites:** create the non-production Firebase project (its id must not contain `prod`), register the App Check debug token, and set the load-test password. Steps are in `docs/runbooks/scaling.md`.
 - **Gen-2 host guard:** confirm in the GCP console that vida-finance's Cloud Run hash is `gd5fcu677q` and its project number is `447766605132` (the hash answered `/health` with 200, which is the only evidence so far).
 - **Slack:** set `SLACK_WEBHOOK_URL` on Functions if overdue-remittance alerts should reach Slack.
-- **Local credentials:** the `gcloud` CLI on this Mac is signed in as the production admin service account. Claude did not use it; the user was asked whether read-only use is acceptable and had not answered when this was written.
+- **Local credentials:** the `gcloud` CLI on this Mac is signed in as the production admin service account (`firebase-adminsdk-fbsvc@vida-finance`). Claude has not used it; the user was asked whether read-only use is acceptable and has not answered. Application Default Credentials are the user's own Google login (re-done 2026-10-13); that is what the backfill dry run and the index check used, read-only. If ADC fails with `invalid_rapt`, ask the user to run `gcloud auth application-default login`; never sign in for them.
+- **Staging project:** GitHub secrets `FIREBASE_PROJECT_ID_STAGING` and `FIREBASE_SERVICE_ACCOUNT_STAGING` exist. Someone should confirm whether that project can host the load test (its id must not contain `prod`).
 - **Ops remittance screen:** an agent checked it in headless Chrome on the emulators; a person with an ops login should still open it in production.
 - **Marketing pages:** look at them in Safari (iOS and macOS) and Firefox, and watch the route fade and board films; only headless Chrome screenshots were compared.
 - **D1:** confirm the billing cause using billing account `01B681-29512A-745C5D`'s payment history, and see who granted indexAdmin on 2026-08-03. The exact `gcloud logging read` commands are in the checklist D1 section. The deploy SA cannot read those logs. Add a billing-state alert.
@@ -91,7 +97,10 @@ changes approvals, so it waits for the user's explicit go-ahead to merge.
   - Agents never push, merge or deploy, and never touch IAM, billing or secrets.
   - Agents never send load or writes to production. A single read-only GET to `/health` is fine.
 - **Merging to `main` is a production deploy.** Branch protection requires 0 reviews, so nothing but CI stops it. Merge only when the user has authorised it.
-- **Old worktrees** under `.claude/worktrees/wf_*` and the `swarm/*` / `swarm2/*` branches can be removed once their content is on `main`: `git worktree remove <path>` and `git branch -d <branch>`. They are local only.
+- **Old worktrees** under `.claude/worktrees/wf_*` (about 20) and the `swarm/*` … `swarm4/*` branches are all merged into `main` and can be removed when the user agrees: `git worktree remove <path>` and `git branch -d <branch>`. They are local only. `swarm2/lighthouse-perf`'s worktree was `locked`; use `git worktree unlock` first.
+- **Local tooling now installed:** k6 (Homebrew), Firebase emulators with Java, `@lhci/cli` via npx. A local Redis is needed for emulator runs of rate-limited callables (`redis-server --port <p>`); stop any you start.
+- **Workflow resume:** if a Workflow run is cut off by a session ending, check its worktrees for commits and uncommitted work before relaunching; completed agents can be replayed from cache only within the same session.
+- **Visual checks:** the built-in browser pane can preview a local production build (`.claude/launch.json` with `npm --prefix public-v2 run preview`; delete the file afterwards). Ops pages need `npm run dev:emulators` plus `scripts/seed-remittance-emulator.mjs` (see `docs/runbooks/payroll-remittances.md`), never the real project.
 - `graphify-out/` does not exist in this clone, so the CLAUDE.md graphify rule falls back to normal code search.
 
 ## 5. Useful commands
@@ -103,6 +112,7 @@ gh workflow run verify-production-live.yml --ref main
 (cd functions && npx tsc --noEmit -p . && npx jest)
 (cd public-v2 && npx tsc --noEmit -p . && npx cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run)
 (cd services/underwriting-service && npx jest)
-node --test scripts/check-production-health.test.mjs tests/load/target.test.mjs
+node --test scripts/*.test.mjs tests/load/*.test.mjs tests/load/seed/*.test.mjs
 npm run test:migrations
+npm run lint && (cd functions && npm run lint) && (cd public-v2 && npm run lint && npm run build)
 ```
