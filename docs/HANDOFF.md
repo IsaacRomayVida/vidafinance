@@ -1,4 +1,4 @@
-# Session handoff — production readiness (updated 2026-10-15)
+# Session handoff — production readiness (updated 2026-10-15, after #639)
 
 Paste-ready kickoff prompt for the next session: `docs/NEXT_SESSION_PROMPT.md`.
 
@@ -46,16 +46,28 @@ that time could have changed (CI state, open PRs, production health).
 - GitHub secrets `FIREBASE_PROJECT_ID_STAGING` and `FIREBASE_SERVICE_ACCOUNT_STAGING` exist, so a
   staging Firebase project may already exist for the load test.
 
-### In progress: PR #639 (`hardening/stage0-closed-credit`, open, not merged)
-Stage 0: an INFONAVIT record with `credit_status:"closed"` is never counted as active, even with
-`balance > 0` (it was). Two new tests fail on revert; underwriting 454 passed, 1 skipped. CI is
-green (16 passing, 3 skipped). It changes who gets approved, so it waits for the user's explicit
-go-ahead ("merge 639"). **This handoff file and the kickoff prompt live on this branch** until
-#639 merges; `main` still has the 2026-10-13 version.
+- **PR #639** (`hardening/stage0-closed-credit`) merged as `b8919fe` on 2026-10-15 after the user
+  said "merge 639" (16 checks passed, 3 skipped). Deploy run 38752277581 succeeded (CI + Firebase);
+  `verify-production-live.yml` run 38755867305, dispatched afterwards, passed. Contents: stage 0
+  treats an INFONAVIT record with `credit_status:"closed"` as closed even with `balance > 0`.
+
+### Underwriting-service is not redeployed by merges (found 2026-10-15)
+#639's change is in `services/underwriting-service`, which runs on Railway and is called by
+`functions/src/index.ts` (`UNDERWRITING_SERVICE_URL` + `/underwrite`). Merging to `main` did **not**
+redeploy it: the Railway commit statuses on `b8919fe`, `878bb86` (#638) and `4390a44` (#636) cover only
+ml-service, notification-service, payment-server and pdf-generator. `23d03d2` (#635) also had
+registry-service-funpay, deployed by its own workflow. No commit has an underwriting-service status, and
+no workflow deploys it. So stage 0 changes from #636 (INFONAVIT gate) and #639 are probably **not live**
+in production underwriting. This can't be confirmed locally: the `/health` route reports no version, and
+the local `railway` login cannot see the project. `deploy-registry-funpay.yml` is the pattern to copy
+(`serviceInstanceDeploy … latestCommit: true`, then poll `deployments.meta.commitHash`). Deploying
+underwriting is a production change that takes every underwriting commit since its last deploy, so it
+needs the user's explicit go-ahead.
 
 ## 2. Next steps, in order
-1. PR #639: merge only with the user's explicit go-ahead (production deploy), then dispatch
-   `verify-production-live.yml` and confirm it passes. Then have someone with an ops login open
+1. Underwriting-service deploy gap (section 1): with the user's go-ahead, get the merged underwriting
+   code running on Railway and make it verifiable (a version/commit on `/health`, and a deploy workflow
+   modelled on `deploy-registry-funpay.yml`). Someone with an ops login should still open
    `/ops/remittances` in production.
 2. Remittance, still open:
    - Overdue alerts are not resolved when the money arrives, and a record re-opened by a void does not re-raise a threshold it already raised. Whether `SLACK_WEBHOOK_URL` is set in production is unverified.
