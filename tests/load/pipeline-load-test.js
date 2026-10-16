@@ -58,7 +58,7 @@ import {
   poolConfigFromEnv,
   poolIndexFor,
   poolSignInUrl,
-  sendWithOneTransportRetry,
+  signInPoolMember,
 } from './seed/pool.js';
 import {
   requestLatency,
@@ -146,7 +146,8 @@ if (POOL && !LOAD_TEST_PASSWORD) {
 const APP_CHECK = appCheckPlan(__ENV, TARGET.label);
 // Module state is per VU in k6, so each VU holds and refreshes its own token.
 // A failed exchange backs off (5 s doubling to 5 min) instead of being retried
-// on every iteration, and a refusal that cannot heal stops the run — see
+// on every iteration, and a refusal that cannot heal stops the run, as does a
+// token that expires while its refresh keeps failing — see
 // createAppCheckTokenSource in ./seed/pool.js.
 const appCheckToken = createAppCheckTokenSource(APP_CHECK, {
   post: (url, body) =>
@@ -173,23 +174,25 @@ function getAuthHeaders(email) {
 
   // Each member is used once, so there is nothing to cache: one sign-in per
   // iteration, tagged `auth` so it stays out of the requestLoan thresholds.
-  // A connection that drops before any HTTP answer is tried once more.
-  const signInRes = sendWithOneTransportRetry(
-    () =>
-      http.post(
-        SIGN_IN_URL,
-        JSON.stringify({ email, password: LOAD_TEST_PASSWORD, returnSecureToken: true }),
-        { headers: { 'Content-Type': 'application/json' }, tags: { type: 'auth', name: 'auth-sign-in' } }
-      ),
-    (first) => console.warn(`[auth] sign-in for ${email} got no answer (${first.error || 'status 0'}); trying once more`)
+  // A connection that drops before any HTTP answer is tried once more
+  // (signInPoolMember in ./seed/pool.js).
+  const signIn = signInPoolMember(
+    (url, body) =>
+      http.post(url, body, {
+        headers: { 'Content-Type': 'application/json' },
+        tags: { type: 'auth', name: 'auth-sign-in' },
+      }),
+    SIGN_IN_URL,
+    email,
+    LOAD_TEST_PASSWORD,
+    (message) => console.warn(message)
   );
-  if (signInRes.status !== 200) {
+  if (!signIn.idToken) {
     // Without a token the request below is a 401 — which is what gets counted.
     signInFailures.add(1);
-    console.warn(`[auth] sign-in failed for ${email}: status=${signInRes.status}`);
     return base;
   }
-  return { ...base, Authorization: `Bearer ${JSON.parse(signInRes.body).idToken}` };
+  return { ...base, Authorization: `Bearer ${signIn.idToken}` };
 }
 
 // ── Setup: seed test data ───────────────────────────────────────────────────

@@ -96,10 +96,14 @@ test('productionIdentifiers names each production value found in the Firebase va
 
 test('FIREBASE_PROJECT_ID set to the production project NUMBER is production (Google takes the number in place of the id)', () => {
   // /v1/projects/447766605132/apps/…:exchangeDebugToken is the production project
-  for (const value of [PRODUCTION_PROJECT_NUMBER, ` ${PRODUCTION_PROJECT_NUMBER} `, `"${PRODUCTION_PROJECT_NUMBER}"`]) {
-    const found = productionIdentifiers({ FIREBASE_PROJECT_ID: value, FIREBASE_APP_ID: '1:1:web:x', FIREBASE_API_KEY: 'k' });
-    assert.equal(found.length, 1, value);
-    assert.match(found[0], /^FIREBASE_PROJECT_ID=.*447766605132.* is the PRODUCTION project/);
+  const found = productionIdentifiers({ FIREBASE_PROJECT_ID: PRODUCTION_PROJECT_NUMBER, FIREBASE_APP_ID: '1:1:web:x', FIREBASE_API_KEY: 'k' });
+  assert.equal(found.length, 1);
+  assert.match(found[0], /^FIREBASE_PROJECT_ID=447766605132 is the PRODUCTION project/);
+  // padded or quoted, it is refused before it is compared (see the shape test below)
+  for (const value of [` ${PRODUCTION_PROJECT_NUMBER} `, `"${PRODUCTION_PROJECT_NUMBER}"`]) {
+    const malformed = productionIdentifiers({ FIREBASE_PROJECT_ID: value, FIREBASE_APP_ID: '1:1:web:x', FIREBASE_API_KEY: 'k' });
+    assert.equal(malformed.length, 1, value);
+    assert.match(malformed[0], /is not a Firebase project id/);
   }
   // some other project's number is not
   assert.deepEqual(productionIdentifiers({ FIREBASE_PROJECT_ID: `9${PRODUCTION_PROJECT_NUMBER}` }), []);
@@ -113,7 +117,37 @@ test('a quoted or padded copy of a production value is still that value', () => 
   assert.equal(productionIdentifiers({ FIREBASE_API_KEY: ` '${PRODUCTION_WEB_API_KEY}' ` }).length, 1);
   assert.equal(productionIdentifiers({ FIREBASE_PROJECT_ID: `'${PRODUCTION_PROJECT_ID}'` }).length, 1);
   assert.equal(productionIdentifiers({ FIREBASE_APP_ID: `"1:${PRODUCTION_PROJECT_NUMBER}:web:abc"` }).length, 1);
-  assert.deepEqual(productionIdentifiers({ FIREBASE_API_KEY: '"AIzaSyNotTheProductionKey"', FIREBASE_PROJECT_ID: '"vida-staging"' }), []);
+  assert.deepEqual(productionIdentifiers({ FIREBASE_API_KEY: '"AIzaSyNotTheProductionKey"' }), []);
+});
+
+test('FIREBASE_PROJECT_ID is shape-checked (^[a-z0-9-]+$) before it is compared with production or used', () => {
+  // the values a REST path or a careless shell would turn into production — or into somewhere else
+  for (const value of [
+    'vida%2Dfinance', // percent-decoded by the server: vida-finance
+    '%76ida-finance',
+    'vida-staging/../vida-finance',
+    'vida-staging/../../projects/447766605132',
+    'vida-staging?key=x',
+    'vida-staging#',
+    '"vida-staging"',
+    ' vida-staging',
+    'Vida-Staging',
+    'vida_staging',
+    'vida.staging',
+    'vida-staging\n',
+    'vida-ſtaging', // non-ASCII
+  ]) {
+    const found = productionIdentifiers({ FIREBASE_PROJECT_ID: value });
+    assert.equal(found.length, 1, value);
+    assert.match(found[0], /^FIREBASE_PROJECT_ID=".*" is not a Firebase project id \(lower-case letters, digits and hyphens only/, value);
+  }
+  // well-formed non-production ids and numbers pass; well-formed production ones are still production
+  for (const value of ['vida-staging', 'demo-vida-load', 'funpay-load-1', '123456789012']) {
+    assert.deepEqual(productionIdentifiers({ FIREBASE_PROJECT_ID: value }), [], value);
+  }
+  for (const value of [PRODUCTION_PROJECT_ID, PRODUCTION_PROJECT_NUMBER, 'vida-prod-eu']) {
+    assert.match(productionIdentifiers({ FIREBASE_PROJECT_ID: value })[0], /is the PRODUCTION project/, value);
+  }
 });
 
 test('PROFILE is smoke, full, or unset — nothing else runs', () => {
