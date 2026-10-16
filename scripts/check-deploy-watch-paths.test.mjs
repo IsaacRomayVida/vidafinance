@@ -54,6 +54,32 @@ jobs:
       - run: 'true'
 `;
 
+/** The underwriting service: same Dockerfile shape, deployed by hand only. */
+const UW_DOCKERFILE = `FROM node:22-alpine
+WORKDIR /app
+COPY services/underwriting-service/package*.json ./
+RUN npm ci --only=production
+COPY services/shared/ ./services/shared/
+COPY services/underwriting-service/ ./services/underwriting-service/
+CMD ["node", "index.js"]
+`;
+
+const UW_WORKFLOW = `name: Deploy underwriting-service (Railway)
+# A push trigger is a separate decision; see docs/runbooks/deploy.md.
+# on:
+#   push:
+on:
+  workflow_dispatch: {}
+env:
+  RAILWAY_SERVICE_NAME: underwriting-service
+  EXPECTED_DOCKERFILE: services/underwriting-service/Dockerfile
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo serviceInstanceDeploy
+`;
+
 /**
  * A fixture repo laid out at the paths TARGETS hardcodes.
  *
@@ -68,6 +94,10 @@ function fixture(files = {}) {
     'services/registry-service/package.json': '{"name":"registry-service"}\n',
     'services/shared/registry/pool.js': '// shared pool\n',
     '.github/workflows/deploy-registry-funpay.yml': GOOD_WORKFLOW,
+    'services/underwriting-service/Dockerfile': UW_DOCKERFILE,
+    'services/underwriting-service/index.js': '// service entrypoint\n',
+    'services/underwriting-service/package.json': '{"name":"underwriting-service"}\n',
+    '.github/workflows/deploy-underwriting.yml': UW_WORKFLOW,
     '.dockerignore': 'node_modules\n',
   };
 
@@ -299,7 +329,7 @@ describe('check-deploy-watch-paths', () => {
         assert.equal(code, 1, `expected failure, got:\n${out}`);
         const lastLine = out.split('\n').filter((l) => l.trim()).pop();
         assert.doesNotMatch(lastLine ?? '', /✓/, `failing run ended on: ${lastLine}`);
-        assert.doesNotMatch(out, /Every CI-deployed service watches everything/);
+        assert.doesNotMatch(out, /watches everything its build reads/);
       }
     );
   });
@@ -417,6 +447,65 @@ describe('check-deploy-watch-paths', () => {
         assert.equal(code, 1, `expected failure, got:\n${out}`);
         assert.match(out, /premise no longer holds/);
         assert.match(out, /paths-ignore/);
+      }
+    );
+  });
+  it('passes a dispatch-only deploy workflow, and says it deploys by hand only', () => {
+    // deploy-underwriting.yml has no push trigger by decision, so there is no
+    // filter to cover. The sign-off must not fold it into "watches everything".
+    withFixture({}, ({ code, out }) => {
+      assert.equal(code, 0, `expected pass, got:\n${out}`);
+      assert.match(out, /underwriting-service: .* is workflow_dispatch only/);
+      assert.match(out, /Deployed by hand only: underwriting-service\./);
+      assert.doesNotMatch(out, /✓ underwriting-service/);
+    });
+  });
+
+  it('FAILS when a dispatch-only workflow gains a push trigger while TARGETS still says dispatchOnly', () => {
+    // The push decision and this check must change together. Otherwise the new
+    // `paths:` filter would ship unchecked — the silent direction again.
+    const withPush = UW_WORKFLOW.replace(
+      'on:\n  workflow_dispatch: {}\n',
+      "on:\n  push:\n    branches: [main]\n    paths:\n      - 'services/underwriting-service/**'\n  workflow_dispatch: {}\n"
+    );
+    assert.notEqual(withPush, UW_WORKFLOW);
+    withFixture({ '.github/workflows/deploy-underwriting.yml': withPush }, ({ code, out }) => {
+      assert.equal(code, 1, `expected failure, got:\n${out}`);
+      assert.match(out, /now has a `push:` trigger, but TARGETS marks underwriting-service as dispatchOnly/);
+      assert.match(out, /remove `dispatchOnly`/);
+    });
+  });
+
+  it('FAILS on the one-line `on: [push, ...]` spelling too', () => {
+    const inline = UW_WORKFLOW.replace('on:\n  workflow_dispatch: {}\n', 'on: [push, workflow_dispatch]\n');
+    withFixture({ '.github/workflows/deploy-underwriting.yml': inline }, ({ code, out }) => {
+      assert.equal(code, 1, `expected failure, got:\n${out}`);
+      assert.match(out, /now has a `push:` trigger/);
+    });
+  });
+
+  it('still checks the build premise of a dispatch-only service', () => {
+    // No filter to cover is not the same as nothing to check: when a push
+    // trigger is approved, the filter must be derived from the real build.
+    withFixture({ 'services/underwriting-service/Dockerfile': null }, ({ code, out }) => {
+      assert.equal(code, 1, `expected failure, got:\n${out}`);
+      assert.match(out, /underwriting-service: this check's premise no longer holds/);
+    });
+  });
+
+  it('FAILS when the underwriting workflow declares no RAILWAY_SERVICE_NAME', () => {
+    // That service is identified by name (resolved to an id at deploy time),
+    // so the key this check reads is RAILWAY_SERVICE_NAME, not _ID.
+    withFixture(
+      {
+        '.github/workflows/deploy-underwriting.yml': UW_WORKFLOW.replace(
+          '  RAILWAY_SERVICE_NAME: underwriting-service\n',
+          ''
+        ),
+      },
+      ({ code, out }) => {
+        assert.equal(code, 1, `expected failure, got:\n${out}`);
+        assert.match(out, /deploy-underwriting\.yml declares no `RAILWAY_SERVICE_NAME`/);
       }
     );
   });

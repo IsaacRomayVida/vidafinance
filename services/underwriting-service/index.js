@@ -34,6 +34,7 @@ if (!process.env.METAMAP_WEBHOOK_SECRET) {
 
 const metamapClient = require('./src/metamap-client');
 const { riskSealSmokeHandler } = require('./src/riskseal-smoke');
+const { buildInfo } = require('./src/build-info');
 
 const svcAcct = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_B64
@@ -114,9 +115,13 @@ app.get('/metrics', async (req, res) => {
   }
 });
 
+// Read once: the build does not change under a running process.
+// deploy-underwriting.yml compares `commit` with the deployment it triggered.
+const BUILD = buildInfo();
+
 app.get('/health', async (req, res) => {
   const r = await redis.ping().then(() => true).catch(() => false);
-  res.json({ status: r ? 'ok' : 'degraded', service: 'vida-underwriting-service', redis: r, ts: new Date().toISOString() });
+  res.json({ status: r ? 'ok' : 'degraded', service: 'vida-underwriting-service', redis: r, ...BUILD, ts: new Date().toISOString() });
 });
 
 // ── RiskSeal smoke (VID3-713 live verification) ─────────────────────
