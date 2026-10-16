@@ -10,7 +10,7 @@ gh pr list --state open
 gh run list --branch main --limit 10
 ```
 
-**State as of 2026-10-15:**
+**State as of 2026-10-16:**
 - **Merged and deployed to production:** PRs #635, #636, #637, #638 and #639 (Firebase side; see the underwriting gap below). After each deploy, `verify-production-live.yml` was dispatched and passed, and the scheduled production checks have kept passing.
   - #636: INFONAVIT gate, E18 remittance ledger, registry monitoring.
   - #637: remittance void and dedupe, the ops screen `/ops/remittances`, Lighthouse performance gate set to `error`, load-test seed tooling.
@@ -23,16 +23,13 @@ gh run list --branch main --limit 10
 
 **What to do:**
 1. Report the verified current state to the user in a few lines.
-2. Ask the user how to close the underwriting deploy gap (handoff section 1). Do nothing to production without an explicit go-ahead.
-3. Then work through section 2 of the handoff in order:
-   - remittance leftovers: alert resolution, server-side totals, a page cap on the overdue loop;
-   - load-test hardening;
-   - the marketing stage-panel gap and the `<html lang>` mismatch.
+2. The swarm5 PR (`hardening/remittance-load-marketing`) holds remittance alert resolution and totals, load-test hardening, the marketing fixes and a dispatch-only underwriting deploy workflow. Merge it only on the user's explicit go-ahead for that PR, with CI fully green; then watch the deploy and dispatch `verify-production-live.yml`.
+3. Dispatching `deploy-underwriting.yml` deploys to production Railway: only with the user's explicit approval, and only after the PR is on `main`. Then work through the rest of handoff section 2.
 4. Ask the user before removing the old `.claude/worktrees/wf_*` worktrees and the `swarm*/*` branches. They are all merged.
 
 **How the user wants you to work:**
 - **Parallel work:** use multi-agent workflows (a "swarm") with the Workflow tool.
-  - Give each agent its own worktree and branch (next prefix: `swarm5/*`).
+  - Give each agent its own worktree and branch (next prefix: `swarm6/*`).
   - Run an adversarial reviewer on every branch that re-runs the tests and revert-checks the fixes.
   - Send a repair agent when a review blocks.
   - Merge the approved branches into a `hardening/*` branch off `main`, run the full suites locally (commands are in handoff section 5), push, and open a PR.
