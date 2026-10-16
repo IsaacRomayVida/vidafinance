@@ -650,6 +650,20 @@ export interface RemittanceView {
   receipts: RemittanceReceiptView[];
 }
 
+export interface RemittanceTotals {
+  count: number;
+  expectedCents: number;
+  receivedCents: number;
+  outstandingCents: number;
+  overdueCount: number;
+  overdueCents: number;
+}
+
+export interface MatchingRemittanceTotals extends RemittanceTotals {
+  /** false: the walk stopped at its cap, so these figures cover only the first part of the view. */
+  complete: boolean;
+}
+
 export interface ListPayrollRemittancesResult {
   /** The Mexico City date aging was computed against. */
   asOf: string;
@@ -659,14 +673,13 @@ export interface ListPayrollRemittancesResult {
   /** One page, in the ledger's order (see `remittancesQuery`). */
   remittances: RemittanceView[];
   /** Totals of THIS PAGE's rows — not of everything that matches. */
-  totals: {
-    count: number;
-    expectedCents: number;
-    receivedCents: number;
-    outstandingCents: number;
-    overdueCount: number;
-    overdueCents: number;
-  };
+  totals: RemittanceTotals;
+  /**
+   * Totals of EVERY record the filters match, across all pages. Only on the
+   * first page (no `cursor`): later pages of the same walk return null, as
+   * does a first page whose totals walk failed — the list itself still works.
+   */
+  matchingTotals: MatchingRemittanceTotals | null;
   /** Pass back as `cursor` for the next page; null on the last page. */
   nextCursor: string | null;
   /** `nextCursor !== null`. Kept for callers written before pagination. */
@@ -742,6 +755,94 @@ export function toRemittanceView(
   };
 }
 
+const EMPTY_TOTALS: RemittanceTotals = {
+  count: 0,
+  expectedCents: 0,
+  receivedCents: 0,
+  outstandingCents: 0,
+  overdueCount: 0,
+  overdueCents: 0,
+};
+
+function addToTotals(t: RemittanceTotals, r: Pick<RemittanceView, 'expectedCents' | 'receivedCents' | 'aging'>): RemittanceTotals {
+  return {
+    count: t.count + 1,
+    expectedCents: t.expectedCents + r.expectedCents,
+    receivedCents: t.receivedCents + r.receivedCents,
+    outstandingCents: t.outstandingCents + r.aging.outstandingCents,
+    overdueCount: t.overdueCount + (r.aging.overdue ? 1 : 0),
+    overdueCents: t.overdueCents + (r.aging.overdue ? r.aging.outstandingCents : 0),
+  };
+}
+
+/** Records the totals walk reads per page, and the most pages it reads (40,000 records). */
+export const MATCHING_TOTALS_PAGE_SIZE = 1000;
+export const MATCHING_TOTALS_MAX_PAGES = 40;
+
+export interface MatchingTotalsFilter {
+  outstandingOnly: boolean;
+  overdueOnly: boolean;
+  employerId?: string;
+  today: string;
+  graceDays: number;
+}
+
+/**
+ * Totals over every record a list filter matches, not one page of it.
+ *
+ * The same ordered query the list pages through, walked to the end with only
+ * the three fields the arithmetic needs (`select`), and summed with the same
+ * derivation the rows use — status from the figures, aging from the period
+ * end — so the totals cannot disagree with the rows that make them up. It
+ * needs no index the list does not already use. A Firestore sum() aggregation
+ * would be cheaper per call, but would sum stored `status` and need composite
+ * indexes over the summed fields; the outstanding view, which is what ops
+ * opens, is small.
+ *
+ * The walk stops after MATCHING_TOTALS_MAX_PAGES pages and says so
+ * (`complete: false`) rather than passing a partial sum off as the whole.
+ */
+export async function matchingRemittanceTotals(
+  db: Firestore,
+  filter: MatchingTotalsFilter,
+  maxPages: number = MATCHING_TOTALS_MAX_PAGES,
+): Promise<MatchingRemittanceTotals> {
+  let totals = EMPTY_TOTALS;
+  let after: RemittancePosition | undefined;
+  for (let pages = 0; ; pages++) {
+    const page = await remittancesQuery(db, {
+      outstandingOnly: filter.outstandingOnly,
+      employerId: filter.employerId,
+      periodEndBefore: filter.overdueOnly ? calendarDaysBefore(filter.today, filter.graceDays) : undefined,
+      after,
+    })
+      .select('expectedCents', 'receivedCents', 'payPeriodEnd')
+      .limit(MATCHING_TOTALS_PAGE_SIZE)
+      .get();
+
+    for (const doc of page.docs) {
+      const data = doc.data();
+      const expectedCents = Number(data['expectedCents'] ?? 0);
+      const receivedCents = Number(data['receivedCents'] ?? 0);
+      // The same two filters the page applies to its rows.
+      if (filter.outstandingOnly && !OUTSTANDING_REMITTANCE_STATUSES.includes(remittanceStatus(expectedCents, receivedCents))) {
+        continue;
+      }
+      const aging = remittanceAging(data, filter.today, filter.graceDays);
+      if (filter.overdueOnly && !aging.overdue) continue;
+      totals = addToTotals(totals, { expectedCents, receivedCents, aging });
+    }
+
+    const last = page.docs[page.docs.length - 1];
+    if (!last || page.docs.length < MATCHING_TOTALS_PAGE_SIZE) return { ...totals, complete: true };
+    if (pages + 1 >= maxPages) {
+      logger.warn({ ...filter, maxPages }, 'Remittance totals walk stopped at its cap; totals are incomplete');
+      return { ...totals, complete: false };
+    }
+    after = { payPeriodEnd: String(last.data()['payPeriodEnd'] ?? ''), batchId: last.id };
+  }
+}
+
 /**
  * The read path for the ops remittance screen: which batches still owe money,
  * and for how long.
@@ -750,6 +851,10 @@ export function toRemittanceView(
  * records oldest pay period first, or — `view: 'all'` — every record newest
  * first. The order is total (pay period end, then batch id), so paging with
  * `nextCursor` neither skips nor repeats a record however many there are.
+ *
+ * The first page (no `cursor`) also carries `matchingTotals`, the totals of
+ * every record the filters match (`matchingRemittanceTotals`); `totals` stays
+ * the page's own.
  *
  * It only knows about batches that have a record. Batches processed before the
  * ledger shipped get one from the backfill script (or from the first receipt
@@ -830,19 +935,39 @@ export const listPayrollRemittances = onCall(
             .filter((r) => !outstandingOnly || OUTSTANDING_REMITTANCE_STATUSES.includes(r.status))
             .filter((r) => !input.overdueOnly || r.aging.overdue);
 
-          const totals = remittances.reduce(
-            (t, r) => ({
-              count: t.count + 1,
-              expectedCents: t.expectedCents + r.expectedCents,
-              receivedCents: t.receivedCents + r.receivedCents,
-              outstandingCents: t.outstandingCents + r.aging.outstandingCents,
-              overdueCount: t.overdueCount + (r.aging.overdue ? 1 : 0),
-              overdueCents: t.overdueCents + (r.aging.overdue ? r.aging.outstandingCents : 0),
-            }),
-            { count: 0, expectedCents: 0, receivedCents: 0, outstandingCents: 0, overdueCount: 0, overdueCents: 0 },
-          );
+          const totals = remittances.reduce(addToTotals, EMPTY_TOTALS);
 
-          return { asOf: today, graceDays, pageSize, remittances, totals, nextCursor, truncated: nextCursor !== null };
+          // Later pages of a walk already had these on its first page.
+          let matchingTotals: MatchingRemittanceTotals | null = null;
+          if (input.cursor === undefined) {
+            try {
+              matchingTotals = await matchingRemittanceTotals(getFirestore(), {
+                outstandingOnly,
+                overdueOnly: input.overdueOnly === true,
+                employerId: input.employerId,
+                today,
+                graceDays,
+              });
+            } catch (err) {
+              // The list is still right without them; the screen falls back to
+              // summing what it has loaded, and says so.
+              logger.error(
+                { error: err instanceof Error ? err.message : String(err) },
+                'Remittance totals walk failed; returning the page without them',
+              );
+            }
+          }
+
+          return {
+            asOf: today,
+            graceDays,
+            pageSize,
+            remittances,
+            totals,
+            matchingTotals,
+            nextCursor,
+            truncated: nextCursor !== null,
+          };
         },
       ),
   ),

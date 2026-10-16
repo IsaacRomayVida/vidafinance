@@ -49,12 +49,16 @@ const mockStore: Record<CollectionName, Record<string, Doc>> = {
 let mockAutoId = 0;
 type Filter = { field: string; op: string; value: unknown };
 type Order = { field: string; direction: 'asc' | 'desc' };
-type QuerySpec = { filters: Filter[]; orders: Order[]; after: unknown[] | null; limit: number | null };
+type QuerySpec = { filters: Filter[]; orders: Order[]; after: unknown[] | null; limit: number | null; select?: string[] };
 type Ref = { _collection: CollectionName; id: string };
 type Query = { _collection: CollectionName; _spec: QuerySpec };
 
 /** Every query the code ran, so a test can pin that it filtered, ordered and limited server-side. */
 const mockQueries: Array<{ collection: string } & QuerySpec> = [];
+/** The projected (`select`) queries — the list's totals walk — kept apart from the page queries above. */
+const mockTotalsQueries: Array<{ collection: string } & QuerySpec> = [];
+/** When set, a projected query fails, as a totals walk might in production. */
+let mockFailTotals = false;
 
 const mockFieldValue = { serverTimestamp: jest.fn(() => ({ _serverTimestamp: true })) };
 
@@ -71,7 +75,12 @@ class MockTimestamp {
 const mockCompare = (a: unknown, b: unknown) => (a === b ? 0 : (a as string | number) < (b as string | number) ? -1 : 1);
 
 function mockRunQuery(collection: CollectionName, spec: QuerySpec) {
-  mockQueries.push({ collection, ...spec });
+  if (spec.select) {
+    if (mockFailTotals) throw Object.assign(new Error('FAILED_PRECONDITION'), { code: 9 });
+    mockTotalsQueries.push({ collection, ...spec });
+  } else {
+    mockQueries.push({ collection, ...spec });
+  }
   const sortKey = (id: string, doc: Doc) => spec.orders.map((o) => (o.field === '__name__' ? id : doc[o.field]));
   const compareKeys = (a: unknown[], b: unknown[]) => {
     for (let i = 0; i < spec.orders.length; i++) {
@@ -107,6 +116,8 @@ const mockMakeQuery = (collection: CollectionName, spec: QuerySpec): Record<stri
     mockMakeQuery(collection, { ...spec, orders: [...spec.orders, { field, direction }] }),
   startAfter: (...values: unknown[]) => mockMakeQuery(collection, { ...spec, after: values }),
   limit: (n: number) => mockMakeQuery(collection, { ...spec, limit: n }),
+  // The projection is recorded, not applied: the code must not depend on a field it did not select.
+  select: (...fields: string[]) => mockMakeQuery(collection, { ...spec, select: fields }),
   get: async () => mockRunQuery(collection, spec),
 });
 
@@ -166,7 +177,10 @@ import {
   toRemittanceView,
   encodeRemittanceCursor,
   decodeRemittanceCursor,
+  matchingRemittanceTotals,
+  MATCHING_TOTALS_PAGE_SIZE,
 } from '../remittance';
+import type { Firestore } from 'firebase-admin/firestore';
 import { remittanceAlertDocId } from '../remittanceLedger';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<Record<string, unknown>>;
@@ -215,6 +229,8 @@ const setNow = (iso: string) => nowSpy.mockReturnValue(Date.parse(iso));
 beforeEach(() => {
   for (const name of Object.keys(mockStore) as CollectionName[]) mockStore[name] = {};
   mockQueries.length = 0;
+  mockTotalsQueries.length = 0;
+  mockFailTotals = false;
   mockAutoId = 0;
   jest.clearAllMocks();
   nowSpy = jest.spyOn(Date, 'now').mockReturnValue(NOON_JUL_20);
@@ -1256,6 +1272,103 @@ describe('listPayrollRemittances — pagination', () => {
     ]) {
       expect(decodeRemittanceCursor(bad, 'asc')).toBeNull();
     }
+  });
+});
+
+describe('listPayrollRemittances — totals of everything the filters match', () => {
+  const dayOf = (i: number) => new Date(Date.UTC(2020, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
+
+  it('the first page carries totals over every page, beside the page\'s own', async () => {
+    // 120 records over three pages of 50: 2020 dates, so all overdue as of 2026-07-20.
+    for (let i = 0; i < 120; i++) {
+      seedRemittance({ payPeriodEnd: dayOf(i), expectedCents: 1000, receivedCents: i % 2 === 0 ? 0 : 400, status: i % 2 === 0 ? 'expected' : 'partial' }, `batch-${String(i).padStart(4, '0')}`);
+    }
+
+    const first = await list(opsRequest({ limit: 50 }));
+
+    expect(first['totals']).toMatchObject({ count: 50, expectedCents: 50000 });
+    expect(first['matchingTotals']).toEqual({
+      count: 120,
+      expectedCents: 120000,
+      receivedCents: 60 * 400,
+      outstandingCents: 120000 - 60 * 400,
+      overdueCount: 120,
+      overdueCents: 120000 - 60 * 400,
+      complete: true,
+    });
+    // Later pages of the same walk do not repeat the work.
+    const second = await list(opsRequest({ limit: 50, cursor: first['nextCursor'] }));
+    expect(second['matchingTotals']).toBeNull();
+    expect(mockTotalsQueries).toHaveLength(1);
+  });
+
+  it('walks the same ordered, filtered query, projected to the fields it sums', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+
+    await list(opsRequest({ employerId: 'employer-uid-1', overdueOnly: true }));
+
+    expect(mockTotalsQueries[0]).toEqual({
+      collection: 'payrollRemittances',
+      filters: [
+        { field: 'employerId', op: '==', value: 'employer-uid-1' },
+        { field: 'status', op: 'in', value: ['expected', 'partial'] },
+        { field: 'payPeriodEnd', op: '<', value: '2026-07-13' },
+      ],
+      orders: [
+        { field: 'payPeriodEnd', direction: 'asc' },
+        { field: '__name__', direction: 'asc' },
+      ],
+      after: null,
+      limit: MATCHING_TOTALS_PAGE_SIZE,
+      select: ['expectedCents', 'receivedCents', 'payPeriodEnd'],
+    });
+  });
+
+  it('applies the view\'s filters the way the rows do', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15', receivedCents: 50000, status: 'partial' }, 'emp-a_old'); // overdue
+    seedRemittance({ payPeriodEnd: '2026-07-15' }, 'emp-a_current'); // in grace
+    seedRemittance({ payPeriodEnd: '2026-05-31', receivedCents: 170000, status: 'received' }, 'emp-a_settled');
+    // Stored status is stale; the figures say it is paid, so it is not outstanding.
+    seedRemittance({ payPeriodEnd: '2026-05-15', receivedCents: 170000, status: 'partial' }, 'emp-a_stale');
+    seedRemittance({ payPeriodEnd: '2026-06-15', employerId: 'employer-uid-2' }, 'emp-b_old');
+
+    const outstanding = await list(opsRequest({}));
+    expect(outstanding['matchingTotals']).toMatchObject({ count: 3, outstandingCents: 120000 + 170000 + 170000, overdueCount: 2 });
+    expect(outstanding['matchingTotals']).toMatchObject({ count: (outstanding['totals'] as { count: number }).count });
+
+    const all = await list(opsRequest({ view: 'all' }));
+    expect(all['matchingTotals']).toMatchObject({ count: 5, expectedCents: 5 * 170000, outstandingCents: 460000, overdueCount: 2, overdueCents: 290000 });
+
+    const overdue = await list(opsRequest({ overdueOnly: true, employerId: 'employer-uid-1' }));
+    expect(overdue['matchingTotals']).toMatchObject({ count: 1, outstandingCents: 120000, overdueCents: 120000 });
+  });
+
+  it('says when it stopped at its cap instead of passing a partial sum off as the whole', async () => {
+    for (let i = 0; i < 5; i++) seedRemittance({ payPeriodEnd: dayOf(i) }, `b-${i}`);
+    const db = mockDb as unknown as Firestore;
+    const filter = { outstandingOnly: true, overdueOnly: false, today: '2026-07-20', graceDays: 7 };
+
+    await expect(matchingRemittanceTotals(db, filter, 1)).resolves.toMatchObject({ count: 5, complete: true });
+
+    for (let i = 5; i < MATCHING_TOTALS_PAGE_SIZE + 1; i++) seedRemittance({ payPeriodEnd: dayOf(i) }, `b-${i}`);
+    await expect(matchingRemittanceTotals(db, filter, 1)).resolves.toMatchObject({
+      count: MATCHING_TOTALS_PAGE_SIZE,
+      complete: false,
+    });
+    await expect(matchingRemittanceTotals(db, filter, 2)).resolves.toMatchObject({
+      count: MATCHING_TOTALS_PAGE_SIZE + 1,
+      complete: true,
+    });
+  });
+
+  it('still returns the page when the totals walk fails', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+    mockFailTotals = true;
+
+    const res = await list(opsRequest({}));
+
+    expect(res['matchingTotals']).toBeNull();
+    expect((res['remittances'] as unknown[])).toHaveLength(1);
   });
 });
 

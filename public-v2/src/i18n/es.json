@@ -1366,6 +1366,8 @@
   "remit_list_title_partial_one": "{{count}} remesa cargada · hay más",
   "remit_list_title_partial_other": "{{count}} remesas cargadas · hay más",
   "remit_totals_partial": "Los totales de arriba suman solo las remesas cargadas hasta ahora, no toda la vista.",
+  "remit_totals_view_one": "Los totales de arriba son de toda la vista: {{count}} remesa, de la que hay {{loaded}} en pantalla.",
+  "remit_totals_view_other": "Los totales de arriba son de toda la vista: {{count}} remesas, de las que hay {{loaded}} en pantalla.",
   "remit_order_outstanding": "Orden: periodo más antiguo primero.",
   "remit_order_all": "Orden: periodo más reciente primero.",
   "remit_kpi_scope_loaded": "de lo cargado"

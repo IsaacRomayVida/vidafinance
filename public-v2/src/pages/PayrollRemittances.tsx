@@ -15,6 +15,7 @@ import {
   totalsOf,
   type ListRemittancesInput,
   type ListRemittancesResult,
+  type MatchingRemittanceTotals,
   type RecordRemittanceResult,
   type Remittance,
   type RemittanceReceipt,
@@ -70,7 +71,10 @@ const money = (cents: number) => `$${formatCents(cents)}`;
  * never writes to Firestore itself.
  *
  * The list is paged by the server (one ordered query, `nextCursor`). The
- * figures at the top are sums of the rows on screen, and say so whenever
+ * figures at the top are the server's totals for the whole view
+ * (`matchingTotals`, sent with page one), and say how many of those rows are
+ * on screen. Without them (an older server, or its totals walk failed or hit
+ * its cap) they fall back to sums of the rows on screen, and say so whenever
  * there is another page.
  */
 export function PayrollRemittances() {
@@ -86,6 +90,8 @@ export function PayrollRemittances() {
   });
   const [rows, setRows] = useState<Remittance[] | null>(null);
   const [meta, setMeta] = useState<ListMeta | null>(null);
+  // From the last page-one answer; a "load more" answer leaves it alone.
+  const [viewTotals, setViewTotals] = useState<MatchingRemittanceTotals | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -118,6 +124,10 @@ export function PayrollRemittances() {
           const seen = new Set(current.map((r) => r.batchId));
           return [...current, ...page.remittances.filter((r) => !seen.has(r.batchId))];
         });
+        if (!appending) {
+          // Partial totals are not passed off as the view's: the screen sums its own rows instead.
+          setViewTotals(page.matchingTotals?.complete ? page.matchingTotals : null);
+        }
         setMeta({ asOf: page.asOf, graceDays: page.graceDays, nextCursor: page.nextCursor ?? null });
         setLoadError(null);
         setMoreError(null);
@@ -210,7 +220,8 @@ export function PayrollRemittances() {
   };
 
   const remittances = rows ?? [];
-  const totals = rows ? totalsOf(rows) : null;
+  // The whole view when the server sent it; otherwise only what is loaded.
+  const totals = rows ? viewTotals ?? totalsOf(rows) : null;
   const hasMore = Boolean(meta?.nextCursor);
   // Oldest first whenever the list is outstanding-only; `overdueOnly` implies it.
   const oldestFirst = request.view === 'outstanding' || request.overdueOnly;
@@ -264,7 +275,13 @@ export function PayrollRemittances() {
         </div>
       </div>
 
-      {rows && hasMore && (
+      {rows && viewTotals && remittances.length < viewTotals.count && (
+        <p role="status" className="ops-note" data-testid="remit-totals-scope">
+          {t('remit_totals_view', { count: viewTotals.count, loaded: remittances.length })}
+        </p>
+      )}
+
+      {rows && !viewTotals && hasMore && (
         <p role="status" className="ops-toast" data-testid="remit-totals-partial">{t('remit_totals_partial')}</p>
       )}
 

@@ -221,6 +221,9 @@ Output:
   nextCursor: string | null; // pass back as `cursor` for the next page; null on the last page
   truncated: boolean;        // === (nextCursor !== null); kept for callers written before pagination
   totals: { count, expectedCents, receivedCents, outstandingCents, overdueCount, overdueCents }; // THIS PAGE only
+  // EVERY record the filters match, across all pages. First page (no cursor) only; null on
+  // later pages and when the totals walk failed. complete: false = stopped at its cap.
+  matchingTotals: { count, expectedCents, receivedCents, outstandingCents, overdueCount, overdueCents, complete } | null;
   remittances: Array<{
     batchId: string;
     employerId: string | null;
@@ -285,8 +288,17 @@ those, so past 500 matches the oldest debts could be the ones cut.
   `status` disagrees with its figures is dropped after the read. Use `nextCursor`, not the row
   count, to decide whether there is more.
 - **`totals` cover the returned page only**, as they always covered only the returned rows.
-  With one page (`nextCursor: null`) they are the totals of everything that matched. With more,
-  sum across pages or label them as page totals. There is no server-side grand total yet.
+  With one page (`nextCursor: null`) they are the totals of everything that matched.
+- **`matchingTotals` cover everything the filters match** (added 2026-10-16). Worked out on
+  the first page only, by walking the same ordered query to the end with `select` on
+  `expectedCents`, `receivedCents`, `payPeriodEnd` (1,000 per read, at most 40 reads =
+  40,000 records), summed with the same derivation as the rows — status from the figures,
+  aging from the period end — so they cannot disagree with the rows. It uses the indexes the
+  list already needs; no new index. It costs one document read per matching record per
+  first-page call; a Firestore `sum()` aggregation would be cheaper but would trust the stored
+  `status` and need composite indexes over the summed fields. If the walk hits its cap it
+  returns `complete: false` (and logs a warning); if it fails the page is still returned, with
+  `matchingTotals: null`.
 - Backwards compatible for a caller that sends neither `limit` nor `cursor`: same fields, same
   first 500 rows in the same order for the outstanding view, `truncated` still says whether
   more exist. New fields: `pageSize`, `nextCursor`.
@@ -505,9 +517,12 @@ is shown if that read fails).
   `nextCursor` and appends. A filter change starts again from page one with no
   cursor; **Actualizar**, and the reload after a write, ask page one for as
   many rows as were already on screen (capped at 500) so ops keeps their place.
-  The four totals are sums of the rows on screen, not the server's per-page
-  `totals`; while another page exists the heading reads "N remesas cargadas ·
-  hay más" and a line under the totals says they cover only what is loaded.
+  The four totals are the server's `matchingTotals` for the whole view; while
+  not all of it is loaded, a line under them says how many remesas the view has
+  and how many are on screen, and the heading reads "N remesas cargadas · hay
+  más". If the server sent no complete `matchingTotals`, the totals fall back
+  to sums of the rows on screen and a line under them says they cover only what
+  is loaded.
   The order is stated next to the as-of date (oldest period first for
   outstanding and overdue, newest first for "Todas"). Each row shows expected /
   received / outstanding, the status, the aging pill (peach up to 15 days
