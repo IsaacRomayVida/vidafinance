@@ -11,7 +11,6 @@ export function Footer() {
     const next = i18n.language === 'es' ? 'en' : 'es';
     i18n.changeLanguage(next);
     safeSetItem('vida_lang', next);
-    document.documentElement.lang = next;
   };
 
   return (
