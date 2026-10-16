@@ -146,7 +146,8 @@ if (POOL && !LOAD_TEST_PASSWORD) {
 const APP_CHECK = appCheckPlan(__ENV, TARGET.label);
 // Module state is per VU in k6, so each VU holds and refreshes its own token.
 // A failed exchange backs off (5 s doubling to 5 min) instead of being retried
-// on every iteration, and a refusal that cannot heal stops the run — see
+// on every iteration, and a refusal that cannot heal stops the run, as does a
+// token that expires while its refresh keeps failing — see
 // createAppCheckTokenSource in ./seed/pool.js.
 const appCheckToken = createAppCheckTokenSource(APP_CHECK, {
   post: (url, body) =>

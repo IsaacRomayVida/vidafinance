@@ -449,7 +449,7 @@ test('the backoff doubles up to five minutes and resets after a success', () => 
   h.t += 80000;
   assert.equal(h.token(), 'two'); // fails again: back to a 5 s wait, not 20 s
   assert.match(h.warnings.at(-1), /next attempt in 5s/);
-  // a failure with a token in hand never aborts the run
+  // a failure with a still-valid token in hand never aborts the run
   assert.deepEqual(h.aborts, []);
 });
 
@@ -487,6 +487,61 @@ test('an exchange that cannot heal stops the run instead of sending 401s', () =>
   assert.equal(broken.token(), '');
   broken.t += 20000;
   assert.equal(broken.token(), 'ok');
+});
+
+test('a token that has expired while its refresh kept failing stops the run instead of being sent dead', () => {
+  // 3,600 s token; refresh due at 2,880 s; the endpoint goes down at that moment and stays down
+  const h = exchangeHarness([OK('only', '3600s'), { status: 503, body: '' }]);
+  assert.equal(h.token(), 'only');
+  h.t += 2880000;
+  // the last 720 s of its life: backing off, the still-valid token is reused and nothing aborts
+  while (h.t < 1000000 + 3600000 - 500) {
+    assert.equal(h.token(), 'only');
+    h.t += 500;
+  }
+  assert.deepEqual(h.aborts, []);
+  const attemptsBeforeExpiry = h.posts.length;
+  assert.ok(attemptsBeforeExpiry >= 5, `refresh retried while valid (${attemptsBeforeExpiry})`);
+  // attempts at +0, 5, 15, 35, 75, 155, 315, 615 s; the next is not due until +915 s, after expiry
+  assert.ok(h.posts.at(-1).at + pool.appCheckBackoffMs(attemptsBeforeExpiry) > 1000000 + 3600000, 'still backing off at expiry');
+
+  // expiry: one more attempt at once — not at the end of the back-off window — then stop
+  h.t = 1000000 + 3600000;
+  assert.equal(h.token(), '', 'a dead token is never handed out');
+  assert.equal(h.posts.length, attemptsBeforeExpiry + 1);
+  assert.equal(h.aborts.length, 1);
+  assert.match(h.aborts[0], /App Check token expired and its refresh failed \(last HTTP 503, \d+ failed in a row\)/);
+  // and nothing more after the abort
+  for (let i = 0; i < 100; i++) {
+    h.t += 1000;
+    assert.equal(h.token(), '');
+  }
+  assert.equal(h.aborts.length, 1);
+  assert.equal(h.posts.length, attemptsBeforeExpiry + 1);
+});
+
+test('an expired token whose refresh is refused outright (403) or throws stops the run on that attempt', () => {
+  for (const failure of [{ status: 403, body: '{"error":{"code":403,"status":"PERMISSION_DENIED"}}' }, new Error('dial tcp: i/o timeout')]) {
+    const h = exchangeHarness([OK('short', '1800s'), failure]);
+    assert.equal(h.token(), 'short');
+    h.t += 1800000; // refresh was due at 1,440 s; nothing asked until now, and now it has expired
+    assert.equal(h.token(), '');
+    assert.equal(h.posts.length, 2);
+    assert.equal(h.aborts.length, 1, String(failure.status ?? failure.message));
+  }
+  // an expired token whose refresh succeeds is simply replaced
+  const ok = exchangeHarness([OK('old', '1800s'), OK('new', '1800s')]);
+  assert.equal(ok.token(), 'old');
+  ok.t += 1800000;
+  assert.equal(ok.token(), 'new');
+  assert.deepEqual(ok.aborts, []);
+});
+
+test('appCheckTtlMs reads the exchange ttl, defaulting to 30 minutes', () => {
+  assert.equal(pool.appCheckTtlMs('3600s'), 3600000);
+  assert.equal(pool.appCheckTtlMs('1800.5s'), 1800500);
+  assert.equal(pool.appCheckTtlMs(undefined), 1800000);
+  assert.equal(pool.appCheckTtlMs('1h'), 1800000);
 });
 
 test('appCheckRefreshAfterMs refreshes before the token expires', () => {

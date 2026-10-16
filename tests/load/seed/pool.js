@@ -437,11 +437,15 @@ export function appCheckPlan(env, targetLabel) {
   );
 }
 
+/** Milliseconds an exchanged token is valid for: the `ttl` ("3600s") the exchange returned; 30 min when it is unreadable. */
+export function appCheckTtlMs(ttl) {
+  const m = /^(\d+(?:\.\d+)?)s$/.exec(String(ttl));
+  return (m ? Number(m[1]) : 1800) * 1000;
+}
+
 /** Milliseconds to keep an exchanged token: 80% of the `ttl` ("3600s") the exchange returned, at least a minute. */
 export function appCheckRefreshAfterMs(ttl) {
-  const m = /^(\d+(?:\.\d+)?)s$/.exec(String(ttl));
-  const seconds = m ? Number(m[1]) : 1800;
-  return Math.max(60, seconds * 0.8) * 1000;
+  return Math.max(60000, appCheckTtlMs(ttl) * 0.8);
 }
 
 /** First wait after a failed debug-token exchange; doubles on each further failure up to the maximum. */
@@ -469,7 +473,12 @@ export function appCheckBackoffMs(consecutiveFailures) {
  *     (wrong token, app id, key or project): the run is aborted at once;
  *   - APP_CHECK_GIVE_UP_AFTER failures in a row with no token ever obtained
  *     abort the run too. Without a token every request is a 401 that burns a
- *     pool member and measures nothing.
+ *     pool member and measures nothing;
+ *   - a token whose `ttl` has run out is dead, not "the last token". Once it
+ *     has, the next request tries the exchange at once (backing off or not),
+ *     and if that fails the run is aborted: the token used to be reused for
+ *     as long as the refresh kept failing, so a long outage of the exchange
+ *     turned the rest of the run into 401s.
  *
  * Pure: the HTTP call, the clock and the abort are injected, so
  * pool.test.mjs drives the real logic under node.
@@ -487,6 +496,7 @@ export function createAppCheckTokenSource(plan, { post, now, warn = () => {}, ab
 
   let token = '';
   let refreshAt = 0;
+  let expiresAt = 0;
   let failures = 0;
   let retryAt = 0;
   let aborted = false;
@@ -500,8 +510,9 @@ export function createAppCheckTokenSource(plan, { post, now, warn = () => {}, ab
   return function appCheckToken() {
     if (aborted) return token;
     const t = now();
+    const expired = Boolean(token) && t >= expiresAt;
     if (token && t < refreshAt) return token;
-    if (t < retryAt) return token; // backing off
+    if (t < retryAt && !expired) return token; // backing off
 
     let status = 0;
     let exchanged = null;
@@ -516,6 +527,7 @@ export function createAppCheckTokenSource(plan, { post, now, warn = () => {}, ab
     if (exchanged && typeof exchanged.token === 'string' && exchanged.token) {
       token = exchanged.token;
       refreshAt = t + appCheckRefreshAfterMs(exchanged.ttl);
+      expiresAt = t + appCheckTtlMs(exchanged.ttl);
       failures = 0;
       retryAt = 0;
       return token;
@@ -525,7 +537,13 @@ export function createAppCheckTokenSource(plan, { post, now, warn = () => {}, ab
     const wait = appCheckBackoffMs(failures);
     retryAt = t + wait;
     warn(`[appcheck] debug-token exchange failed: status=${status}; next attempt in ${Math.round(wait / 1000)}s`);
-    if (!token) {
+    if (expired) {
+      token = '';
+      stop(
+        `App Check token expired and its refresh failed (last HTTP ${status}, ${failures} failed in a row); ` +
+          'stopping rather than sending a dead token on every request.'
+      );
+    } else if (!token) {
       if ([400, 401, 403, 404].includes(status)) {
         stop(
           `App Check debug-token exchange was refused (HTTP ${status}). Waiting will not fix a wrong debug token, ` +
