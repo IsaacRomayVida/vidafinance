@@ -690,7 +690,182 @@ test('a sign-in that got no HTTP answer is sent once more; any HTTP status is fi
   for (const status of [400, 401, 429, 500, 503]) assert.equal(run([{ status }, { status: 200 }]).sends, 1, String(status));
 
   const script = repo('tests/load/pipeline-load-test.js');
-  assert.match(script, /const signInRes = sendWithOneTransportRetry\(\s+\(\) =>\s+http\.post\(\s+SIGN_IN_URL,/);
+  assert.match(script, /const signIn = signInPoolMember\(\s+\(url, body\) =>\s+http\.post\(url, body, \{/);
+  assert.match(script, /SIGN_IN_URL,\s+email,\s+LOAD_TEST_PASSWORD,/);
+});
+
+// ── The exchange and the sign-in against mocked transports ───────────────────
+// Neither has run against a real project (runbook § H2). These drive the real
+// code end to end — plan or URL, request, answer, outcome — through a mock that
+// checks each request against the REST contract of the Google endpoint and
+// answers in that endpoint's own format. Nothing here opens a socket.
+
+/** Mock of POST firebaseappcheck.googleapis.com/v1/projects/{p}/apps/{a}:exchangeDebugToken. */
+function appCheckEndpoint(answers) {
+  const m = { calls: [] };
+  m.post = (url, body) => {
+    const u = new URL(url);
+    assert.equal(u.origin, 'https://firebaseappcheck.googleapis.com');
+    assert.equal(decodeURIComponent(u.pathname), '/v1/projects/vida-staging/apps/1:123:web:abc:exchangeDebugToken');
+    assert.deepEqual([...u.searchParams], [['key', 'web-key']]);
+    assert.deepEqual(JSON.parse(body), { debug_token: STAGING_EXCHANGE.APP_CHECK_DEBUG_TOKEN });
+    m.calls.push(url);
+    const next = answers.length > 1 ? answers.shift() : answers[0];
+    if (next instanceof Error) throw next;
+    return next;
+  };
+  return m;
+}
+const googleError = (code, status, message = status) => ({ status: code, body: JSON.stringify({ error: { code, message, status } }) });
+// k6 does not throw on a transport failure: it returns status 0 with `error` set and no body.
+const NO_ANSWER = { status: 0, error: 'dial tcp: lookup firebaseappcheck.googleapis.com: i/o timeout', body: null };
+
+function exchangeThrough(endpoint, clock) {
+  const aborts = [];
+  const warnings = [];
+  const token = pool.createAppCheckTokenSource(pool.appCheckPlan(STAGING_EXCHANGE, 'staging'), {
+    post: endpoint.post,
+    now: () => clock.t,
+    warn: (w) => warnings.push(w),
+    abort: (a) => aborts.push(a),
+  });
+  return { token, aborts, warnings };
+}
+
+test('mocked App Check endpoint — success: the exchanged JWT is sent, never the debug token, and kept for its ttl', () => {
+  const jwt = 'eyJraWQiOiJ4In0.eyJzdWIiOiIxOjEyMzp3ZWI6YWJjIn0.c2ln';
+  const endpoint = appCheckEndpoint([{ status: 200, body: JSON.stringify({ token: jwt, ttl: '3600s' }) }]);
+  const clock = { t: 0 };
+  const run = exchangeThrough(endpoint, clock);
+  for (let i = 0; i < 50; i++, clock.t += 10000) assert.equal(run.token(), jwt);
+  assert.equal(endpoint.calls.length, 1);
+  assert.notEqual(run.token(), STAGING_EXCHANGE.APP_CHECK_DEBUG_TOKEN);
+  assert.deepEqual(run.aborts, []);
+});
+
+test('mocked App Check endpoint — retryable failures (no answer, 429, 500, 503) back off, then heal without aborting', () => {
+  const jwt = 'eyJ.after-retries.sig';
+  const endpoint = appCheckEndpoint([
+    NO_ANSWER,
+    googleError(429, 'RESOURCE_EXHAUSTED'),
+    googleError(503, 'UNAVAILABLE'),
+    googleError(500, 'INTERNAL'),
+    { status: 200, body: JSON.stringify({ token: jwt, ttl: '3600s' }) },
+  ]);
+  const clock = { t: 0 };
+  const run = exchangeThrough(endpoint, clock);
+  const seen = [];
+  for (let i = 0; i < 400; i++, clock.t += 500) seen.push(run.token());
+  assert.equal(endpoint.calls.length, 5, 'four failures and the success, not one call per iteration');
+  assert.equal(seen.at(-1), jwt);
+  assert.deepEqual(run.aborts, []);
+  assert.deepEqual(
+    run.warnings.map((w) => /status=(\d+)/.exec(w)[1]),
+    ['0', '429', '503', '500']
+  );
+});
+
+test('mocked App Check endpoint — terminal answers (400, 401, 403, 404) abort the run on the first attempt', () => {
+  for (const answer of [
+    googleError(400, 'INVALID_ARGUMENT', 'Invalid debug token.'),
+    googleError(401, 'UNAUTHENTICATED'),
+    googleError(403, 'PERMISSION_DENIED', 'Requests from this referer are blocked.'),
+    googleError(404, 'NOT_FOUND', 'App not found.'),
+  ]) {
+    const endpoint = appCheckEndpoint([answer]);
+    const clock = { t: 0 };
+    const run = exchangeThrough(endpoint, clock);
+    assert.equal(run.token(), '');
+    assert.equal(endpoint.calls.length, 1);
+    assert.equal(run.aborts.length, 1, `HTTP ${answer.status}`);
+    assert.match(run.aborts[0], new RegExp(`refused \\(HTTP ${answer.status}\\)`));
+  }
+  // no answer at all, five times in a row, with no token ever obtained: also stops
+  const endpoint = appCheckEndpoint([NO_ANSWER]);
+  const clock = { t: 0 };
+  const run = exchangeThrough(endpoint, clock);
+  for (let i = 0; i < 2000; i++, clock.t += 1000) run.token();
+  assert.equal(endpoint.calls.length, pool.APP_CHECK_GIVE_UP_AFTER);
+  assert.match(run.aborts[0], /failed 5 times in a row \(last HTTP 0\)/);
+});
+
+/** Mock of POST identitytoolkit.googleapis.com/v1/accounts:signInWithPassword (or the Auth emulator's copy). */
+function signInEndpoint(answers, origin = 'https://identitytoolkit.googleapis.com', pathPrefix = '') {
+  const m = { calls: [] };
+  m.post = (url, body) => {
+    const u = new URL(url);
+    assert.equal(u.origin, origin);
+    assert.equal(u.pathname, `${pathPrefix}/v1/accounts:signInWithPassword`);
+    assert.equal(u.searchParams.get('key'), 'web-key');
+    assert.deepEqual(JSON.parse(body), { email: pool.employeeEmail(7), password: 'pool-password-1234567', returnSecureToken: true });
+    m.calls.push(url);
+    return answers.shift();
+  };
+  return m;
+}
+const VERIFY_PASSWORD_RESPONSE = {
+  status: 200,
+  body: JSON.stringify({
+    kind: 'identitytoolkit#VerifyPasswordResponse',
+    localId: pool.employeeUid(7),
+    email: pool.employeeEmail(7),
+    idToken: 'eyJ.id-token.sig',
+    registered: true,
+    refreshToken: 'refresh',
+    expiresIn: '3600',
+  }),
+};
+
+function signInThrough(endpoint, env = { FIREBASE_API_KEY: 'web-key' }, label = 'staging') {
+  const warnings = [];
+  const result = pool.signInPoolMember(
+    endpoint.post,
+    pool.poolSignInUrl(env, label),
+    pool.employeeEmail(7),
+    'pool-password-1234567',
+    (w) => warnings.push(w)
+  );
+  return { result, warnings };
+}
+
+test('mocked sign-in endpoint — success returns the ID token, on Google and on the Auth emulator', () => {
+  const google = signInEndpoint([VERIFY_PASSWORD_RESPONSE]);
+  assert.deepEqual(signInThrough(google).result, { idToken: 'eyJ.id-token.sig', status: 200 });
+  assert.equal(google.calls.length, 1);
+
+  const emulator = signInEndpoint([VERIFY_PASSWORD_RESPONSE], 'http://127.0.0.1:9099', '/identitytoolkit.googleapis.com');
+  const env = { FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099', FIREBASE_API_KEY: 'web-key' };
+  assert.equal(signInThrough(emulator, env, 'emulator').result.idToken, 'eyJ.id-token.sig');
+});
+
+test('mocked sign-in endpoint — no answer is retried once and then heals', () => {
+  const endpoint = signInEndpoint([{ status: 0, error: 'read: connection reset by peer', body: null }, VERIFY_PASSWORD_RESPONSE]);
+  const { result, warnings } = signInThrough(endpoint);
+  assert.deepEqual(result, { idToken: 'eyJ.id-token.sig', status: 200 });
+  assert.equal(endpoint.calls.length, 2);
+  assert.match(warnings[0], /got no answer \(read: connection reset by peer\); trying once more/);
+});
+
+test('mocked sign-in endpoint — terminal outcomes give no token, and an HTTP answer is never resent', () => {
+  const cases = [
+    // no answer twice: retried once, not until it works
+    [[{ status: 0, error: 'reset', body: null }, { status: 0, error: 'reset', body: null }, VERIFY_PASSWORD_RESPONSE], 2, 0],
+    [[googleError(400, 'INVALID_LOGIN_CREDENTIALS')], 1, 400],
+    [[googleError(400, 'INVALID_PASSWORD')], 1, 400],
+    [[googleError(400, 'TOO_MANY_ATTEMPTS_TRY_LATER')], 1, 400],
+    [[googleError(429, 'RESOURCE_EXHAUSTED')], 1, 429],
+    [[googleError(503, 'UNAVAILABLE'), VERIFY_PASSWORD_RESPONSE], 1, 503],
+    // a 200 that is not the sign-in response: no token, and no exception out of the iteration
+    [[{ status: 200, body: '<html>captive portal</html>' }], 1, 200],
+    [[{ status: 200, body: JSON.stringify({ kind: 'identitytoolkit#VerifyPasswordResponse' }) }], 1, 200],
+  ];
+  for (const [answers, sends, status] of cases) {
+    const endpoint = signInEndpoint([...answers]);
+    const { result, warnings } = signInThrough(endpoint);
+    assert.deepEqual(result, { idToken: null, status }, JSON.stringify(answers[0]));
+    assert.equal(endpoint.calls.length, sends, JSON.stringify(answers[0]));
+    assert.ok(warnings.length >= 1);
+  }
 });
 
 test('every failed request lands in exactly one named bucket, and failed sign-ins are counted', () => {

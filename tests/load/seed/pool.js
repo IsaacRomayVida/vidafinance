@@ -578,6 +578,48 @@ export function sendWithOneTransportRetry(send, onRetry = () => {}) {
 }
 
 /**
+ * Signs one pool member in (Identity Toolkit `accounts:signInWithPassword`, or
+ * the Auth emulator's copy of it) and returns the ID token for the
+ * Authorization header. A request that got no HTTP answer is sent once more
+ * (sendWithOneTransportRetry); any HTTP answer other than a 200 carrying an
+ * `idToken` is a failed sign-in, which the caller counts — the requestLoan call
+ * that follows without a token is the 401 the report shows.
+ *
+ * Pure, like createAppCheckTokenSource: the k6 script injects `http.post`,
+ * pool.test.mjs a mock, so the request and every outcome are pinned without a
+ * real project.
+ *
+ * @param {(url: string, body: string) => { status: number, body?: string, error?: string }} post
+ * @param {string} url  from poolSignInUrl
+ * @param {string} email
+ * @param {string} password
+ * @param {(message: string) => void} [warn]
+ * @returns {{ idToken: string, status: 200 } | { idToken: null, status: number }}
+ */
+export function signInPoolMember(post, url, email, password, warn = () => {}) {
+  const res = sendWithOneTransportRetry(
+    () => post(url, JSON.stringify({ email, password, returnSecureToken: true })),
+    (first) => warn(`[auth] sign-in for ${email} got no answer (${first.error || 'status 0'}); trying once more`)
+  );
+  if (res.status !== 200) {
+    warn(`[auth] sign-in failed for ${email}: status=${res.status}`);
+    return { idToken: null, status: res.status };
+  }
+  let idToken = null;
+  try {
+    idToken = JSON.parse(res.body).idToken;
+  } catch {
+    idToken = null;
+  }
+  if (typeof idToken !== 'string' || !idToken) {
+    // Used to be JSON.parse(...).idToken unguarded: a 200 that was not JSON threw out of the iteration.
+    warn(`[auth] sign-in for ${email} answered 200 without an idToken`);
+    return { idToken: null, status: res.status };
+  }
+  return { idToken, status: 200 };
+}
+
+/**
  * Upper bound on iterations for a list of { target (req/min), duration ('30m') }
  * stages, as pipeline-load-test.js runs them: VUs = ceil(target / 10), ramped
  * linearly from the previous stage (k6 starts at 1 VU), each VU looping no
