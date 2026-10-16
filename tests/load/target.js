@@ -87,6 +87,9 @@ function pathSegments(url) {
     .filter((segment) => segment && segment !== '.' && segment !== '..');
 }
 
+/** What a FIREBASE_PROJECT_ID must look like before it is compared with production or put in a URL. */
+export const FIREBASE_PROJECT_ID_SHAPE = /^[a-z0-9-]+$/;
+
 /**
  * Production named anywhere in the Firebase variables of a run — independently
  * of TARGET_URL. The host guard below only sees where requestLoan is called;
@@ -94,12 +97,22 @@ function pathSegments(url) {
  * token, and a staging TARGET_URL does not make a production key harmless.
  *
  * @param {Record<string, string|undefined>} env
- * @returns {string[]} one line per production identifier found; empty when there is none
+ * @returns {string[]} one line per production identifier found (or malformed project id); empty when there is none
  */
 export function productionIdentifiers(env) {
   const found = [];
   const projectId = env.FIREBASE_PROJECT_ID || '';
-  if (projectId && isProductionProjectId(projectId)) {
+  // Shape first, compare second. A project id (or number) is only ever
+  // lower-case letters, digits and hyphens; anything else is not compared at
+  // all. The comparison below cannot see that `vida%2Dfinance` or
+  // `x/../vida-finance` reach production once they sit in a REST path, and
+  // appCheckPlan puts this value in one.
+  if (projectId && !FIREBASE_PROJECT_ID_SHAPE.test(projectId)) {
+    found.push(
+      `FIREBASE_PROJECT_ID=${JSON.stringify(projectId)} is not a Firebase project id ` +
+        '(lower-case letters, digits and hyphens only — no quotes, spaces, slashes or percent signs)'
+    );
+  } else if (projectId && isProductionProjectId(projectId)) {
     found.push(`FIREBASE_PROJECT_ID=${projectId} is the PRODUCTION project (its id or its project number, or it names itself production)`);
   }
   // 1:<project number>:web:<hash>

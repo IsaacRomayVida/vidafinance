@@ -319,11 +319,13 @@ const STAGING_EXCHANGE = {
 };
 const PRODUCTION_VALUES = [
   ['FIREBASE_PROJECT_ID', PRODUCTION_PROJECT_ID, /FIREBASE_PROJECT_ID=vida-finance is the PRODUCTION project/],
-  ['FIREBASE_PROJECT_ID', ' Vida-Finance ', /PRODUCTION project/],
+  // malformed ids are refused before they are compared
+  ['FIREBASE_PROJECT_ID', ' Vida-Finance ', /FIREBASE_PROJECT_ID=" Vida-Finance " is not a Firebase project id/],
+  ['FIREBASE_PROJECT_ID', 'vida%2Dfinance', /is not a Firebase project id/],
   ['FIREBASE_PROJECT_ID', 'vida-prod-eu', /PRODUCTION project/],
   // Google's REST paths take the project number in place of the id
   ['FIREBASE_PROJECT_ID', PRODUCTION_PROJECT_NUMBER, /FIREBASE_PROJECT_ID=447766605132 is the PRODUCTION project/],
-  ['FIREBASE_PROJECT_ID', `"${PRODUCTION_PROJECT_ID}"`, /PRODUCTION project/],
+  ['FIREBASE_PROJECT_ID', `"${PRODUCTION_PROJECT_ID}"`, /is not a Firebase project id/],
   ['FIREBASE_API_KEY', `"${PRODUCTION_WEB_API_KEY}"`, /FIREBASE_API_KEY is the PRODUCTION project's Web API key/],
   ['FIREBASE_APP_ID', `1:${PRODUCTION_PROJECT_NUMBER}:web:7d747366eb91b2452cb3e9`, /FIREBASE_APP_ID belongs to project number 447766605132/],
   ['FIREBASE_API_KEY', PRODUCTION_WEB_API_KEY, /FIREBASE_API_KEY is the PRODUCTION project's Web API key/],
