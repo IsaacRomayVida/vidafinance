@@ -71,7 +71,6 @@ export function Navbar({ ctaLabel, ctaHref = '/onboarding' }: NavbarProps) {
     const next = i18n.language === 'es' ? 'en' : 'es';
     i18n.changeLanguage(next);
     safeSetItem('vida_lang', next);
-    document.documentElement.lang = next;
   };
 
   const cta = ctaLabel || t('nav_get_started');

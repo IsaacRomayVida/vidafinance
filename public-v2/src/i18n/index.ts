@@ -79,10 +79,21 @@ export const i18nReady: Promise<unknown> = i18n
   // Spanish fallback is already in memory.
   .catch(() => undefined);
 
-// Keep <html lang=""> in sync with the active language
-document.documentElement.lang = savedLang;
+/**
+ * <html lang=""> names the language on screen, which is not always the one
+ * asked for: until a requested chunk has loaded — and for good if it times
+ * out, fails, or the language is unknown — the page renders the Spanish
+ * fallback. `resolvedLanguage` is the first language in the chain that has
+ * copy loaded, i.e. the one actually rendered. Nothing else writes the
+ * attribute; index.html starts it at "es".
+ */
+function syncDocumentLang() {
+  document.documentElement.lang = i18n.resolvedLanguage || 'es';
+}
+syncDocumentLang();
 i18n.on('languageChanged', (lang) => {
-  document.documentElement.lang = lang;
+  syncDocumentLang();
+  // The reader's choice is kept even when its copy has not arrived yet.
   safeSetItem('vida_lang', lang);
 });
 
