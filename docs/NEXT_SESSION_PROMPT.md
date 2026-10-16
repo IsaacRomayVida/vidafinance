@@ -15,13 +15,13 @@ gh run list --branch main --limit 10
   - #636: INFONAVIT gate, E18 remittance ledger, registry monitoring. #637: remittance void/dedupe, `/ops/remittances`. #638: paginated remittances, daily `remittanceOverdueCheck`, k6 emulator smoke.
   - #639: stage 0 treats a `credit_status:"closed"` INFONAVIT credit as closed even with a leftover balance.
   - #640: remittance alerts close on payment and re-raise after a void, page caps, server-side totals; load-test guards; marketing fixes; underwriting `/health` commit field and the dispatch-only `deploy-underwriting.yml`.
-- **Underwriting-service on Railway** was deployed on 2026-10-16 to `0543a8c` (it had been on `8259bd0` from 2026-09-18). Merges do **not** redeploy it: after an underwriting merge, dispatch `deploy-underwriting.yml` from `main` with the user's go-ahead.
+- **Underwriting-service on Railway** was deployed on 2026-10-16 to `0543a8c` (it had been on `8259bd0` from 2026-09-18). Since #641, `deploy-underwriting.yml` deploys it on every push to `main` touching its build inputs; check that run after any underwriting merge.
 - **Slack:** `SLACK_WEBHOOK_URL` is not a GitHub secret, so overdue alerts only appear in the ops alerts page.
-- **Open PR:** only the docs PR for this handoff (`docs/handoff-production-ready`).
+- **Open PRs:** none expected once #641 (handoff + underwriting push trigger) merges.
 
 **What to do:**
 1. Report the verified current state to the user in a few lines.
-2. Work through handoff section 2: the push-trigger decision for `deploy-underwriting.yml`, then the small swarm5 follow-ups.
+2. Work through handoff section 2: the small swarm5 follow-ups.
 3. List the human-only items in handoff section 3 precisely; never fake their evidence.
 
 **How the user wants you to work:**

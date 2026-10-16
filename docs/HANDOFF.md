@@ -67,30 +67,25 @@ approval, `deploy-underwriting.yml` run 38882474775 deployed `0543a8c` (deployme
 `1f8ad33a-959f-4bc1-9730-795a2230b456`, service `a13f634d-79e1-45d4-ae54-29ad27b805ea`). The workflow's
 own checks passed (Dockerfile build, deployment SUCCESS, `/health` commit = main), production `/health`
 reports `"commit":"0543a8c6…"`, and a second `verify-production-live.yml` run 38882712615 passed.
-**Merges still do not deploy underwriting.** After any merge that touches `services/underwriting-service`
-or `services/shared`, dispatch `deploy-underwriting.yml` from `main` (with the user's go-ahead), or decide
-to add a push trigger like `deploy-registry-funpay.yml` has.
+On 2026-10-16 the user approved a push trigger: `deploy-underwriting.yml` now deploys on every push to
+`main` touching `services/underwriting-service/**`, `services/shared/**`, `.dockerignore` or the workflow,
+and `scripts/check-deploy-watch-paths.mjs` holds that filter to the Dockerfile's COPY set (its old
+dispatch-only mode is gone). It shipped with the handoff docs PR #641; merging #641 triggers its first push deploy, so check that run.
 
 ## 2. Next steps, in order
-1. Decide whether `deploy-underwriting.yml` gets a push trigger (paths: `services/underwriting-service/**`,
-   `services/shared/**`, `.dockerignore`, the workflow itself), so stage changes can't go stale again.
-   Until then, every underwriting merge needs a manual dispatch. The checks only a first run could confirm
-   (service resolved by name, `RAILWAY_GIT_COMMIT_SHA` set at runtime, Dockerfile path) all held on run 38882474775.
-2. Small follow-ups from the swarm5 reviews (none blocking):
+1. Small follow-ups from the swarm5 reviews (none blocking):
    - Remittance totals: a first-page `listPayrollRemittances` call walks every matching record (cap
      40 × 1,000 reads, reports `complete:false` at the cap). "Overdue" depends on today's date, so stored
      `sum()` aggregation can't replace it; if the ledger grows, maintain counters instead. `viewTotals` is
      not cleared while a new filter loads (same staleness as the rows). `resolveStaleAlerts` is not
      transactional (cosmetic: a dismissed alert can also get `resolvedBy:'system'`).
-   - Underwriting workflow: `hasPushTrigger` in `scripts/check-deploy-watch-paths.mjs` misses the block-list
-     `on:\n  - push` and quoted `"push":` spellings; `DEPLOYMENT_COMMIT` is read when the deployment first
-     appears, not at SUCCESS.
+   - Underwriting workflow: `DEPLOYMENT_COMMIT` is read when the deployment first appears, not at SUCCESS.
    - Load: in `tests/load/seed/pool.js` `createAppCheckTokenSource`, an exchange ttl under ~75 s makes the
      refresh point fall after expiry; `FIREBASE_APP_ID`/`FIREBASE_API_KEY` and the seed's `--project` are not
      shape-checked; static `APP_CHECK_TOKEN`/`AUTH_TOKEN` have no expiry detection (smoke-only path).
    - Marketing: the language toggles still label themselves from `i18n.language` (requested) rather than
      `resolvedLanguage`, so after a failed English chunk the toggle offers Spanish while Spanish is shown.
-3. Still open, needs people or infrastructure: `SLACK_WEBHOOK_URL` in production is unverified; the 7-day
+2. Still open, needs people or infrastructure: `SLACK_WEBHOOK_URL` in production is unverified; the 7-day
    grace period is a display default, not an agreed term; B8 and runbook setup B need a staging run
    (section 3); the App Check exchange and sign-in retry are unit-tested against mocks only; `/` Lighthouse
    sits at 0.93–0.94, close to the gate.
