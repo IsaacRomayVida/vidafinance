@@ -494,15 +494,23 @@ describe('runRemittanceOverdueCheck — volume and failure', () => {
   });
 
   it('caps the walk over open alerts too', async () => {
+    // Only the alerts walk has more than one page here: every record is settled,
+    // so the ledger walk finds nothing and cannot be what truncates the run.
     for (let i = 0; i < PAGE_SIZE + 1; i++) {
       const id = `batch-${String(i).padStart(4, '0')}`;
-      seedRemittance(id);
+      seedRemittance(id, { receivedCents: 170000, status: 'received' });
       mockStore.incident_log[remittanceAlertDocId(id, 1)] = { source: REMITTANCE_ALERT_SOURCE, batchId: id, resolved: false };
     }
+    const last = remittanceAlertDocId(`batch-${String(PAGE_SIZE).padStart(4, '0')}`, 1);
 
     const result = await runRemittanceOverdueCheck(db, noon('2026-07-23'), undefined, { maxPages: 1 });
 
-    expect(result.truncated).toBe(true);
+    expect(result).toMatchObject({ truncated: true, overdue: 0, resolved: PAGE_SIZE });
+    expect(mockStore.incident_log[last]).toMatchObject({ resolved: false });
+    expect(mockStore.incident_log[`${REMITTANCE_CHECK_TRUNCATED_SOURCE}_2026-07-23`]).toMatchObject({
+      source: REMITTANCE_CHECK_TRUNCATED_SOURCE,
+      resolved: false,
+    });
   });
 
   it('keeps going when one alert cannot be written, reports it, and raises it on the next run', async () => {
