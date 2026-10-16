@@ -1,23 +1,18 @@
 name: Deploy underwriting-service (Railway)
 
-# ⚠️ MERGING TO MAIN DOES NOT REDEPLOY underwriting-service. THIS IS THE WAY TO.
+# ⚠️ underwriting-service HAS NO RAILWAY DEPLOYMENT TRIGGER. THIS WORKFLOW IS IT.
 #
 # `underwriting-service` (Railway project `FunPay`, environment `production`) is
 # what functions/src/index.ts calls at UNDERWRITING_SERVICE_URL + /underwrite —
-# the credit decision. As of 2026-10-15 nothing deploys it on merge: Railway's
-# commit statuses on recent merge commits cover ml-service, notification-service,
-# payment-server and pdf-generator only, and no workflow here deployed it. Merged
-# underwriting changes (stage 0 among them) are therefore not known to be live.
-# Same gap registry-service-funpay had; see deploy-registry-funpay.yml, which
-# this workflow follows step for step, and docs/runbooks/deploy.md §1.2.
+# the credit decision. Until 2026-10-16 nothing deployed it on merge: production
+# ran `8259bd0` (2026-09-18) while #636's INFONAVIT gate and #639's closed-credit
+# rule sat merged and unshipped. Railway's commit statuses on merge commits cover
+# ml-service, notification-service, payment-server and pdf-generator only. Same
+# gap registry-service-funpay had; see deploy-registry-funpay.yml, which this
+# workflow follows step for step, and docs/runbooks/deploy.md §1.2.
 #
-# WORKFLOW_DISPATCH ONLY, ON PURPOSE. Deploying the credit-decision service on
-# every merge to main has not been approved. Adding a `push:` trigger is a
-# separate decision, to be made explicitly — not slipped in with this file. When
-# it is made: add `push` with a `paths:` list mirroring the Dockerfile's COPY set
-# (copy the registry workflow's), and drop `dispatchOnly` from this service's
-# TARGETS row in scripts/check-deploy-watch-paths.mjs in the same PR. That check
-# fails until both are done, so the filter cannot go live unchecked.
+# It deploys on every push to main that touches the build (the user approved the
+# push trigger on 2026-10-16), and can still be dispatched by hand.
 #
 # Also note recover-production-services.yml redeploys this service if — and only
 # if — Railway reports ZERO active deployments for it. That is a self-heal for a
@@ -32,6 +27,19 @@ name: Deploy underwriting-service (Railway)
 # process, not inferred from a status field.
 
 on:
+  push:
+    branches: [main]
+    # This list mirrors the Dockerfile's COPY set, NOT the npm dependency graph.
+    # services/underwriting-service/Dockerfile builds from the repo root and
+    # copies `services/shared/` as well as its own directory, so a shared-only
+    # commit must deploy too. If you change the Dockerfile's COPY set, change
+    # this list in the same PR: scripts/check-deploy-watch-paths.mjs re-derives
+    # the COPY set and fails CI on an uncovered path.
+    paths:
+      - 'services/underwriting-service/**'
+      - 'services/shared/**'
+      - '.dockerignore'
+      - '.github/workflows/deploy-underwriting.yml'
   workflow_dispatch: {}
 
 concurrency:
@@ -425,9 +433,9 @@ jobs:
         if: env.DEPLOYMENT_COMMIT != ''
         run: |
           if [ "${DEPLOYMENT_COMMIT}" != "${GITHUB_SHA}" ]; then
-            echo "::warning::Railway deployed ${DEPLOYMENT_COMMIT:0:8}, but main was ${GITHUB_SHA:0:8} at dispatch. Check which branch the service is linked to in Railway."
+            echo "::warning::Railway deployed ${DEPLOYMENT_COMMIT:0:8}, but main was ${GITHUB_SHA:0:8} when this run started. Check which branch the service is linked to in Railway."
           else
-            echo "✓ Deployed commit is main at dispatch (${GITHUB_SHA:0:8})"
+            echo "✓ Deployed commit is main as of this run (${GITHUB_SHA:0:8})"
           fi
 
       - name: Summary
@@ -440,7 +448,7 @@ jobs:
             echo "- Previously live deployment: \`${BEFORE_DEPLOYMENT_ID:-<none>}\` (commit \`${BEFORE_DEPLOYMENT_COMMIT:-unknown}\`)"
             echo "- Deployment waited on: \`${DEPLOYMENT_ID:-not created}\`"
             echo "- Deployed commit (Railway): \`${DEPLOYMENT_COMMIT:-unknown}\`"
-            echo "- main at dispatch: \`${GITHUB_SHA}\`"
+            echo "- main when this run started: \`${GITHUB_SHA}\`"
             echo "- Railway result: \`${DEPLOYMENT_STATUS:-FAILED}\`"
             echo "- /health reports: \`${LIVE_COMMIT:-not verified}\`"
             echo ""
@@ -450,5 +458,5 @@ jobs:
               echo "⚠ Not verified that the running service reports the deployed commit."
             fi
             echo ""
-            echo "This workflow is dispatch-only: merging to main does not deploy underwriting-service."
+            echo "Triggered by: \`${GITHUB_EVENT_NAME}\`"
           } >> "$GITHUB_STEP_SUMMARY"
