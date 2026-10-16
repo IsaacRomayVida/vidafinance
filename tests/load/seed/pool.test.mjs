@@ -955,6 +955,14 @@ test('the runbook does not present the full-pipeline setup as cleared, and state
   const runbook = repo('docs/runbooks/scaling.md');
   assert.match(runbook, /\*\*B — full pipeline\. NOT cleared to run\b/);
   assert.doesNotMatch(runbook, /Two workable setups/);
+  // and says that the k6-side guards do not clear it, nor make the exchange / sign-in proven
+  assert.match(runbook, /Nothing the k6 script guards changes this\./);
+  assert.match(runbook, /Only a real staging run with that checklist recorded can clear B\./);
+  assert.doesNotMatch(runbook, /\*\*B — full pipeline\.\s*(Now )?cleared/i);
+  assert.match(runbook, /The exchange and the pool sign-in have \*\*never been run against a real project\*\*/);
+  // what is now guarded is described
+  assert.match(runbook, /`FIREBASE_PROJECT_ID` is shape-checked first: .*\n?.*`\^\[a-z0-9-\]\+\$`/);
+  assert.match(runbook, /an expired token is never sent/);
   // the facts the gap rests on are still the code's
   const stage5 = repo('services/underwriting-service/src/stages/stage5-review.js');
   assert.match(stage5, /fetch\("https:\/\/api\.anthropic\.com\/v1\/messages"/);
