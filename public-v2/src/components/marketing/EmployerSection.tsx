@@ -1,8 +1,10 @@
+import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Board, BoardHead } from './Board';
 import { Icon, type IconName } from '../shared/Icons';
 import { useNearViewport } from '../../hooks/useNearViewport';
+import { BOARD_PLACEHOLDERS } from './boardPlaceholders';
 
 /**
  * Employer section on the ops-side board. The stage is a generated
@@ -14,7 +16,18 @@ import { useNearViewport } from '../../hooks/useNearViewport';
  * The photograph is a CSS background, which a browser fetches during page
  * load however far down the page it is. `.shown` turns it on once the stage
  * is near the viewport, so it does not compete with the hero image.
+ *
+ * Starting the request there still leaves a gap: a reader who gets to the
+ * stage faster than the file arrives (a flick, an anchor jump, the End key)
+ * reached it while the photograph was still downloading, and a CSS
+ * background paints nothing until it has fully loaded. So the stage carries
+ * a tiny inline copy of the same photograph (boardPlaceholders.ts, ~100
+ * bytes, no request) as the layer under it, from the first paint on — the
+ * way BoardPhoto does for the board stills.
  */
+const STAGE_PHOTO = '/images/brand/stage-employer.webp';
+const STAGE_PLACEHOLDER = { '--stage-ph': `url("${BOARD_PLACEHOLDERS[STAGE_PHOTO]}")` } as CSSProperties;
+
 const OBJECTS: { icon: IconName; t: string; d: string; lit?: boolean }[] = [
   { icon: 'nomina', t: 'emp_obj_1_t', d: 'emp_obj_1_d', lit: true },
   { icon: 'quincena', t: 'emp_obj_2_t', d: 'emp_obj_2_d' },
@@ -37,7 +50,7 @@ export function EmployerSection() {
       <div className="mk-gap" />
 
       <div className="mk-ops-grid">
-        <div ref={stage} className={`mk-panel stage photo${near ? ' shown' : ''}`} aria-hidden="true">
+        <div ref={stage} className={`mk-panel stage photo${near ? ' shown' : ''}`} style={STAGE_PLACEHOLDER} aria-hidden="true">
           <div className="mk-brand-ops"><b>F</b>FunPay · Ops</div>
           <div className="mk-tags">
             <span className="mk-tag"><i />{t('emp_tag_collections')}</span>
