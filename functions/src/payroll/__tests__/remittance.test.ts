@@ -35,7 +35,8 @@ type CollectionName =
   | 'payrollRemittanceReferences'
   | 'payrollBatches'
   | 'payrollDeductions'
-  | 'audit_log';
+  | 'audit_log'
+  | 'incident_log';
 
 const mockStore: Record<CollectionName, Record<string, Doc>> = {
   payrollRemittances: {},
@@ -43,16 +44,21 @@ const mockStore: Record<CollectionName, Record<string, Doc>> = {
   payrollBatches: {},
   payrollDeductions: {},
   audit_log: {},
+  incident_log: {},
 };
 let mockAutoId = 0;
 type Filter = { field: string; op: string; value: unknown };
 type Order = { field: string; direction: 'asc' | 'desc' };
-type QuerySpec = { filters: Filter[]; orders: Order[]; after: unknown[] | null; limit: number | null };
+type QuerySpec = { filters: Filter[]; orders: Order[]; after: unknown[] | null; limit: number | null; select?: string[] };
 type Ref = { _collection: CollectionName; id: string };
 type Query = { _collection: CollectionName; _spec: QuerySpec };
 
 /** Every query the code ran, so a test can pin that it filtered, ordered and limited server-side. */
 const mockQueries: Array<{ collection: string } & QuerySpec> = [];
+/** The projected (`select`) queries — the list's totals walk — kept apart from the page queries above. */
+const mockTotalsQueries: Array<{ collection: string } & QuerySpec> = [];
+/** When set, a projected query fails, as a totals walk might in production. */
+let mockFailTotals = false;
 
 const mockFieldValue = { serverTimestamp: jest.fn(() => ({ _serverTimestamp: true })) };
 
@@ -69,7 +75,12 @@ class MockTimestamp {
 const mockCompare = (a: unknown, b: unknown) => (a === b ? 0 : (a as string | number) < (b as string | number) ? -1 : 1);
 
 function mockRunQuery(collection: CollectionName, spec: QuerySpec) {
-  mockQueries.push({ collection, ...spec });
+  if (spec.select) {
+    if (mockFailTotals) throw Object.assign(new Error('FAILED_PRECONDITION'), { code: 9 });
+    mockTotalsQueries.push({ collection, ...spec });
+  } else {
+    mockQueries.push({ collection, ...spec });
+  }
   const sortKey = (id: string, doc: Doc) => spec.orders.map((o) => (o.field === '__name__' ? id : doc[o.field]));
   const compareKeys = (a: unknown[], b: unknown[]) => {
     for (let i = 0; i < spec.orders.length; i++) {
@@ -105,6 +116,8 @@ const mockMakeQuery = (collection: CollectionName, spec: QuerySpec): Record<stri
     mockMakeQuery(collection, { ...spec, orders: [...spec.orders, { field, direction }] }),
   startAfter: (...values: unknown[]) => mockMakeQuery(collection, { ...spec, after: values }),
   limit: (n: number) => mockMakeQuery(collection, { ...spec, limit: n }),
+  // The projection is recorded, not applied: the code must not depend on a field it did not select.
+  select: (...fields: string[]) => mockMakeQuery(collection, { ...spec, select: fields }),
   get: async () => mockRunQuery(collection, spec),
 });
 
@@ -164,7 +177,11 @@ import {
   toRemittanceView,
   encodeRemittanceCursor,
   decodeRemittanceCursor,
+  matchingRemittanceTotals,
+  MATCHING_TOTALS_PAGE_SIZE,
 } from '../remittance';
+import type { Firestore } from 'firebase-admin/firestore';
+import { remittanceAlertDocId } from '../remittanceLedger';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<Record<string, unknown>>;
 const record = recordPayrollRemittance as unknown as Handler;
@@ -212,6 +229,8 @@ const setNow = (iso: string) => nowSpy.mockReturnValue(Date.parse(iso));
 beforeEach(() => {
   for (const name of Object.keys(mockStore) as CollectionName[]) mockStore[name] = {};
   mockQueries.length = 0;
+  mockTotalsQueries.length = 0;
+  mockFailTotals = false;
   mockAutoId = 0;
   jest.clearAllMocks();
   nowSpy = jest.spyOn(Date, 'now').mockReturnValue(NOON_JUL_20);
@@ -848,6 +867,115 @@ describe('voidPayrollRemittanceReceipt', () => {
   });
 });
 
+describe('overdue alerts follow the money', () => {
+  const alertId = (thresholdDays: number, epoch = 0) => remittanceAlertDocId(BATCH_ID, thresholdDays, epoch);
+  const seedAlert = (id: string, over: Doc = {}) => {
+    mockStore.incident_log[id] = { source: 'remittance-overdue', batchId: BATCH_ID, resolved: false, error: 'late', ...over };
+  };
+
+  it('closes the open alerts in the same commit as the receipt that settles the record', async () => {
+    seedRemittance();
+    seedAlert(alertId(1));
+    seedAlert(alertId(16));
+
+    await record(opsRequest(receipt({ amountCents: 170000 })));
+
+    for (const id of [alertId(1), alertId(16)]) {
+      expect(mockStore.incident_log[id]).toEqual({
+        source: 'remittance-overdue',
+        batchId: BATCH_ID,
+        error: 'late',
+        resolved: true,
+        resolvedBy: 'system',
+        resolution: 'remittance-received',
+        resolvedAt: expect.any(MockTimestamp),
+      });
+    }
+    expect(auditEntries()[0]).toMatchObject({ meta: { resolvedAlerts: [alertId(1), alertId(16)] } });
+  });
+
+  it('an overpayment settles too', async () => {
+    seedRemittance();
+    seedAlert(alertId(1));
+
+    await record(opsRequest(receipt({ amountCents: 200000 })));
+
+    expect(mockStore.incident_log[alertId(1)]).toMatchObject({ resolved: true, resolution: 'remittance-received' });
+  });
+
+  it('leaves the alert open while money is still missing', async () => {
+    seedRemittance();
+    seedAlert(alertId(1));
+
+    await record(opsRequest(receipt({ amountCents: 100000 })));
+
+    expect(mockStore.incident_log[alertId(1)]).toMatchObject({ resolved: false });
+    expect(auditEntries()[0]!['meta']).not.toHaveProperty('resolvedAlerts');
+  });
+
+  it('does not rewrite an alert ops already dismissed', async () => {
+    seedRemittance();
+    seedAlert(alertId(1), { resolved: true });
+
+    await record(opsRequest(receipt({ amountCents: 170000 })));
+
+    expect(mockStore.incident_log[alertId(1)]).toEqual({
+      source: 'remittance-overdue',
+      batchId: BATCH_ID,
+      error: 'late',
+      resolved: true,
+    });
+  });
+
+  it('closes only the current cycle\'s alerts', async () => {
+    seedRemittance({ overdueAlertEpoch: 1 });
+    seedAlert(alertId(1));
+    seedAlert(alertId(1, 1));
+
+    await record(opsRequest(receipt({ amountCents: 170000 })));
+
+    expect(mockStore.incident_log[alertId(1, 1)]).toMatchObject({ resolved: true });
+    // An earlier cycle's leftover is the daily check's to close, as superseded.
+    expect(mockStore.incident_log[alertId(1)]).toMatchObject({ resolved: false });
+  });
+
+  it('a void that makes a settled record owe again starts a new alert cycle', async () => {
+    seedRemittance();
+    const { receiptId } = await record(opsRequest(receipt({ amountCents: 170000 })));
+    expect(stored()).not.toHaveProperty('overdueAlertEpoch');
+
+    await voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId, reason: 'wrong batch' }));
+
+    expect(stored()).toMatchObject({ status: 'expected', overdueAlertEpoch: 1 });
+
+    // Settled and re-opened once more: the next cycle.
+    const again = await record(opsRequest(receipt({ amountCents: 170000, bankReference: 'SPEI-0002' })));
+    await voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId: again['receiptId'], reason: 'wrong batch' }));
+    expect(stored()).toMatchObject({ overdueAlertEpoch: 2 });
+  });
+
+  it('a void on a record that still owed keeps its cycle', async () => {
+    seedRemittance();
+    const { receiptId } = await record(opsRequest(receipt({ amountCents: 100000 })));
+
+    await voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId, reason: 'wrong batch' }));
+
+    expect(stored()).toMatchObject({ status: 'expected' });
+    expect(stored()).not.toHaveProperty('overdueAlertEpoch');
+  });
+
+  it('a void that leaves an overpaid record still settled keeps its cycle', async () => {
+    seedRemittance();
+    await record(opsRequest(receipt({ amountCents: 170000 })));
+    const extra = await record(opsRequest(receipt({ amountCents: 5000, bankReference: 'SPEI-0002' })));
+
+    await voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId: extra['receiptId'], reason: 'duplicate' }));
+
+    expect(stored()).toMatchObject({ status: 'received' });
+    expect(stored()).not.toHaveProperty('overdueAlertEpoch');
+  });
+});
+
 describe('listPayrollRemittances', () => {
   function seedFour() {
     // As of 2026-07-20 with the default 7-day grace:
@@ -1144,6 +1272,103 @@ describe('listPayrollRemittances — pagination', () => {
     ]) {
       expect(decodeRemittanceCursor(bad, 'asc')).toBeNull();
     }
+  });
+});
+
+describe('listPayrollRemittances — totals of everything the filters match', () => {
+  const dayOf = (i: number) => new Date(Date.UTC(2020, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
+
+  it('the first page carries totals over every page, beside the page\'s own', async () => {
+    // 120 records over three pages of 50: 2020 dates, so all overdue as of 2026-07-20.
+    for (let i = 0; i < 120; i++) {
+      seedRemittance({ payPeriodEnd: dayOf(i), expectedCents: 1000, receivedCents: i % 2 === 0 ? 0 : 400, status: i % 2 === 0 ? 'expected' : 'partial' }, `batch-${String(i).padStart(4, '0')}`);
+    }
+
+    const first = await list(opsRequest({ limit: 50 }));
+
+    expect(first['totals']).toMatchObject({ count: 50, expectedCents: 50000 });
+    expect(first['matchingTotals']).toEqual({
+      count: 120,
+      expectedCents: 120000,
+      receivedCents: 60 * 400,
+      outstandingCents: 120000 - 60 * 400,
+      overdueCount: 120,
+      overdueCents: 120000 - 60 * 400,
+      complete: true,
+    });
+    // Later pages of the same walk do not repeat the work.
+    const second = await list(opsRequest({ limit: 50, cursor: first['nextCursor'] }));
+    expect(second['matchingTotals']).toBeNull();
+    expect(mockTotalsQueries).toHaveLength(1);
+  });
+
+  it('walks the same ordered, filtered query, projected to the fields it sums', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+
+    await list(opsRequest({ employerId: 'employer-uid-1', overdueOnly: true }));
+
+    expect(mockTotalsQueries[0]).toEqual({
+      collection: 'payrollRemittances',
+      filters: [
+        { field: 'employerId', op: '==', value: 'employer-uid-1' },
+        { field: 'status', op: 'in', value: ['expected', 'partial'] },
+        { field: 'payPeriodEnd', op: '<', value: '2026-07-13' },
+      ],
+      orders: [
+        { field: 'payPeriodEnd', direction: 'asc' },
+        { field: '__name__', direction: 'asc' },
+      ],
+      after: null,
+      limit: MATCHING_TOTALS_PAGE_SIZE,
+      select: ['expectedCents', 'receivedCents', 'payPeriodEnd'],
+    });
+  });
+
+  it('applies the view\'s filters the way the rows do', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15', receivedCents: 50000, status: 'partial' }, 'emp-a_old'); // overdue
+    seedRemittance({ payPeriodEnd: '2026-07-15' }, 'emp-a_current'); // in grace
+    seedRemittance({ payPeriodEnd: '2026-05-31', receivedCents: 170000, status: 'received' }, 'emp-a_settled');
+    // Stored status is stale; the figures say it is paid, so it is not outstanding.
+    seedRemittance({ payPeriodEnd: '2026-05-15', receivedCents: 170000, status: 'partial' }, 'emp-a_stale');
+    seedRemittance({ payPeriodEnd: '2026-06-15', employerId: 'employer-uid-2' }, 'emp-b_old');
+
+    const outstanding = await list(opsRequest({}));
+    expect(outstanding['matchingTotals']).toMatchObject({ count: 3, outstandingCents: 120000 + 170000 + 170000, overdueCount: 2 });
+    expect(outstanding['matchingTotals']).toMatchObject({ count: (outstanding['totals'] as { count: number }).count });
+
+    const all = await list(opsRequest({ view: 'all' }));
+    expect(all['matchingTotals']).toMatchObject({ count: 5, expectedCents: 5 * 170000, outstandingCents: 460000, overdueCount: 2, overdueCents: 290000 });
+
+    const overdue = await list(opsRequest({ overdueOnly: true, employerId: 'employer-uid-1' }));
+    expect(overdue['matchingTotals']).toMatchObject({ count: 1, outstandingCents: 120000, overdueCents: 120000 });
+  });
+
+  it('says when it stopped at its cap instead of passing a partial sum off as the whole', async () => {
+    for (let i = 0; i < 5; i++) seedRemittance({ payPeriodEnd: dayOf(i) }, `b-${i}`);
+    const db = mockDb as unknown as Firestore;
+    const filter = { outstandingOnly: true, overdueOnly: false, today: '2026-07-20', graceDays: 7 };
+
+    await expect(matchingRemittanceTotals(db, filter, 1)).resolves.toMatchObject({ count: 5, complete: true });
+
+    for (let i = 5; i < MATCHING_TOTALS_PAGE_SIZE + 1; i++) seedRemittance({ payPeriodEnd: dayOf(i) }, `b-${i}`);
+    await expect(matchingRemittanceTotals(db, filter, 1)).resolves.toMatchObject({
+      count: MATCHING_TOTALS_PAGE_SIZE,
+      complete: false,
+    });
+    await expect(matchingRemittanceTotals(db, filter, 2)).resolves.toMatchObject({
+      count: MATCHING_TOTALS_PAGE_SIZE + 1,
+      complete: true,
+    });
+  });
+
+  it('still returns the page when the totals walk fails', async () => {
+    seedRemittance({ payPeriodEnd: '2026-06-15' }, 'a');
+    mockFailTotals = true;
+
+    const res = await list(opsRequest({}));
+
+    expect(res['matchingTotals']).toBeNull();
+    expect((res['remittances'] as unknown[])).toHaveLength(1);
   });
 });
 

@@ -87,16 +87,26 @@ export interface ListRemittancesResult {
   pageSize?: number;
   /** Pass back as `cursor` for the next page; null (or absent, older server) on the last one. */
   nextCursor?: string | null;
-  /** Totals of THIS page only. There is no server-side grand total. */
+  /** Totals of THIS page only. */
   totals: RemittanceTotals;
+  /**
+   * Totals of every record the filters match, across all pages. Sent with the
+   * first page only (null on later pages, and when the server could not work
+   * them out; absent from an older server). `complete: false` means the server
+   * stopped at its cap and these cover only part of the view.
+   */
+  matchingTotals?: MatchingRemittanceTotals | null;
   remittances: Remittance[];
 }
 
+export interface MatchingRemittanceTotals extends RemittanceTotals {
+  complete: boolean;
+}
+
 /**
- * Totals over the rows actually on screen. The server totals each page on its
- * own, so once a second page is loaded the only honest figure is the sum of
- * what was loaded — recomputed from the rows rather than added page by page,
- * so it cannot drift from the list beneath it.
+ * Totals over the rows actually on screen — the fallback when the server sent
+ * no `matchingTotals`. Recomputed from the rows rather than added page by
+ * page, so it cannot drift from the list beneath it.
  */
 export function totalsOf(remittances: Remittance[]): RemittanceTotals {
   return remittances.reduce<RemittanceTotals>(
