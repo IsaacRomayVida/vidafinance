@@ -98,6 +98,13 @@ jobs:
       - name: The drift check still fails when it should — hard gate
         run: node --test scripts/check-deploy-watch-paths.test.mjs
 
+      # deploy-underwriting.yml resolves which Railway service to deploy and
+      # whether /health proves the deploy live through these two pure
+      # functions. Both only run on a manual dispatch to production, so a PR
+      # that breaks either has to go red here rather than mid-deploy.
+      - name: The underwriting deploy still targets the right service — hard gate
+        run: node --test scripts/deploy-underwriting-checks.test.mjs
+
       # Same reasoning for the production-liveness checkers that
       # verify-production-live.yml runs on a schedule: their decision
       # functions are pure, and a rotted decision keeps printing ✓ — so a PR

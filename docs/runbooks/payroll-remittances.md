@@ -24,6 +24,7 @@ the date in `America/Mexico_City`.
 | `lastReceivedOn` | callables | Latest `receivedOn` among non-voided receipts, or `null`. |
 | `receipts[]` | callables | Append-only. A voided receipt stays, marked. |
 | `createdOnDemandBy` | `recordPayrollRemittance` | uid, only on a record created by a receipt against a pre-ledger batch. |
+| `overdueAlertEpoch` | expected side, `voidPayrollRemittanceReceipt` | The record's overdue-alert cycle; absent means 0. Goes up by one each time a settled record (nothing outstanding) owes money again — a void took a receipt back out, or a retried batch raised `expectedCents`. See the overdue alert below. |
 | `backfilledBy` | backfill script | `004_backfill_payroll_remittances`, only on backfilled records. |
 
 "Expected side" is `processPayroll` for every batch since E18, and the backfill script or
@@ -220,6 +221,9 @@ Output:
   nextCursor: string | null; // pass back as `cursor` for the next page; null on the last page
   truncated: boolean;        // === (nextCursor !== null); kept for callers written before pagination
   totals: { count, expectedCents, receivedCents, outstandingCents, overdueCount, overdueCents }; // THIS PAGE only
+  // EVERY record the filters match, across all pages. First page (no cursor) only; null on
+  // later pages and when the totals walk failed. complete: false = stopped at its cap.
+  matchingTotals: { count, expectedCents, receivedCents, outstandingCents, overdueCount, overdueCents, complete } | null;
   remittances: Array<{
     batchId: string;
     employerId: string | null;
@@ -284,8 +288,17 @@ those, so past 500 matches the oldest debts could be the ones cut.
   `status` disagrees with its figures is dropped after the read. Use `nextCursor`, not the row
   count, to decide whether there is more.
 - **`totals` cover the returned page only**, as they always covered only the returned rows.
-  With one page (`nextCursor: null`) they are the totals of everything that matched. With more,
-  sum across pages or label them as page totals. There is no server-side grand total yet.
+  With one page (`nextCursor: null`) they are the totals of everything that matched.
+- **`matchingTotals` cover everything the filters match** (added 2026-10-16). Worked out on
+  the first page only, by walking the same ordered query to the end with `select` on
+  `expectedCents`, `receivedCents`, `payPeriodEnd` (1,000 per read, at most 40 reads =
+  40,000 records), summed with the same derivation as the rows — status from the figures,
+  aging from the period end — so they cannot disagree with the rows. It uses the indexes the
+  list already needs; no new index. It costs one document read per matching record per
+  first-page call; a Firestore `sum()` aggregation would be cheaper but would trust the stored
+  `status` and need composite indexes over the summed fields. If the walk hits its cap it
+  returns `complete: false` (and logs a warning); if it fails the page is still returned, with
+  `matchingTotals: null`.
 - Backwards compatible for a caller that sends neither `limit` nor `cursor`: same fields, same
   first 500 rows in the same order for the outstanding view, `truncated` still says whether
   more exist. New fields: `pageSize`, `nextCursor`.
@@ -328,27 +341,42 @@ already use. No new secret, collection, rule or service.
   change nothing else). Fields: `source: 'remittance-overdue'`, `error` (the Spanish line the
   page prints), `severity`, `ts`, `resolved`, plus `batchId`, `employerId`, `payPeriodEnd`,
   `expectedCents`, `receivedCents`, `outstandingCents`, `daysOverdue`, `thresholdDays`,
-  `graceDays`, `asOf`.
+  `alertEpoch`, `graceDays`, `asOf`. When the system closes one it adds `resolved: true`,
+  `resolvedAt`, `resolvedBy: 'system'` and `resolution` (below).
 - **Slack** — one summary line per run that raised something, through `sendSlackAlert`. Like
   every other caller it does nothing unless `SLACK_WEBHOOK_URL` is set on Functions. Whether
   it is set in production has not been checked; `incident_log` is the channel to rely on.
 
 Rules:
 
-- **One alert per record per threshold.** Thresholds are 1, 16 and 31 days overdue — the lower
-  edges of the aging buckets. `severity` is `warning` for 1 and 16, `critical` for 31.
-- The document id is `remittance-overdue_<threshold>d_<batchId>` and it is written with
-  `create()`. A second run the same day, a retried run or two overlapping runs cannot raise
-  the same alert twice, and an alert ops dismissed is not raised again.
+- **One alert per record per threshold per cycle.** Thresholds are 1, 16 and 31 days overdue —
+  the lower edges of the aging buckets. `severity` is `warning` for 1 and 16, `critical` for 31.
+- The document id is `remittance-overdue_<threshold>d_<batchId>` in cycle 0 (unchanged from
+  before cycles existed) and `remittance-overdue_e<cycle>_<threshold>d_<batchId>` after that,
+  written with `create()`. A second run the same day, a retried run or two overlapping runs
+  cannot raise the same alert twice, and an alert ops dismissed is not raised again in the same
+  cycle.
+- **A record re-opened after it was settled starts a new cycle** (`overdueAlertEpoch`), so it
+  can raise every threshold again — including ones the settled cycle already raised.
 - A record first seen already past several thresholds (after the backfill, or after the
   scheduler was down) gets one alert, for the highest threshold. Lower ones are not back-filled.
 - It uses the default 7-day grace. That is a display default, not an agreed term, so an alert
   means "late by our default", not "in breach".
-- Not done: an alert is not resolved automatically when the money arrives (ops dismiss it),
-  and a record that is settled, then re-opened by a void, does not re-raise a threshold it
-  already raised.
-- If an alert cannot be written the sweep carries on, logs the batch, and the run fails at the
-  end; the next run raises what was missed.
+- **Alerts close themselves when the money arrives.** The receipt that leaves a record with
+  nothing outstanding closes that cycle's open alerts in the same transaction
+  (`resolution: 'remittance-received'`; the audit entry lists them in `meta.resolvedAlerts`).
+  Each run of the check also walks every open `remittance-overdue` alert (equality filters on
+  `source` and `resolved` — no composite index) and closes the ones whose record is no longer
+  overdue (`'no-longer-overdue'`) or has moved on to a later cycle (`'superseded'`), whatever
+  settled it. An alert whose record cannot be found is left open. An alert ops already
+  dismissed is not touched.
+- If an alert cannot be written or closed the sweep carries on, logs it, and the run fails at
+  the end; the next run does what was missed.
+- **Page cap.** Each walk (open alerts, outstanding records) reads at most 50 pages of 200
+  (10,000 documents). A run that stops at the cap with more left to read logs an error, writes
+  a `critical` incident `remittance-overdue-check_<date>` (source `remittance-overdue-check`,
+  one per day) and a critical Slack line, and fails. If that ever fires, raise `MAX_PAGES` in
+  `remittanceOverdueCheck.ts` — the ledger has outgrown it.
 
 ## Backfill: `scripts/migrations/004_backfill_payroll_remittances.ts`
 
@@ -489,9 +517,12 @@ is shown if that read fails).
   `nextCursor` and appends. A filter change starts again from page one with no
   cursor; **Actualizar**, and the reload after a write, ask page one for as
   many rows as were already on screen (capped at 500) so ops keeps their place.
-  The four totals are sums of the rows on screen, not the server's per-page
-  `totals`; while another page exists the heading reads "N remesas cargadas ·
-  hay más" and a line under the totals says they cover only what is loaded.
+  The four totals are the server's `matchingTotals` for the whole view; while
+  not all of it is loaded, a line under them says how many remesas the view has
+  and how many are on screen, and the heading reads "N remesas cargadas · hay
+  más". If the server sent no complete `matchingTotals`, the totals fall back
+  to sums of the rows on screen and a line under them says they cover only what
+  is loaded.
   The order is stated next to the as-of date (oldest period first for
   outstanding and overdue, newest first for "Todas"). Each row shows expected /
   received / outstanding, the status, the aging pill (peach up to 15 days

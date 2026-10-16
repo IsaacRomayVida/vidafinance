@@ -10,7 +10,7 @@ This runbook covers how a normal production deploy flows, what to watch during a
 
 Every push to `main` automatically deploys **Firebase Hosting + Cloud Functions + Firestore rules + Storage rules** to production. No manual step. Most Railway services (payment-server, softcredito, notifications, pdf-generator, ml-service) deploy separately from their own GitHub pushes, gated on Railway's own build.
 
-**`registry-service-funpay` is the exception: it has no Railway trigger and is deployed by CI instead — see §1.1.** Do not assume a Railway service redeploys itself. "It's a Railway service, so Railway deploys it" is the sentence that let that one run six-day-old code.
+**`registry-service-funpay` is the exception: it has no Railway trigger and is deployed by CI instead — see §1.1.** **`underwriting-service` is the other one: merging does not redeploy it, and it deploys only when someone runs `deploy-underwriting.yml` by hand — see §1.2.** Do not assume a Railway service redeploys itself. "It's a Railway service, so Railway deploys it" is the sentence that let that one run six-day-old code.
 
 A deploy takes ~6–8 minutes. During that window, the app is in a zero-downtime rolling state: Hosting flips atomically at the end, Cloud Functions each flip individually as each finishes rebuilding.
 
@@ -25,6 +25,7 @@ A deploy takes ~6–8 minutes. During that window, the app is in a zero-downtime
 | Manual retry | Same | `gh run rerun <run-id>` |
 | Manual `firebase deploy` from a dev laptop | **Forbidden on production** | See "Emergency hotfix" below |
 | Push to `main` touching `services/registry-service/**` or `services/shared/**` | `registry-service-funpay` (Railway) | `.github/workflows/deploy-registry-funpay.yml` — see §1.1 |
+| Manual dispatch only (no push trigger) | `underwriting-service` (Railway) | `.github/workflows/deploy-underwriting.yml` — see §1.2 |
 
 There is no "promote staging → prod" mechanism — each environment deploys from its own branch.
 
@@ -60,6 +61,63 @@ Two things to know when touching it:
 > **If a deployment trigger is ever added in the Railway dashboard, delete
 > `.github/workflows/deploy-registry-funpay.yml` in the same change.** Otherwise every qualifying push
 > deploys twice and two builds of one service race each other.
+
+### 1.2 underwriting-service deploys only when dispatched
+
+`underwriting-service` (Railway project `FunPay`, environment `production`) serves
+`POST /underwrite`, which `functions/src/index.ts` calls through `UNDERWRITING_SERVICE_URL` — the credit
+decision. **Merging to `main` does not redeploy it.** Checked 2026-10-15: Railway's commit statuses on
+recent merge commits cover ml-service, notification-service, payment-server and pdf-generator only, and
+no workflow deployed underwriting. So an underwriting change being merged (stage 0, #639) says nothing
+about it being live.
+
+`.github/workflows/deploy-underwriting.yml` is the deploy path. It is **`workflow_dispatch` only, on
+purpose**: deploying the credit-decision service on every merge has not been approved, and adding a
+`push:` trigger is a separate decision. When that decision is made, add the trigger with a `paths:` list
+mirroring the Dockerfile's `COPY` set (as in §1.1) and remove `dispatchOnly` from the underwriting row of
+`TARGETS` in `scripts/check-deploy-watch-paths.mjs` in the same PR — that check fails while the two
+disagree, so a new filter cannot go live unchecked.
+
+**How to run it.** Only from `main` (the job refuses any other ref), and only with approval to deploy
+underwriting to production — the job runs in the `production` environment:
+
+```bash
+gh workflow run deploy-underwriting.yml --ref main
+gh run watch "$(gh run list --workflow deploy-underwriting.yml --limit 1 --json databaseId -q '.[0].databaseId')"
+```
+
+Or Actions → *Deploy underwriting-service (Railway)* → *Run workflow* on `main`. It uses the existing
+`RAILWAY_API_TOKEN` secret; no new secret is needed.
+
+**What it does and verifies**, in order — any failure before the trigger deploys nothing:
+
+1. **Resolves the service.** The repo has never recorded underwriting's Railway service id, and one is
+   not hardcoded. The job lists every service in FunPay/production with its domains and picks the one
+   serving the canonical host in `scripts/production-endpoints.json`
+   (`underwriting-service-production.up.railway.app`). It refuses if none or several do, if any
+   service's domains could not be read, or if the match is not named `underwriting-service`. The
+   decision is `scripts/deploy-underwriting-checks.mjs resolve`, tested in CI.
+2. **Confirms the build premise**: `RAILWAY_DOCKERFILE_PATH` is `services/underwriting-service/Dockerfile`,
+   `railwayConfigFile` is null and the root directory is the repo root — the same guard as §1.1.
+3. **Records the live deployment**, then triggers `serviceInstanceDeploy(latestCommit: true)` — the head
+   of the branch Railway links, never the dispatching ref.
+4. **Waits for the new deployment** (a different id from step 3) to reach `SUCCESS`; `FAILED`, `CRASHED`,
+   `REMOVED`, `SKIPPED` and `NEEDS_APPROVAL` fail the job. Ten-minute window.
+5. **Asks the service.** `GET /health` now reports `commit` (Railway's `RAILWAY_GIT_COMMIT_SHA`, or
+   `"unknown"`), `version` (from `package.json`) and `deploymentId` (`RAILWAY_DEPLOYMENT_ID`, or `null`).
+   The job polls it for up to five minutes and passes only when `commit` equals the commit Railway reports
+   for the new deployment (`meta.commitHash`). It fails at once if the new deployment answers with a
+   different commit or with `"unknown"`.
+6. **Compares with `main`.** If Railway built a commit other than `main` at dispatch time, the job warns:
+   the service may be linked to another branch, or a merge landed in between.
+
+To check what is live without deploying:
+
+```bash
+curl -s https://underwriting-service-production.up.railway.app/health | jq '{commit, version, deploymentId}'
+```
+
+A build from before this change has no `commit` field at all.
 
 ---
 

@@ -1366,6 +1366,8 @@
   "remit_list_title_partial_one": "{{count}} remittance loaded · there are more",
   "remit_list_title_partial_other": "{{count}} remittances loaded · there are more",
   "remit_totals_partial": "The totals above add up only the remittances loaded so far, not the whole view.",
+  "remit_totals_view_one": "The totals above cover the whole view: {{count}} remittance, {{loaded}} of it on screen.",
+  "remit_totals_view_other": "The totals above cover the whole view: {{count}} remittances, {{loaded}} of them on screen.",
   "remit_order_outstanding": "Order: oldest pay period first.",
   "remit_order_all": "Order: newest pay period first.",
   "remit_kpi_scope_loaded": "of what is loaded"

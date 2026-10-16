@@ -9,8 +9,10 @@
  * receipts read as voided; and server refusals are shown in words ops can act
  * on (the duplicate-reference cases in particular) — in Spanish, keyed on the
  * server's `details.reason`, never its English message. The list is paged:
- * "load more" sends the server's cursor and appends, the totals are sums of
- * what is on screen and say so while there is another page, and a void's
+ * "load more" sends the server's cursor and appends, the totals are the
+ * server's totals for the whole view when it sends them (saying how much of
+ * the view is on screen) and otherwise sums of what is on screen that say so
+ * while there is another page, and a void's
  * timestamp is shown as the Mexico City date.
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -545,6 +547,85 @@ describe('PayrollRemittances — pages', () => {
     expect(screen.getByRole('heading', { name: '3 remesas' })).toBeInTheDocument();
     expect(screen.queryByTestId('remit-totals-partial')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Cargar más remesas' })).toBeNull();
+  });
+
+  /** What the server sends as `matchingTotals`: the whole view, not the page. */
+  const viewTotals = {
+    count: 120,
+    expectedCents: 9_876_543,
+    receivedCents: 1_000_000,
+    outstandingCents: 8_876_543,
+    overdueCount: 7,
+    overdueCents: 4_000_000,
+    complete: true,
+  };
+  const withViewTotals = (result: ReturnType<typeof listResult>, matchingTotals: unknown) => ({
+    data: { ...result.data, matchingTotals },
+  });
+
+  it('shows the server totals for the whole view, and says how much of it is on screen', async () => {
+    handlers.listPayrollRemittances = vi.fn<Handler>(async (args) =>
+      (args as { cursor?: string }).cursor
+        ? withViewTotals(listResult(pageTwo, null), null)
+        : withViewTotals(listResult(pageOne, 'cursor-after-b-2'), viewTotals),
+    );
+    render(<PayrollRemittances />);
+    await row('b-2');
+
+    expect(within(kpi('Esperado')).getByText('$98,765.43')).toBeInTheDocument();
+    expect(within(kpi('Recibido')).getByText('$10,000.00')).toBeInTheDocument();
+    expect(within(kpi('Pendiente')).getByText('$88,765.43')).toBeInTheDocument();
+    expect(within(kpi('Vencido')).getByText('$40,000.00')).toBeInTheDocument();
+    expect(within(kpi('Vencido')).getByText('7 remesas')).toBeInTheDocument();
+    expect(screen.getByTestId('remit-totals-scope')).toHaveTextContent(
+      'Los totales de arriba son de toda la vista: 120 remesas, de las que hay 2 en pantalla.',
+    );
+    // Not the loaded-rows caveat: these figures are not partial.
+    expect(screen.queryByTestId('remit-totals-partial')).toBeNull();
+
+    // The next page (which carries no totals) keeps the view's figures and updates the count on screen.
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar más remesas' }));
+    await row('b-3');
+    expect(within(kpi('Esperado')).getByText('$98,765.43')).toBeInTheDocument();
+    expect(screen.getByTestId('remit-totals-scope')).toHaveTextContent('de las que hay 3 en pantalla');
+  });
+
+  it('drops the scope line once everything in the view is on screen', async () => {
+    handlers.listPayrollRemittances = vi.fn<Handler>(async () =>
+      withViewTotals(listResult(pageOne, null), { ...viewTotals, count: 2 }),
+    );
+    render(<PayrollRemittances />);
+    await row('b-2');
+
+    expect(within(kpi('Esperado')).getByText('$98,765.43')).toBeInTheDocument();
+    expect(screen.queryByTestId('remit-totals-scope')).toBeNull();
+  });
+
+  it('falls back to summing the loaded rows, and says so, when the server totals are incomplete', async () => {
+    handlers.listPayrollRemittances = vi.fn<Handler>(async () =>
+      withViewTotals(listResult(pageOne, 'cursor-after-b-2'), { ...viewTotals, complete: false }),
+    );
+    render(<PayrollRemittances />);
+    await row('b-2');
+
+    expect(within(kpi('Esperado')).getByText('$300.00')).toBeInTheDocument();
+    expect(screen.getByTestId('remit-totals-partial')).toBeInTheDocument();
+    expect(screen.queryByTestId('remit-totals-scope')).toBeNull();
+  });
+
+  it('takes the new view\'s totals when a filter changes', async () => {
+    handlers.listPayrollRemittances = vi.fn<Handler>(async (args) =>
+      (args as { view: string }).view === 'all'
+        ? withViewTotals(listResult(pageOne, 'c'), { ...viewTotals, expectedCents: 11_111_100 })
+        : withViewTotals(listResult(pageOne, 'c'), viewTotals),
+    );
+    render(<PayrollRemittances />);
+    await row('b-2');
+    expect(within(kpi('Esperado')).getByText('$98,765.43')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Todas' }));
+
+    expect(await within(kpi('Esperado')).findByText('$111,111.00')).toBeInTheDocument();
   });
 
   it('never shows the same batch twice if a page repeats one', async () => {

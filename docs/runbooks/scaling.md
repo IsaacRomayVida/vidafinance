@@ -212,6 +212,9 @@ always for the pool sign-in and for the App Check debug-token exchange, and for 
 target is not production. `TARGET_URL` only says where `requestLoan` is called; those three say
 which project the pool's passwords and the debug token are sent to. No flag overrides it. The
 signed-off production smoke (below) uses `APP_CHECK_TOKEN` + `AUTH_TOKEN` and none of the three.
+`FIREBASE_PROJECT_ID` is shape-checked first: anything but lower-case letters, digits and hyphens
+(`^[a-z0-9-]+$`) is refused before it is compared with production or put in the exchange URL — a
+quoted, padded or upper-case id, `vida%2Dfinance`, `x/../vida-finance`. Write the id bare.
 
 The setup step now **aborts** (it used to "proceed anyway") if `/api/health` is not 200.
 Results land in `tests/load/results/<date>T<time>Z-<label>-<profile>-report.md` (committable) and
@@ -370,6 +373,10 @@ The two setups:
   unset, `BUREAU_MODE=offline` on a non-production adapter, `BELVO_BASE_URL` unset, a
   non-production service account and Redis, alerts off. Even then it measures only what the
   paragraph above says, and it leaves the residue listed under step 7.
+  Nothing the k6 script guards changes this. It refuses production targets and production
+  Firebase identifiers, malformed project ids, a missing App Check token and an expired one it
+  cannot refresh — but it cannot see how the target's services are configured, so none of the
+  rows above is checked by it. Only a real staging run with that checklist recorded can clear B.
 
 #### Needs a human first (console and credential actions — not automated, not done)
 
@@ -399,7 +406,10 @@ The two setups:
    (`…/v1/projects/<project>/apps/<app id>:exchangeDebugToken`) for an App Check token and
    re-exchanges at 80% of its lifetime, so the 2-hour `full` profile outlives the 1-hour token.
    A failed exchange is **not** retried on every iteration: each VU waits 5 s, then 10 s, 20 s …
-   up to 5 min before asking again, and keeps using the token it has. With no token at all, a
+   up to 5 min before asking again, and keeps using the token it has **while that token is still
+   valid**. Once the token's `ttl` has run out, the next request tries the exchange at once and,
+   if that fails too, the run is **aborted** — an expired token is never sent (it used to be,
+   for as long as the refresh kept failing). With no token at all, a
    400 / 401 / 403 / 404 from the exchange (wrong debug token, app id, key or project) aborts the
    run at once, and so do five failures in a row — otherwise every request would be a 401 that
    uses up a pool member.
@@ -414,8 +424,14 @@ The two setups:
 
 5. **Delete the debug token in the console when the run is over.**
 
-The exchange path has unit tests for the request it builds but has **never been run against a
-real project** — the smoke run in step 5 is its first real test.
+The exchange and the pool sign-in have **never been run against a real project** — the smoke
+run in step 5 is their first real test. What exists is unit tests (`tests/load/seed/pool.test.mjs`)
+that drive both from the run's environment to the outcome through a *mocked* endpoint: the mock
+checks each request against the Google REST contract (URL, `key`, body) and answers in Google's
+own error format — success, retryable failures (no answer, 429, 5xx: back off, then recover) and
+terminal ones (400 / 401 / 403 / 404: abort; a sign-in that gets no answer twice: counted as a
+failed sign-in). They prove the script's side of the contract as written down, not that Google
+answers that way for the target project, its API-key restrictions or its quotas.
 
 #### Environment variables the k6 script reads
 
@@ -427,7 +443,7 @@ real project** — the smoke run in step 5 is its first real test.
 | `POOL_OFFSET` | First pool index to use (default 0). |
 | `LOAD_TEST_PASSWORD` | The password the pool was seeded with. |
 | `FIREBASE_API_KEY` | Web API key of the target project (sign-in, and the App Check exchange). Production's key is refused. |
-| `APP_CHECK_DEBUG_TOKEN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` | Debug token and what is needed to exchange it. Production's project id and app id are refused. |
+| `APP_CHECK_DEBUG_TOKEN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` | Debug token and what is needed to exchange it. Production's project id and app id are refused; a project id that is not `^[a-z0-9-]+$` is refused. |
 | `APP_CHECK_TOKEN` | Alternative: an already-exchanged token. Expires; smoke profile only. |
 | `FIREBASE_AUTH_EMULATOR_HOST` | Emulator only: sign in against the Auth emulator instead of Google. |
 | `PROFILE` | `smoke` or `full` (default), lower case. Any other value is refused at init (it used to run the full two hours). |
@@ -567,7 +583,7 @@ is over the 1% threshold, and k6 then exits 99. A review re-run the same day (sa
 5031 / 8231 / 9139, load average ~150) measured 89 iterations, 88 accepted and 1 failed: the Auth
 emulator reset one sign-in connection (status 0), which the script counted as one sign-in failure
 and one HTTP 401. Since then a sign-in that gets no HTTP answer is sent once more
-(`sendWithOneTransportRetry`); that retry has unit tests only and has not been seen to fire in a
+(`sendWithOneTransportRetry`, inside `signInPoolMember`); that retry has unit tests only and has not been seen to fire in a
 run. The committed report above is run 3; a new run writes a time-stamped file and leaves it alone.
 
 Run 4, after those changes (same setup, ports 5041 / 8241 / 9141, via `npm run load-test:smoke`,
