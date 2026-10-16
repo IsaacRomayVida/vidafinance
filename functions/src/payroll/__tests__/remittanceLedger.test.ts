@@ -14,7 +14,10 @@ import {
   expectedRemittanceFields,
   isRealCalendarDate,
   lastReceivedOnOf,
+  nextOverdueAlertEpoch,
   normalizeBankReference,
+  overdueAlertEpochOf,
+  remittanceAlertDocIds,
   pesosToCents,
   receiptIdOf,
   receiptReferenceKey,
@@ -85,6 +88,51 @@ describe('expectedRemittanceFields', () => {
     expect(fields).toMatchObject({ receivedCents: 500, status: 'received' });
     expect(fields).not.toHaveProperty('receipts');
     expect(fields).not.toHaveProperty('createdAt');
+  });
+
+  it('starts a new alert cycle when a retried batch makes a settled record owe again', () => {
+    const settled = { expectedCents: 500, receivedCents: 500, overdueAlertEpoch: 2 };
+
+    expect(
+      expectedRemittanceFields(batch, { expectedCents: 800, deductionCount: 2 }, settled, 'TS'),
+    ).toMatchObject({ status: 'partial', overdueAlertEpoch: 3 });
+    // Still settled, or a new record: the cycle is not touched.
+    expect(expectedRemittanceFields(batch, { expectedCents: 500, deductionCount: 1 }, settled, 'TS')).not.toHaveProperty(
+      'overdueAlertEpoch',
+    );
+    expect(
+      expectedRemittanceFields(batch, { expectedCents: 500, deductionCount: 1 }, undefined, 'TS'),
+    ).not.toHaveProperty('overdueAlertEpoch');
+    // Already owing before: the same cycle.
+    expect(
+      expectedRemittanceFields(batch, { expectedCents: 900, deductionCount: 2 }, { expectedCents: 800, receivedCents: 0 }, 'TS'),
+    ).not.toHaveProperty('overdueAlertEpoch');
+  });
+});
+
+describe('overdue alert cycles', () => {
+  it('reads a missing or malformed cycle as 0', () => {
+    expect(overdueAlertEpochOf(undefined)).toBe(0);
+    expect(overdueAlertEpochOf({ overdueAlertEpoch: 'x' })).toBe(0);
+    expect(overdueAlertEpochOf({ overdueAlertEpoch: -1 })).toBe(0);
+    expect(overdueAlertEpochOf({ overdueAlertEpoch: 3 })).toBe(3);
+  });
+
+  it('moves on only for settled → owing', () => {
+    const settled = { expectedCents: 500, receivedCents: 500 };
+    expect(nextOverdueAlertEpoch(settled, 500, 0)).toBe(1);
+    expect(nextOverdueAlertEpoch({ ...settled, overdueAlertEpoch: 1 }, 500, 100)).toBe(2);
+    expect(nextOverdueAlertEpoch(settled, 500, 500)).toBe(0);
+    expect(nextOverdueAlertEpoch({ expectedCents: 500, receivedCents: 100 }, 500, 0)).toBe(0);
+    expect(nextOverdueAlertEpoch(undefined, 500, 0)).toBe(0);
+  });
+
+  it('lists one id per threshold for a cycle', () => {
+    expect(remittanceAlertDocIds('b1', 1)).toEqual([
+      'remittance-overdue_e1_1d_b1',
+      'remittance-overdue_e1_16d_b1',
+      'remittance-overdue_e1_31d_b1',
+    ]);
   });
 });
 

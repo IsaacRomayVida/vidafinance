@@ -35,7 +35,8 @@ type CollectionName =
   | 'payrollRemittanceReferences'
   | 'payrollBatches'
   | 'payrollDeductions'
-  | 'audit_log';
+  | 'audit_log'
+  | 'incident_log';
 
 const mockStore: Record<CollectionName, Record<string, Doc>> = {
   payrollRemittances: {},
@@ -43,6 +44,7 @@ const mockStore: Record<CollectionName, Record<string, Doc>> = {
   payrollBatches: {},
   payrollDeductions: {},
   audit_log: {},
+  incident_log: {},
 };
 let mockAutoId = 0;
 type Filter = { field: string; op: string; value: unknown };
@@ -165,6 +167,7 @@ import {
   encodeRemittanceCursor,
   decodeRemittanceCursor,
 } from '../remittance';
+import { remittanceAlertDocId } from '../remittanceLedger';
 
 type Handler = (req: { auth?: unknown; data: unknown }) => Promise<Record<string, unknown>>;
 const record = recordPayrollRemittance as unknown as Handler;
@@ -845,6 +848,115 @@ describe('voidPayrollRemittanceReceipt', () => {
     expect(res).toMatchObject({ receivedCents: 100000, status: 'partial' });
     expect(storedReceipts()[1]).toMatchObject({ receiptId: 'legacy-1', bankReferenceKey: 'SPEI-0002', voided: true });
     expect(storedReceipts()[0]).not.toHaveProperty('voided');
+  });
+});
+
+describe('overdue alerts follow the money', () => {
+  const alertId = (thresholdDays: number, epoch = 0) => remittanceAlertDocId(BATCH_ID, thresholdDays, epoch);
+  const seedAlert = (id: string, over: Doc = {}) => {
+    mockStore.incident_log[id] = { source: 'remittance-overdue', batchId: BATCH_ID, resolved: false, error: 'late', ...over };
+  };
+
+  it('closes the open alerts in the same commit as the receipt that settles the record', async () => {
+    seedRemittance();
+    seedAlert(alertId(1));
+    seedAlert(alertId(16));
+
+    await record(opsRequest(receipt({ amountCents: 170000 })));
+
+    for (const id of [alertId(1), alertId(16)]) {
+      expect(mockStore.incident_log[id]).toEqual({
+        source: 'remittance-overdue',
+        batchId: BATCH_ID,
+        error: 'late',
+        resolved: true,
+        resolvedBy: 'system',
+        resolution: 'remittance-received',
+        resolvedAt: expect.any(MockTimestamp),
+      });
+    }
+    expect(auditEntries()[0]).toMatchObject({ meta: { resolvedAlerts: [alertId(1), alertId(16)] } });
+  });
+
+  it('an overpayment settles too', async () => {
+    seedRemittance();
+    seedAlert(alertId(1));
+
+    await record(opsRequest(receipt({ amountCents: 200000 })));
+
+    expect(mockStore.incident_log[alertId(1)]).toMatchObject({ resolved: true, resolution: 'remittance-received' });
+  });
+
+  it('leaves the alert open while money is still missing', async () => {
+    seedRemittance();
+    seedAlert(alertId(1));
+
+    await record(opsRequest(receipt({ amountCents: 100000 })));
+
+    expect(mockStore.incident_log[alertId(1)]).toMatchObject({ resolved: false });
+    expect(auditEntries()[0]!['meta']).not.toHaveProperty('resolvedAlerts');
+  });
+
+  it('does not rewrite an alert ops already dismissed', async () => {
+    seedRemittance();
+    seedAlert(alertId(1), { resolved: true });
+
+    await record(opsRequest(receipt({ amountCents: 170000 })));
+
+    expect(mockStore.incident_log[alertId(1)]).toEqual({
+      source: 'remittance-overdue',
+      batchId: BATCH_ID,
+      error: 'late',
+      resolved: true,
+    });
+  });
+
+  it('closes only the current cycle\'s alerts', async () => {
+    seedRemittance({ overdueAlertEpoch: 1 });
+    seedAlert(alertId(1));
+    seedAlert(alertId(1, 1));
+
+    await record(opsRequest(receipt({ amountCents: 170000 })));
+
+    expect(mockStore.incident_log[alertId(1, 1)]).toMatchObject({ resolved: true });
+    // An earlier cycle's leftover is the daily check's to close, as superseded.
+    expect(mockStore.incident_log[alertId(1)]).toMatchObject({ resolved: false });
+  });
+
+  it('a void that makes a settled record owe again starts a new alert cycle', async () => {
+    seedRemittance();
+    const { receiptId } = await record(opsRequest(receipt({ amountCents: 170000 })));
+    expect(stored()).not.toHaveProperty('overdueAlertEpoch');
+
+    await voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId, reason: 'wrong batch' }));
+
+    expect(stored()).toMatchObject({ status: 'expected', overdueAlertEpoch: 1 });
+
+    // Settled and re-opened once more: the next cycle.
+    const again = await record(opsRequest(receipt({ amountCents: 170000, bankReference: 'SPEI-0002' })));
+    await voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId: again['receiptId'], reason: 'wrong batch' }));
+    expect(stored()).toMatchObject({ overdueAlertEpoch: 2 });
+  });
+
+  it('a void on a record that still owed keeps its cycle', async () => {
+    seedRemittance();
+    const { receiptId } = await record(opsRequest(receipt({ amountCents: 100000 })));
+
+    await voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId, reason: 'wrong batch' }));
+
+    expect(stored()).toMatchObject({ status: 'expected' });
+    expect(stored()).not.toHaveProperty('overdueAlertEpoch');
+  });
+
+  it('a void that leaves an overpaid record still settled keeps its cycle', async () => {
+    seedRemittance();
+    await record(opsRequest(receipt({ amountCents: 170000 })));
+    const extra = await record(opsRequest(receipt({ amountCents: 5000, bankReference: 'SPEI-0002' })));
+
+    await voidReceipt(opsRequest({ batchId: BATCH_ID, receiptId: extra['receiptId'], reason: 'duplicate' }));
+
+    expect(stored()).toMatchObject({ status: 'received' });
+    expect(stored()).not.toHaveProperty('overdueAlertEpoch');
   });
 });
 

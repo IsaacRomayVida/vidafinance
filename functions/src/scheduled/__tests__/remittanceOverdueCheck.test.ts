@@ -4,10 +4,12 @@
  *
  *  - it raises into `incident_log` (the ops Alerts page) and Slack, the two
  *    channels the other monitors already use;
- *  - ONE alert per record per threshold (1, 16, 31 days overdue), however many
- *    times it runs — including after ops dismissed the alert;
+ *  - ONE alert per record per threshold (1, 16, 31 days overdue) per cycle,
+ *    however many times it runs — including after ops dismissed the alert;
+ *  - it closes open alerts whose record is no longer overdue, and a record a
+ *    void re-opened (a new cycle) can raise its thresholds again;
  *  - "today" is the Mexico City date, and the grace window is respected;
- *  - it walks every page of the ledger;
+ *  - it walks every page of the ledger, up to a cap it reports loudly;
  *  - index.ts exports it and deploy.yml deploys it.
  *
  * Time is passed in (`runRemittanceOverdueCheck(db, now)`) or pinned through
@@ -26,16 +28,44 @@ jest.mock('../../utils/slackAlert', () => ({
 }));
 
 type Doc = Record<string, unknown>;
+type Collection = 'payrollRemittances' | 'incident_log';
 type Filter = { field: string; op: string; value: unknown };
-type Spec = { filters: Filter[]; orders: Array<{ field: string; direction: string }>; after: unknown[] | null; limit: number | null };
+type Spec = {
+  collection: Collection;
+  filters: Filter[];
+  orders: Array<{ field: string; direction: string }>;
+  after: unknown[] | null;
+  limit: number | null;
+};
 
-const mockStore: { payrollRemittances: Record<string, Doc>; incident_log: Record<string, Doc> } = {
+const mockStore: Record<Collection, Record<string, Doc>> = {
   payrollRemittances: {},
   incident_log: {},
 };
 const mockQueries: Spec[] = [];
 /** Batch ids whose alert write should fail with something other than "already exists". */
 const mockFailCreateFor = new Set<string>();
+/** Alert ids whose resolving update should fail. */
+const mockFailUpdateFor = new Set<string>();
+
+const mockDocRef = (collection: Collection, id: string) => ({
+  id,
+  get: async () => {
+    const entry = mockStore[collection][id];
+    return { id, exists: entry !== undefined, data: () => entry };
+  },
+  // Like the Admin SDK: create() rejects with gRPC ALREADY_EXISTS (6) if the document is there.
+  create: async (data: Doc) => {
+    if (mockFailCreateFor.has(String(data['batchId']))) throw new Error('deadline exceeded');
+    if (mockStore[collection][id]) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 });
+    mockStore[collection][id] = { ...data };
+  },
+  update: async (data: Doc) => {
+    if (mockFailUpdateFor.has(id)) throw new Error('deadline exceeded');
+    if (!mockStore[collection][id]) throw new Error(`update of missing doc ${id}`);
+    mockStore[collection][id] = { ...mockStore[collection][id], ...data };
+  },
+});
 
 function mockRunQuery(spec: Spec) {
   mockQueries.push(spec);
@@ -44,9 +74,10 @@ function mockRunQuery(spec: Spec) {
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! < b[i]! ? -1 : 1;
     return 0;
   };
-  const docs = Object.entries(mockStore.payrollRemittances)
+  const docs = Object.entries(mockStore[spec.collection])
     .filter(([, doc]) =>
       spec.filters.every((f) => {
+        if (f.op === '==') return doc[f.field] === f.value;
         if (f.op === 'in') return (f.value as unknown[]).includes(doc[f.field]);
         if (f.op === '<') return typeof doc[f.field] === 'string' && (doc[f.field] as string) < (f.value as string);
         throw new Error(`unsupported operator ${f.op}`);
@@ -55,7 +86,7 @@ function mockRunQuery(spec: Spec) {
     .sort(([aId, a], [bId, b]) => compare(key(aId, a), key(bId, b)))
     .filter(([id, doc]) => spec.after === null || compare(key(id, doc), spec.after as string[]) > 0)
     .slice(0, spec.limit ?? Infinity)
-    .map(([id, data]) => ({ id, data: () => data }));
+    .map(([id, data]) => ({ id, data: () => data, ref: mockDocRef(spec.collection, id) }));
   return { docs, size: docs.length, empty: docs.length === 0 };
 }
 
@@ -68,21 +99,12 @@ const mockQuery = (spec: Spec): Record<string, unknown> => ({
 });
 
 const mockDb = {
-  collection: (name: string) => {
-    if (name === 'payrollRemittances') return mockQuery({ filters: [], orders: [], after: null, limit: null });
-    if (name === 'incident_log') {
-      return {
-        doc: (id: string) => ({
-          // Like the Admin SDK: create() rejects with gRPC ALREADY_EXISTS (6) if the document is there.
-          create: async (data: Doc) => {
-            if (mockFailCreateFor.has(String(data['batchId']))) throw new Error('deadline exceeded');
-            if (mockStore.incident_log[id]) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 });
-            mockStore.incident_log[id] = { ...data };
-          },
-        }),
-      };
-    }
-    throw new Error(`unexpected collection ${name}`);
+  collection: (name: Collection) => {
+    if (name !== 'payrollRemittances' && name !== 'incident_log') throw new Error(`unexpected collection ${name}`);
+    return {
+      ...mockQuery({ collection: name, filters: [], orders: [], after: null, limit: null }),
+      doc: (id: string) => mockDocRef(name, id),
+    };
   },
 };
 
@@ -94,11 +116,15 @@ jest.mock('firebase-admin/firestore', () => ({
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Firestore } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions';
 import {
   remittanceOverdueCheck,
   runRemittanceOverdueCheck,
   remittanceAlertDocId,
+  MAX_PAGES,
+  PAGE_SIZE,
   REMITTANCE_ALERT_SOURCE,
+  REMITTANCE_CHECK_TRUNCATED_SOURCE,
 } from '../remittanceOverdueCheck';
 
 const db = mockDb as unknown as Firestore;
@@ -122,6 +148,8 @@ function seedRemittance(batchId: string, over: Doc = {}) {
 }
 
 const alerts = () => Object.values(mockStore.incident_log);
+/** The queries over the ledger itself (the run also queries open alerts). */
+const ledgerQueries = () => mockQueries.filter((q) => q.collection === 'payrollRemittances');
 const alertIds = () => Object.keys(mockStore.incident_log).sort();
 
 beforeEach(() => {
@@ -129,6 +157,7 @@ beforeEach(() => {
   mockStore.incident_log = {};
   mockQueries.length = 0;
   mockFailCreateFor.clear();
+  mockFailUpdateFor.clear();
   jest.clearAllMocks();
 });
 
@@ -167,6 +196,7 @@ describe('runRemittanceOverdueCheck — what it raises', () => {
       outstandingCents: 120000,
       daysOverdue: 1,
       thresholdDays: 1,
+      alertEpoch: 0,
       graceDays: 7,
       asOf: '2026-07-23',
     });
@@ -190,7 +220,7 @@ describe('runRemittanceOverdueCheck — what it raises', () => {
 
     await sweep('2026-07-23');
 
-    expect(mockQueries[0]).toMatchObject({
+    expect(ledgerQueries()[0]).toMatchObject({
       filters: [
         { field: 'status', op: 'in', value: ['expected', 'partial'] },
         { field: 'payPeriodEnd', op: '<', value: '2026-07-16' },
@@ -300,6 +330,121 @@ describe('runRemittanceOverdueCheck — one alert per record per threshold', () 
   });
 });
 
+describe('runRemittanceOverdueCheck — closing alerts the money has answered', () => {
+  it('resolves the open alert once the record is paid, as the system, for the Alerts page', async () => {
+    seedRemittance('b1');
+    await sweep('2026-07-23');
+    Object.assign(mockStore.payrollRemittances['b1']!, { receivedCents: 170000, status: 'received' });
+
+    const result = await sweep('2026-07-24');
+
+    expect(result).toMatchObject({ resolved: 1, raised: [], failed: 0 });
+    expect(mockStore.incident_log[remittanceAlertDocId('b1', 1)]).toMatchObject({
+      resolved: true,
+      resolvedBy: 'system',
+      resolution: 'no-longer-overdue',
+      resolvedAt: { _serverTimestamp: true },
+      // The alert itself is kept as it was raised.
+      asOf: '2026-07-23',
+    });
+    // Nothing left to close: the next run touches nothing.
+    expect((await sweep('2026-07-25')).resolved).toBe(0);
+  });
+
+  it('resolves every threshold the record raised, and only that record\'s', async () => {
+    seedRemittance('b1', { payPeriodEnd: '2026-05-15' });
+    seedRemittance('b2', { payPeriodEnd: '2026-05-15' });
+    await sweep('2026-06-01'); // 10 days overdue → threshold 1
+    await sweep('2026-06-20'); // 29 days overdue → threshold 16
+    Object.assign(mockStore.payrollRemittances['b1']!, { receivedCents: 200000, status: 'overpaid' });
+
+    const result = await sweep('2026-06-21');
+
+    expect(result.resolved).toBe(2);
+    expect(mockStore.incident_log[remittanceAlertDocId('b1', 1)]!['resolved']).toBe(true);
+    expect(mockStore.incident_log[remittanceAlertDocId('b1', 16)]!['resolved']).toBe(true);
+    expect(mockStore.incident_log[remittanceAlertDocId('b2', 1)]!['resolved']).toBe(false);
+    expect(mockStore.incident_log[remittanceAlertDocId('b2', 16)]!['resolved']).toBe(false);
+  });
+
+  it('keeps the alert open while money is still missing after a partial payment', async () => {
+    seedRemittance('b1');
+    await sweep('2026-07-23');
+    Object.assign(mockStore.payrollRemittances['b1']!, { receivedCents: 100000, status: 'partial' });
+
+    expect((await sweep('2026-07-24')).resolved).toBe(0);
+    expect(mockStore.incident_log[remittanceAlertDocId('b1', 1)]!['resolved']).toBe(false);
+  });
+
+  it('leaves open an alert whose record cannot be found, and other sources\' incidents alone', async () => {
+    mockStore.incident_log[remittanceAlertDocId('gone', 1)] = { source: REMITTANCE_ALERT_SOURCE, batchId: 'gone', resolved: false };
+    mockStore.incident_log['system-health_x'] = { source: 'system-health', batchId: 'b1', resolved: false };
+    seedRemittance('b1', { receivedCents: 170000, status: 'received' });
+
+    expect((await sweep('2026-07-24')).resolved).toBe(0);
+    expect(mockStore.incident_log[remittanceAlertDocId('gone', 1)]!['resolved']).toBe(false);
+    expect(mockStore.incident_log['system-health_x']!['resolved']).toBe(false);
+  });
+
+  it('keeps going when one alert cannot be closed, and reports it', async () => {
+    seedRemittance('b1');
+    seedRemittance('b2');
+    await sweep('2026-07-23');
+    for (const id of ['b1', 'b2']) Object.assign(mockStore.payrollRemittances[id]!, { receivedCents: 170000, status: 'received' });
+    mockFailUpdateFor.add(remittanceAlertDocId('b1', 1));
+
+    const result = await sweep('2026-07-24');
+
+    expect(result).toMatchObject({ resolved: 1, failed: 1 });
+    expect(mockStore.incident_log[remittanceAlertDocId('b2', 1)]!['resolved']).toBe(true);
+  });
+});
+
+describe('runRemittanceOverdueCheck — a record re-opened after it was settled', () => {
+  it('raises a threshold again in the new cycle, even one the settled cycle already raised', async () => {
+    seedRemittance('b1');
+    await sweep('2026-07-23');
+    // Paid, then the receipt is voided: the record owes again and is in cycle 1.
+    Object.assign(mockStore.payrollRemittances['b1']!, { receivedCents: 170000, status: 'received' });
+    await sweep('2026-07-24');
+    Object.assign(mockStore.payrollRemittances['b1']!, { receivedCents: 0, status: 'expected', overdueAlertEpoch: 1 });
+
+    const result = await sweep('2026-07-25');
+
+    expect(result.raised).toEqual([expect.objectContaining({ batchId: 'b1', thresholdDays: 1, daysOverdue: 3 })]);
+    expect(mockStore.incident_log[remittanceAlertDocId('b1', 1, 1)]).toMatchObject({
+      resolved: false,
+      alertEpoch: 1,
+      asOf: '2026-07-25',
+    });
+    // The first cycle's alert stays as it was closed.
+    expect(mockStore.incident_log[remittanceAlertDocId('b1', 1)]).toMatchObject({ resolved: true, asOf: '2026-07-23' });
+    // And still only once per threshold within the new cycle.
+    expect((await sweep('2026-07-26')).raised).toEqual([]);
+    expect(mockSendSlackAlert).toHaveBeenCalledTimes(2);
+  });
+
+  it('closes an earlier cycle\'s alert that was still open, as superseded', async () => {
+    seedRemittance('b1');
+    await sweep('2026-07-23');
+    // Settled and re-opened between two runs: the cycle-0 alert was never closed.
+    Object.assign(mockStore.payrollRemittances['b1']!, { overdueAlertEpoch: 1 });
+
+    const result = await sweep('2026-07-24');
+
+    expect(result.resolved).toBe(1);
+    expect(mockStore.incident_log[remittanceAlertDocId('b1', 1)]).toMatchObject({ resolved: true, resolution: 'superseded' });
+    expect(mockStore.incident_log[remittanceAlertDocId('b1', 1, 1)]).toMatchObject({ resolved: false, alertEpoch: 1 });
+  });
+
+  it('gives each cycle its own ids, which cannot collide even though batch ids contain "_"', () => {
+    expect(remittanceAlertDocId('b1', 16)).toBe('remittance-overdue_16d_b1');
+    expect(remittanceAlertDocId('b1', 16, 2)).toBe('remittance-overdue_e2_16d_b1');
+    expect(remittanceAlertDocId('e1_1d_x', 1, 0)).not.toBe(remittanceAlertDocId('x', 1, 1));
+    expect(remittanceAlertDocId('1d_x', 1, 1)).not.toBe(remittanceAlertDocId('x', 1, 11));
+  });
+});
+
 describe('runRemittanceOverdueCheck — volume and failure', () => {
   it('walks every page of the ledger', async () => {
     for (let i = 0; i < 450; i++) seedRemittance(`batch-${String(i).padStart(4, '0')}`);
@@ -307,10 +452,57 @@ describe('runRemittanceOverdueCheck — volume and failure', () => {
     const result = await sweep('2026-07-23');
 
     expect(result.raised).toHaveLength(450);
+    expect(result.truncated).toBe(false);
     expect(alerts()).toHaveLength(450);
-    expect(mockQueries.length).toBe(3);
-    expect(mockQueries[1]!.after).toEqual(['2026-07-15', 'batch-0199']);
+    expect(ledgerQueries().length).toBe(3);
+    expect(ledgerQueries()[1]!.after).toEqual(['2026-07-15', 'batch-0199']);
     expect(mockSendSlackAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops at its page cap and says so loudly: log, an incident, and a critical Slack line', async () => {
+    for (let i = 0; i < 450; i++) seedRemittance(`batch-${String(i).padStart(4, '0')}`);
+
+    const result = await runRemittanceOverdueCheck(db, noon('2026-07-23'), undefined, { maxPages: 2 });
+
+    expect(result.truncated).toBe(true);
+    expect(result.raised).toHaveLength(2 * PAGE_SIZE);
+    expect(ledgerQueries()).toHaveLength(2);
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('page cap'), expect.objectContaining({ maxPages: 2 }));
+    const incident = mockStore.incident_log[`${REMITTANCE_CHECK_TRUNCATED_SOURCE}_2026-07-23`];
+    expect(incident).toMatchObject({
+      source: REMITTANCE_CHECK_TRUNCATED_SOURCE,
+      severity: 'critical',
+      resolved: false,
+      ts: { _serverTimestamp: true },
+      error: expect.stringContaining('400 registros'),
+    });
+    expect(mockSendSlackAlert).toHaveBeenLastCalledWith(expect.stringContaining('NOT checked'), 'critical');
+
+    // A second truncated run the same day does not raise a second incident.
+    await runRemittanceOverdueCheck(db, noon('2026-07-23'), undefined, { maxPages: 2 });
+    expect(alerts().filter((a) => a['source'] === REMITTANCE_CHECK_TRUNCATED_SOURCE)).toHaveLength(1);
+  });
+
+  it('is not truncated when the last page it reads is the last page there is', async () => {
+    for (let i = 0; i < 350; i++) seedRemittance(`batch-${String(i).padStart(4, '0')}`);
+
+    const result = await runRemittanceOverdueCheck(db, noon('2026-07-23'), undefined, { maxPages: 2 });
+
+    expect(result).toMatchObject({ truncated: false });
+    expect(result.raised).toHaveLength(350);
+    expect(alerts().some((a) => a['source'] === REMITTANCE_CHECK_TRUNCATED_SOURCE)).toBe(false);
+  });
+
+  it('caps the walk over open alerts too', async () => {
+    for (let i = 0; i < PAGE_SIZE + 1; i++) {
+      const id = `batch-${String(i).padStart(4, '0')}`;
+      seedRemittance(id);
+      mockStore.incident_log[remittanceAlertDocId(id, 1)] = { source: REMITTANCE_ALERT_SOURCE, batchId: id, resolved: false };
+    }
+
+    const result = await runRemittanceOverdueCheck(db, noon('2026-07-23'), undefined, { maxPages: 1 });
+
+    expect(result.truncated).toBe(true);
   });
 
   it('keeps going when one alert cannot be written, reports it, and raises it on the next run', async () => {
@@ -359,6 +551,13 @@ describe('remittanceOverdueCheck — the scheduled handler', () => {
     mockFailCreateFor.add('b1');
 
     await expect(handler()).rejects.toThrow(/1 alert\(s\) could not be written/);
+  });
+
+  it('fails the run when it stopped at the page cap', async () => {
+    for (let i = 0; i < MAX_PAGES * PAGE_SIZE + 1; i++) seedRemittance(`batch-${String(i).padStart(5, '0')}`);
+
+    await expect(handler()).rejects.toThrow(/page cap/);
+    expect(ledgerQueries()).toHaveLength(MAX_PAGES);
   });
 });
 

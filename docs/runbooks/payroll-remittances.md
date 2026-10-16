@@ -24,6 +24,7 @@ the date in `America/Mexico_City`.
 | `lastReceivedOn` | callables | Latest `receivedOn` among non-voided receipts, or `null`. |
 | `receipts[]` | callables | Append-only. A voided receipt stays, marked. |
 | `createdOnDemandBy` | `recordPayrollRemittance` | uid, only on a record created by a receipt against a pre-ledger batch. |
+| `overdueAlertEpoch` | expected side, `voidPayrollRemittanceReceipt` | The record's overdue-alert cycle; absent means 0. Goes up by one each time a settled record (nothing outstanding) owes money again — a void took a receipt back out, or a retried batch raised `expectedCents`. See the overdue alert below. |
 | `backfilledBy` | backfill script | `004_backfill_payroll_remittances`, only on backfilled records. |
 
 "Expected side" is `processPayroll` for every batch since E18, and the backfill script or
@@ -328,27 +329,42 @@ already use. No new secret, collection, rule or service.
   change nothing else). Fields: `source: 'remittance-overdue'`, `error` (the Spanish line the
   page prints), `severity`, `ts`, `resolved`, plus `batchId`, `employerId`, `payPeriodEnd`,
   `expectedCents`, `receivedCents`, `outstandingCents`, `daysOverdue`, `thresholdDays`,
-  `graceDays`, `asOf`.
+  `alertEpoch`, `graceDays`, `asOf`. When the system closes one it adds `resolved: true`,
+  `resolvedAt`, `resolvedBy: 'system'` and `resolution` (below).
 - **Slack** — one summary line per run that raised something, through `sendSlackAlert`. Like
   every other caller it does nothing unless `SLACK_WEBHOOK_URL` is set on Functions. Whether
   it is set in production has not been checked; `incident_log` is the channel to rely on.
 
 Rules:
 
-- **One alert per record per threshold.** Thresholds are 1, 16 and 31 days overdue — the lower
-  edges of the aging buckets. `severity` is `warning` for 1 and 16, `critical` for 31.
-- The document id is `remittance-overdue_<threshold>d_<batchId>` and it is written with
-  `create()`. A second run the same day, a retried run or two overlapping runs cannot raise
-  the same alert twice, and an alert ops dismissed is not raised again.
+- **One alert per record per threshold per cycle.** Thresholds are 1, 16 and 31 days overdue —
+  the lower edges of the aging buckets. `severity` is `warning` for 1 and 16, `critical` for 31.
+- The document id is `remittance-overdue_<threshold>d_<batchId>` in cycle 0 (unchanged from
+  before cycles existed) and `remittance-overdue_e<cycle>_<threshold>d_<batchId>` after that,
+  written with `create()`. A second run the same day, a retried run or two overlapping runs
+  cannot raise the same alert twice, and an alert ops dismissed is not raised again in the same
+  cycle.
+- **A record re-opened after it was settled starts a new cycle** (`overdueAlertEpoch`), so it
+  can raise every threshold again — including ones the settled cycle already raised.
 - A record first seen already past several thresholds (after the backfill, or after the
   scheduler was down) gets one alert, for the highest threshold. Lower ones are not back-filled.
 - It uses the default 7-day grace. That is a display default, not an agreed term, so an alert
   means "late by our default", not "in breach".
-- Not done: an alert is not resolved automatically when the money arrives (ops dismiss it),
-  and a record that is settled, then re-opened by a void, does not re-raise a threshold it
-  already raised.
-- If an alert cannot be written the sweep carries on, logs the batch, and the run fails at the
-  end; the next run raises what was missed.
+- **Alerts close themselves when the money arrives.** The receipt that leaves a record with
+  nothing outstanding closes that cycle's open alerts in the same transaction
+  (`resolution: 'remittance-received'`; the audit entry lists them in `meta.resolvedAlerts`).
+  Each run of the check also walks every open `remittance-overdue` alert (equality filters on
+  `source` and `resolved` — no composite index) and closes the ones whose record is no longer
+  overdue (`'no-longer-overdue'`) or has moved on to a later cycle (`'superseded'`), whatever
+  settled it. An alert whose record cannot be found is left open. An alert ops already
+  dismissed is not touched.
+- If an alert cannot be written or closed the sweep carries on, logs it, and the run fails at
+  the end; the next run does what was missed.
+- **Page cap.** Each walk (open alerts, outstanding records) reads at most 50 pages of 200
+  (10,000 documents). A run that stops at the cap with more left to read logs an error, writes
+  a `critical` incident `remittance-overdue-check_<date>` (source `remittance-overdue-check`,
+  one per day) and a critical Slack line, and fails. If that ever fires, raise `MAX_PAGES` in
+  `remittanceOverdueCheck.ts` — the ledger has outgrown it.
 
 ## Backfill: `scripts/migrations/004_backfill_payroll_remittances.ts`
 

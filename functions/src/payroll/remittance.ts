@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
-import { getFirestore, FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Timestamp, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import { withAuth } from '../middleware/authMiddleware';
@@ -9,7 +9,9 @@ import { enforceRateLimit } from '../utils/rateLimiter';
 import { AUDIT_LOG_COLLECTION, buildAuditLogDocument } from '../utils/auditLog';
 import {
   DEFAULT_REMITTANCE_GRACE_DAYS,
+  INCIDENT_LOG_COLLECTION,
   OUTSTANDING_REMITTANCE_STATUSES,
+  OVERDUE_ALERT_EPOCH_FIELD,
   PAYROLL_BATCHES_COLLECTION,
   PAYROLL_REMITTANCES_COLLECTION,
   PAYROLL_REMITTANCE_REFERENCES_COLLECTION,
@@ -20,15 +22,19 @@ import {
   isRealCalendarDate,
   isVoided,
   lastReceivedOnOf,
+  nextOverdueAlertEpoch,
   normalizeBankReference,
+  overdueAlertEpochOf,
   readExpectedInTx,
   receiptIdOf,
   receiptReferenceKey,
   receiptsOf,
   receivedCentsOf,
   remittanceAging,
+  remittanceAlertDocIds,
   remittanceStatus,
   remittancesQuery,
+  resolvedAlertFields,
   remittancesQueryDirection,
   todayInMexicoCity,
   upsertExpectedRemittance,
@@ -326,7 +332,6 @@ export const recordPayrollRemittance = onCall(
               );
             }
 
-            // ── Writes ──
             const nextReceipts: StoredReceipt[] = [
               ...receipts,
               {
@@ -343,6 +348,21 @@ export const recordPayrollRemittance = onCall(
             const priorReceivedCents = Number(current['receivedCents'] ?? 0);
             const receivedCents = receivedCentsOf(nextReceipts);
             const status = remittanceStatus(expectedCents, receivedCents);
+
+            // Money in full closes the overdue alerts this cycle raised, in
+            // the same commit, so the Alerts page stops showing a batch that
+            // has been paid. Still a read, so still before the first write.
+            const openAlerts: DocumentReference[] = [];
+            if (expectedCents - receivedCents <= 0) {
+              const epoch = overdueAlertEpochOf(current);
+              for (const id of remittanceAlertDocIds(input.batchId, epoch)) {
+                const ref = db.collection(INCIDENT_LOG_COLLECTION).doc(id);
+                const alert = await tx.get(ref);
+                if (alert.exists && alert.data()?.['resolved'] !== true) openAlerts.push(ref);
+              }
+            }
+
+            // ── Writes ──
             const moved = {
               receivedCents,
               status,
@@ -356,6 +376,8 @@ export const recordPayrollRemittance = onCall(
             } else {
               tx.set(remittanceRef, { ...current, ...moved, createdOnDemandBy: auth.uid });
             }
+
+            for (const ref of openAlerts) tx.update(ref, resolvedAlertFields('remittance-received', now));
 
             tx.set(referenceRef, {
               bankReferenceKey,
@@ -389,6 +411,7 @@ export const recordPayrollRemittance = onCall(
                 bankReferenceKey,
                 ...(snap.exists ? {} : { createdRecord: true, expectedCents }),
                 ...(otherBatches.length > 0 ? { sharedTransferWith: otherBatches } : {}),
+                ...(openAlerts.length > 0 ? { resolvedAlerts: openAlerts.map((ref) => ref.id) } : {}),
               },
             }, now));
 
@@ -513,12 +536,17 @@ export const voidPayrollRemittanceReceipt = onCall(
             );
             const receivedCents = receivedCentsOf(nextReceipts);
             const status = remittanceStatus(expectedCents, receivedCents);
+            // A void that leaves a settled record owing again starts a new
+            // alert cycle: the overdue check can then raise every threshold
+            // afresh, even ones the settled cycle already raised (and closed).
+            const epoch = nextOverdueAlertEpoch(current, expectedCents, receivedCents);
 
             tx.update(remittanceRef, {
               receivedCents,
               status,
               receipts: nextReceipts,
               lastReceivedOn: lastReceivedOnOf(nextReceipts),
+              ...(epoch !== overdueAlertEpochOf(current) ? { [OVERDUE_ALERT_EPOCH_FIELD]: epoch } : {}),
               updatedAt: now,
             });
 

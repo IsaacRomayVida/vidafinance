@@ -90,6 +90,8 @@ export function expectedRemittanceFields(
   serverTimestamp: unknown,
 ): Record<string, unknown> {
   const receivedCents = Number(existing?.['receivedCents'] ?? 0);
+  // A retried batch that raises what a settled record expects re-opens it.
+  const epoch = nextOverdueAlertEpoch(existing, expected.expectedCents, receivedCents);
   return {
     batchId: batch.batchId,
     employerId: batch.employerId,
@@ -100,6 +102,7 @@ export function expectedRemittanceFields(
     receivedCents,
     status: remittanceStatus(expected.expectedCents, receivedCents),
     ...(existing ? {} : { receipts: [], createdAt: serverTimestamp }),
+    ...(epoch !== overdueAlertEpochOf(existing) ? { [OVERDUE_ALERT_EPOCH_FIELD]: epoch } : {}),
     updatedAt: serverTimestamp,
   };
 }
@@ -390,4 +393,74 @@ export function remittanceAlertThreshold(daysOverdue: number): number | null {
     if (daysOverdue >= threshold) reached = threshold;
   }
   return reached;
+}
+
+// ─── Overdue alerts: identity and lifecycle ──────────────────────────────────
+
+/** `incident_log` is the collection the ops Alerts page (`/ops/alerts`) lists. */
+export const INCIDENT_LOG_COLLECTION = 'incident_log';
+export const REMITTANCE_ALERT_SOURCE = 'remittance-overdue';
+
+/**
+ * The record field that numbers its overdue-alert cycles. A cycle is one
+ * stretch of owing money: it starts at 0 and moves on each time a record that
+ * was settled owes money again (a void took a receipt back out, or a retried
+ * batch raised what is expected). Alerts are keyed on it, so a re-opened record
+ * can raise a threshold again that its previous cycle already raised.
+ */
+export const OVERDUE_ALERT_EPOCH_FIELD = 'overdueAlertEpoch';
+
+export function overdueAlertEpochOf(doc: Record<string, unknown> | undefined): number {
+  const epoch = Number(doc?.[OVERDUE_ALERT_EPOCH_FIELD] ?? 0);
+  return Number.isInteger(epoch) && epoch > 0 ? epoch : 0;
+}
+
+/**
+ * The cycle a record is in after a write that leaves it at these figures.
+ * `existing` is the record before the write (undefined when the write creates
+ * it). Only a settled → owing move starts a new cycle; anything else keeps it.
+ */
+export function nextOverdueAlertEpoch(
+  existing: Record<string, unknown> | undefined,
+  expectedCents: number,
+  receivedCents: number,
+): number {
+  const epoch = overdueAlertEpochOf(existing);
+  if (!existing) return epoch;
+  const wasSettled = Number(existing['expectedCents'] ?? 0) - Number(existing['receivedCents'] ?? 0) <= 0;
+  return wasSettled && expectedCents - receivedCents > 0 ? epoch + 1 : epoch;
+}
+
+/**
+ * Deterministic, so `create()` is the idempotency check. Cycle 0 keeps the id
+ * alerts had before cycles existed; a later cycle is marked `e<n>_` straight
+ * after the source, where a cycle-0 id always has a digit, so no two (batch,
+ * cycle, threshold) triples share an id even though batch ids contain `_`.
+ */
+export function remittanceAlertDocId(batchId: string, thresholdDays: number, epoch = 0): string {
+  return epoch > 0
+    ? `${REMITTANCE_ALERT_SOURCE}_e${epoch}_${thresholdDays}d_${batchId}`
+    : `${REMITTANCE_ALERT_SOURCE}_${thresholdDays}d_${batchId}`;
+}
+
+/** Every alert id one cycle of a record can have raised. */
+export function remittanceAlertDocIds(batchId: string, epoch = 0): string[] {
+  return REMITTANCE_ALERT_THRESHOLD_DAYS.map((threshold) => remittanceAlertDocId(batchId, threshold, epoch));
+}
+
+/** Why the system (not ops) closed an alert. */
+export type RemittanceAlertResolution =
+  /** A receipt left the record with nothing outstanding. */
+  | 'remittance-received'
+  /** The daily check found the record no longer overdue. */
+  | 'no-longer-overdue'
+  /** The record settled and owes again: the alert belongs to the cycle before. */
+  | 'superseded';
+
+/**
+ * The update that closes an alert. `resolved` is the field the Alerts page
+ * reads (and the only one ops may flip); the rest say it was the system, and why.
+ */
+export function resolvedAlertFields(resolution: RemittanceAlertResolution, resolvedAt: unknown): Record<string, unknown> {
+  return { resolved: true, resolvedAt, resolvedBy: 'system', resolution };
 }
