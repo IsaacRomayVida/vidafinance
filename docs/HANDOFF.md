@@ -51,67 +51,44 @@ that time could have changed (CI state, open PRs, production health).
   `verify-production-live.yml` run 38755867305, dispatched afterwards, passed. Contents: stage 0
   treats an INFONAVIT record with `credit_status:"closed"` as closed even with `balance > 0`.
 
-### Underwriting-service is not redeployed by merges (found 2026-10-15)
-#639's change is in `services/underwriting-service`, which runs on Railway and is called by
-`functions/src/index.ts` (`UNDERWRITING_SERVICE_URL` + `/underwrite`). Merging to `main` did **not**
-redeploy it: the Railway commit statuses on `b8919fe`, `878bb86` (#638) and `4390a44` (#636) cover only
-ml-service, notification-service, payment-server and pdf-generator. `23d03d2` (#635) also had
-registry-service-funpay, deployed by its own workflow. No commit has an underwriting-service status, and
-no workflow deploys it. So stage 0 changes from #636 (INFONAVIT gate) and #639 are probably **not live**
-in production underwriting. This can't be confirmed locally: the `/health` route reports no version, and
-the local `railway` login cannot see the project. `deploy-registry-funpay.yml` is the pattern to copy
-(`serviceInstanceDeploy … latestCommit: true`, then poll `deployments.meta.commitHash`). Deploying
-underwriting is a production change that takes every underwriting commit since its last deploy, so it
-needs the user's explicit go-ahead.
+- **PR #640** (`hardening/remittance-load-marketing`, the swarm5 work) merged as `0543a8c` on 2026-10-16 on
+  the user's go-ahead ("do it all"), 16 checks passed, 3 skipped. Deploy run 38878782143 succeeded;
+  `verify-production-live.yml` run 38882409086 passed. Contents: overdue remittance alerts close when the
+  money arrives and re-raise after a void (`overdueAlertEpoch`), page caps with a `remittance-check-truncated`
+  incident in `remittanceOverdueCheck`, server-side totals on `/ops/remittances`, load-test guards
+  (`FIREBASE_PROJECT_ID` shape check, abort on a failed App Check refresh, mocked exchange/sign-in tests),
+  the employer stage photo and `<html lang>` fixes, `/health` commit/version on underwriting, and
+  `.github/workflows/deploy-underwriting.yml` (dispatch-only).
+
+### Underwriting-service deployed (2026-10-16)
+Merges never redeployed `services/underwriting-service` on Railway; production had been running `8259bd0`
+(#630, 2026-09-18), so #636's INFONAVIT gate and #639's closed-credit rule were not live. With the user's
+approval, `deploy-underwriting.yml` run 38882474775 deployed `0543a8c` (deployment
+`1f8ad33a-959f-4bc1-9730-795a2230b456`, service `a13f634d-79e1-45d4-ae54-29ad27b805ea`). The workflow's
+own checks passed (Dockerfile build, deployment SUCCESS, `/health` commit = main), production `/health`
+reports `"commit":"0543a8c6…"`, and a second `verify-production-live.yml` run 38882712615 passed.
+On 2026-10-16 the user approved a push trigger: `deploy-underwriting.yml` now deploys on every push to
+`main` touching `services/underwriting-service/**`, `services/shared/**`, `.dockerignore` or the workflow,
+and `scripts/check-deploy-watch-paths.mjs` holds that filter to the Dockerfile's COPY set (its old
+dispatch-only mode is gone). It shipped with the handoff docs PR #641; merging #641 triggers its first push deploy, so check that run.
 
 ## 2. Next steps, in order
-1. **This branch's PR** (`hardening/remittance-load-marketing`, swarm5 work, see below): merge only on the
-   user's explicit go-ahead, then watch `VIDA Platform — Deploy` and dispatch `verify-production-live.yml`.
-   Merging adds `deploy-underwriting.yml` but deploys nothing to Railway (dispatch-only).
-2. **Underwriting deploy** (section 1 gap): after the PR is on `main` and only with the user's explicit approval,
-   dispatch `deploy-underwriting.yml` from `main` (runbook: `docs/runbooks/deploy.md`). It deploys every
-   underwriting commit since the service's last deploy, including the stage 0 changes from #636 and #639.
-   Things only the first real run can confirm: the services/domains queries resolve underwriting-service by
-   name; Railway sets `RAILWAY_GIT_COMMIT_SHA` at runtime for this Dockerfile build (if not, `/health`
-   reports `unknown` and the verify step fails *after* the deploy happened); `RAILWAY_DOCKERFILE_PATH` is
-   `services/underwriting-service/Dockerfile`. Whether to add a push trigger is a separate decision.
-3. Small follow-ups from the swarm5 reviews (none blocking):
+1. Small follow-ups from the swarm5 reviews (none blocking):
    - Remittance totals: a first-page `listPayrollRemittances` call walks every matching record (cap
      40 × 1,000 reads, reports `complete:false` at the cap). "Overdue" depends on today's date, so stored
      `sum()` aggregation can't replace it; if the ledger grows, maintain counters instead. `viewTotals` is
      not cleared while a new filter loads (same staleness as the rows). `resolveStaleAlerts` is not
      transactional (cosmetic: a dismissed alert can also get `resolvedBy:'system'`).
-   - Underwriting workflow: `hasPushTrigger` in `scripts/check-deploy-watch-paths.mjs` misses the block-list
-     `on:\n  - push` and quoted `"push":` spellings; `DEPLOYMENT_COMMIT` is read when the deployment first
-     appears, not at SUCCESS.
+   - Underwriting workflow: `DEPLOYMENT_COMMIT` is read when the deployment first appears, not at SUCCESS.
    - Load: in `tests/load/seed/pool.js` `createAppCheckTokenSource`, an exchange ttl under ~75 s makes the
      refresh point fall after expiry; `FIREBASE_APP_ID`/`FIREBASE_API_KEY` and the seed's `--project` are not
      shape-checked; static `APP_CHECK_TOKEN`/`AUTH_TOKEN` have no expiry detection (smoke-only path).
    - Marketing: the language toggles still label themselves from `i18n.language` (requested) rather than
      `resolvedLanguage`, so after a failed English chunk the toggle offers Spanish while Spanish is shown.
-4. Still open, needs people or infrastructure: `SLACK_WEBHOOK_URL` in production is unverified; the 7-day
+2. Still open, needs people or infrastructure: `SLACK_WEBHOOK_URL` in production is unverified; the 7-day
    grace period is a display default, not an agreed term; B8 and runbook setup B need a staging run
    (section 3); the App Check exchange and sign-in retry are unit-tested against mocks only; `/` Lighthouse
    sits at 0.93–0.94, close to the gate.
-
-### swarm5 work on this branch (2026-10-16, not yet merged)
-Built by a Workflow swarm (one builder per `swarm5/*` branch, an adversarial reviewer that re-ran suites and
-reverted each fix to see its test fail, one repair round where a review blocked). All four approved.
-- `swarm5/remittance-followups`: overdue alerts close when the money arrives (on receipt and in the daily
-  check); a void bumps `overdueAlertEpoch` so thresholds can re-raise; both paging walks in
-  `remittanceOverdueCheck` stop at a page cap and raise a `remittance-check-truncated` incident; server-side
-  totals for the whole filtered view on `/ops/remittances`. No new index; `firestore.rules` unchanged.
-  The first review blocked (open-alerts cap had no test of its own); repaired and re-approved.
-- `swarm5/load-hardening`: `FIREBASE_PROJECT_ID` shape check before the production comparison; the run
-  aborts when the App Check token expires and its refresh fails; mocked tests for the App Check exchange and
-  pool sign-in; scaling runbook updated, setup B still not cleared.
-- `swarm5/marketing-fixes`: the employer stage always has its photo (placeholder) on a fast scroll;
-  `<html lang>` follows the language actually rendered.
-- `swarm5/underwriting-deploy`: `/health` reports `commit`, `version` and deployment id;
-  `.github/workflows/deploy-underwriting.yml` (workflow_dispatch only) deploys via `serviceInstanceDeploy`
-  and verifies the commit on `/health`; `docs/runbooks/deploy.md` updated.
-Local suites on the merged branch: functions 1225/1225, public-v2 506/506, underwriting 459 + 1 skipped,
-scripts/load 248/248, migrations 65/65, lint 0 errors, public-v2 build OK.
 
 ## 3. Needs a human (do not fake these)
 - **Load test prerequisites:** create the non-production Firebase project (its id must not contain `prod`), register the App Check debug token, and set the load-test password. Steps are in `docs/runbooks/scaling.md`.
@@ -129,7 +106,7 @@ scripts/load 248/248, migrations 65/65, lint 0 errors, public-v2 build OK.
 
 ## 4. How the work was run (repeat the same way)
 - **Multi-agent "swarm" via the Workflow tool:** one agent per area in an isolated git
-  worktree on its own branch (`swarm/*` from #635, `swarm2/*` for #636, `swarm3/*` for #637, `swarm4/*` for #638, `swarm5/*` for the remittance/load/marketing/underwriting-deploy branch), then
+  worktree on its own branch (`swarm/*` from #635, `swarm2/*` for #636, `swarm3/*` for #637, `swarm4/*` for #638, `swarm5/*` for #640), then
   an adversarial reviewer per branch that re-runs the tests, then a repair agent if
   the review blocked. After that, merge the approved branches into a `hardening/*`
   branch, run the full suites locally, push, and let PR CI gate it.
@@ -141,7 +118,7 @@ scripts/load 248/248, migrations 65/65, lint 0 errors, public-v2 build OK.
   - Agents never push, merge or deploy, and never touch IAM, billing or secrets.
   - Agents never send load or writes to production. A single read-only GET to `/health` is fine.
 - **Merging to `main` is a production deploy.** Branch protection requires 0 reviews, so nothing but CI stops it. Merge only when the user has authorised it.
-- **Old worktrees:** the 20 `swarm/*` … `swarm4/*` worktrees and branches were removed on 2026-10-16 with the user's go-ahead (all merged, none dirty). The `swarm5/*` branches and their `.claude/worktrees/wf_c4228a3c-7f5-*` worktrees remain until #640 merges; then remove them with `git worktree remove --force <path>` (only untracked `node_modules` symlinks) and `git branch -d <branch>`, with the user's agreement.
+- **Old worktrees:** all `swarm/*` … `swarm5/*` worktrees, branches and `worktree-wf_*` placeholder branches were removed on 2026-10-16 with the user's go-ahead (all merged, none dirty). Workflow runs leave `worktree-wf_*` branches behind; delete them with `git branch -d` once merged.
 - **Local tooling now installed:** k6 (Homebrew), Firebase emulators with Java, `@lhci/cli` via npx. A local Redis is needed for emulator runs of rate-limited callables (`redis-server --port <p>`); stop any you start.
 - **Workflow resume:** if a Workflow run is cut off by a session ending, check its worktrees for commits and uncommitted work before relaunching; completed agents can be replayed from cache only within the same session.
 - **Visual checks:** the built-in browser pane can preview a local production build (`.claude/launch.json` with `npm --prefix public-v2 run preview`; delete the file afterwards). Ops pages need `npm run dev:emulators` plus `scripts/seed-remittance-emulator.mjs` (see `docs/runbooks/payroll-remittances.md`), never the real project.

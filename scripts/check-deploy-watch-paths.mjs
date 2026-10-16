@@ -94,8 +94,7 @@ import { join } from 'node:path';
  * when another service gets the same treatment.
  *
  * `serviceKey` names the workflow `env:` key that identifies the Railway
- * service (default `RAILWAY_SERVICE_ID`). `dispatchOnly` marks a workflow that
- * deliberately has no `push:` trigger — see the underwriting row.
+ * service (default `RAILWAY_SERVICE_ID`).
  */
 export const TARGETS = [
   {
@@ -124,14 +123,6 @@ export const TARGETS = [
     // it at deploy time from the canonical domain and checks it against this
     // name. Same rule as above: the one copy lives in the workflow.
     serviceKey: 'RAILWAY_SERVICE_NAME',
-    // workflow_dispatch only, by decision: deploying underwriting on every merge
-    // has not been approved. With no push trigger there is no `paths:` filter
-    // and nothing can be silently skipped, so coverage is not checked — but the
-    // build premise still is, so the day a push trigger is approved the filter
-    // check starts from a true premise. The workflow gaining a `push:` while this
-    // flag is still set FAILS below: the push decision and this check must
-    // change together, or the new filter would go unchecked.
-    dispatchOnly: true,
   },
 ];
 
@@ -324,24 +315,6 @@ export function pathsFilter(yaml) {
 }
 
 /**
- * Whether a workflow can be started by a push, in any of the `on:` spellings:
- * a `push:` key, `on: push`, or `push` in an `on: [...]` list. Whole-line
- * comments are ignored, so a comment explaining why there is no push trigger
- * does not count as one.
- */
-export function hasPushTrigger(yaml) {
-  const code = yaml
-    .split('\n')
-    .filter((line) => !/^\s*#/.test(line))
-    .join('\n');
-  return (
-    /^\s*push:/m.test(code) ||
-    /^\s*["']?on["']?:\s*push\s*(#.*)?$/m.test(code) ||
-    /^\s*["']?on["']?:\s*\[[^\]]*\bpush\b[^\]]*\]/m.test(code)
-  );
-}
-
-/**
  * GitHub `paths:` semantics, restricted to the two forms we accept.
  *
  * A bare directory (`services/shared`) matches a *file* of that name, not the
@@ -482,18 +455,6 @@ function checkTarget(target, dockerfilePath, workflowPath) {
   requireInput(target.dockerfile, 'the Dockerfile itself');
   if (existsSync('.dockerignore')) requireInput('.dockerignore', 'the build context .dockerignore');
 
-  if (target.dispatchOnly) {
-    if (hasPushTrigger(workflowYaml)) {
-      problems.push(
-        `${workflowPath} now has a \`push:\` trigger, but TARGETS marks ${target.service} as ` +
-          'dispatchOnly, so its `paths:` filter would never be checked against the COPY set. ' +
-          'If deploying on push was approved, remove `dispatchOnly` from its TARGETS row in the ' +
-          'same change so the filter is held to the build it deploys.'
-      );
-    }
-    return { problems, missing, paths: null, dispatchOnly: true };
-  }
-
   const { paths, problems: yamlProblems } = pathsFilter(workflowYaml);
   problems.push(...yamlProblems);
   if (problems.length) return { problems, missing, paths };
@@ -576,7 +537,6 @@ const targets =
     : TARGETS;
 
 let failed = false;
-const dispatchOnly = [];
 
 // Run before the per-target loop: if TARGETS does not cover everything that
 // deploys, no per-target result can be trusted to mean what it says.
@@ -606,7 +566,7 @@ if (!argDockerfile) {
 }
 
 for (const target of targets) {
-  const { problems, missing, paths, dispatchOnly: isDispatchOnly } = checkTarget(
+  const { problems, missing, paths } = checkTarget(
     target,
     target.parseDockerfile ?? target.dockerfile,
     target.workflow
@@ -617,15 +577,6 @@ for (const target of targets) {
     console.error(`\n${target.service}: this check's premise no longer holds, so its result `
       + 'would be misleading. Not reporting coverage.\n');
     for (const problem of problems) console.error(`  - ${problem}`);
-    continue;
-  }
-
-  if (isDispatchOnly) {
-    dispatchOnly.push(target.service);
-    console.log(
-      `- ${target.service}: ${target.workflow} is workflow_dispatch only — it deploys when ` +
-        'someone runs it, never on push, so there is no paths filter to cover. Build premise checked.'
-    );
     continue;
   }
 
@@ -663,12 +614,5 @@ for (const target of targets) {
 }
 
 if (failed) process.exit(1);
-// The sign-off names the dispatch-only services rather than folding them into
-// "watches everything": a service that never deploys on push watches nothing,
-// and the reader of the last line should not have to know that.
-console.log(
-  dispatchOnly.length
-    ? `\nEvery push-deployed service watches everything its build reads. Deployed by hand only: ${dispatchOnly.join(', ')}.`
-    : '\nEvery CI-deployed service watches everything its build reads.'
-);
+console.log('\nEvery CI-deployed service watches everything its build reads.');
 }

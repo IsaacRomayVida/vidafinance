@@ -1,6 +1,6 @@
 You're continuing work on FunPay (repo `IsaacRomayVida/vidafinance`, folder `/Volumes/PortableSSD/Suena/Funpay`). It's an employee microcredit platform for a Mexican SOFOM: loans are repaid through payroll deduction. Earlier Claude sessions (on other accounts) have been getting the whole system production-ready. You're picking up exactly where the last one stopped, without its conversation history.
 
-**First, read `docs/HANDOFF.md` in full, from the branch `hardening/remittance-load-marketing`.** It is the authoritative record of what shipped, what's open, what needs a human, and how the work is run. The up-to-date copy lives on that branch until its PR merges; `main` has an older one. Read it with `git show origin/hardening/remittance-load-marketing:docs/HANDOFF.md`, or check the branch out.
+**First, read `docs/HANDOFF.md` in full, from the branch `docs/handoff-production-ready`.** It is the authoritative record of what shipped, what's open, what needs a human, and how the work is run. The up-to-date copy lives on that branch until its PR merges; `main` has an older one. Read it with `git show origin/docs/handoff-production-ready:docs/HANDOFF.md`, or check the branch out.
 
 Then confirm it still matches reality:
 
@@ -11,21 +11,18 @@ gh run list --branch main --limit 10
 ```
 
 **State as of 2026-10-16:**
-- **Merged and deployed to production:** PRs #635, #636, #637, #638 and #639 (Firebase side; see the underwriting gap below). After each deploy, `verify-production-live.yml` was dispatched and passed, and the scheduled production checks have kept passing.
-  - #636: INFONAVIT gate, E18 remittance ledger, registry monitoring.
-  - #637: remittance void and dedupe, the ops screen `/ops/remittances`, Lighthouse performance gate set to `error`, load-test seed tooling.
-  - #638: paginated remittance list, daily `remittanceOverdueCheck`, `public-v2` emulator wiring, a k6 smoke run on the emulator (90/90 accepted), marketing polish.
-- **Production indexes:** the three `payrollRemittances` indexes added by #638 are `READY`.
-- **Backfill 004:** a read-only dry run against production found 0 payroll batches, so no backfill is needed.
+- **Merged and deployed to production:** PRs #635–#640. After each deploy, `verify-production-live.yml` was dispatched and passed, and the scheduled production checks have kept passing.
+  - #636: INFONAVIT gate, E18 remittance ledger, registry monitoring. #637: remittance void/dedupe, `/ops/remittances`. #638: paginated remittances, daily `remittanceOverdueCheck`, k6 emulator smoke.
+  - #639: stage 0 treats a `credit_status:"closed"` INFONAVIT credit as closed even with a leftover balance.
+  - #640: remittance alerts close on payment and re-raise after a void, page caps, server-side totals; load-test guards; marketing fixes; underwriting `/health` commit field and the dispatch-only `deploy-underwriting.yml`.
+- **Underwriting-service on Railway** was deployed on 2026-10-16 to `0543a8c` (it had been on `8259bd0` from 2026-09-18). Since #641, `deploy-underwriting.yml` deploys it on every push to `main` touching its build inputs; check that run after any underwriting merge.
 - **Slack:** `SLACK_WEBHOOK_URL` is not a GitHub secret, so overdue alerts only appear in the ops alerts page.
-  - #639 (merged 2026-10-15 as `b8919fe`): stage 0 treats an INFONAVIT credit with `credit_status:"closed"` as closed even with a leftover balance. Deploy run 38752277581 and `verify-production-live` run 38755867305 passed.
-- **Underwriting deploy gap:** merges do not redeploy `services/underwriting-service` on Railway (no Railway status for it on any recent merge commit, no workflow deploys it), so the stage 0 changes from #636 and #639 are probably not live. Deploying it is a production change that needs the user's explicit go-ahead; handoff section 1 has the details.
+- **Open PRs:** none expected once #641 (handoff + underwriting push trigger) merges.
 
 **What to do:**
 1. Report the verified current state to the user in a few lines.
-2. The swarm5 PR (`hardening/remittance-load-marketing`) holds remittance alert resolution and totals, load-test hardening, the marketing fixes and a dispatch-only underwriting deploy workflow. Merge it only on the user's explicit go-ahead for that PR, with CI fully green; then watch the deploy and dispatch `verify-production-live.yml`.
-3. Dispatching `deploy-underwriting.yml` deploys to production Railway: only with the user's explicit approval, and only after the PR is on `main`. Then work through the rest of handoff section 2.
-4. Ask the user before removing the old `.claude/worktrees/wf_*` worktrees and the `swarm*/*` branches. They are all merged.
+2. Work through handoff section 2: the small swarm5 follow-ups.
+3. List the human-only items in handoff section 3 precisely; never fake their evidence.
 
 **How the user wants you to work:**
 - **Parallel work:** use multi-agent workflows (a "swarm") with the Workflow tool.
