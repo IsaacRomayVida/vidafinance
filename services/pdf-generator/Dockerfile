@@ -1,6 +1,7 @@
 # Built from the monorepo repo root as context.
 # Railway config: Root Directory = (unset), RAILWAY_DOCKERFILE_PATH = services/pdf-generator/Dockerfile
 FROM ghcr.io/puppeteer/puppeteer:21
+# Root only for install and ownership; the service runs as pptruser.
 USER root
 WORKDIR /app
 
@@ -11,6 +12,8 @@ COPY services/shared/ ./services/shared/
 COPY services/pdf-generator/ ./services/pdf-generator/
 
 WORKDIR /app/services/pdf-generator
+RUN chown -R pptruser:pptruser /app
+USER pptruser
 EXPOSE 3004
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget -qO- http://localhost:3004/health || exit 1
