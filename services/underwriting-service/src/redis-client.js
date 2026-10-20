@@ -51,7 +51,7 @@ const redis = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: 2,
   commandTimeout: 2000,
   tls: process.env.REDIS_URL?.startsWith("rediss://")
-    ? { rejectUnauthorized: false }
+    ? { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' }
     : undefined,
 });
 

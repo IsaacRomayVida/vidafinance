@@ -69,6 +69,7 @@ function NativeScene({ source }: { source: number }) {
 
 export function BrandIntro({ onDone }: { onDone: () => void }) {
   const reduced = useReducedMotion();
+  // nosemgrep: ajinabraham.njsscan.crypto.crypto_node.node_insecure_random_generator -- Cosmetic scene pick, not security-sensitive
   const [scene] = useState(() => SCENES[Math.floor(Math.random() * SCENES.length)]);
   const mark = useRef(new Animated.Value(0)).current;
   const ring = useRef(new Animated.Value(0)).current;

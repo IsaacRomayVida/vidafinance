@@ -6,6 +6,8 @@ import { guardReadAfterWrite as mockGuardReadAfterWrite } from '../../__mocks__/
 // how they broke the build when they first met.
 export {};
 
+import cryptoModule from 'crypto';
+
 // Regression test for the `onEmployerDocCreated` trigger in index.ts.
 //
 // This trigger mints the `employer_admin` custom claim — cross-employee reads,
@@ -453,20 +455,20 @@ describe('onEmployerDocCreated — join code', () => {
     mockDb.employers.set('employer-b', { employerCode: 'BBBBBB' });
     const candidates = ['AAAAAA', 'BBBBBB', 'CCCCCC'];
     let next = 0;
-    jest.spyOn(Math, 'random').mockImplementation(() => {
+    jest.spyOn(cryptoModule, 'randomInt').mockImplementation((() => {
       // Drive generateEmployerCodeCandidate to emit the candidates in order:
       // each call picks one alphabet index, six calls per candidate.
       const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       const code = candidates[Math.min(Math.floor(next / 6), candidates.length - 1)];
       const index = alphabet.indexOf(code[next % 6]);
       next += 1;
-      return index / alphabet.length;
-    });
+      return index;
+    }) as unknown as typeof cryptoModule.randomInt);
 
     try {
       await trigger(makeEvent('employer-c', 'pending_verification'));
     } finally {
-      (Math.random as jest.Mock).mockRestore();
+      (cryptoModule.randomInt as unknown as jest.Mock).mockRestore();
     }
 
     expect(mockDb.employers.get('employer-c')?.['employerCode']).toBe('CCCCCC');

@@ -50,6 +50,7 @@ async function runIdentityValidation(applicant, priorResults, { logger, db } = {
   const data = {};
 
   // 1. RFC format validation
+  // nosemgrep: ajinabraham.njsscan.dos.regex_dos.regex_dos -- Fixed anchored pattern over bounded input, no nested quantifiers (linear time)
   const rfcValid = RFC_REGEX.test((applicant.rfc || "").toUpperCase());
   data.rfcValid = rfcValid;
   if (!rfcValid) {
@@ -63,6 +64,7 @@ async function runIdentityValidation(applicant, priorResults, { logger, db } = {
   }
 
   // 2. CURP format validation
+  // nosemgrep: ajinabraham.njsscan.dos.regex_dos.regex_dos -- Fixed anchored pattern over bounded input, no nested quantifiers (linear time)
   const curpValid = CURP_REGEX.test((applicant.curp || "").toUpperCase());
   data.curpValid = curpValid;
   if (!curpValid) {

@@ -25,6 +25,7 @@ const STAGE_NAMES = [
 ];
 
 function generateCorrelationId() {
+  // nosemgrep: ajinabraham.njsscan.crypto.crypto_node.node_insecure_random_generator -- Log correlation id, not a security token
   return `uw-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
 

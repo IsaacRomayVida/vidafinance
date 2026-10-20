@@ -45,6 +45,7 @@ async function run(): Promise<void> {
 beforeEach(() => {
   jest.clearAllMocks();
   process.env['PAYMENT_SERVER_URL'] = 'https://payments.example.test';
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   process.env['INTERNAL_SECRET'] = 'shh';
 });
 

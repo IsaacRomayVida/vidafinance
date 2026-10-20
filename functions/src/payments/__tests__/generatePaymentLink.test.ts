@@ -54,6 +54,7 @@ beforeEach(() => {
   _mockStore.loans = {};
   _mockStore.auditLog = [];
   process.env['PAYMENT_SERVER_URL'] = 'https://payment-server.internal';
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   process.env['INTERNAL_SECRET'] = 'test-secret';
 });
 
@@ -377,6 +378,7 @@ describe('generatePaymentLink', () => {
     it('uses INTERNAL_API_SECRET as fallback for secret header', async () => {
       _mockStore.loans['loan-xyz'] = approvedLoan;
       delete process.env['INTERNAL_SECRET'];
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
       process.env['INTERNAL_API_SECRET'] = 'api-secret-alt';
       (fetch as jest.Mock).mockResolvedValue(
         mockFetchResponse(true, { paymentUrl: 'https://oxxo.link', orderId: 'ord-001' })

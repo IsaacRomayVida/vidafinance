@@ -15,6 +15,7 @@ const AUTH = `http://${HOST}:9099/identitytoolkit.googleapis.com/v1`;
 const FIRESTORE = `http://${HOST}:8080/v1/projects/${PROJECT}/databases/(default)/documents`;
 
 const EMAIL = 'maria.qa@demo.funpay.mx';
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- Local emulator or fixture value, not a real credential
 const PASSWORD = 'demo-funpay-qa';
 
 async function call(url, method, body) {

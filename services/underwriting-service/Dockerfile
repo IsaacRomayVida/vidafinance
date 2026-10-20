@@ -10,6 +10,9 @@ COPY services/shared/ ./services/shared/
 COPY services/underwriting-service/ ./services/underwriting-service/
 
 WORKDIR /app/services/underwriting-service
+# Run unprivileged: the node user owns the app tree.
+RUN chown -R node:node /app
+USER node
 EXPOSE 3003
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3003/health || exit 1

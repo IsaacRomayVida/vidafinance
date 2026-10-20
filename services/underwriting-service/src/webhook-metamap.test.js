@@ -66,6 +66,7 @@ const metamapClient = require("./metamap-client");
 /* ------------------------------------------------------------------ */
 /*  Env setup                                                         */
 /* ------------------------------------------------------------------ */
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 const WEBHOOK_SECRET = "test-webhook-secret-123";
 
 process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({
@@ -74,7 +75,9 @@ process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({
   client_email: "test@test.iam.gserviceaccount.com",
 });
 process.env.REDIS_URL = "redis://localhost:6379";
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.METAMAP_WEBHOOK_SECRET = WEBHOOK_SECRET;
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.INTERNAL_SECRET = "test-internal-secret";
 
 /* ------------------------------------------------------------------ */
@@ -284,6 +287,7 @@ describe("metamap-client contract (real module, not the mock)", () => {
     // Signed, because an unset secret is no longer a way to reach `valid: true`
     // — see the fail-closed note on parseWebhook. This case is about the
     // envelope's SHAPE on the accepting path, so it has to actually accept.
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env.METAMAP_WEBHOOK_SECRET = "envelope-shape-secret";
     try {
       const out = actual.parseWebhook(body, sign(body, "envelope-shape-secret"));
@@ -322,6 +326,7 @@ describe("metamap-client contract (real module, not the mock)", () => {
     // signature produced an unhandled rejection and no response at all — the
     // one case the 401 branch existed for was the one it never reached.
     const secretBefore = process.env.METAMAP_WEBHOOK_SECRET;
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env.METAMAP_WEBHOOK_SECRET = "a-secret";
     try {
       const body = { eventName: "verification_completed", resource: "v-123" };

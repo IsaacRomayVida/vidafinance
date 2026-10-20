@@ -281,6 +281,7 @@ export function pathsFilter(yaml) {
     return { paths: null, problems };
   }
 
+  // nosemgrep: ajinabraham.njsscan.dos.regex_dos.regex_dos -- Fixed pattern run over lines of a repo file in CI, not user input
   const starts = lines.map((l, i) => (/^\s*paths:\s*$/.test(l) ? i : -1)).filter((i) => i >= 0);
   if (starts.length > 1) {
     problems.push(

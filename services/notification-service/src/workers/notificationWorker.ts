@@ -82,7 +82,7 @@ const QUEUE_NAME = 'vida-notifications';
 const redisUrl = process.env.REDIS_URL ?? '';
 const bullConnection = {
   url: redisUrl,
-  ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {}),
+  ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' } } : {}),
 };
 
 export const notificationWorker = new Worker<NotificationJobData>(

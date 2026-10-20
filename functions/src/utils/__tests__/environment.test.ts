@@ -34,6 +34,7 @@ describe('utils/environment', () => {
 
     it('stays false on production even with an explicit opt-in', () => {
       process.env['GCLOUD_PROJECT'] = 'vida-finance';
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- Local emulator or fixture value, not a real credential
       process.env['VIDA_ALLOW_TEST_BYPASS'] = 'true';
       expect(allowTestBypass()).toBe(false);
     });
@@ -61,12 +62,14 @@ describe('utils/environment', () => {
 
     it('honours the explicit opt-in on a non-production project', () => {
       process.env['GCLOUD_PROJECT'] = 'vida-finance-staging';
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- Local emulator or fixture value, not a real credential
       process.env['VIDA_ALLOW_TEST_BYPASS'] = 'true';
       expect(allowTestBypass()).toBe(true);
     });
 
     it('ignores a non-"true" opt-in value', () => {
       process.env['GCLOUD_PROJECT'] = 'vida-finance-staging';
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- Local emulator or fixture value, not a real credential
       process.env['VIDA_ALLOW_TEST_BYPASS'] = '1';
       expect(allowTestBypass()).toBe(false);
     });
