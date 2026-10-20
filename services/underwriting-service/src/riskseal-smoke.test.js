@@ -38,6 +38,7 @@ describe("GET /riskseal/smoke", () => {
   test("200: reports envMock=false and returns result when RISKSEAL_MOCK is false", async () => {
     process.env.RISKSEAL_MOCK = "false";
     process.env.RISKSEAL_BASE_URL = "https://latam-1.riskseal.io";
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_api_key -- Test fixture value, not a real credential
     process.env.RISKSEAL_API_KEY = "test-key";
 
     checkDigitalFootprint.mockResolvedValueOnce({
@@ -91,6 +92,7 @@ describe("GET /riskseal/smoke", () => {
   test("502: returns riskseal_call_failed when adapter throws", async () => {
     process.env.RISKSEAL_MOCK = "false";
     process.env.RISKSEAL_BASE_URL = "https://latam-1.riskseal.io";
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_api_key -- Test fixture value, not a real credential
     process.env.RISKSEAL_API_KEY = "test-key";
 
     checkDigitalFootprint.mockRejectedValueOnce(new Error("RiskSeal 401: unauthorized"));

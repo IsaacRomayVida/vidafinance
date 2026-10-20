@@ -134,6 +134,7 @@ test('production-endpoints.json parses and covers all six services + hosting', (
 test('production-endpoints.json records registry-service apart from `services`', () => {
   const e = loadEndpoints();
   assert.match(e.registry.url, /^https:\/\/[^/]+$/, 'https origin, no path or trailing slash');
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   assert.equal(e.registry.secretName, 'REGISTRY_SERVICE_URL');
   // In `services` it would be written into functions/.env by deploy.yml next
   // to the REGISTRY_SERVICE_URL secret line, and auto-redeployed by
@@ -209,6 +210,7 @@ test('collectRows: a drifted SERVICE secret is informational — never fails, ne
   assert.equal(alpha.fail, false);
   assert.match(alpha.reason, /stale-alpha\.example/);
   assert.match(alpha.reason, /informational only/);
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   assert.equal(row(rows, 'secret:BETA_URL').reason, 'matches canonical');
   assert.ok(!calls.some((u) => u.includes('stale-alpha')), 'a service secret URL is not probed');
   assert.equal(overallVerdict(rows).ok, true);

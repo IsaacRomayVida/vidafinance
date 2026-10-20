@@ -13,6 +13,7 @@ const os = require('os');
 const DEFAULT_DB_USER = process.env.PGUSER || process.env.USER || os.userInfo().username;
 process.env.REGISTRY_DATABASE_URL =
   process.env.DATABASE_URL || `postgres://${DEFAULT_DB_USER}@localhost:5432/vida_registry_test`;
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.INTERNAL_SECRET = 'test-secret';
 
 const request = require('supertest');
@@ -35,6 +36,7 @@ test('rejects requests without the internal secret', async () => {
 });
 
 test('resolves-or-creates an entity and is idempotent', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const first = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -42,6 +44,7 @@ test('resolves-or-creates an entity and is idempotent', async () => {
   expect(first.status).toBe(200);
   expect(first.body.entityId).toBeDefined();
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const second = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -50,6 +53,7 @@ test('resolves-or-creates an entity and is idempotent', async () => {
 });
 
 test('400s when required fields are missing', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -58,18 +62,21 @@ test('400s when required fields are missing', async () => {
 });
 
 test('attaches an additional ref to an existing entity', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const resolved = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'firebase', externalId: 'uid-2', kind: 'worker' });
   const entityId = resolved.body.entityId;
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const refRes = await request(app)
     .post(`/internal/entities/${entityId}/refs`)
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'rfc', externalId: 'ABCD800101XXX' });
   expect(refRes.status).toBe(200);
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const byRfc = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -84,6 +91,7 @@ test('health reports db connectivity', async () => {
 });
 
 test('resolve with refs attaches all refs to the entity in one call', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -99,12 +107,14 @@ test('resolve with refs attaches all refs to the entity in one call', async () =
   expect(res.status).toBe(200);
   const entityId = res.body.entityId;
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const viaRfc = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'rfc', externalId: 'BATC800101XXX', kind: 'worker' });
   expect(viaRfc.body.entityId).toBe(entityId);
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const viaCurp = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -114,15 +124,18 @@ test('resolve with refs attaches all refs to the entity in one call', async () =
 
 test('a ref conflict inside a batched resolve rolls back the whole transaction -- no partial rows', async () => {
   // Pre-seed a ref pointing at a different entity so the batch below collides.
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const seed = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'firebase', externalId: 'uid-seed', kind: 'worker' });
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   await request(app)
     .post(`/internal/entities/${seed.body.entityId}/refs`)
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'rfc', externalId: 'CONF800101XXX' });
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -142,6 +155,7 @@ test('a ref conflict inside a batched resolve rolls back the whole transaction -
 
   // Nothing from the failed batch member should have been created --
   // neither the new entity nor a firebase ref for uid-conflicting-batch.
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const lookup = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -155,20 +169,24 @@ test('a ref conflict inside a batched resolve rolls back the whole transaction -
 });
 
 test('addExternalRef route surfaces a conflict as 409, not 500', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const seed = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'firebase', externalId: 'uid-seed-2', kind: 'worker' });
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   await request(app)
     .post(`/internal/entities/${seed.body.entityId}/refs`)
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'curp', externalId: 'ROUT800101HDFRRL04' });
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const other = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'firebase', externalId: 'uid-other-2', kind: 'worker' });
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const conflict = await request(app)
     .post(`/internal/entities/${other.body.entityId}/refs`)
     .set('x-internal-secret', 'test-secret')
@@ -189,12 +207,14 @@ test('addExternalRef route surfaces a conflict as 409, not 500', async () => {
 // is a malformed request.
 
 test('re-attaching the same ref with a differently-spelled entity id is idempotent, not a conflict', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const seed = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'firebase', externalId: 'uid-spelling', kind: 'worker' });
   const entityId = seed.body.entityId;
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const first = await request(app)
     .post(`/internal/entities/${entityId}/refs`)
     .set('x-internal-secret', 'test-secret')
@@ -203,6 +223,7 @@ test('re-attaching the same ref with a differently-spelled entity id is idempote
 
   // Same entity, same ref -- just an uppercase uuid. This is the ordinary
   // retry case, not a duplicate identity.
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const retry = await request(app)
     .post(`/internal/entities/${entityId.toUpperCase()}/refs`)
     .set('x-internal-secret', 'test-secret')
@@ -217,6 +238,7 @@ test('re-attaching the same ref with a differently-spelled entity id is idempote
 });
 
 test('400s (not 500) when :entityId is not a uuid, and leaks no Postgres internals', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/not-a-uuid/refs')
     .set('x-internal-secret', 'test-secret')
@@ -229,6 +251,7 @@ test('400s (not 500) when :entityId is not a uuid, and leaks no Postgres interna
 });
 
 test('404s (not 500) when :entityId is a well-formed uuid for an entity that does not exist', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/11111111-2222-3333-4444-555555555555/refs')
     .set('x-internal-secret', 'test-secret')
@@ -256,6 +279,7 @@ test('rejects a wrong internal secret regardless of its length', async () => {
 });
 
 test('400s when externalId is a JSON number instead of a string', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -264,6 +288,7 @@ test('400s when externalId is a JSON number instead of a string', async () => {
 });
 
 test('400s when a ref inside refs[] has a non-string externalId', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -277,11 +302,13 @@ test('400s when a ref inside refs[] has a non-string externalId', async () => {
 });
 
 test('400s on the refs route when system or externalId is not a string', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const seed = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
     .send({ system: 'firebase', externalId: 'uid-seed-3', kind: 'worker' });
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post(`/internal/entities/${seed.body.entityId}/refs`)
     .set('x-internal-secret', 'test-secret')
@@ -290,6 +317,7 @@ test('400s on the refs route when system or externalId is not a string', async (
 });
 
 test('400s when a clabe externalId normalizes to empty (e.g. "N/A")', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -299,6 +327,7 @@ test('400s when a clabe externalId normalizes to empty (e.g. "N/A")', async () =
 });
 
 test('400s when an rfc externalId is whitespace-only after trim', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -308,6 +337,7 @@ test('400s when an rfc externalId is whitespace-only after trim', async () => {
 });
 
 test('an invalid externalId inside the refs[] batch rolls back the whole resolve -- no entity created', async () => {
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   const res = await request(app)
     .post('/internal/entities/resolve')
     .set('x-internal-secret', 'test-secret')
@@ -345,6 +375,7 @@ test('resolve returns 503 instead of hanging when the pool cannot hand out a con
     .spyOn(pool, 'connect')
     .mockRejectedValueOnce(new Error('timeout exceeded when trying to connect'));
   try {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     const res = await request(app)
       .post('/internal/entities/resolve')
       .set('x-internal-secret', 'test-secret')
@@ -362,6 +393,7 @@ test('refs route returns 503 instead of hanging when the pool cannot hand out a 
     .spyOn(pool, 'connect')
     .mockRejectedValueOnce(new Error('timeout exceeded when trying to connect'));
   try {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     const res = await request(app)
       .post('/internal/entities/00000000-0000-0000-0000-000000000000/refs')
       .set('x-internal-secret', 'test-secret')
@@ -390,6 +422,7 @@ test('a ROLLBACK that itself fails still reports the original error as 500', asy
   };
   const spy = jest.spyOn(pool, 'connect').mockResolvedValueOnce(deadClient);
   try {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     const res = await request(app)
       .post('/internal/entities/resolve')
       .set('x-internal-secret', 'test-secret')

@@ -37,6 +37,7 @@ async function run() {
   console.log(`Setting employer_admin claims on ${TARGET_UIDS.length} account(s)...\n`);
 
   for (const uid of TARGET_UIDS) {
+    // nosemgrep: ajinabraham.njsscan.generic.error_disclosure.generic_error_disclosure -- CLI script prints to the operator console, not an HTTP response
     try {
       await admin.auth().setCustomUserClaims(uid, { role: "employer_admin" });
       const user = await admin.auth().getUser(uid);

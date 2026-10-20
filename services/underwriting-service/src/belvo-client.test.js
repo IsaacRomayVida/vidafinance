@@ -122,7 +122,9 @@ describe("belvo-client: timeouts", () => {
   }
 
   beforeEach(() => {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env.BELVO_SECRET_ID = "test-id";
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password,ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Local emulator or fixture value, not a real credential
     process.env.BELVO_SECRET_PASSWORD = "test-pass";
     process.env.BELVO_BASE_URL = "https://sandbox.belvo.com";
     process.env.NODE_ENV = "test";
@@ -217,7 +219,9 @@ describe("belvo-client: getClient", () => {
   });
 
   it("wires the resolved base URL into the Belvo SDK client", async () => {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env.BELVO_SECRET_ID = "test-id";
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password,ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Local emulator or fixture value, not a real credential
     process.env.BELVO_SECRET_PASSWORD = "test-pass";
     process.env.BELVO_BASE_URL = "https://sandbox.belvo.com";
     process.env.NODE_ENV = "staging";

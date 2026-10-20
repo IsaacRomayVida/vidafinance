@@ -14,6 +14,7 @@ const { execFileSync } = require('child_process');
 const { assertInternalSecret, secretMatches, requireInternal } = require('./internalAuth');
 
 const SERVICE_DIR = path.resolve(__dirname, '..');
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 const SECRET = 'the-real-secret';
 
 describe('assertInternalSecret', () => {
@@ -38,6 +39,7 @@ describe('assertInternalSecret', () => {
     try {
       delete process.env.INTERNAL_SECRET;
       expect(() => assertInternalSecret()).toThrow(/INTERNAL_SECRET is required/);
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
       process.env.INTERNAL_SECRET = SECRET;
       expect(() => assertInternalSecret()).not.toThrow();
     } finally {
@@ -49,10 +51,12 @@ describe('assertInternalSecret', () => {
 
 describe('secretMatches', () => {
   test('matches the correct secret', () => {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     expect(secretMatches(SECRET, SECRET)).toBe(true);
   });
 
   test('rejects a wrong secret', () => {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     expect(secretMatches(SECRET, 'guess')).toBe(false);
   });
 
@@ -99,6 +103,7 @@ describe('requireInternal middleware', () => {
     return { res, nextCalled };
   }
 
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   beforeEach(() => { process.env.INTERNAL_SECRET = SECRET; });
   afterAll(() => {
     if (savedSecret === undefined) delete process.env.INTERNAL_SECRET;
@@ -153,6 +158,7 @@ describe('index.js boot guard', () => {
     delete env.INTERNAL_SECRET;
     delete env.FIREBASE_SERVICE_ACCOUNT;
     delete env.FIREBASE_SERVICE_ACCOUNT_B64;
+    // nosemgrep: ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack -- Test assertion on fixture values, not a secret comparison
     if (secret !== undefined) env.INTERNAL_SECRET = secret;
     try {
       execFileSync(process.execPath, ['-e', "require('./index.js')"], {

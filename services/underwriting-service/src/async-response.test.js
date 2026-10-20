@@ -84,7 +84,9 @@ process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({
   client_email: "test@test.iam.gserviceaccount.com",
 });
 process.env.REDIS_URL = "redis://localhost:6379";
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.METAMAP_WEBHOOK_SECRET = "test-webhook-secret-123";
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.INTERNAL_SECRET = "test-internal-secret";
 
 /* ------------------------------------------------------------------ */
