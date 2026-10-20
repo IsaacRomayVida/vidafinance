@@ -1,6 +1,6 @@
 /**
  * VID3-370: v1.8 Full E2E Test — 12 phases, all flows, all users
- * Run with: NODE_PATH=$(npm root -g) node e2e-test-v18.mjs
+ * Run with: E2E_TEST_PASSWORD=... NODE_PATH=$(npm root -g) node e2e-test-v18.mjs
  */
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -12,7 +12,12 @@ const http = require('http');
 
 const BASE = 'https://vida-finance.web.app';
 const TIMEOUT = 10000;
-const PASSWORD = 'TestPass123!';
+// The test accounts' password is supplied by the operator, never committed.
+const PASSWORD = process.env.E2E_TEST_PASSWORD;
+if (!PASSWORD) {
+  console.error('E2E_TEST_PASSWORD is required (password of the e2e test accounts).');
+  process.exit(1);
+}
 const TS = Date.now();
 const EMPLOYER_EMAIL = `e2e-employer-${TS}@vida-test.com`;
 const EMPLOYEE_EMAIL = `e2e-employee-${TS}@vida-test.com`;
