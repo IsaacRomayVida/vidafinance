@@ -1,0 +1,67 @@
+# © Suena AG / FunPay Technologies. All rights reserved.
+name: OpenSSF Scorecard
+
+# Follows https://github.com/ossf/scorecard-action#workflow-example.
+# Results are published to the public OpenSSF API only when the repo is
+# public (publish_results requires it). On a private repo the run still
+# scores the repo and keeps the SARIF as an artifact; code-scanning upload
+# needs GitHub Advanced Security (CODEQL_ENABLED).
+
+on:
+  branch_protection_rule:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * 2" # Tuesdays 04:41 UTC
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      # A private repo needs these read scopes for Scorecard's GraphQL queries
+      # (commit/PR/check history); without them ListCommits fails with
+      # "Resource not accessible by integration".
+      issues: read
+      pull-requests: read
+      checks: read
+      security-events: write # SARIF upload (only used when CODEQL_ENABLED)
+      id-token: write # publish_results, public repos only
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run analysis
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publishing to the public OpenSSF API is refused for private repos
+          # (and would expose the repo's existence). Keep it off; re-enable
+          # only if the repo is ever made public.
+          publish_results: false
+      - name: Keep the report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 30
+      - name: Upload to code scanning
+        if: vars.CODEQL_ENABLED == 'true'
+        uses: github/codeql-action/upload-sarif@48870fdd6b42ee6474ec4207209ff87609271a5e # v4.39.0
+        with:
+          sarif_file: results.sarif
+          category: scorecard

@@ -1,17 +1,29 @@
-# gitleaks config for vidafinance. Extends the default ruleset.
+# © Suena AG / FunPay Technologies. All rights reserved.
 #
-# Allowlist is scoped to exact fingerprints, not broad path/rule exemptions --
-# each entry is a client-side value that is public-by-design (Firebase web
-# config, meant to ship in the browser bundle; security is enforced via
-# Firestore rules + App Check, not secrecy of these values) or not a
-# credential at all (a localStorage key string flagged by entropy heuristics).
-# Mirrors the same pattern already in use in the sibling vidatravel repo.
+# gitleaks config for FunPay. Extends the default ruleset.
+#
+# Every entry below is reviewed and narrow. Do not add a broad path or rule
+# exemption. Each entry states why it is not a credential, who reviewed it and
+# when; see docs/security/pipeline.md for how to add one. Never allowlist a
+# real secret: rotate it first.
+#
+# Last reviewed: 2026-10-20 (Romay).
 [extend]
 useDefault = true
 
-[allowlist]
+# Client-side values that are public by design (not credentials).
+[[allowlists]]
 description = "Known-safe client-side values, not credentials"
 regexes = [
-  '''AIzaSyD5FFDHe2mAtqfBBw6vz4-V2WflvTxCTEw''', # Firebase web apiKey, public by design
-  '''funpay_splash_seen_v1''',                    # localStorage key, not a credential
+  '''AIzaSyD5FFDHe2mAtqfBBw6vz4-V2WflvTxCTEw''', # Firebase web apiKey: ships in the browser bundle; security is enforced by Firestore rules and App Check
+  '''funpay_splash_seen_v1''',                    # localStorage key, flagged by entropy only
+]
+
+# Test fixtures. One exact file, only the two rules that flag it.
+[[allowlists]]
+description = "Load-test seed: unsigned alg=none JWT used as an emulator App Check placeholder; no deployed project accepts it"
+condition = "AND"
+targetRules = ["jwt", "generic-api-key"]
+paths = [
+  '''^tests/load/seed/pool\.js$''',
 ]
