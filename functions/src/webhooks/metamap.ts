@@ -3,6 +3,7 @@ import { logger } from 'firebase-functions';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { createHmac, timingSafeEqual } from 'crypto';
 
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Name of the environment variable, not a secret value
 const WEBHOOK_SECRET_ENV = 'METAMAP_WEBHOOK_SECRET';
 
 function verifySignature(rawBody: string, signature: string | undefined, secret: string): boolean {

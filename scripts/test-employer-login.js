@@ -5,7 +5,7 @@
  * to the /employer dashboard. Uses Puppeteer headless Chrome.
  *
  * Usage:
- *   node scripts/test-employer-login.js
+ *   E2E_TEST_PASSWORD=... node scripts/test-employer-login.js
  *
  * Prerequisites:
  *   - Custom claims must be set for the test employer account
@@ -15,7 +15,12 @@
 const puppeteer = require("puppeteer");
 
 const TEST_EMAIL = "test-employer-1774134933675@vida-test.com";
-const TEST_PASSWORD = "TestPass123!";
+// The test account password is supplied by the operator, never committed.
+const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD;
+if (!TEST_PASSWORD) {
+  console.error("E2E_TEST_PASSWORD is required (password of the test employer account).");
+  process.exit(1);
+}
 const LOGIN_URL = "https://vida-finance.web.app/login";
 const POST_LOGIN_WAIT_MS = 10_000;
 

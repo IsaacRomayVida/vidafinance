@@ -9,6 +9,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/ml-service/ ./
 
+# Run unprivileged: the app user owns the app tree and the model directory.
+RUN useradd --system --create-home --uid 10001 app && chown -R app:app /app /models
+USER app
+
 EXPOSE 3005
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:3005/health || exit 1

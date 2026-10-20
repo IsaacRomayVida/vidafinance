@@ -29,7 +29,7 @@ export function getQueue(name: string): Queue {
   const queue = new Queue(name, {
     connection: {
       url: redisUrl,
-      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {}),
+      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' } } : {}),
     },
     defaultJobOptions: DEFAULT_JOB_OPTIONS,
   });

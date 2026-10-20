@@ -167,6 +167,7 @@ describe('limits that guard spend or a code space fail CLOSED when the limiter i
     // the limiter having refused anything. Configured, the ONLY thing that can
     // stop the outbound billable call is the rate limiter.
     process.env['SOFTCREDITO_ADAPTER_URL'] = 'https://adapter.test';
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env['INTERNAL_SECRET'] = 'a-real-secret';
     mockFetch.mockResolvedValue({
       ok: true,

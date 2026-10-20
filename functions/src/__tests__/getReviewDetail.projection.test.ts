@@ -92,6 +92,7 @@ const EMPLOYER_DOC = {
   companyName: 'Grupo Textil del Bajío',
   industry: 'manufacturing',
   riskTier: 2,
+  // nosemgrep: generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash -- Synthetic hash fixture, not a real credential
   apiKeyHash: '$2b$12$KzVQ9dTLm0wQ3lY7pN1ceOJmXbA6sR8fH2gU4vW1xY0zB5cD7eF9G',
   bankClabe: '012180001234567895',
   rfc: 'GTB950101ABC',

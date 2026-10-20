@@ -40,11 +40,14 @@ const SERVICE_ACCOUNT = JSON.stringify({
   private_key: "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----\n",
   client_email: "test@test.iam.gserviceaccount.com",
 });
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 const INTERNAL_SECRET = "health-suite-internal-secret";
 
 process.env.FIREBASE_SERVICE_ACCOUNT = SERVICE_ACCOUNT;
 process.env.REDIS_URL = "redis://localhost:6379";
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.INTERNAL_SECRET = INTERNAL_SECRET;
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.METAMAP_WEBHOOK_SECRET = "health-suite-webhook-secret";
 
 const { version } = require("../package.json");

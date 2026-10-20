@@ -128,13 +128,16 @@ describe('requireInternal', () => {
   }
 
   it('calls next() on either accepted value', () => {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env.INTERNAL_SECRET = OLD;
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env.INTERNAL_SECRET_ALT = NEW;
     expect(run({ 'x-internal-secret': OLD }).nextCalled).toBe(true);
     expect(run({ 'x-internal-secret': NEW }).nextCalled).toBe(true);
   });
 
   it('401s on a wrong value, a missing header and an empty one', () => {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env.INTERNAL_SECRET = OLD;
     delete process.env.INTERNAL_SECRET_ALT;
     for (const headers of [{ 'x-internal-secret': 'guess' }, {}, { 'x-internal-secret': '' }]) {

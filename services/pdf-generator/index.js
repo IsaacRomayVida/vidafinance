@@ -41,7 +41,7 @@ const storage = admin.storage().bucket(process.env.FIREBASE_STORAGE_BUCKET);
 const redis = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,
   tls: process.env.REDIS_URL?.startsWith("rediss://")
-    ? { rejectUnauthorized: false }
+    ? { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' }
     : undefined,
 });
 
@@ -246,6 +246,7 @@ app.use(helmet());
 app.use(metricsMiddleware('vida-pdf-generator'));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
+  // nosemgrep: javascript.express.security.cors-misconfiguration.cors-misconfiguration -- Origin is matched against the ALLOWED allowlist before the header is set
   if (origin && ALLOWED.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
   if (req.method === "OPTIONS") { res.setHeader("Access-Control-Allow-Methods", "GET,POST"); res.setHeader("Access-Control-Allow-Headers", "Content-Type,x-internal-secret"); return res.sendStatus(204); }
   next();

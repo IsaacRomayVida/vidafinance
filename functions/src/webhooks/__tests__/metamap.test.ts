@@ -5,6 +5,7 @@ import { getFirestore } from '../../__mocks__/firebase-admin/firestore';
 type Handler = (req: unknown, res: unknown) => Promise<void>;
 const fn = metamapWebhook as unknown as Handler;
 
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 const SECRET = 'test-secret';
 
 function sign(body: string): string {

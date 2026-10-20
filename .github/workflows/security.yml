@@ -1,0 +1,280 @@
+# © Suena AG / FunPay Technologies. All rights reserved.
+name: Security
+
+# Static analysis, secret scanning, dependency and container scanning.
+# See docs/security/pipeline.md for what each job does and which ones block.
+#
+# SARIF upload to the GitHub Security tab needs GitHub Advanced Security on a
+# private repo. It is off until the repo variable CODEQL_ENABLED is
+# 'true' (the same switch that enables codeql.yml). Every scanner also keeps its report as a run artifact either way.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  semgrep:
+    name: Semgrep CE
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write # SARIF upload (only used when CODEQL_ENABLED)
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # baseline scan on PRs needs the merge base
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install Semgrep
+        run: python -m pip install --disable-pip-version-check semgrep==1.181.0
+      - name: Scan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+          args=(
+            --config p/owasp-top-ten --config p/typescript --config p/nodejsscan
+            --config p/react --config p/secrets --config p/dockerfile
+            --config p/github-actions
+            --metrics=off --sarif --sarif-output=semgrep.sarif
+            --exclude node_modules --exclude dist --exclude build
+            --exclude '*.test.ts' --exclude '*.test.tsx' --exclude '*.test.js' --exclude '*.test.mjs'
+            --exclude tests --exclude __tests__ --exclude outputs
+            --exclude '*.map' --exclude '*.min.js'
+            # The 2-vCPU runner needs ~10x the wall time of a laptop for this
+            # ruleset (1,100+ CPU-seconds); the first run hit the job limit
+            # and was cancelled. Bound memory and per-file time explicitly so
+            # one pathological file cannot stall the scan.
+            --jobs 2 --max-memory 4096 --timeout 10 --timeout-threshold 3
+          )
+          if [ "$EVENT" = "pull_request" ]; then
+            # Block only on ERROR findings the PR introduces. Existing debt
+            # does not freeze unrelated work.
+            semgrep scan "${args[@]}" --baseline-commit "$BASE_SHA" --severity ERROR --error
+          else
+            # Main and weekly runs report everything and never fail the run.
+            semgrep scan "${args[@]}" || true
+          fi
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Upload to code scanning
+        if: always() && vars.CODEQL_ENABLED == 'true' && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@48870fdd6b42ee6474ec4207209ff87609271a5e # v4.39.0
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  gitleaks:
+    name: Gitleaks (full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # every commit, not just the tip
+          persist-credentials: false
+      - name: Install gitleaks (checksum verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks gitleaks.tgz
+      - name: Scan history
+        run: |
+          gitleaks detect --source . --redact --verbose \
+            --report-format sarif --report-path gitleaks.sarif
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gitleaks-sarif
+          path: gitleaks.sarif
+          if-no-files-found: ignore
+          retention-days: 30
+
+  trufflehog:
+    name: TruffleHog (verified only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan
+        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        with:
+          path: ./
+          # PRs scan only the commits they add. Main and weekly runs scan all
+          # history (an empty base means "everything").
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+          # The action already appends --fail itself; repeating it makes
+          # trufflehog exit with "flag 'fail' cannot be repeated".
+          extra_args: --results=verified
+
+  osv-scanner:
+    name: OSV-Scanner (critical/high)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write # SARIF upload (only used when CODEQL_ENABLED)
+    env:
+      OSV_VERSION: "2.7.0"
+      OSV_SHA256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install osv-scanner (checksum verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SHA256}  osv-scanner" | sha256sum -c -
+          sudo install -m 0755 osv-scanner /usr/local/bin/osv-scanner
+          rm -f osv-scanner
+      - name: Scan lockfiles
+        run: |
+          # Exit code 1 only means "vulnerabilities exist"; the gate below
+          # decides whether any are critical or high. Other codes are errors.
+          # Reviewed exceptions live in osv-scanner.toml (id, reason, expiry);
+          # the file is optional and used when present.
+          cfg=()
+          if [ -f osv-scanner.toml ]; then cfg=(--config=osv-scanner.toml); fi
+          set +e
+          osv-scanner scan source -r "${cfg[@]}" --format json --output osv.json .
+          rc=$?
+          set -e
+          if [ "$rc" -gt 1 ]; then echo "::error::osv-scanner failed (exit $rc)"; exit "$rc"; fi
+          osv-scanner scan source -r "${cfg[@]}" --format sarif --output osv.sarif . || true
+      - name: Gate on critical/high
+        run: python3 .github/scripts/osv-gate.py osv.json
+      - name: Keep the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: osv-reports
+          path: |
+            osv.json
+            osv.sarif
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Upload to code scanning
+        if: always() && vars.CODEQL_ENABLED == 'true' && hashFiles('osv.sarif') != ''
+        uses: github/codeql-action/upload-sarif@48870fdd6b42ee6474ec4207209ff87609271a5e # v4.39.0
+        with:
+          sarif_file: osv.sarif
+          category: osv-scanner
+
+  trivy-fs:
+    name: Trivy filesystem (critical/high)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          # Without this the SARIF run reports (and exits on) every severity,
+          # so a LOW finding failed a job named critical/high.
+          limit-severities-for-sarif: true
+          format: sarif
+          output: trivy-fs.sarif
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-fs-sarif
+          path: trivy-fs.sarif
+          if-no-files-found: ignore
+          retention-days: 30
+
+  trivy-dockerfiles:
+    name: Trivy Dockerfile (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - ml-service
+          - notification-service
+          - payment-server
+          - pdf-generator
+          - registry-service
+          - softcredito-adapter
+          - underwriting-service
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan image configuration
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: services/${{ matrix.service }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          format: table

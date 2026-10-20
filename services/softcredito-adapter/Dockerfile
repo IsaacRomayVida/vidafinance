@@ -16,6 +16,9 @@ COPY services/softcredito-adapter/ ./services/softcredito-adapter/
 
 # Run from the service directory so relative requires (../shared/alerting) resolve
 WORKDIR /app/services/softcredito-adapter
+# Run unprivileged: the node user owns the app tree.
+RUN chown -R node:node /app
+USER node
 
 EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

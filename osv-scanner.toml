@@ -1,0 +1,56 @@
+# © Suena AG / FunPay Technologies. All rights reserved.
+#
+# Accepted dependency findings. Only advisories that have no published fix are
+# listed. Every entry expires on 2027-01-15; re-check upstream before then and
+# remove the entry as soon as a patched release exists.
+
+# braces <= 3.0.3: stack exhaustion on deeply nested brace patterns. Upstream
+# has no patched release. Reached only through glob matching of repository file
+# paths in build and test tooling (micromatch, jest, fast-glob), never on
+# user-supplied patterns.
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2027-01-15
+reason = "No patched braces release exists. Used only by build and test tooling on repository paths, never on user input."
+
+# node-forge <= 1.4.0: RSA PKCS#1 v1.5 signature verification flaw. 1.4.0 is
+# the latest release. Reached only through the Google auth libraries inside
+# firebase-admin; the services do not verify RSA PKCS#1 v1.5 signatures with
+# low-exponent keys through it.
+[[IgnoredVulns]]
+id = "GHSA-86w9-cpqp-85rv"
+ignoreUntil = 2027-01-15
+reason = "No patched node-forge release exists. Transitive of firebase-admin; no RSA PKCS#1 v1.5 signature verification with untrusted keys is done through it."
+
+# extract-zip 2.0.1: symlink traversal while extracting archives. 2.0.1 is the
+# latest release. Used only by puppeteer to unpack its own pinned browser
+# download at install time; no user-supplied archive is ever extracted.
+[[IgnoredVulns]]
+id = "GHSA-7pqw-9j4j-h8q3"
+ignoreUntil = 2027-01-15
+reason = "No patched extract-zip release exists. Only unpacks the browser download for puppeteer, never user-supplied archives."
+
+[[IgnoredVulns]]
+id = "GHSA-jmr9-qjv8-65gv"
+ignoreUntil = 2027-01-15
+reason = "No patched extract-zip release exists. Only unpacks the browser download for puppeteer, never user-supplied archives."
+
+# nltk <= 3.10.3: file sandbox bypass in model-artifact APIs. No fixed release.
+# nltk is present only as a dependency of evidently's text drift reports; the
+# service never loads or saves nltk model artifacts from caller-controlled paths.
+[[IgnoredVulns]]
+id = "GHSA-8mgp-746c-j5xp"
+ignoreUntil = 2027-01-15
+reason = "No patched nltk release exists. Transitive of evidently; no nltk model artifact path is caller-controlled."
+
+# uuid 3.4.0: missing buffer bounds check in v3/v5/v6 when the caller passes an
+# output buffer. @expo/ngrok pins uuid ^3 and uses the deep import
+# uuid/v4, which does not exist in the patched releases. Scoped to this one
+# package version, so the advisory still fires everywhere else.
+[[PackageOverrides]]
+name = "uuid"
+version = "3.4.0"
+ecosystem = "npm"
+ignore = true
+effectiveUntil = 2027-01-15
+reason = "Only @expo/ngrok (developer tunnel, never shipped) pins uuid 3, and it uses v4 without an output buffer. No fix exists inside the 3.x line."

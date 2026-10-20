@@ -8,7 +8,9 @@ const assert = require("assert");
 
 // Set mock mode before requiring modules
 process.env.METAMAP_MOCK = "true";
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.BELVO_SECRET_ID = "test";
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password,ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Local emulator or fixture value, not a real credential
 process.env.BELVO_SECRET_PASSWORD = "test";
 process.env.BELVO_BASE_URL = "https://sandbox.belvo.com";
 

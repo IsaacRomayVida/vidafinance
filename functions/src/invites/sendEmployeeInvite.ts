@@ -35,7 +35,7 @@ function getNotificationQueue(): Queue {
   return new Queue('vida-notifications', {
     connection: {
       url: redisUrl,
-      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {}),
+      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' } } : {}),
     },
   });
 }
