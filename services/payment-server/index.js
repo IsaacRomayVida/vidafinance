@@ -32,7 +32,7 @@ admin.initializeApp({ credential: admin.credential.cert(svcAcct) });
 const db    = admin.firestore();
 const redis = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,
-  tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
+  tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' } : undefined
 });
 
 const SERVICE_NAME = 'vida-payment-server';
@@ -50,6 +50,7 @@ app.use(metricsMiddleware('vida-payment-server'));
 app.use((req, res, next) => {
   if (req.path.startsWith('/webhooks')) return next();
   const origin = req.headers.origin;
+  // nosemgrep: javascript.express.security.cors-misconfiguration.cors-misconfiguration -- Origin is matched against the ALLOWED allowlist before the header is set
   if (origin && ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
   if (req.method === 'OPTIONS') { res.setHeader('Access-Control-Allow-Methods', 'GET,POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-internal-secret'); return res.sendStatus(204); }
   next();

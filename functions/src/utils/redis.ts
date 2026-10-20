@@ -9,7 +9,7 @@ export function getRedis(): IORedis {
     _redis = new IORedis(url, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
-      tls: url.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+      tls: url.startsWith('rediss://') ? { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' } : undefined,
     });
     _redis.on('error', () => {}); // suppress unhandled error events
   }

@@ -81,7 +81,7 @@ export function getRedisClient(): IORedis {
     _redis = new IORedis(process.env['REDIS_URL'] ?? '', {
       maxRetriesPerRequest: 3,
       tls: process.env['REDIS_URL']?.startsWith('rediss://')
-        ? { rejectUnauthorized: false }
+        ? { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' }
         : undefined,
     });
   }
@@ -93,7 +93,7 @@ export function getNotificationQueue(): Queue {
   return new Queue('vida-notifications', {
     connection: {
       url: redisUrl,
-      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {}),
+      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' } } : {}),
     },
   });
 }

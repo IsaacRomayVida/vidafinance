@@ -62,14 +62,30 @@ describe('utils/redis getRedis()', () => {
     );
   });
 
-  it('enables TLS with rejectUnauthorized: false for a rediss:// URL', async () => {
+  it('enables TLS with certificate verification for a rediss:// URL', async () => {
     process.env['REDIS_URL'] = 'rediss://secure-host:6380';
+    delete process.env['REDIS_TLS_ALLOW_UNVERIFIED'];
     const { getRedis } = await import('../redis');
 
     getRedis();
 
     expect(MockIORedis).toHaveBeenCalledWith(
       'rediss://secure-host:6380',
+      expect.objectContaining({ tls: { rejectUnauthorized: true } })
+    );
+  });
+
+  it('only skips certificate verification when REDIS_TLS_ALLOW_UNVERIFIED=true', async () => {
+    process.env['REDIS_URL'] = 'rediss://secure-host:6380';
+    process.env['REDIS_TLS_ALLOW_UNVERIFIED'] = 'true';
+    const { getRedis } = await import('../redis');
+
+    getRedis();
+
+    delete process.env['REDIS_TLS_ALLOW_UNVERIFIED'];
+    expect(MockIORedis).toHaveBeenCalledWith(
+      'rediss://secure-host:6380',
+      // nosemgrep: problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification -- asserts the explicit opt-out path
       expect.objectContaining({ tls: { rejectUnauthorized: false } })
     );
   });
