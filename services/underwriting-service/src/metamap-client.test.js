@@ -55,6 +55,7 @@ beforeEach(() => {
   client.__resetForTests();
   process.env.METAMAP_MOCK = "false";
   process.env.METAMAP_CLIENT_ID = "test-client-id";
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   process.env.METAMAP_CLIENT_SECRET = "test-client-secret";
   process.env.METAMAP_BASE_URL = "https://api.getmati.com";
   process.env.METAMAP_FLOW_ID_KYC = "flow-kyc-123";

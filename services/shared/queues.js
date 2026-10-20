@@ -2,7 +2,7 @@ const { Queue, Worker } = require('bullmq');
 const IORedis = require('ioredis');
 const connection = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null, enableReadyCheck: false,
-  tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
+  tls: process.env.REDIS_URL?.startsWith('rediss://') ? { rejectUnauthorized: process.env['REDIS_TLS_ALLOW_UNVERIFIED'] !== 'true' } : undefined
 });
 const QUEUES = { DISBURSEMENTS:'vida-disbursements', NOTIFICATIONS:'vida-notifications', PDFS:'vida-pdfs', UNDERWRITING:'vida-underwriting' };
 const getQueue = name => new Queue(name, { connection, defaultJobOptions:{ removeOnComplete:{count:1000}, removeOnFail:{count:5000}, attempts:5, backoff:{type:'exponential',delay:2000} }});

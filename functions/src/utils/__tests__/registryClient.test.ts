@@ -17,6 +17,7 @@ const mockFetch = fetch as unknown as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
   process.env['REGISTRY_SERVICE_URL'] = 'https://registry.example.test';
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   process.env['INTERNAL_SECRET'] = 'shh';
 });
 

@@ -84,6 +84,7 @@ beforeEach(() => {
   redis.get.mockResolvedValue(null);
   redis.set.mockResolvedValue("OK");
   process.env.DENUE_API_URL = "https://denue.test/app/api/denue/v1/consulta";
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_api_key -- Test fixture value, not a real credential
   process.env.DENUE_API_KEY = "test-token";
   process.env.REPSE_URL = "https://repse.test/consulta";
 });

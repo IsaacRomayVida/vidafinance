@@ -582,6 +582,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 
     async function mockUnderwritingResponse(body: Record<string, unknown> | null) {
       process.env['UNDERWRITING_SERVICE_URL'] = 'https://uw.internal';
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
       process.env['INTERNAL_SECRET'] = 'test-secret';
       const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
       if (body === null) {
@@ -876,6 +877,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
       ml: Record<string, unknown>;
     }) {
       process.env['ML_SERVICE_URL'] = ML_URL;
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
       process.env['INTERNAL_SECRET'] = 'test-secret';
       if (uw !== null) process.env['UNDERWRITING_SERVICE_URL'] = UW_URL;
 
@@ -1359,6 +1361,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 
     async function mockUnderwritingResponseWithEmployerB(maxActiveSlots: number | undefined) {
       process.env['UNDERWRITING_SERVICE_URL'] = UW_URL;
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
       process.env['INTERNAL_SECRET'] = 'test-secret';
       const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
       fetchModule.mockResolvedValue({
@@ -1487,6 +1490,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 
     async function mockUwWithEmployerB(employerB: Record<string, unknown>) {
       process.env['UNDERWRITING_SERVICE_URL'] = UW_URL;
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
       process.env['INTERNAL_SECRET'] = 'test-secret';
       const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
       fetchModule.mockResolvedValue({
@@ -1653,6 +1657,7 @@ describe('requestLoan (deployed handler in index.ts)', () => {
 
     async function mockMlGate(): Promise<jest.Mock> {
       process.env['ML_SERVICE_URL'] = ML_URL;
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
       process.env['INTERNAL_SECRET'] = 'test-secret';
       const fetchModule = (await import('node-fetch')).default as unknown as jest.Mock;
       // No fraud, no default — the gate passes, so the assertion is purely
@@ -2054,6 +2059,7 @@ describe('requestLoan refuses a borrower whose identity was never verified', () 
       // would be a self-service way to skip identity entirely — the same hole
       // PR #572 closed on the client.
       process.env['GCLOUD_PROJECT'] = 'vida-finance';
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- Local emulator or fixture value, not a real credential
       process.env['VIDA_ALLOW_TEST_BYPASS'] = 'true';
       await expect(
         callWith(unverifiedEmployee({ email: 'attacker@vida-test.com' }))

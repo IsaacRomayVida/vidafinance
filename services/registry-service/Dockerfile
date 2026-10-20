@@ -10,6 +10,9 @@ COPY services/shared/ ./services/shared/
 COPY services/registry-service/ ./services/registry-service/
 
 WORKDIR /app/services/registry-service
+# Run unprivileged: the node user owns the app tree.
+RUN chown -R node:node /app
+USER node
 EXPOSE 3006
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3006/health || exit 1

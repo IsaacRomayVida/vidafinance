@@ -94,6 +94,7 @@ function missingI18nKeys(d: Record<string, string>, statuses: readonly string[])
 }
 
 function missingBadgeRules(css: string, statuses: readonly string[]): string[] {
+  // nosemgrep: ajinabraham.njsscan.dos.regex_dos.regex_dos -- Test-only pattern built from static status literals
   return statuses.filter((s) => !new RegExp(`\\.badge-${s}\\s*[,{]`).test(css));
 }
 

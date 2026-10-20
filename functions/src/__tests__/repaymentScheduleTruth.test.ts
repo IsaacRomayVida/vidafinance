@@ -343,6 +343,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockDb = buildMockDb();
   process.env['SOFTCREDITO_ADAPTER_URL'] = 'https://sc.example.test';
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   process.env['INTERNAL_SECRET'] = 'test-secret';
   delete process.env['UNDERWRITING_SERVICE_URL'];
   mockFetch.mockResolvedValue({

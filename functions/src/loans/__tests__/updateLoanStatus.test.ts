@@ -242,6 +242,7 @@ beforeEach(() => {
   jest.resetModules();
   jest.clearAllMocks();
   process.env['SOFTCREDITO_ADAPTER_URL'] = 'https://sc.example.test';
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   process.env['INTERNAL_SECRET'] = 'test-secret';
   delete process.env['ALLOW_STUB_DISBURSEMENT'];
   ulsMockFetch.mockResolvedValue({

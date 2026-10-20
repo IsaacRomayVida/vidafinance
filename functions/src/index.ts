@@ -8,6 +8,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp, AggregateField } from 'firebase-admin/firestore';
 import fetch from 'node-fetch';
 import { nanoid } from 'nanoid';
+import { randomInt } from 'crypto';
 
 import { withAuth } from './middleware/authMiddleware';
 import { withErrorHandling, VidaErrorCode } from './utils/errorHandler';
@@ -3179,7 +3180,7 @@ const EMPLOYER_CODE_MAX_ATTEMPTS = 10;
 function generateEmployerCodeCandidate(): string {
   let code = '';
   for (let i = 0; i < EMPLOYER_CODE_LENGTH; i++) {
-    code += EMPLOYER_CODE_ALPHABET.charAt(Math.floor(Math.random() * EMPLOYER_CODE_ALPHABET.length));
+    code += EMPLOYER_CODE_ALPHABET.charAt(randomInt(EMPLOYER_CODE_ALPHABET.length));
   }
   return code;
 }
