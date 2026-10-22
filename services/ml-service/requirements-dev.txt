@@ -19,3 +19,4 @@ protobuf>=6.33.5
 requests>=2.32.4
 setuptools>=78.1.1
 tqdm>=4.66.3
+certifi>=2026.10.19
