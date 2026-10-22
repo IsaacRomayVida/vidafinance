@@ -119,6 +119,7 @@ describe('validateCURP fails closed', () => {
     delete process.env['FUNCTIONS_EMULATOR'];
     delete process.env['VIDA_ALLOW_TEST_BYPASS'];
     process.env['SOFTCREDITO_ADAPTER_URL'] = 'https://adapter.test';
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env['INTERNAL_SECRET'] = 'a-real-secret';
   });
 
@@ -253,6 +254,7 @@ describe('test bypass is unreachable on production', () => {
   it('does not bypass on the production project even with a VIDA-prefixed CURP', async () => {
     jest.resetModules();
     process.env['GCLOUD_PROJECT'] = 'vida-finance';
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- Local emulator or fixture value, not a real credential
     process.env['VIDA_ALLOW_TEST_BYPASS'] = 'true';
     delete process.env['SOFTCREDITO_ADAPTER_URL'];
     const fn = await loadValidateCURP();

@@ -176,6 +176,7 @@ const keys = argv.length ? argv : Object.keys(TARGETS);
 
 console.log(`\nGenerating ${keys.length} image(s) with gpt-image-1 …\n`);
 for (const k of keys) {
+  // nosemgrep: ajinabraham.njsscan.generic.error_disclosure.generic_error_disclosure -- CLI script prints to the operator console, not an HTTP response
   try {
     await generate(k);
   } catch (e) {

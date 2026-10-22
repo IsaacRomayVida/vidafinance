@@ -158,6 +158,7 @@ beforeEach(() => {
   (global as unknown as { fetch: jest.Mock }).fetch = mockFetch;
   mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ synced: 0 }) });
   process.env['SOFTCREDITO_ADAPTER_URL'] = 'https://sc.example.test';
+  // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
   process.env['INTERNAL_SECRET'] = 'test-secret';
 });
 

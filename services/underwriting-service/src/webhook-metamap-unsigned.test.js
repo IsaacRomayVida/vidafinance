@@ -71,6 +71,7 @@ jest.mock("ioredis", () =>
 /* ------------------------------------------------------------------ */
 /*  Env setup                                                         */
 /* ------------------------------------------------------------------ */
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 const WEBHOOK_SECRET = "unsigned-suite-secret";
 
 process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({
@@ -79,6 +80,7 @@ process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({
   client_email: "test@test.iam.gserviceaccount.com",
 });
 process.env.REDIS_URL = "redis://localhost:6379";
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
 process.env.INTERNAL_SECRET = "test-internal-secret";
 // Keeps the real metamap-client's getVerificationResult off the network on the
 // happy path -- the point of this suite is the signature gate, not the fetch.
@@ -181,6 +183,7 @@ describe("POST /webhooks/metamap with METAMAP_WEBHOOK_SECRET unset", () => {
 
 describe("POST /webhooks/metamap with METAMAP_WEBHOOK_SECRET configured", () => {
   beforeEach(() => {
+    // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
     process.env.METAMAP_WEBHOOK_SECRET = WEBHOOK_SECRET;
     app = loadApp();
   });

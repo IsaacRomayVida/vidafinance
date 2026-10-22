@@ -467,6 +467,7 @@ describe('markLoanDisbursed', () => {
     // adding that call back without a vendor-side replace path.
     it('never re-registers the deduction, even with the adapter configured (would double-collect)', async () => {
       process.env['SOFTCREDITO_ADAPTER_URL'] = 'http://softcredito-adapter.railway.internal:3002';
+      // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_secret -- Test fixture value, not a real credential
       process.env['INTERNAL_SECRET'] = 'secret';
       _mockStore.loans['loan-abc'] = approvedLoanResolvedAtRequest;
 

@@ -31,6 +31,7 @@ export const DEFAULT_PROJECT = 'demo-funpay-local';
 export const PRODUCTION_PROJECT_IDS = Object.freeze(['vida-finance']);
 export const OPS_EMAIL = 'ops@funpay.test';
 /** Emulator-only. This account cannot exist anywhere but the local auth emulator. */
+// nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- Local emulator or fixture value, not a real credential
 export const OPS_PASSWORD = 'emulator-only-ops-login';
 export const OPS_UID = 'seed-ops-user';
 export const BULK_MAX = 600;

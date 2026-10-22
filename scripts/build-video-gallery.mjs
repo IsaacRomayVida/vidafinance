@@ -50,6 +50,7 @@ for (const p of walk(src).sort()) {
   const [batch, note] = BATCH[run] ?? ['?', 'unlabelled run'];
   const graded = rel.includes('/graded/');
   const bytes = readFileSync(p);
+  // nosemgrep: ajinabraham.njsscan.crypto.crypto_node.node_md5 -- Content de-duplication hash, not a security control
   const hash = createHash('md5').update(bytes).digest('hex').slice(0, 8);
   if (seen.has(hash)) continue; // the same film downloaded from two runs
   seen.add(hash);

@@ -14,6 +14,9 @@ COPY services/shared/ ./services/shared/
 COPY services/payment-server/ ./services/payment-server/
 
 WORKDIR /app/services/payment-server
+# Run unprivileged: the node user owns the app tree.
+RUN chown -R node:node /app
+USER node
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3001/health || exit 1
